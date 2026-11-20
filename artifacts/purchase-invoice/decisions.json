@@ -397,6 +397,13 @@
           "grid": false,
           "displayLogic": null
         },
+        "etgoRemittedAmt": {
+          "visibility": "readOnly",
+          "grid": false,
+          "form": false,
+          "displayLogic": null,
+          "agentPrompt": "Amount currently in a confirmed remittance (payments in status Remitted, REM_SENT), still outstanding until collected: it stays included in outstandingAmount, but that part cannot be registered as a payment from the invoice (the remittance will collect it). 0 when nothing is remitted. Read-only, computed by the system."
+        },
         "totalPaid": {
           "visibility": "readOnly",
           "form": false,

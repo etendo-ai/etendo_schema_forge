@@ -70,9 +70,18 @@ describe('PaymentEditModalLauncher', () => {
     // Purchase invoice for a payment OUT — the editor lives on the invoice window, not this one.
     expect(modal).toHaveAttribute('data-spec', 'purchase-invoice');
     expect(modal).toHaveAttribute('data-invoice', 'inv-1');
-    expect(modal).toHaveAttribute('data-outstanding', '25.00');
+    expect(modal).toHaveAttribute('data-outstanding', '25');
     expect(modal).toHaveAttribute('data-payment', 'pay-1');
     expect(modal).toHaveAttribute('data-base', 'http://host/sws/neo/purchase-invoice');
+  });
+
+  it('offers only the part of the outstanding outside a confirmed remittance (ETP-6247)', async () => {
+    // The remitted part is collected by the remittance and the backend refuses it, so the editor's
+    // target (and its overpayment hint) is the free part.
+    mockResolved({ invoice: { ...INVOICE, outstandingAmount: '100.00', etgoRemittedAmt: 60 } });
+    renderLauncher({ id: 'pay-1', invoiceId: 'inv-1' });
+    const modal = await screen.findByTestId('NewPaymentEntryModal__stub');
+    expect(modal).toHaveAttribute('data-outstanding', '40');
   });
 
   it('takes the payment from invoicePayments, the only source of its editable shape', async () => {

@@ -177,6 +177,28 @@ describe('PaymentDetailSidebarBase — activity history', () => {
     expect(screen.queryByText('pagoConfirmadoEnProgreso')).toBeNull();
   });
 
+  it('says "confirmado · en remesa" for a collection in a confirmed remittance', async () => {
+    // REM_SENT: processed, but the bank has not collected the remittance — nothing was deposited.
+    const data = baseData({ status: 'REM_SENT', processed: true });
+    render(<PaymentDetailSidebarBase dir="in" specName="payment-in" data={data} token="t" apiBaseUrl="http://x" />);
+
+    dispatchProcessSuccess({ recordId: 'pay-1', columnName: 'aPRMProcessPayment' });
+
+    await screen.findAllByText('cobroConfirmadoEnRemesa');
+    expect(screen.queryByText('cobroConfirmado')).toBeNull();
+  });
+
+  it('says "confirmado · en remesa" for a payment in a confirmed payment remittance', async () => {
+    const data = baseData({ status: 'REM_SENT', processed: true });
+    render(<PaymentDetailSidebarBase dir="out" specName="payment-out" data={data} token="t" apiBaseUrl="http://x" />);
+
+    dispatchProcessSuccess({ recordId: 'pay-1', columnName: 'aPRMProcessPayment' });
+
+    await screen.findAllByText('pagoConfirmadoEnRemesa');
+    expect(screen.queryByText('pagoConfirmado')).toBeNull();
+    expect(screen.queryByText('pagoConfirmadoEnProgreso')).toBeNull();
+  });
+
   it('says plain "confirmado · depositado" once the withdrawal is recorded', async () => {
     const data = baseData({ status: 'PWNC', processed: true });
     render(<PaymentDetailSidebarBase dir="out" specName="payment-out" data={data} token="t" apiBaseUrl="http://x" />);

@@ -551,3 +551,28 @@ describe('resolveInvoicePaymentBadge — invariants', () => {
     assert.equal(JSON.stringify(record), snapshot);
   });
 });
+
+describe('resolveInvoicePaymentBadge — invoice in a confirmed remittance (ETP-6247)', () => {
+  it('reports a fully remitted invoice as remitted, not pending', () => {
+    assert.deepEqual(
+      resolveInvoicePaymentBadge(completed(100, 100, { etgoRemittedAmt: 100 })),
+      { kind: 'remitted', amount: 100, isCredit: false, remittedAmount: 100 },
+    );
+  });
+
+  it('shows only the free part of a partially remitted invoice as the amount', () => {
+    assert.deepEqual(
+      resolveInvoicePaymentBadge(completed(100, 100, { etgoRemittedAmt: 60 })),
+      { kind: 'partially-remitted', amount: 40, isCredit: false, remittedAmount: 60 },
+    );
+  });
+
+  it('reads an absent or zero etgoRemittedAmt as nothing remitted', () => {
+    assert.equal(resolveInvoicePaymentBadge(completed(100, 100)).kind, 'pending');
+    assert.equal(resolveInvoicePaymentBadge(completed(100, 100, { etgoRemittedAmt: 0 })).kind, 'pending');
+  });
+
+  it('lets a collected invoice read as paid whatever the remitted amount', () => {
+    assert.equal(resolveInvoicePaymentBadge(completed(100, 0, { etgoRemittedAmt: 100 })).kind, 'paid');
+  });
+});

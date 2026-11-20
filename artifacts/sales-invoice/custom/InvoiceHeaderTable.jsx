@@ -225,10 +225,14 @@ export default function InvoiceHeaderTable(props) {
           // A credit instrument has no meaningful due date — no colour, no dot.
           // Sign-based (ETP-4841), so a POSITIVE rectificativa keeps its due-date
           // state like any other payable invoice.
-          if (resolveInvoicePaymentBadge(row).isCredit) {
+          const dueBadge = resolveInvoicePaymentBadge(row);
+          if (dueBadge.isCredit) {
             return <span className="text-muted-foreground">{formatCalendarDate(d, locale)}</span>;
           }
-          const state = getDueDateState(d, row.outstandingAmount);
+          // ETP-6247 — a due fully in a confirmed remittance is the bank's to collect, not overdue
+          // for the user: neutral dot, never the red one. A partial remittance keeps the date state,
+          // since the free part is still owed by the customer.
+          const state = dueBadge.kind === 'remitted' ? 'ok' : getDueDateState(d, row.outstandingAmount);
           return (
             <span className="inline-flex items-center gap-1.5" style={getDueDateTextStyle(state)}>
               <span className="inline-block h-2 w-2 rounded-full shrink-0" style={getDueDateDotStyle(state)} />
@@ -264,7 +268,9 @@ export default function InvoiceHeaderTable(props) {
         // ETP-5268 follow-up #2: the credit-available pill grew a 72px inline
         // amount box (6-digit truncation + tooltip), pushing its natural width
         // past 160px and clipping the pill itself — 220px covers that too.
-        minWidth: 220,
+        // ETP-6247: the partially-remitted pill carries two amounts
+        // ("40,00 € · 60,00 € en remesa") — 260px keeps it on one line.
+        minWidth: 260,
         render: (row) => {
           const currency = row['currency$_identifier'] || 'EUR';
           // ETP-4841: the badge follows the SIGN of the total, not the document type
@@ -298,6 +304,22 @@ export default function InvoiceHeaderTable(props) {
               </button>
             );
           }
+          // ETP-6247 — the whole outstanding is in a CONFIRMED remittance: the bank collects it, so
+          // no amount to register is offered. The chip opens the payments modal, where the remitted
+          // collection and its remittance live. Same pattern as purchase-invoice's transfer chip.
+          if (badge.kind === 'remitted') {
+            return (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setPaymentRow(row); }}
+                data-testid="invoice-remitted"
+                style={{...NOWRAP_FLEX,display:'inline-flex',alignItems:'center',gap:7,font:'500 12px/18px Inter',padding:'3px 10px',borderRadius:999,background:'var(--status-warning-bg)',border:'none',color:'var(--status-warning-fg)',cursor:'pointer'}}
+              >
+                <span style={{width:8,height:8,borderRadius:'50%',background:'var(--status-warning-fg)',flexShrink:0,display:'inline-block'}}/>
+                {ui('remittanceInvoiceChip')}
+              </button>
+            );
+          }
           if (badge.kind === 'paid') {
             return (
               <span style={{...NOWRAP_FLEX,display:'inline-flex',alignItems:'center',gap:5,font:'500 12px/18px Inter',padding:'3px 10px',borderRadius:999,background:'var(--status-success-bg)',color:'var(--status-success-fg)'}}>
@@ -305,15 +327,24 @@ export default function InvoiceHeaderTable(props) {
               </span>
             );
           }
+          // `pending` / `partial` show what is still owed; `partially-remitted` (ETP-6247) shows only
+          // the FREE part as the amount to register, plus how much the remittance will collect.
+          const partiallyRemitted = badge.kind === 'partially-remitted';
           return (
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); setPaymentRow(row); }}
               aria-label={t('addCobro')}
+              data-testid={partiallyRemitted ? 'invoice-partially-remitted' : undefined}
               style={{...NOWRAP_FLEX,display:'inline-flex',alignItems:'center',gap:7,font:'600 13px/1 Inter',padding:'6px 11px',borderRadius:8,background:'var(--status-warning-bg)',border:'1px solid var(--status-warning-border)',color:'var(--status-warning-fg)',cursor:'pointer',fontVariantNumeric:'tabular-nums'}}
             >
               <span style={{width:8,height:8,borderRadius:'50%',background:'var(--status-warning-fg)',flexShrink:0,display:'inline-block'}}/>
               {fmtAmt(badge.amount, currency)}
+              {partiallyRemitted && (
+                <span style={{fontWeight:500,fontSize:12}}>
+                  <span style={{opacity:0.4}}>·</span> {ui('remittanceInvoiceRemittedSuffix', { amount: fmtAmt(badge.remittedAmount, currency) })}
+                </span>
+              )}
             </button>
           );
         },

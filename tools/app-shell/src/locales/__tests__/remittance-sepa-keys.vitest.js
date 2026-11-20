@@ -2,6 +2,9 @@
 // @covers artifacts/remittance/custom/RemittanceSepaFileData.jsx
 // @covers artifacts/remittance/custom/RemittanceAdvancedOptions.jsx
 // @covers tools/app-shell/src/components/financial-accounts/CreditorIdControls.jsx
+// @covers tools/app-shell/src/locales/en_US.json
+// @covers tools/app-shell/src/locales/es_ES.json
+// @covers tools/app-shell/src/locales/es_AR.json
 //
 // A i18n key used by the remittance SEPA block / «Antes de confirmar» / account creditor field that is missing
 // from a locale is SILENT: `ui()` echoes the raw key. Every literal key those files use (ui('x'), the key maps,
@@ -54,5 +57,67 @@ describe('remittance SEPA i18n keys', () => {
     const labels = { ...dictionary.genericLabels, ...dictionary.ui };
     const missing = keys.filter((key) => !(key in labels));
     expect(missing).toEqual([]);
+  });
+});
+
+// The invoice side of a CONFIRMED remittance: the chip/suffix on the invoice grids and topbars, the
+// link from a payment to its remittance, the disabled "add payment" reason, the payment sidebar
+// label and the two backend refusals. A key missing from one locale is silent (the raw key shows).
+describe('invoice-side remittance i18n keys', () => {
+  const INVOICE_FILES = [
+    join(SRC, 'windows/custom/shared/RemittanceLink.jsx'),
+    join(SRC, 'windows/custom/shared/preview-cards/PaymentsCard.jsx'),
+    join(SRC, 'windows/custom/shared/InvoicePaymentHistoryModal.jsx'),
+    join(SRC, 'windows/custom/shared/PaymentDetailSidebarBase.jsx'),
+    join(SRC, 'windows/custom/purchase-invoice/PurchaseInvoiceHeaderTable.jsx'),
+    join(SRC, 'windows/custom/purchase-invoice/PurchaseInvoiceTopbar.jsx'),
+    join(ROOT, 'artifacts/sales-invoice/custom/InvoiceHeaderTable.jsx'),
+    join(ROOT, 'artifacts/sales-invoice/custom/InvoiceTopbarExtra.jsx'),
+  ];
+  // key → the placeholders its sentence must carry in every locale.
+  const KEYS = {
+    remittanceInvoiceChip: [],
+    remittanceInvoiceRemittedSuffix: ['amount'],
+    remittancePaymentLink: ['documentNo'],
+    cpAddPaymentBlockedByRemittance: [],
+    cobroConfirmadoEnRemesa: [],
+    pagoConfirmadoEnRemesa: [],
+    'backendError.invoiceInRemittance': ['remittance', 'amount'],
+    'backendError.paymentInRemittance': ['remittance'],
+  };
+  const LOCALES = [['en_US', enUS], ['es_ES', esES], ['es_AR', esAR]];
+  const labelsOf = (dictionary) => ({ ...dictionary.genericLabels, ...dictionary.ui });
+  const placeholders = (text) => [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
+
+  it('every non-backend key is used by the invoice-side files', () => {
+    const text = INVOICE_FILES.map((file) => readFileSync(file, 'utf8')).join('\n');
+    for (const key of Object.keys(KEYS).filter((k) => !k.startsWith('backendError.'))) {
+      expect(text, key).toContain(`'${key}'`);
+    }
+  });
+
+  it.each(LOCALES)('every remittance key the invoice-side files use exists in %s', (_name, dictionary) => {
+    const labels = labelsOf(dictionary);
+    const used = new Set();
+    for (const file of INVOICE_FILES) {
+      for (const m of readFileSync(file, 'utf8').matchAll(KEY)) used.add(m[1]);
+    }
+    const missing = [...used].filter((key) => !NOT_I18N.has(key) && !(key in labels));
+    expect(missing).toEqual([]);
+  });
+
+  it.each(LOCALES)('has every key, non-empty, with its placeholders, in %s', (_name, dictionary) => {
+    const labels = labelsOf(dictionary);
+    for (const [key, params] of Object.entries(KEYS)) {
+      expect(typeof labels[key] === 'string' && labels[key].trim(), `${key}`).toBeTruthy();
+      expect(placeholders(labels[key]), key).toEqual([...params].sort());
+    }
+  });
+
+  it('translates the Spanish locales instead of copying the English sentence', () => {
+    for (const key of Object.keys(KEYS)) {
+      expect(labelsOf(esES)[key], `es_ES ${key}`).not.toBe(labelsOf(enUS)[key]);
+      expect(labelsOf(esAR)[key], `es_AR ${key}`).not.toBe(labelsOf(enUS)[key]);
+    }
   });
 });

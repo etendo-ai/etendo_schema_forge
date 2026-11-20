@@ -1816,7 +1816,7 @@
       ]
     },
     "292dffcc06f348c4ec0075d2f5a2480c447ec36ea06e3e8b7460e3e1d5ce8fed": {
-      "checksum": "7f503d734cab961b3dcd34d15fd7a1e92a2595291c1d1c3fd6b47e0376568f57",
+      "checksum": "52119cd75e0114de505a92f3d5a8afcad07082e4e0e933deb6a69cf703da0550",
       "params": [
         [
           "131",
@@ -1915,6 +1915,12 @@
         },
         {
           "ad_reference_id": "575BCB88A4694C27BC013DE9C73E6FE7",
+          "name": "Remitted",
+          "name_es": "Remitted",
+          "value": "REM_SENT"
+        },
+        {
+          "ad_reference_id": "575BCB88A4694C27BC013DE9C73E6FE7",
           "name": "Payment Made",
           "name_es": "Pagado",
           "value": "PPM"
@@ -1924,6 +1930,12 @@
           "name": "Payment Received",
           "name_es": "Cobrado",
           "value": "RPR"
+        },
+        {
+          "ad_reference_id": "575BCB88A4694C27BC013DE9C73E6FE7",
+          "name": "Settled in Remittance",
+          "name_es": "Settled in Remittance",
+          "value": "REM_CANCEL"
         },
         {
           "ad_reference_id": "575BCB88A4694C27BC013DE9C73E6FE7",
@@ -4585,7 +4597,7 @@
       ]
     },
     "518bc71f3c5600c82be1f355a91bf2aa0a5ee50531e8abd1f9f73ba244952ddb": {
-      "checksum": "7401584bcbb08b5338a2164a3a46792fc03908c6d59159bb3a9fe3ba17412709",
+      "checksum": "bbfb73ccabe8d35cfb35bea4aab6dd3a3b62b572fa40c8b9c1d14b8afd250b9c",
       "params": [
         [
           "131",
@@ -4685,6 +4697,12 @@
         },
         {
           "ad_reference_id": "575BCB88A4694C27BC013DE9C73E6FE7",
+          "name": "Remitted",
+          "name_es": "Remitted",
+          "value": "REM_SENT"
+        },
+        {
+          "ad_reference_id": "575BCB88A4694C27BC013DE9C73E6FE7",
           "name": "Payment Made",
           "name_es": "Pagado",
           "value": "PPM"
@@ -4694,6 +4712,12 @@
           "name": "Payment Received",
           "name_es": "Cobrado",
           "value": "RPR"
+        },
+        {
+          "ad_reference_id": "575BCB88A4694C27BC013DE9C73E6FE7",
+          "name": "Settled in Remittance",
+          "name_es": "Settled in Remittance",
+          "value": "REM_CANCEL"
         },
         {
           "ad_reference_id": "575BCB88A4694C27BC013DE9C73E6FE7",

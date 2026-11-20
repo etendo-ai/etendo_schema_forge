@@ -7024,7 +7024,7 @@
       ]
     },
     "372af9720002cd00d7ab60cf2919961286c4022d7cae4da33f0586eff52202ca": {
-      "checksum": "446aecaac4160c8b4f4b6ca8261019fe59ce73b1dc0977d93677c7904e2a5267",
+      "checksum": "633fa60f72df71bd1ee04d3bce179ac843a9bb02ed062064d9d9742063987560",
       "params": [
         "167"
       ],
@@ -8408,6 +8408,12 @@
           "ad_table_id": "318",
           "columnname": "EM_ETGO_Tbai_Status",
           "position": "991"
+        },
+        {
+          "ad_column_id": "8304CA28B7A342E8BB3C8427391A6F72",
+          "ad_table_id": "318",
+          "columnname": "EM_Etgo_Remitted_Amt",
+          "position": "992"
         },
         {
           "ad_column_id": "0DE0E9401AFB4B869A754BF45B75278E",
@@ -11432,7 +11438,7 @@
       ]
     },
     "4bc12fadc3f4675f289d036b6b78cded78314e733c80834fa999e947d67ec251": {
-      "checksum": "0e8a388f8b5f08a0df0b560a92fa776a8f4d4e75e16f46ffd2465bf00208199b",
+      "checksum": "9dc0685a1c8cda285839e0ee456e271d07d3f20c1d6205202ad94c1b634a0f5a",
       "params": [
         "183"
       ],
@@ -12816,6 +12822,12 @@
           "ad_table_id": "318",
           "columnname": "EM_ETGO_Tbai_Status",
           "position": "991"
+        },
+        {
+          "ad_column_id": "8304CA28B7A342E8BB3C8427391A6F72",
+          "ad_table_id": "318",
+          "columnname": "EM_Etgo_Remitted_Amt",
+          "position": "992"
         },
         {
           "ad_column_id": "0DE0E9401AFB4B869A754BF45B75278E",

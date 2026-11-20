@@ -208,6 +208,129 @@ describe('useInvoicePreview — free-to-allocate gating', () => {
   });
 });
 
+// ─── confirmed remittance ────────────────────────────────────────────────────
+//
+// The part of the outstanding in a CONFIRMED remittance is collected by the remittance, so it is
+// not offered as a new payment. The outstanding itself (and every total that reads it) is unchanged.
+
+/** paymentPlan answers with the given installments, invoicePayments with the given payments. */
+function stubPlan({ installments, payments = [] }) {
+  apiFetch.mockImplementation((url) => Promise.resolve({
+    ok: true,
+    json: () => Promise.resolve({
+      response: { data: String(url).includes('/paymentPlan') ? installments : payments },
+    }),
+  }));
+}
+
+function renderPreviewFor(invoice) {
+  // `invoice` must be a stable reference (see the territory suite below).
+  const props = { invoice, apiBaseUrl: 'http://host/sws/neo/sales-invoice', specName: 'sales-invoice' };
+  return renderHook(() => useInvoicePreview(props));
+}
+
+describe('useInvoicePreview — confirmed remittance', () => {
+  beforeEach(() => {
+    useFiscalConfigMock.mockReturnValue({ profile: null, tbaiRecord: null });
+  });
+
+  it('blocks a new payment by remittance when the whole plan is remitted', async () => {
+    stubPlan({ installments: [{ id: 'i1', outstandingAmount: '500.00', remittedAmount: '500.00', payableAmount: '0' }] });
+    const { result } = renderPreview();
+    await waitFor(() => expect(result.current.loadingPayments).toBe(false));
+
+    expect(result.current.totalOutstanding).toBe(500);
+    expect(result.current.totalRemitted).toBe(500);
+    expect(result.current.freeToAllocate).toBe(0);
+    expect(result.current.canAddPayment).toBe(false);
+    expect(result.current.addPaymentBlockedByRemittance).toBe(true);
+    // The remittance reason wins: deleting a draft would not unblock it.
+    expect(result.current.addPaymentBlockedByDraft).toBe(false);
+  });
+
+  it('offers only the free part of a partial remittance', async () => {
+    stubPlan({ installments: [{ id: 'i1', outstandingAmount: '500.00', remittedAmount: '300.00', payableAmount: '200.00' }] });
+    const { result } = renderPreview();
+    await waitFor(() => expect(result.current.loadingPayments).toBe(false));
+
+    expect(result.current.totalOutstanding).toBe(500);
+    expect(result.current.totalRemitted).toBe(300);
+    expect(result.current.freeToAllocate).toBe(200);
+    expect(result.current.canAddPayment).toBe(true);
+    expect(result.current.addPaymentBlockedByRemittance).toBe(false);
+  });
+
+  it('subtracts a draft once from the free part, not twice through payableAmount', async () => {
+    // payableAmount (100) already leaves the draft out; free − draft must be 200 − 100 = 100, not 0.
+    stubPlan({
+      installments: [{ id: 'i1', outstandingAmount: '500.00', remittedAmount: '300.00', payableAmount: '100.00' }],
+      payments: [{ id: 'd1', amount: '100.00', status: 'RPAP', processed: false }],
+    });
+    const { result } = renderPreview();
+    await waitFor(() => expect(result.current.loadingPayments).toBe(false));
+
+    expect(result.current.freeToAllocate).toBe(100);
+    expect(result.current.canAddPayment).toBe(true);
+  });
+
+  it('blames the drafts, not the remittance, when a draft covers the free part of a partial remittance', async () => {
+    stubPlan({
+      installments: [{ id: 'i1', outstandingAmount: '500.00', remittedAmount: '300.00' }],
+      payments: [{ id: 'd1', amount: '200.00', status: 'RPAP', processed: false }],
+    });
+    const { result } = renderPreview();
+    await waitFor(() => expect(result.current.loadingPayments).toBe(false));
+
+    expect(result.current.freeToAllocate).toBe(0);
+    expect(result.current.addPaymentBlockedByRemittance).toBe(false);
+    expect(result.current.addPaymentBlockedByDraft).toBe(true);
+  });
+
+  it('does not reserve a REM_SENT payment as a draft', async () => {
+    stubPlan({
+      installments: [{ id: 'i1', outstandingAmount: '500.00', remittedAmount: '300.00' }],
+      payments: [{ id: 'r1', amount: '300.00', status: 'REM_SENT', processed: false }],
+    });
+    const { result } = renderPreview();
+    await waitFor(() => expect(result.current.loadingPayments).toBe(false));
+
+    expect(result.current.freeToAllocate).toBe(200);
+  });
+
+  it('falls back to the header etgoRemittedAmt when the payment plan is empty', async () => {
+    const invoice = { id: 'inv-h', documentStatus: 'CO', grandTotalAmount: '500.00', etgoRemittedAmt: '500.00' };
+    stubPlan({ installments: [] });
+    const { result } = renderPreviewFor(invoice);
+    await waitFor(() => expect(result.current.loadingPayments).toBe(false));
+
+    expect(result.current.totalOutstanding).toBe(500);
+    expect(result.current.totalRemitted).toBe(500);
+    expect(result.current.addPaymentBlockedByRemittance).toBe(true);
+    expect(result.current.canAddPayment).toBe(false);
+  });
+
+  it('reads a header partial remittance without installments as the free part', async () => {
+    const invoice = { id: 'inv-hp', documentStatus: 'CO', grandTotalAmount: '500.00', etgoRemittedAmt: '120' };
+    stubPlan({ installments: [] });
+    const { result } = renderPreviewFor(invoice);
+    await waitFor(() => expect(result.current.loadingPayments).toBe(false));
+
+    expect(result.current.totalRemitted).toBe(120);
+    expect(result.current.freeToAllocate).toBe(380);
+    expect(result.current.canAddPayment).toBe(true);
+  });
+
+  it('reports nothing remitted for a payload without the remittance fields', async () => {
+    stubPlan({ installments: [{ id: 'i1', outstandingAmount: '500.00' }] });
+    const { result } = renderPreview();
+    await waitFor(() => expect(result.current.loadingPayments).toBe(false));
+
+    expect(result.current.totalRemitted).toBe(0);
+    expect(result.current.freeToAllocate).toBe(500);
+    expect(result.current.addPaymentBlockedByRemittance).toBe(false);
+  });
+});
+
 // ETP-5087: territory (from the active TBAI config) must be resolved and forwarded to
 // getPendingSifTargets, and exposed on the hook's return value for InvoicePreview.jsx to
 // thread into getInvoiceFiscalTargets/useFiscalStatus.

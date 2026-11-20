@@ -35,9 +35,26 @@ export const STATUS_PAYMENT_MADE = 'PPM';
  */
 export const PAYMENT_STATUS_ERROR = 'ETGOERR';
 
+/**
+ * "Remitted" — the status Classic REM gives the payment of a CONFIRMED remittance due that the bank
+ * has not collected yet (ETP-6247). The money has not moved: the invoice keeps its full outstanding
+ * until the remittance is collected, and the payment then moves on to RPR/PPM and RDNC/PWNC. A draft
+ * remittance creates no payment at all, so it never shows up here.
+ *
+ * The payment is not the user's to edit: the remittance owns its lifecycle and the backend refuses a
+ * reactivation or removal (`ETGO_PaymentInRemittance`). So it counts as processed — never a draft
+ * the invoice modal would offer to edit or delete, or reserve against the outstanding — but it is
+ * NOT a deposited status: reading it as "Cobro depositado" is exactly the lie this state replaces.
+ *
+ * `REM_CANCEL` ("settled in remittance") is a settled status and stays out of this: it keeps
+ * reading as deposited.
+ */
+export const STATUS_REMITTED = 'REM_SENT';
+
 /** True when the payment is confirmed rather than an editable draft. */
 export function isPaymentProcessed(payment) {
-  return payment?.processed === true || DEPOSITED_STATUSES.has(payment?.status || '');
+  const status = payment?.status || '';
+  return payment?.processed === true || DEPOSITED_STATUSES.has(status) || status === STATUS_REMITTED;
 }
 
 /**
@@ -49,11 +66,14 @@ export function isPaymentProcessed(payment) {
  * progreso" in the modal and "Pago depositado" in the payment window at the same time (ETP-4895).
  *
  * @param payment a payment row; `pisPending` is optional (see below)
- * @returns one of `'error' | 'inProgress' | 'deposited' | 'draft'`
+ * @returns one of `'error' | 'remitted' | 'inProgress' | 'deposited' | 'draft'`
  */
 export function paymentDisplayState(payment) {
   const status = payment?.status || '';
   if (status === PAYMENT_STATUS_ERROR) return 'error';
+  // Ahead of the processed check on purpose: a remitted payment is processed, and without this it
+  // read "Cobro depositado" in green while the bank had not collected anything (ETP-6247).
+  if (status === STATUS_REMITTED) return 'remitted';
   // `pisPending` is the backend's exact answer — processed, initiated over PIS, and with no bank
   // transaction. Only the invoice payment-list action carries it; where it is absent, PPM answers
   // the same question from the status alone (see STATUS_PAYMENT_MADE).

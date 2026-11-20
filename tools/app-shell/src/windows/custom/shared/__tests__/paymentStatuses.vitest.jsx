@@ -38,6 +38,21 @@ describe('paymentDisplayState', () => {
     expect(paymentDisplayState(payment)).toBe('draft');
   });
 
+  // ETP-6247 — REM_SENT is the payment of a confirmed remittance the bank has not collected yet. It
+  // is processed, so before this it fell through to "deposited" and read "Cobro depositado" in green.
+  it('reads REM_SENT as remitted, ahead of the processed check', () => {
+    expect(paymentDisplayState({ status: 'REM_SENT', processed: true })).toBe('remitted');
+    expect(paymentDisplayState({ status: 'REM_SENT', processed: false })).toBe('remitted');
+  });
+
+  it('keeps REM_CANCEL (settled in remittance) as deposited', () => {
+    expect(paymentDisplayState({ status: 'REM_CANCEL', processed: true })).toBe('deposited');
+  });
+
+  it('counts a remitted payment as processed: the remittance owns it, it is never a draft', () => {
+    expect(isPaymentProcessed({ status: 'REM_SENT', processed: false })).toBe(true);
+  });
+
   it('keeps "in progress" separate from "still a draft": a PPM payment is processed', () => {
     // The distinction the delete-draft button and the row-click navigation depend on. Folding PPM
     // into the draft bucket would offer to delete a payment the bank has already committed to.

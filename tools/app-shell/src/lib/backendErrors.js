@@ -1,5 +1,6 @@
 // ETP-5840 — relative, not `@/`: this module is loaded by plain `node --test` too.
 import { formatCalendarDate } from './dateOnly.js';
+import { formatCurrency } from './formatCurrency.js';
 import {
   announceQuotaRefusal, extractQuotaExceeded, isQuotaCheckFailed, quotaResourceLabel, quotaUsageText,
 } from './planQuotas.js';
@@ -653,6 +654,17 @@ const BACKEND_ERROR_KEY_MAP = {
   ETGO_RemittanceMarkCollectedNotAllowed: 'backendError.remittanceMarkCollectedNotAllowed',
   ETGO_RemittanceMarkCollectedFailed: 'backendError.remittanceMarkCollectedFailed',
   ETGO_RemittanceReactivateNotAllowed: 'backendError.remittanceReactivateNotAllowed',
+  // ETP-6247 — the invoice side of a confirmed remittance (InvoiceRemittance, 422).
+  // ETGO_InvoiceInRemittance: a payment registered from the invoice over its free part (the rest is
+  // in remittance `{0}`; only `{1}` can be registered). ETGO_PaymentInRemittance: a reactivation or
+  // removal of a REM_SENT payment, which the remittance owns. Both carry the remittance as extra
+  // error keys (remittanceId, remittanceDocumentNo, payableAmount, remittedAmount, currency) instead
+  // of `messageParams`; `extractBackendMessageParams` turns them into `{remittance}` / `{amount}`
+  // (the amount through formatCurrency — the backend's own text prints it unformatted, «1234.50»).
+  // A body missing them leaves the param unfilled, the key route yields (UNFILLED_PARAM) and the
+  // backend's localized text is shown — never a sentence without the number.
+  ETGO_InvoiceInRemittance: 'backendError.invoiceInRemittance',
+  ETGO_PaymentInRemittance: 'backendError.paymentInRemittance',
   // ETP-5684 — NeoAccountingAccessPolicy (com.etendoerp.go): a post/unpost from a role without
   // Show Accounting Fields. The SPA hides those actions, so this reaches only a stale screen.
   ETGO_AccountingAccessDenied: 'backendError.accountingAccessDenied',
@@ -713,8 +725,40 @@ export function extractBackendMessageKeys(payload) {
  */
 export function extractBackendMessageParams(payload) {
   const params = payload?.messageParams ?? payload?.response?.messageParams ?? payload?.error?.messageParams;
-  if (!params || typeof params !== 'object' || Array.isArray(params)) return undefined;
-  return Object.keys(params).length > 0 ? params : undefined;
+  if (!params || typeof params !== 'object' || Array.isArray(params)) {
+    return extractRemittanceRefusalParams(payload);
+  }
+  return Object.keys(params).length > 0 ? params : extractRemittanceRefusalParams(payload);
+}
+
+const INVOICE_IN_REMITTANCE_KEY = 'ETGO_InvoiceInRemittance';
+const PAYMENT_IN_REMITTANCE_KEY = 'ETGO_PaymentInRemittance';
+
+/**
+ * ETP-6247 — the two remittance refusals of `InvoiceRemittance` (com.etendoerp.go) send their values
+ * as top-level keys of the error object (`remittanceDocumentNo`, `payableAmount`, `remittedAmount`,
+ * `currency`) rather than as `messageParams`. Normalized here into the params their sentences take:
+ * `remittance` (the remittance number) and, for ETGO_InvoiceInRemittance, `amount` — the payable
+ * amount formatted with formatCurrency in the body's `currency` (grouped, without a symbol when the
+ * body names none). `undefined` for any other body, or when the remittance number is missing, so the
+ * backend's own text is shown instead.
+ *
+ * @param {object|null|undefined} payload parsed JSON error body
+ * @returns {object|undefined} `{ remittance, amount? }` or undefined
+ */
+function extractRemittanceRefusalParams(payload) {
+  const keys = extractBackendMessageKeys(payload);
+  if (!keys) return undefined;
+  const error = payload?.error ?? payload?.response?.error ?? payload;
+  const remittance = nonEmptyString(error?.remittanceDocumentNo);
+  if (!remittance) return undefined;
+  if (keys.includes(INVOICE_IN_REMITTANCE_KEY)) {
+    const payable = error?.payableAmount;
+    if (payable == null || payable === '' || !Number.isFinite(Number(payable))) return { remittance };
+    return { remittance, amount: formatCurrency(nonEmptyString(error?.currency) ?? '', Number(payable)) };
+  }
+  if (keys.includes(PAYMENT_IN_REMITTANCE_KEY)) return { remittance };
+  return undefined;
 }
 
 // ETP-5175 — the Invalid-Account posting failure, rendered from its identity instead of its prose.

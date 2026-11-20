@@ -39,6 +39,8 @@ function fmtRate(rate) {
 function confirmedLabelKey(isIn, state) {
   if (state === 'error') return isIn ? 'cobroConfirmadoRechazado' : 'pagoConfirmadoRechazado';
   if (state === 'inProgress') return isIn ? 'cobroConfirmadoEnProgreso' : 'pagoConfirmadoEnProgreso';
+  // ETP-6247 — in a confirmed remittance the bank has not collected yet: nothing was deposited.
+  if (state === 'remitted') return isIn ? 'cobroConfirmadoEnRemesa' : 'pagoConfirmadoEnRemesa';
   return isIn ? 'cobroConfirmado' : 'pagoConfirmado';
 }
 
@@ -237,7 +239,8 @@ export default function PaymentDetailSidebarBase({ dir, specName, data, token, a
   // purchase invoices and Payment Out — so collections keep the old reading until it is looked at
   // on its own.
   const isDraft = paymentState === 'draft' || (isIn && data?.status === 'RPAE');
-  const isInProgress = paymentState === 'inProgress';
+  // A remitted payment (ETP-6247) waits on the bank like one in progress, so it takes the same tone.
+  const isInProgress = paymentState === 'inProgress' || paymentState === 'remitted';
   const isError = paymentState === 'error';
   const totalAmount = parseFloat(data?.amount ?? 0);
   const currency = data?.['currency$_identifier'];

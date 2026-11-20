@@ -378,6 +378,13 @@ action `confirm`):
    and «Cobrada» (`markCollected`, from `PR`/`SB`: settles every payment on the fecha de
    cargo/abono with the automated-remittance module's `settleOnDueDate`, ends `CT`/`PT` and flags
    the remittance automated) are the later steps; see `neo-headless.md` §4.6c;
+   While the remittance is confirmed but not collected/paid, its invoices keep their full
+   outstanding (totals and KPIs unchanged), but the invoice UI shows the remitted part: «En remesa»
+   instead of the pending amount when the whole due is remitted, «Pendiente X · Y en remesa» when only
+   part of it is, the payment as «Remesado» with a «Remesa N» link back here, and no payment can be
+   registered for the remitted part (the backend refuses it with `ETGO_InvoiceInRemittance`). A draft
+   remittance changes nothing on the invoice. Details: `sales-invoice.md` / `purchase-invoice.md`,
+   *Invoices in a confirmed remittance — ETP-6247*;
 4. it generates the SEPA file (`pain.008.001.08` for CORE collections, `pain.001.001.09` for SCT payments).
    For CORE, GO checks the bank identifications and party names, and reconciles the number and
    amount of the debits against each payment group and the file header. If one of these checks

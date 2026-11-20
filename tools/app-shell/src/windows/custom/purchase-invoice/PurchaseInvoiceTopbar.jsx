@@ -93,6 +93,25 @@ export default function PurchaseInvoiceTopbar({ data, recordId, apiBaseUrl, onRe
             </span>
           );
         }
+        // ETP-6247 — the whole outstanding is in a CONFIRMED payment remittance: the bank pays it,
+        // so the badge says so instead of offering it as pending. Opens the same payments modal,
+        // where the remitted payment links to its remittance.
+        if (badge.kind === 'remitted') {
+          return (
+            <span
+              className="inline-flex items-center gap-2 whitespace-nowrap text-sm leading-6 font-medium h-10"
+              style={{ padding: '0 12px', borderRadius: '8px', backgroundColor: 'var(--status-warning-bg)', color: 'var(--status-warning-fg)', cursor: 'pointer' }}
+              data-testid="payment-status-badge"
+              data-state="remitted"
+              onClick={handleBadgeClick}
+            >
+              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: 'var(--status-warning-fg)' }} />
+              {ui('remittanceInvoiceChip')}
+              <span style={{ opacity: 0.4 }}>&middot;</span>
+              <span className="font-semibold tabular-nums">{formatCurrency(currency || 'USD', badge.remittedAmount)}</span>
+            </span>
+          );
+        }
         if (isFullyPaid) {
           return (
             <span
@@ -119,6 +138,15 @@ export default function PurchaseInvoiceTopbar({ data, recordId, apiBaseUrl, onRe
             {ui('statusPending')}
             <span style={{ opacity: 0.4 }}>&middot;</span>
             <span className="font-semibold tabular-nums">{formatCurrency(currency || 'USD', badge.amount)}</span>
+            {/* ETP-6247 — `badge.amount` is the free part; the rest is in a confirmed remittance. */}
+            {badge.kind === 'partially-remitted' && (
+              <>
+                <span style={{ opacity: 0.4 }}>&middot;</span>
+                <span className="tabular-nums" data-testid="payment-status-badge-remitted">
+                  {ui('remittanceInvoiceRemittedSuffix', { amount: formatCurrency(currency || 'USD', badge.remittedAmount) })}
+                </span>
+              </>
+            )}
           </span>
         );
       })()}
