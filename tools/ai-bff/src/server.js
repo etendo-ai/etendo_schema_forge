@@ -7,6 +7,7 @@ import { convertToModelMessages, pipeUIMessageStreamToResponse, stepCountIs, str
 import { z } from 'zod';
 import { createTurnRecorder, usageEndpoint } from './usage.js';
 import { buildSystemPrompt } from './systemPrompt.js';
+import { tabularAttachmentsToText } from './attachments.js';
 import {
   createHistoryStore, elideOldToolResults, fingerprintResponse, fingerprintUiMessages,
   historyConfigFromEnv, resolveHistory,
@@ -289,7 +290,7 @@ export async function handleChat(req, res) {
       ...browserTools(),
     };
     trace('tools', { mode: isPageHelpRequest ? 'page-help' : 'chat', available: Object.keys(tools) });
-    const uiMessages = body.messages || [];
+    const uiMessages = await tabularAttachmentsToText(body.messages || []);
     let modelMessages;
     if (cacheKey) {
       const plan = resolveHistory(historyStore.get(cacheKey), uiMessages);

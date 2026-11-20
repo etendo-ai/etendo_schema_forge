@@ -207,6 +207,19 @@ function traceHistory(stage, payload) {
   console.warn(`[copilot:history] ${stage}`, payload);
 }
 
+const AGENT_FILE_EXTENSIONS = /\.(csv|tsv|txt|xlsx)$/i;
+// Keeps the base64 body under the BFF's 1 MB request limit.
+export const AGENT_FILE_MAX_BYTES = 512 * 1024;
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
 function messageText(message) {
   if (typeof message.content === 'string') return message.content;
   return (message.parts || [])
@@ -393,6 +406,8 @@ export function useAiCopilotChat({ onOpenCopilot, menuGroups }) {
     }),
   }), []);
   const [input, setInput] = useState('');
+  const [files, setFiles] = useState([]);
+  const [fileError, setFileError] = useState('');
   const handlePageHelpFinish = useCallback(({ message }) => {
     if (!pageHelpPendingRef.current) return;
     const hasPendingTool = (message.parts || []).some(part => (
@@ -570,11 +585,17 @@ export function useAiCopilotChat({ onOpenCopilot, menuGroups }) {
     setPageHelpError(pageHelpChat.error.message || 'No se pudo analizar esta pantalla.');
   }, [pageHelpChat.error]);
 
-  const messages = useMemo(() => chat.messages.map(message => ({
-    id: message.id,
-    role: message.role === 'user' ? 'user' : 'copilot',
-    text: messageText(message),
-  })).filter(message => message.text || message.role === 'user'), [chat.messages]);
+  const messages = useMemo(() => chat.messages.map((message) => {
+    const files = message.role === 'user'
+      ? (message.parts || []).filter(part => part.type === 'file').map(part => ({ name: part.filename || 'archivo' }))
+      : [];
+    return {
+      id: message.id,
+      role: message.role === 'user' ? 'user' : 'copilot',
+      text: messageText(message),
+      ...(files.length ? { files } : {}),
+    };
+  }).filter(message => message.text || message.role === 'user'), [chat.messages]);
 
   // ETP-4576: no `token` in this gate. Under the cookie session the client holds none, so
   // gating on it would swallow every message silently. authHeaders() already resolves the
@@ -583,8 +604,39 @@ export function useAiCopilotChat({ onOpenCopilot, menuGroups }) {
     const value = text?.trim();
     if (!value) return;
     setInput('');
-    await chat.sendMessage({ text: value });
-  }, [chat]);
+    const pending = files;
+    setFiles([]);
+    if (!pending.length) {
+      await chat.sendMessage({ text: value });
+      return;
+    }
+    const parts = await Promise.all(pending.map(async file => ({
+      type: 'file',
+      mediaType: file.type || 'application/octet-stream',
+      filename: file.name,
+      url: await readFileAsDataUrl(file),
+    })));
+    await chat.sendMessage({ text: value, files: parts });
+  }, [chat, files]);
+
+  // Queued on the client only: the file travels with the next message to the agent.
+  const uploadFile = useCallback((file) => {
+    if (!file) return;
+    if (!AGENT_FILE_EXTENSIONS.test(file.name || '')) {
+      setFileError('Formato no soportado: adjunta un archivo CSV, TSV, TXT o XLSX.');
+      return;
+    }
+    if (file.size > AGENT_FILE_MAX_BYTES) {
+      setFileError('El archivo es demasiado grande: el máximo es 512 KB.');
+      return;
+    }
+    setFileError('');
+    setFiles(current => [...current, file]);
+  }, []);
+
+  const removeFile = useCallback((index) => {
+    setFiles(current => current.filter((_, i) => i !== index));
+  }, []);
 
   const requestPageHelp = useCallback(async () => {
     // ETP-4576: the missing-session case is no longer detectable from a token the client does
@@ -623,6 +675,8 @@ export function useAiCopilotChat({ onOpenCopilot, menuGroups }) {
 
   const actions = useMemo(() => ({
     sendMessage,
+    uploadFile,
+    removeFile,
     setInput,
     resetConversation: startNewConversation,
     startNewConversation,
@@ -639,13 +693,14 @@ export function useAiCopilotChat({ onOpenCopilot, menuGroups }) {
     addToolResult: chat.addToolOutput,
     requestPageHelp,
     showPageHelp,
-  }), [chat.addToolOutput, chat.regenerate, dismissError, history.deleteConversation, history.loadArchivedConversations, history.loadConversations, history.permanentDelete, history.renameConversation, history.restoreConversation, requestPageHelp, selectConversation, sendMessage, showPageHelp, startNewConversation, stop]);
+  }), [chat.addToolOutput, chat.regenerate, dismissError, history.deleteConversation, history.loadArchivedConversations, history.loadConversations, history.permanentDelete, history.renameConversation, history.restoreConversation, requestPageHelp, selectConversation, sendMessage, showPageHelp, startNewConversation, stop, uploadFile, removeFile]);
 
   return {
     messages,
     input,
+    files,
     isSending: chat.status === 'submitted' || chat.status === 'streaming',
-    error: chat.error?.message || loadError || history.historyError,
+    error: fileError || chat.error?.message || loadError || history.historyError,
     conversationId,
     isLoadingMessages,
     conversations: history.conversations,
