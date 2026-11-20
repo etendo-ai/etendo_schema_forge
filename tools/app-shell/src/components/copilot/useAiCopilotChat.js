@@ -208,6 +208,13 @@ function traceHistory(stage, payload) {
 }
 
 const AGENT_FILE_EXTENSIONS = /\.(csv|tsv|txt|xlsx)$/i;
+const AGENT_FILE_MEDIA_TYPES = new Set([
+  'text/csv', 'text/tab-separated-values', 'text/plain',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  // Browsers (notably on Windows) report these for .csv/.xlsx.
+  'application/csv', 'application/vnd.ms-excel', 'application/octet-stream',
+]);
+const ATTACHED_NOTE = /^\[Archivo adjunto "(.*)"\]$/;
 // Keeps the base64 body under the BFF's 1 MB request limit.
 export const AGENT_FILE_MAX_BYTES = 512 * 1024;
 
@@ -461,6 +468,8 @@ export function useAiCopilotChat({ onOpenCopilot, menuGroups }) {
     savedIdsRef.current = new Set();
     turnAbortedRef.current = false;
     setLoadError('');
+    setFileError('');
+    setFiles([]);
     setIsLoadingMessages(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- isBusy only reads a ref
   }, [chat.setMessages, chat.stop, chat.clearError]);
@@ -536,6 +545,8 @@ export function useAiCopilotChat({ onOpenCopilot, menuGroups }) {
     if (isBusy()) chat.stop();
     chat.setMessages([]);
     chat.clearError();
+    setFileError('');
+    setFiles([]);
     conversationIdRef.current = id;
     setConversationId(id);
     conversationCreatedRef.current = true;
@@ -566,6 +577,7 @@ export function useAiCopilotChat({ onOpenCopilot, menuGroups }) {
   const dismissError = useCallback(() => {
     chat.clearError();
     setLoadError('');
+    setFileError('');
     clearHistoryError();
   }, [chat.clearError, clearHistoryError]);
 
@@ -586,14 +598,18 @@ export function useAiCopilotChat({ onOpenCopilot, menuGroups }) {
   }, [pageHelpChat.error]);
 
   const messages = useMemo(() => chat.messages.map((message) => {
-    const files = message.role === 'user'
-      ? (message.parts || []).filter(part => part.type === 'file').map(part => ({ name: part.filename || 'archivo' }))
-      : [];
+    const attached = [];
+    const textParts = [];
+    for (const part of message.role === 'user' ? (message.parts || []) : []) {
+      if (part.type === 'file') attached.push({ name: part.filename || 'archivo' });
+      else if (part.type === 'text' && ATTACHED_NOTE.test(part.text)) attached.push({ name: part.text.match(ATTACHED_NOTE)[1] });
+      else if (part.type === 'text') textParts.push(part);
+    }
     return {
       id: message.id,
       role: message.role === 'user' ? 'user' : 'copilot',
-      text: messageText(message),
-      ...(files.length ? { files } : {}),
+      text: attached.length ? messageText({ ...message, parts: textParts }) : messageText(message),
+      ...(attached.length ? { files: attached } : {}),
     };
   }).filter(message => message.text || message.role === 'user'), [chat.messages]);
 
@@ -603,26 +619,47 @@ export function useAiCopilotChat({ onOpenCopilot, menuGroups }) {
   const sendMessage = useCallback(async (text) => {
     const value = text?.trim();
     if (!value) return;
-    setInput('');
+    setFileError('');
     const pending = files;
-    setFiles([]);
     if (!pending.length) {
+      setInput('');
       await chat.sendMessage({ text: value });
       return;
     }
-    const parts = await Promise.all(pending.map(async file => ({
-      type: 'file',
-      mediaType: file.type || 'application/octet-stream',
-      filename: file.name,
-      url: await readFileAsDataUrl(file),
-    })));
-    await chat.sendMessage({ text: value, files: parts });
+    // Read first: if a file cannot be read, nothing is cleared and the user can retry.
+    let parts;
+    try {
+      parts = await Promise.all(pending.map(async file => ({
+        type: 'file',
+        mediaType: file.type || 'application/octet-stream',
+        filename: file.name,
+        url: await readFileAsDataUrl(file),
+      })));
+    } catch {
+      setFileError('No se pudo leer el archivo adjunto. Inténtalo de nuevo.');
+      return;
+    }
+    setInput('');
+    setFiles([]);
+    try {
+      await chat.sendMessage({ text: value, files: parts });
+    } finally {
+      // useChat resends every message on each request: keep each data URL to the one
+      // turn it belongs to, leaving a short note (also used to show the file name).
+      chat.setMessages(current => current.map(message => (
+        message.role === 'user' && (message.parts || []).some(part => part.type === 'file')
+          ? { ...message, parts: message.parts.map(part => (
+            part.type === 'file' ? { type: 'text', text: `[Archivo adjunto "${part.filename || 'archivo'}"]` } : part
+          )) }
+          : message
+      )));
+    }
   }, [chat, files]);
 
   // Queued on the client only: the file travels with the next message to the agent.
   const uploadFile = useCallback((file) => {
     if (!file) return;
-    if (!AGENT_FILE_EXTENSIONS.test(file.name || '')) {
+    if (!AGENT_FILE_EXTENSIONS.test(file.name || '') || (file.type && !AGENT_FILE_MEDIA_TYPES.has(file.type))) {
       setFileError('Formato no soportado: adjunta un archivo CSV, TSV, TXT o XLSX.');
       return;
     }
@@ -630,8 +667,14 @@ export function useAiCopilotChat({ onOpenCopilot, menuGroups }) {
       setFileError('El archivo es demasiado grande: el máximo es 512 KB.');
       return;
     }
-    setFileError('');
-    setFiles(current => [...current, file]);
+    setFiles((current) => {
+      if (current.reduce((total, queued) => total + queued.size, 0) + file.size > AGENT_FILE_MAX_BYTES) {
+        setFileError('Los archivos adjuntos superan el máximo de 512 KB en total.');
+        return current;
+      }
+      setFileError('');
+      return [...current, file];
+    });
   }, []);
 
   const removeFile = useCallback((index) => {
