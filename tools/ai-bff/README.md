@@ -187,6 +187,15 @@ file is readable and non-empty, its content replaces the default for both modes.
 It is read on every request, so edits apply without a restart; an unreadable or
 empty file falls back to the default.
 
+## Spreadsheet attachments (CSV, TSV, TXT, XLSX)
+
+The agent chat accepts tabular files (paperclip in the copilot panel), e.g. a contact list to import.
+
+- **Client** (`useAiCopilotChat`): queues files locally (`uploadFile` / `removeFile`) and sends them as AI SDK `file` parts with the next message. Limit: 512 KB per file and in total; other formats are rejected with a translated error (`copilotFile*` keys).
+- **BFF** (`src/attachments.js`): `tabularAttachmentsToText` replaces each file part with a text part holding the table as CSV, so the model never receives a binary part. It never trusts the client: it re-checks `maxBytes` (512 KB), caps the *uncompressed* size of an XLSX at 8 MB (read from the zip central directory with `fflate`, nothing inflated; decompression-bomb guard), reads at most 3 sheets, 500 rows and 100,000 characters per sheet, and appends a note when it truncates so the agent tells the user. The content is marked as DATA, not instructions.
+- **History**: after the turn the client rewrites each file part to the note `[Archivo adjunto "<name>"]` (the data URL is not resent on later turns). The history cache fingerprints that notes form (`attachmentNotes`), and the cached/uncached paths both go through `buildModelMessages`. Saved conversation text leaves the notes out.
+- **Dependencies**: `read-excel-file` (XLSX parsing) and `fflate` (size check).
+
 ## Conversation history cache
 
 The browser already sends every UIMessage (tool calls and results included)

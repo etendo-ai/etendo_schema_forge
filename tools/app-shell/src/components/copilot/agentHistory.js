@@ -6,11 +6,14 @@
 export const CONVERSATION_TITLE_MAX = 60;
 const TOOL_DONE_STATES = ['output-available', 'output-error', 'output-denied'];
 
-/** Text of a UIMessage: only `text` parts, never tool inputs or outputs. */
+/** The note a sent attachment is reduced to; it labels the file, it is not message text. */
+export const ATTACHED_NOTE = /^\[Archivo adjunto "(.*)"\]$/;
+
+/** Text of a UIMessage: only `text` parts, never tool inputs, outputs or attachment notes. */
 export function uiMessageText(message) {
   if (typeof message?.content === 'string') return message.content;
   return (message?.parts || [])
-    .filter(part => part.type === 'text')
+    .filter(part => part.type === 'text' && !ATTACHED_NOTE.test(part.text))
     .map(part => part.text)
     .join('');
 }
