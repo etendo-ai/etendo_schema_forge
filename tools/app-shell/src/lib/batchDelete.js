@@ -1,6 +1,6 @@
 import { toast } from 'sonner';
 
-import { apiFetch } from '@etendosoftware/app-shell-core/auth/api';
+import { apiFetch } from '@etendo-ai/app-shell-core/auth/api';
 import { translateBackendError } from '@/lib/backendErrors.js';
 /**
  * ETP-4656 — shared, UI-agnostic core of the "checkbox selection → confirm →

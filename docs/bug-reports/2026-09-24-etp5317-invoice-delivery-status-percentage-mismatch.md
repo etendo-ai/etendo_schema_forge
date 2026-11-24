@@ -629,9 +629,9 @@ them; only the `sourcedata/AD_*.xml` files are two-way synced.)
 (`resolveDbDefaults()` fell back to hardcoded defaults, `source: "defaults"`,
 `localhost:5432/etendo_dev`, instead of reading the real `gradle.properties` at
 `localhost:5434/etendocoremerge`). Root cause, read directly from
-`node_modules/@etendosoftware/schema-forge-cli/src/db.js`: its `findGradleProperties()` fallback
+`node_modules/@etendo-ai/schema-forge-cli/src/db.js`: its `findGradleProperties()` fallback
 (`join(__dirname, '..', '..')`) assumes the LOCAL_CORE dev layout (2 levels up from
-`cli/src/db.js`); once installed inside `node_modules/@etendosoftware/schema-forge-cli/src/`,
+`cli/src/db.js`); once installed inside `node_modules/@etendo-ai/schema-forge-cli/src/`,
 `__dirname` is far deeper, so the fallback resolves to a meaningless path — the code's own comment
 says `SF_ROOT` (set by the consuming repo's `Makefile`) must be used instead, but I was invoking
 the bins directly, bypassing `make`. Fixed by exporting `SF_ROOT="$(pwd)"` (from the `schema_forge`
@@ -682,7 +682,7 @@ entries repointed at `column: 'EM_ETGO_*'` (keys renamed to match, `eTGOInvoiceS
 their local `LABEL_OVERRIDES` constants got the same new-key entries added (old ones kept, unused
 now but harmless). Verified both files parse (`esbuild`, since a full `vite build` fails here on an
 unrelated pre-existing issue — `vite.config.js` importing a missing module,
-`@etendosoftware/schema-forge-cli/src/report-auth.js`, from the published package — confirmed
+`@etendo-ai/schema-forge-cli/src/report-auth.js`, from the published package — confirmed
 unrelated by reproducing before touching anything).
 
 **Answering the user's actual question, now with the code read, not guessed:** the FORM's status

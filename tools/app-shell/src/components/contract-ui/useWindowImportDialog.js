@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useApiFetch } from '@/auth/useApiFetch.js';
 import { useLabel, useUI } from '@/i18n';
-import { simSearchEveryLanguage } from '@etendosoftware/app-shell-core/lib/simSearch.js';
+import { simSearchEveryLanguage } from '@etendo-ai/app-shell-core/lib/simSearch.js';
 import { useBatch } from '../copilot/ocr/ingest/useBatch.js';
 import { useNumberFlag } from '@/lib/flags/useFeatureFlag.js';
 import { IMPORT_BATCH_SIZE } from '@/lib/flags/flag-keys.js';

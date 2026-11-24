@@ -49,7 +49,7 @@ vi.mock('@/lib/productUsageTelemetry.js', async (importOriginal) => ({
 }));
 
 let mockAuth = null;
-vi.mock('@etendosoftware/app-shell-core/auth', async (importOriginal) => ({
+vi.mock('@etendo-ai/app-shell-core/auth', async (importOriginal) => ({
   ...(await importOriginal()),
   useAuthOptional: () => mockAuth,
 }));

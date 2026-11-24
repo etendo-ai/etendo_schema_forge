@@ -9,7 +9,7 @@ import { renderHook } from '@testing-library/react';
 // test controls the session shape.
 const mockUseAuthOptional = vi.fn();
 const mockCreateApiFetch = vi.fn();
-vi.mock('@etendosoftware/app-shell-core/auth', async (importOriginal) => ({
+vi.mock('@etendo-ai/app-shell-core/auth', async (importOriginal) => ({
   ...(await importOriginal()),
   useAuthOptional: () => mockUseAuthOptional(),
   createApiFetch: (...args) => mockCreateApiFetch(...args),
@@ -20,8 +20,8 @@ vi.mock('@/auth/useLogout.js', () => ({
   useLogout: () => mockLogout,
 }));
 
-import { AuthProvider, createMemoryAuthStorage } from '@etendosoftware/app-shell-core/auth';
-import { DataProvider, createQueryCache, createQueryKey } from '@etendosoftware/app-shell-core/data';
+import { AuthProvider, createMemoryAuthStorage } from '@etendo-ai/app-shell-core/auth';
+import { DataProvider, createQueryCache, createQueryKey } from '@etendo-ai/app-shell-core/data';
 import { useApiFetch } from '../useApiFetch.js';
 
 describe('useApiFetch', () => {

@@ -42,7 +42,7 @@ vi.mock('@/components/ui/label', () => ({
 }));
 
 const changePassword = vi.fn();
-vi.mock('@etendosoftware/etendo-go-core/onboarding/api', () => ({
+vi.mock('@etendo-ai/etendo-go-core/onboarding/api', () => ({
   changePassword: (...a) => changePassword(...a),
   // AUTH-07 / ETP-5022: the dialog resolves the backend's stable error code through this
   // table instead of showing the server's English text, so the mock must carry it.
@@ -62,7 +62,7 @@ vi.mock('@etendosoftware/etendo-go-core/onboarding/api', () => ({
   })[err?.code] || fallbackKey),
 }));
 // The checklist itself is covered in core; here it only has to show up for the typed password.
-vi.mock('@etendosoftware/etendo-go-core/onboarding/password-strength-checklist', () => ({
+vi.mock('@etendo-ai/etendo-go-core/onboarding/password-strength-checklist', () => ({
   PasswordStrengthChecklist: ({ password, testIdPrefix }) => (
     password ? <ul data-testid={`${testIdPrefix}-requirements`} data-password={password} /> : null
   ),
@@ -74,7 +74,7 @@ vi.mock('../copilot/copilotApi.js', () => ({
 import {
   resetSessionCredentials,
   setSessionCredentials,
-} from '@etendosoftware/app-shell-core/auth/sessionCredentials.js';
+} from '@etendo-ai/app-shell-core/auth/sessionCredentials.js';
 import { ChangePasswordDialog } from '../ChangePasswordDialog.jsx';
 
 const STRONG = 'NewPass1!';

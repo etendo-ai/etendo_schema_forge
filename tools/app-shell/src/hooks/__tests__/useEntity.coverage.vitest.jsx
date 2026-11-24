@@ -843,7 +843,7 @@ describe('useEntity — coverage paths', () => {
   // ---------------------------------------------------------------------------
   // ETP-5022: refresh/loadMore no longer special-case a 401 themselves — the
   // shared apiFetch helper already logs out and throws before the response ever
-  // reaches this hook (see @etendosoftware/app-shell-core's createApiFetch), so
+  // reaches this hook (see @etendo-ai/app-shell-core's createApiFetch), so
   // there is nothing left here to unit-test about logout. What IS still this
   // hook's responsibility is that the resulting rejection lands in the normal
   // error path (items reset, loading released) instead of hanging or throwing

@@ -45,7 +45,7 @@ vi.mock('@/hooks/useBankConnectionActions.js', () => ({
 // Stable object across renders — the hook memoizes on `cache`.
 const invalidateCacheMock = vi.fn();
 const dataCacheValue = { cache: { invalidate: (...a) => invalidateCacheMock(...a) } };
-vi.mock('@etendosoftware/app-shell-core/data', async (importOriginal) => ({
+vi.mock('@etendo-ai/app-shell-core/data', async (importOriginal) => ({
   ...(await importOriginal()),
   useOptionalDataCache: () => dataCacheValue,
 }));

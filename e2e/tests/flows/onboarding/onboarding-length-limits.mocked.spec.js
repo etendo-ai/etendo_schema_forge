@@ -38,7 +38,7 @@ const LIMITS = {
   // ETP-5806 — the free-text address field was replaced by structured Street/Number/Building
   // Name/City cells; streetName is the closest conceptual replacement for this length-limit
   // check. The input's maxLength is `STREET_NAME_MAX_LENGTH` from
-  // `@etendosoftware/app-shell-core` (`lib/locationAddress.js`), which is deliberately 60 — the
+  // `@etendo-ai/app-shell-core` (`lib/locationAddress.js`), which is deliberately 60 — the
   // width of `C_LOCATION.ADDRESS1`, the column the composed address line lands in — and NOT the
   // 70 of `EM_OBSEPA_StrtNm`. e2e specs never import app code, so the value is mirrored here:
   // when the constant moves, this literal moves with it.

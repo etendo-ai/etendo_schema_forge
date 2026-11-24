@@ -562,7 +562,7 @@ It prints the key ids, never a password, cookie, CSRF token or secret. The gatew
 | `PUBLIC_API_E2E_GATEWAY_PORT` | fixed gateway port instead of a free one |
 | `PUBLIC_API_E2E_TIMEOUT_MINUTES` | overall limit of the run, default `30`; when it is reached the script stops the suite and the gateway, deletes the keys and exits `124` |
 
-The gateway must be built first: `make public-api-e2e-ci-install` installs the exact published `@etendosoftware/api-gateway-core` pin from `gateway/package.json` and builds the gateway. npm requires GitHub Packages read credentials. No Core clone, `PUBLIC_API_CORE_DIR` or `PUBLIC_API_CORE_REPO` is needed. A second call with the same pin only rebuilds. See the [gateway deployment runbook](ops/public-api-gateway-deploy.md#0-published-gateway-dependency-etp-6150) for registry access and verified stable package releases.
+The gateway must be built first: `make public-api-e2e-ci-install` installs the exact published `@etendo-ai/api-gateway-core` pin from `gateway/package.json` and builds the gateway. npm requires GitHub Packages read credentials. No Core clone, `PUBLIC_API_CORE_DIR` or `PUBLIC_API_CORE_REPO` is needed. A second call with the same pin only rebuilds. See the [gateway deployment runbook](ops/public-api-gateway-deploy.md#0-published-gateway-dependency-etp-6150) for registry access and verified stable package releases.
 
 ```bash
 make public-api-e2e-ci-install
@@ -934,7 +934,7 @@ integrator                gateway (Nest)                     Etendo (com.etendoe
 ## 9. Operational notes
 
 - The gateway Docker image bundles `public-api/` and `gateway/public`, listens on port 4300 and runs as the `node` user (`gateway/Dockerfile`).
-- The image builds `@etendosoftware/api-gateway-core` from `.schema_forge_core/packages/api-gateway-core`, packs it as the tarball `etendosoftware-api-gateway-core-0.1.0.tgz` and installs that tarball, so the gateway is compiled against the core source present at build time.
+- The image builds `@etendo-ai/api-gateway-core` from `.schema_forge_core/packages/api-gateway-core`, packs it as the tarball `etendosoftware-api-gateway-core-0.1.0.tgz` and installs that tarball, so the gateway is compiled against the core source present at build time.
 - `make generate-base-public-api-manifest` regenerates and validates the manifest.
 
 ---

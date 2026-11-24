@@ -82,7 +82,7 @@ import { StrictMode } from 'react';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
-import { registerApiSession, resetApiSessionForTests } from '@etendosoftware/app-shell-core/auth';
+import { registerApiSession, resetApiSessionForTests } from '@etendo-ai/app-shell-core/auth';
 import PortalPage from '../PortalPage.jsx';
 import { ETENDO_PRICING_URL, PortalCreatedWithHeaderLink } from '../portal/PortalBits.jsx';
 import { PortalListTable } from '../portal/PortalListDesktop.jsx';

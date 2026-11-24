@@ -35,7 +35,7 @@ describe('loadReportCli — gated local-core loader (ETP-5460)', () => {
     else process.env.SCHEMA_FORGE_CORE = originalCoreOverride;
   });
 
-  it('with LOCAL_CORE unset, imports the published @etendosoftware/schema-forge-cli package', async () => {
+  it('with LOCAL_CORE unset, imports the published @etendo-ai/schema-forge-cli package', async () => {
     delete process.env.LOCAL_CORE;
     delete process.env.SCHEMA_FORGE_CORE;
     const mod = await loadReportCli('report-sql');

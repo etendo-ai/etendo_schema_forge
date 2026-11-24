@@ -3,7 +3,7 @@
 // form the full Jenkins pipelines use. See docs/public-api.md §4.9 "Running the suite in CI".
 //
 //   node scripts/public-api-e2e-ci.mjs install   (make public-api-e2e-ci-install)
-//     Installs and builds gateway/ with @etendosoftware/api-gateway-core taken from the
+//     Installs and builds gateway/ with @etendo-ai/api-gateway-core taken from the
 //     published version pinned in gateway/package.json, installed by
 //     scripts/lib/pack-gateway-core.mjs, the sequence deploy-public-api.yml uses too.
 //     A second call with the same pin skips the dependencies and only rebuilds gateway/.
@@ -29,7 +29,7 @@ import { installGatewayCore } from './lib/pack-gateway-core.mjs';
 
 const REPO_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const GATEWAY_DIR = join(REPO_DIR, 'gateway');
-const CORE_PACKAGE = '@etendosoftware/api-gateway-core';
+const CORE_PACKAGE = '@etendo-ai/api-gateway-core';
 const INSTALL_STAMP = join(GATEWAY_DIR, 'node_modules', '.public-api-e2e-ci-core');
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
 /** Capabilities of the two keys the run creates: `process` lets the suite run business actions. */

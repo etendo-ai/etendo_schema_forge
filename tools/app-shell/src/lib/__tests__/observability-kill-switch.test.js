@@ -4,7 +4,7 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { OpenFeature, TypedInMemoryProvider } from '@openfeature/web-sdk';
-import { createTelemetryGateway } from '@etendosoftware/app-shell-core/observability/gateway';
+import { createTelemetryGateway } from '@etendo-ai/app-shell-core/observability/gateway';
 import { createDatadogProvider } from '../observability/providers/datadog.js';
 import { createRumProvider } from '../rum.js';
 import { createMixpanelProvider } from '../observability/providers/mixpanel.js';

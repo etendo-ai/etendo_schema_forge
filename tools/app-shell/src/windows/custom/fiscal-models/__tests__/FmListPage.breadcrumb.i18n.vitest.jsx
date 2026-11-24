@@ -11,7 +11,7 @@
 // a raw hardcoded Spanish literal, never localized, never matched against the
 // menu section. The fix is `{ui('taxes')} / {ui('fm.breadcrumb.section')}`.
 //
-// NOTE: the sibling FmListPage.vitest.jsx mocks '@etendosoftware/app-shell-core'
+// NOTE: the sibling FmListPage.vitest.jsx mocks '@etendo-ai/app-shell-core'
 // for useUI, but FmListPage.jsx actually imports useUI from '@/i18n' — that mock
 // never intercepts the real import (verified empirically), so those tests only
 // ever exercise the REAL useUI() falling back to the raw key with no

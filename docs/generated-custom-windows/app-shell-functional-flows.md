@@ -382,7 +382,7 @@ Any authenticated route can also be opened with `?embedded=1`; in that mode the 
   documents (`followUpErrorMessage`). A multi-row bulk summary still shows only counts, except
   that a quota refusal among the failures is named once as the toast description
   (`useBulkActionToast`, rows flagged `quotaRefusal`).
-  The generic CSV/XLSX import (`ImportDialog` in `@etendosoftware/app-shell-core`) still
+  The generic CSV/XLSX import (`ImportDialog` in `@etendo-ai/app-shell-core`) still
   classifies it as its generic row error: its row message is decided inside core's
   `importEngine.classifyImportError`, which has no quota case yet; the fix is owed to ETP-5911
   (`com.etendoerp.go` `docs/open-and-notable-topics.md` §5.18). Which writes a quota can refuse at all, and which it
@@ -820,7 +820,7 @@ Any authenticated route can also be opened with `?embedded=1`; in that mode the 
   - Failed authorization shows an inline error state.
   - Action buttons are disabled while authorization is in progress.
 - **Automated evidence:**
-  - `AuthorizePage` now lives in `@etendosoftware/app-shell-core`; its source-reading coverage (route parameter parsing, default scopes, PKCE gating, consent-vs-landing branching, POST target and headers, redirect handling, deny handling, supported scopes) moved to `packages/app-shell-core/test/AuthorizePage.source.test.js` in the `schema_forge_core` repo. In this repo the one-line shim is covered by `tools/app-shell/src/pages/__tests__/AuthorizePage.vitest.jsx`.
+  - `AuthorizePage` now lives in `@etendo-ai/app-shell-core`; its source-reading coverage (route parameter parsing, default scopes, PKCE gating, consent-vs-landing branching, POST target and headers, redirect handling, deny handling, supported scopes) moved to `packages/app-shell-core/test/AuthorizePage.source.test.js` in the `schema_forge_core` repo. In this repo the one-line shim is covered by `tools/app-shell/src/pages/__tests__/AuthorizePage.vitest.jsx`.
 - **Manual verification path:**
   1. Open `/authorize` with no query string and confirm the connection landing screen appears.
   2. Open `/authorize?client_id=test-client&redirect_uri=https://example.test/cb&code_challenge=abc&response_type=code&state=xyz` while authenticated.
@@ -993,7 +993,7 @@ actual gallery cards, while missing these 5 real ones.
 
 - **User goal / entry point:** None — there is no user-facing notification. When an administrator changes a user's role/permissions while their session is active, the app self-heals silently in the background; the user simply finds their menu/access already up to date on the next natural re-render.
 - **Main path behavior:**
-  - `AuthContext.jsx` (`@etendosoftware/app-shell-core`, ETP-5195) silently refreshes the session on mount, on tab focus/`visibilitychange`, and on a fixed 5-minute poll. Every refresh re-fetches `windowAccess`/`capabilities` (`SFWindowAccessMap`) through the host's `fetchWindowAccess` callback and diffs them; a real diff bumps `authRevision` and swaps the object references, which every consumer that reads them (`useWindowAccessSafe()`, `useCapabilitiesSafe()`, `useRoleMenu()` via `authRevision`) picks up live, with no reload — this self-heals a template-role composition change or an Admin promote/demote for window/capability access.
+  - `AuthContext.jsx` (`@etendo-ai/app-shell-core`, ETP-5195) silently refreshes the session on mount, on tab focus/`visibilitychange`, and on a fixed 5-minute poll. Every refresh re-fetches `windowAccess`/`capabilities` (`SFWindowAccessMap`) through the host's `fetchWindowAccess` callback and diffs them; a real diff bumps `authRevision` and swaps the object references, which every consumer that reads them (`useWindowAccessSafe()`, `useCapabilitiesSafe()`, `useRoleMenu()` via `authRevision`) picks up live, with no reload — this self-heals a template-role composition change or an Admin promote/demote for window/capability access.
   - **ETP-5189 addition — `menuAccess`:** `fetchWindowAccess()` (`App.jsx`) also calls `fetchMenuAccess()`, which flattens the role-filtered menu tree (`fetchMenuTree()` + `collectAllowedIds()`, `lib/menuTree.js` — the same `SFListMenu` source `useRoleMenu()` reads) into a `{id: true}` map and merges it into the payload as `menuAccess`. `AuthContext.jsx`'s diff compares `menuAccess` the same way as the other two maps, so a menu-item-only or process-only grant/revocation (one that never touches a window/capability tier) also bumps `authRevision` — closing a gap where such a change previously left the sidebar permanently stale.
   - **ETP-5423 removal:** ETP-5189 originally shipped a visible companion to this silent refresh — `useRoleChangeNotice()` and a `RoleChangedBanner` component that flagged a genuine post-login access change and rendered a non-dismissible "Reload now" banner. That hook/component pair (and its tests) were removed in ETP-5423: the functional analyst determined they were pure dead-weight on top of ETP-5195's own silent refresh (the underlying access maps are already correct in the background by the time any notification could render — a reload was never the fix, just a reassurance UI). The refresh mechanism above is unchanged; there is simply no visible artifact of it firing anymore.
 - **Failure or edge behavior:**
