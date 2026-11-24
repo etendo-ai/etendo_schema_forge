@@ -22445,6 +22445,8 @@
     "sifDataTabs.dua.lcHintIva": "For a complementary customs liquidation, enter the customs liquidation number; it starts with LC, A01 or A02.",
     "sifDataTabs.dua.lcHintIgic": "For a complementary customs liquidation, enter the customs liquidation number; it starts with CLC or 599.",
     "sifDataTabs.dua.lcHintAny": "For a complementary customs liquidation, enter the customs liquidation number; it starts with LC, A01 or A02 (IVA) or CLC or 599 (IGIC).",
+    "sifDataTabs.dua.importCheck": "Import with DUA",
+    "sifDataTabs.dua.importCheckHelp": "Marks the invoice as an import: shows the DUA and the import taxes. For an organization in SII it is sent as Import (DUA).",
     "sifDataTabs.importTaxes.subtitle": "Enter the base assessed in the DUA; the tax amount is calculated from the rate.",
     "sifDataTabs.importTaxes.rate": "Rate",
     "sifDataTabs.importTaxes.summaryTaxAmount": "Import VAT amount",

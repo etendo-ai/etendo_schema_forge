@@ -298,7 +298,7 @@ describe('SiiImportTaxesSection — the card', () => {
   function renderCard(props = {}) {
     const onHeaderRefresh = vi.fn();
     const utils = render(h(SiiImportTaxesSection, {
-      ui, siiTypeKey: 'F5', multiDua: false, recordId: RECORD, data: { id: RECORD }, apiBaseUrl: '/api/purchase-invoice',
+      ui, multiDua: false, recordId: RECORD, data: { id: RECORD }, apiBaseUrl: '/api/purchase-invoice',
       token: 't', readOnly: false, onHeaderRefresh, step: 2, ...props,
     }));
     return { ...utils, onHeaderRefresh };
@@ -316,12 +316,9 @@ describe('SiiImportTaxesSection — the card', () => {
     routeApi();
   });
 
-  it('renders nothing with the flag off or a type other than F5/LC', () => {
+  it('renders nothing with the flag off', () => {
     flag.enabled = false;
     expect(renderCard().container).toBeEmptyDOMElement();
-    flag.enabled = true;
-    expect(renderCard({ siiTypeKey: 'F1' }).container).toBeEmptyDOMElement();
-    expect(renderCard({ siiTypeKey: 'F6' }).container).toBeEmptyDOMElement();
   });
 
   it('asks to save the invoice first while it is unsaved, with no request', () => {

@@ -22,6 +22,7 @@ import { useCreateContactModal } from '@/components/contract-ui/useCreateContact
 import { getInvoiceDraftMode, buildInvoiceRowQuickActions, useClearSavedRecord, buildInvoiceUnpostActions, invoiceUnpostRowFilter, makeInvoiceReactivateRowFilter } from '../shared/useInvoiceWindow.js';
 import { PURCHASE_INVOICE_FOLLOW_UP } from '../shared/invoiceFollowUp.js';
 import { useSiiImportDuaEnabled } from '../shared/SiiImportDuaSection.jsx';
+import { isImportDuaChecked } from '../shared/importDua.js';
 import { createFollowUpAfterProcess } from '@/components/follow-up-documents/followUpDocuments.js';
 import { useTaxSifLineRowActions } from '../shared/useTaxSifLineRowActions.jsx';
 import { useSifRowSendAction } from '../shared/useSifRowSendAction.jsx';
@@ -116,9 +117,13 @@ const LABEL_OVERRIDES = {
   },
 };
 
-/** ETP-6284: Confirm without lines when the invoice carries manual (import) tax lines. */
+/**
+ * ETP-6284: Confirm without lines on an import with DUA (the Lines tab check `etgoImportDua`, any
+ * organization, SII or not) that carries manual (import) tax lines.
+ */
 export function allowConfirmWithManualTaxLines(record) {
-  return record?.hasManualTaxLines === true || record?.hasManualTaxLines === 'Y';
+  return isImportDuaChecked(record)
+    && (record?.hasManualTaxLines === true || record?.hasManualTaxLines === 'Y');
 }
 
 function PurchaseInvoiceBulkAction(props) {
@@ -242,7 +247,7 @@ export default function PurchaseInvoiceWindow(props) {
   // can save corrected header dimensions; their decisions.json readOnlyLogic override
   // (@Posted@='Y' | (@Processed@='Y' & @DocStatus@!'CO')) keeps them locked while the invoice
   // is posted (matching core C_INVOICE_TRG) or in any processed status other than CO.
-  // ETP-6284: behind the siiImportDua capability, an import invoice with no lines but with manual tax lines
+  // ETP-6284: behind the siiImportDua capability, an import with DUA (Lines tab check) with no lines but with manual tax lines
   // (C_InvoiceTax, Recalculate=N — `hasManualTaxLines`, PurchaseInvoiceHeaderHandler) can be
   // confirmed, as in Classic (C_Invoice_Post accepts lines OR tax lines).
   const importDuaEnabled = useSiiImportDuaEnabled();

@@ -22,8 +22,9 @@ import { InfoBanner } from '@/components/InfoBanner.jsx';
 import { isDuaDateAfterAccountingDate, useSiiImportDuaEnabled } from '@/windows/custom/shared/SiiImportDuaSection.jsx';
 
 /**
- * ETP-6284 — "Impuestos de importación" card of the purchase-invoice SII panel, right after
- * "Importación (DUA)" and behind the same `siiImportDua` capability (`useSiiImportDuaEnabled`).
+ * ETP-6284 — "Impuestos de importación" card of the purchase invoice, in the Lines tab right after
+ * "Importación (DUA)" while the header check "Importación con DUA" is on (`ImportDuaLinesSection`),
+ * behind the same `siiImportDua` capability (`useSiiImportDuaEnabled`). Independent of SII.
  *
  * Classic parity (module SII, purchase invoice "Tax" tab): an import is declared by adding manual
  * tax lines (`C_InvoiceTax` with `Recalculate = 'N'`) next to the ones the invoice lines generate.
@@ -44,8 +45,8 @@ import { isDuaDateAfterAccountingDate, useSiiImportDuaEnabled } from '@/windows/
  * totals (`onHeaderRefresh`).
  *
  * DUA / DUA date are REQUIRED per line with Multiple DUA. Classic declares that rule in
- * `InvoiceTaxEventHandler` but its `showMsg` never throws, so the backend does not enforce it —
- * this card is the only place it holds.
+ * `InvoiceTaxEventHandler` but its `showMsg` never throws; GO enforces it in com.etendoerp.go
+ * (`PurchaseInvoiceTaxExtension`, with the import check on or SII type F5 / LC) on every channel.
  *
  * Tax picker: the purchase-line tax selector (`/lines/selectors/tax`, `C_Tax_IsSOTrx_Date` rule:
  * purchase or both, valid at the invoice date), restricted to import taxes only
@@ -56,8 +57,7 @@ import { isDuaDateAfterAccountingDate, useSiiImportDuaEnabled } from '@/windows/
  * hidden committed item). Its items carry the rate shown in the Tipo column (`labelPrefix`, the same
  * rate the line pickers show); a saved row falls back to `tax.rate`.
  */
-export const DUA_TYPE_KEYS = new Set(['F5', 'LC']);
-// The card is mounted on purchase invoices only (SifTab's `isPurchaseInvoice` gate).
+// The card is mounted on purchase invoices only (the purchase-invoice Lines tab).
 const WINDOW_CATEGORY = 'purchases';
 const CATALOG_PAGE = 100;
 const CATALOG_MAX_PAGES = 5;
@@ -592,7 +592,8 @@ function useTaxRateCatalog(apiFetch, selectorUrl, selectorContext) {
 /**
  * ETP-6284 — whether the saved purchase invoice is an import of deferred VAT (F5/LC, IVA
  * organization in SII, `SIIUtils.isDeferredVATInvoice`), which is when the card offers the
- * compensatory line. Served by `GET <neo>/purchase-invoice/header/{id}/action/siiDeferredVat`
+ * compensatory line (import check on, supplier outside the EU or in Canarias / Ceuta / Melilla —
+ * no SII configuration involved). Served by `GET <neo>/purchase-invoice/header/{id}/action/siiDeferredVat`
  * (com.etendoerp.go, body `{ deferredVat }` at the top level). Fetched while `enabled`, refetched
  * whenever `refreshKey` changes; `false` while loading or on any failure.
  */
@@ -954,11 +955,11 @@ function ImportTaxesBlock({
 }
 
 export default function SiiImportTaxesSection({
-  ui, siiTypeKey, multiDua, recordId, data, apiBaseUrl, token, readOnly, onHeaderRefresh, step,
+  ui, multiDua, recordId, data, apiBaseUrl, token, readOnly, onHeaderRefresh, step,
   deferredVat = false, accountingRegisterDate = null,
 }) {
   const enabled = useSiiImportDuaEnabled();
-  if (!enabled || !DUA_TYPE_KEYS.has(siiTypeKey)) return null;
+  if (!enabled) return null;
   return (
     <ImportTaxesBlock
       ui={ui}
