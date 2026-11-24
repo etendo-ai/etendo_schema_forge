@@ -907,22 +907,32 @@ describe('SideMenu', () => {
       expect(screen.queryByText('Proof of Concept')).not.toBeInTheDocument();
     });
 
-    it('renders the accounting-process item without any feature flag', () => {
+    it('keeps a saved accounting-process favorite visible with every feature flag off', async () => {
+      const user = userEvent.setup();
       mockUseFeatureFlag.mockReturnValue(false);
+      mockUseFavorites.mockReturnValue({
+        favorites: [{ name: 'acct-process-monitor', label: 'Accounting Process' }],
+      });
       render(<SideMenu
         {...defaultProps}
-        menuGroups={[{
-          group: 'Settings',
-          icon: 'Settings',
-          section: 'System',
-          items: [{
-            name: 'acct-process-monitor',
-            label: 'Accounting Process',
-          }],
-        }]}
+        menuGroups={[
+          { group: 'Favorites', icon: 'Star', section: 'General', items: [] },
+          {
+            group: 'Settings',
+            icon: 'Settings',
+            section: 'System',
+            items: [{
+              name: 'acct-process-monitor',
+              label: 'Accounting Process',
+              capability: 'isAdminOrClientAdmin',
+            }],
+          },
+        ]}
       />);
 
-      expect(screen.getByTestId('menu-item-acct-process-monitor')).toBeInTheDocument();
+      await user.click(screen.getByText('Favorites'));
+      // One entry under Settings plus the saved favorite.
+      expect(screen.getAllByText('Accounting Process')).toHaveLength(2);
     });
 
     it('fails closed for an explicitly unknown feature flag', () => {

@@ -706,7 +706,7 @@ export default function SideMenu({
     // Unified Calendar PoC — item-level flag. It sits inside the Proof of Concept group, so it is
     // visible only when BOTH proof-of-concept-menu (group gate above) and this flag are on.
     [UNIFIED_CALENDAR_POC]: showUnifiedCalendarPoc,
-  }), [showPublicApiKeys, showProofOfConceptMenu, showUnifiedCalendarPoc]);
+  }), [showPublicApiKeys, showDocTemplateSelection, showProofOfConceptMenu, showUnifiedCalendarPoc]);
 
   // Applied to Favorites TOO. Favorites are rebuilt from the user's own saved list rather than
   // from menuGroups, so returning early for that group let a favourited flag-gated item stay

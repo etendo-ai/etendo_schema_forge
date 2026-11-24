@@ -284,6 +284,14 @@ test.describe('Accounting process monitor — route', () => {
     await openMonitor(page);
     await expect(page.getByTestId('AcctProcessMonitorPage__statusCard')).toBeVisible();
   });
+
+  test('an admin finds the menu entry in Settings and opens the page, with no overrides', async ({ page }) => {
+    await page.getByRole('button', { name: /configuraci[oó]n|settings/i }).hover();
+    const entry = page.getByTestId('menu-item-acct-process-monitor');
+    await expect(entry).toBeVisible();
+    await entry.click();
+    await expect(page.getByTestId('AcctProcessMonitorPage__statusCard')).toBeVisible();
+  });
 });
 
 test.describe('Accounting process monitor — non-admin', () => {

@@ -270,10 +270,13 @@ describe('CommandPalette', () => {
 
   it('hides accounting processes from a non-admin', () => {
     mockUseAuth.mockReturnValue({ capabilities: { isAdminOrClientAdmin: false } });
-    render(<CommandPalette />);
-    openPalette();
-    expect(screen.queryByText('translated:Accounting Process')).not.toBeInTheDocument();
-    mockUseAuth.mockReturnValue({ capabilities: { isAdminOrClientAdmin: true } });
+    try {
+      render(<CommandPalette />);
+      openPalette();
+      expect(screen.queryByText('translated:Accounting Process')).not.toBeInTheDocument();
+    } finally {
+      mockUseAuth.mockReturnValue({ capabilities: { isAdminOrClientAdmin: true } });
+    }
   });
 
   it('shows public API keys only for an admin when the feature flag is on', () => {
