@@ -1,5 +1,8 @@
 // @covers tools/app-shell/src/components/contract-ui/AutoMatchSuggestionModal.jsx
 // @covers tools/app-shell/src/components/contract-ui/AutoMatchBounceSection.jsx
+// @covers tools/app-shell/src/components/contract-ui/AutoMatchCard.jsx
+// @covers tools/app-shell/src/components/contract-ui/AutoMatchPairRow.jsx
+// @covers tools/app-shell/src/components/contract-ui/AutoMatchCloseConfirmDialog.jsx
 // @covers tools/app-shell/src/components/contract-ui/BouncePairPanel.jsx
 // @covers tools/app-shell/src/components/contract-ui/useBouncePairReview.jsx
 // @covers tools/app-shell/src/hooks/useAutoMatchReview.js
@@ -10,8 +13,8 @@ import { test, expect } from '../../helpers/test.js';
 import { login } from '../../helpers/auth.js';
 
 /**
- * Bounce-pair suggestions (the modal's "Rechazos bancarios" section, the panel's "Posibles rechazos"
- * filter) in the bank reconciliation — mocked.
+ * Bounce-pair suggestions (the modal's yellow "Posibles rechazos bancarios" card, the panel's
+ * "Posibles rechazos" filter) in the bank reconciliation — mocked.
  *
  * The backend detects bounce pairs behind the per-account flag `bank-bounce-suggestions`; the SPA
  * never evaluates it and renders what the backend answers. With the flag on, `autoMatch` carries
@@ -20,26 +23,35 @@ import { login } from '../../helpers/auth.js';
  * unchanged. Contract: com.etendoerp.go docs/neo-headless.md §4.12.1.1.
  *
  * Covered here:
- *   1. the automatch modal auto-opens with one transaction group and three pairs (high, review,
- *      ambiguous): high checked, review unchecked, ambiguous disabled;
+ *   1. the automatch modal auto-opens with the yellow "Posibles rechazos bancarios" card ABOVE the
+ *      green "Líneas del extracto bancario" card, the "Posibles rechazos" KPI and no global footer
+ *      (no "Cancelar"): one transaction group and three pairs (high, review, ambiguous) — high
+ *      checked, review unchecked, ambiguous disabled with "Revisar en el panel";
  *   2. "Revisar en el panel" on the ambiguous pair closes the modal, switches the panel filter to
  *      "Posibles rechazos" and selects the bounce line, with no review banner; each candidate shows
  *      its bank reference ("Ref. X") and the footer the selected bounce's, the clipped description is
  *      on hover; choosing the original and "Descartar par" POSTs `discardPair` with the original and
  *      the bounce;
- *   3. after "Revisar en el panel", the Automatch button reopens the modal on the same suggestions
- *      with the checks as they were left, and Apply sends ONE `applySuggestions` with the
- *      transaction group first and both checked pairs, plus `bounceDecisions` naming the ambiguous
- *      pair `sent_to_panel`;
- *   4. "Descartadas" lists the discarded lines (`status=discarded`) and "Restaurar par" POSTs
+ *   3. "Excluir de la conciliación (N)" is IMMEDIATE and independent: ONE `applySuggestions` with
+ *      ONLY `bouncePair` groups and no `bounceDecisions`; the excluded rows leave at once without an
+ *      automatch refetch, the KPI and the count drop, the toast says "N rechazo(s) excluido(s)…" and
+ *      the button is disabled at N=0; a pair the backend refuses stays on screen with a translated
+ *      error toast while the others are excluded;
+ *   4. "Conciliar seleccionadas (N)" POSTs ONLY transaction groups plus `bounceDecisions` for every
+ *      pair still on screen (`unchecked`, or `sent_to_panel` for a pair sent to the panel), after the
+ *      Automatch button reopened the modal with the checks kept;
+ *   5. closing (X, Esc, backdrop, "Ir a conciliación manual") with rows checked asks "¿Deseas cerrar
+ *      la ventana?": "Seguir trabajando" keeps the modal and the selection, "Cerrar" closes it; with
+ *      nothing checked there is no dialog;
+ *   6. "Descartadas" lists the discarded lines (`status=discarded`) and "Restaurar par" POSTs
  *      `restorePair`;
- *   5. flag off: no "Rechazos bancarios" section, no bounce KPI, the original apply payload;
- *   6. "No es un rechazo" POSTs `dismissPair` with the selected line and the other line of the pair,
+ *   7. flag off: no yellow card, no bounce KPI, the original apply payload;
+ *   8. "No es un rechazo" POSTs `dismissPair` with the selected line and the other line of the pair,
  *      and a failing `dismissPair` changes nothing on screen (no error toast);
- *   7. a pair sent to the panel, then checked and unchecked again in the reopened modal, is
+ *   9. a pair sent to the panel, then checked and unchecked again in the reopened modal, is
  *      reported as `unchecked`, not `sent_to_panel`;
- *   8. read-only tier: the modal never opens and "No es un rechazo" posts nothing;
- *   9. (E2E_TELEMETRY=configured only) the `bounce_suggestions_viewed` / `_dismissed` Mixpanel
+ *  10. read-only tier: the modal never opens and "No es un rechazo" posts nothing;
+ *  11. (E2E_TELEMETRY=configured only) the `bounce_suggestions_viewed` / `_dismissed` Mixpanel
  *      events, read from the requests to the Mixpanel host — see the describe below.
  *
  * Mock mode only (run against plain `make dev`, not `make dev-mock`). Every route is installed AFTER
@@ -205,13 +217,17 @@ const json = (route, body, status = 200) => route.fulfill({
  * Installs every route the account detail's reconciliation tab needs and records the POSTs.
  *
  * @param {import('@playwright/test').Page} page
- * @param {{ flagOn?: boolean, dismissPairStatus?: number }} [opts]
- * @returns {Promise<{ posts: Record<string, object[]>, pendingQueries: URLSearchParams[] }>}
+ * @param {{ flagOn?: boolean, dismissPairStatus?: number, refusePairs?: string[] }} [opts]
+ *   `refusePairs`: `statementLineId`s of the bounce pairs `applySuggestions` refuses with the coded
+ *   "has payment" refusal (HTTP 201, the reason travels in `results[]`).
+ * @returns {Promise<{ posts: Record<string, object[]>, pendingQueries: URLSearchParams[],
+ *   autoMatchRequests: { count: number } }>}
  */
-async function installMocks(page, { flagOn = true, dismissPairStatus = 200 } = {}) {
+async function installMocks(page, { flagOn = true, dismissPairStatus = 200, refusePairs = [] } = {}) {
   const data = answers(flagOn);
   const posts = { discardPair: [], restorePair: [], applySuggestions: [], dismissPair: [] };
   const pendingQueries = [];
+  const autoMatchRequests = { count: 0 };
 
   await page.route(/\/sws\/neo\/financial-account\/account\?/, async (route) => {
     if (route.request().method() !== 'GET') { await route.fallback(); return; }
@@ -252,9 +268,16 @@ async function installMocks(page, { flagOn = true, dismissPairStatus = 200 } = {
       }
       if (action === 'applySuggestions') {
         posts.applySuggestions.push(body);
-        const results = (body.groups ?? []).map((g) => (g.kind === 'bouncePair'
-          ? { kind: 'bouncePair', statementLineId: g.statementLineId, counterpartLineId: g.counterpartLineId, discarded: true }
-          : { statementLineId: g.statementLineId, reconciliationId: 'rec-1' }));
+        const results = (body.groups ?? []).map((g) => {
+          if (g.kind !== 'bouncePair') return { statementLineId: g.statementLineId, reconciliationId: 'rec-1' };
+          const base = { kind: 'bouncePair', statementLineId: g.statementLineId, counterpartLineId: g.counterpartLineId };
+          if (!refusePairs.includes(g.statementLineId)) return { ...base, discarded: true };
+          const message = 'One of the lines is the bank movement of a payment';
+          return {
+            ...base, code: 'HAS_PAYMENT', message,
+            error: { message, status: 409, code: 'HAS_PAYMENT', messageKeys: ['ETGO_BounceHasPayment'] },
+          };
+        });
         await json(route, { response: { data: { results } } }, 201);
         return;
       }
@@ -263,6 +286,7 @@ async function installMocks(page, { flagOn = true, dismissPairStatus = 200 } = {
     }
 
     if (action === 'autoMatch') {
+      autoMatchRequests.count += 1;
       await json(route, { response: { data: { groups: data.groups, kpis: data.kpis } } });
       return;
     }
@@ -281,7 +305,7 @@ async function installMocks(page, { flagOn = true, dismissPairStatus = 200 } = {
     await route.fallback();
   });
 
-  return { posts, pendingQueries };
+  return { posts, pendingQueries, autoMatchRequests };
 }
 
 /** Opens the reconciliation tab; the automatch modal pops once the suggestions land. */
@@ -295,31 +319,76 @@ const modal = (page) => page.getByTestId('automatch-suggestion-modal');
 const pairCheck = (page, key) => page.getByTestId(`automatch-bounce-check-${key}`);
 // The shared Checkbox puts the test id on its <label>; the state lives on the input inside it.
 const pairInput = (page, key) => pairCheck(page, key).getByRole('checkbox');
+const excludeButton = (page) => page.getByTestId('automatch-bounce-exclude');
+const applyButton = (page) => page.getByTestId('automatch-modal-apply');
+const closeConfirm = (page) => page.getByTestId('automatch-close-confirm');
+const confirmClose = (page) => page.getByTestId('automatch-close-confirm-action');
+const keepWorking = (page) => page.getByTestId('automatch-close-keep');
+const requestsOf = (page, action) => page.waitForRequest(
+  (r) => r.method() === 'POST' && r.url().includes(`action=${action}`));
+
+/** The X of the modal's own dialog (the close-confirmation dialog has its own, and is not open). */
+const modalX = (page) => modal(page).getByRole('button', { name: 'Close' });
+
+/**
+ * Closes the modal while rows are checked: `via` triggers the close, the confirmation appears and
+ * "Cerrar" confirms it.
+ */
+async function closeThroughConfirmation(page, via) {
+  await via();
+  await expect(closeConfirm(page)).toBeVisible();
+  await confirmClose(page).click();
+  await expect(modal(page)).toHaveCount(0);
+}
 
 test.describe('Reconciliation — bounce-pair suggestions (mocked)', () => {
-  test('the automatch modal opens with the pairs and their default checks', async ({ page }) => {
+  test('the automatch modal opens with the yellow card above the green one and the default checks', async ({ page }) => {
     await login(page);
     await installMocks(page);
     await openReconciliation(page);
 
     await expect(modal(page)).toBeVisible();
     const section = modal(page).getByTestId('automatch-bounce-section');
+    const statements = modal(page).getByTestId('automatch-statements-section');
     await expect(section).toBeVisible();
+    await expect(statements).toBeVisible();
+    // The yellow card of the possible rejections sits ABOVE the green card of the statement lines.
+    const [sectionBox, statementsBox] = [await section.boundingBox(), await statements.boundingBox()];
+    expect(sectionBox.y).toBeLessThan(statementsBox.y);
+    await expect(section).toContainText('Posibles rechazos bancarios');
+    await expect(statements).toContainText('Líneas del extracto bancario');
     await expect(section.getByTestId('automatch-bounce-count')).toHaveText('3');
+    // The UI's own wording is "rechazo", never "rebote" nor "devolución" (the bank descriptions may say it).
+    await expect(section).toContainText('Detectamos movimientos que el banco rechazó');
+    await expect(section.locator('h3')).not.toContainText(/rebote|devoluci[oó]n/i);
+    await expect(section.getByText(/^Detectamos movimientos/)).not.toContainText(/rebote|devoluci[oó]n/i);
+    // The KPI strip: "Posibles rechazos" with the same figure as the card header.
+    const kpi = modal(page).getByText('Posibles rechazos', { exact: true });
+    await expect(kpi).toHaveCount(1);
+    await expect(kpi.locator('xpath=following-sibling::span')).toHaveText('3');
+
+    // No global footer: each card owns its info sentence and its button.
+    await expect(page.getByTestId('automatch-modal-cancel')).toHaveCount(0);
+    await expect(modal(page).getByRole('button', { name: 'Cancelar' })).toHaveCount(0);
+    await expect(section.getByTestId('Info__automatch-card')).toBeVisible();
+    await expect(statements.getByTestId('Info__automatch-card')).toBeVisible();
+    await expect(excludeButton(page)).toHaveText('Excluir de la conciliación (1)');
+    await expect(applyButton(page)).toHaveText('Conciliar seleccionadas (1)');
+    await expect(section.getByTestId('automatch-bounce-exclude')).toBeVisible();
+    await expect(statements.getByTestId('automatch-modal-apply')).toBeVisible();
+
     await expect(pairInput(page, 'bp-high')).toHaveAttribute('aria-checked', 'true');
     await expect(pairInput(page, 'bp-review')).toHaveAttribute('aria-checked', 'false');
     await expect(pairInput(page, 'bp-amb')).toBeDisabled();
     await expect(page.getByTestId('automatch-bounce-tag-high-bp-high')).toBeVisible();
     await expect(page.getByTestId('automatch-bounce-review-bp-amb')).toBeVisible();
     await expect(page.getByTestId('automatch-bounce-review-bp-high')).toHaveCount(0);
-    // The UI's own wording is "rechazo", never "rebote" nor "devolución" (the bank descriptions may say it).
-    await expect(section).toContainText('Rechazos bancarios');
-    await expect(section).toContainText('Pagos que el banco rechazó: la salida y su rechazo');
-    // The same label twice: the section title and the KPI strip.
-    await expect(modal(page).getByText('Rechazos bancarios', { exact: true })).toHaveCount(2);
+    // The badge and the reason are separate elements: "Revisar" + "rechazo 3 día(s) después".
     const reviewTag = page.getByTestId('automatch-bounce-tag-review-bp-review');
-    await expect(reviewTag).toContainText('rechazo 3 día(s) después');
-    await expect(reviewTag).not.toContainText(/devoluci[oó]n/i);
+    const reviewReason = page.getByTestId('automatch-bounce-reason-bp-review');
+    await expect(reviewTag).toHaveText('Revisar');
+    await expect(reviewReason).toContainText('rechazo 3 día(s) después');
+    await expect(reviewReason).not.toContainText(/devoluci[oó]n/i);
     // The bounce of the ambiguous pair names its bank reference; its original side, still to be
     // chosen in the panel, shows the candidate dates only.
     await expect(page.getByTestId('automatch-bounce-line-meta-bp-amb')).toContainText(`Ref. ${AMB_BOUNCE.referenceNo}`);
@@ -376,7 +445,7 @@ test.describe('Reconciliation — bounce-pair suggestions (mocked)', () => {
     await expect(modal(page)).toHaveCount(0);
   });
 
-  test('the Automatch button reopens the modal with the checks kept, and Apply sends one call with both kinds', async ({ page }) => {
+  test('the Automatch button reopens the modal with the checks kept, and "Conciliar seleccionadas" sends only the groups plus the bounceDecisions', async ({ page }) => {
     await login(page);
     const { posts } = await installMocks(page);
     await openReconciliation(page);
@@ -392,24 +461,200 @@ test.describe('Reconciliation — bounce-pair suggestions (mocked)', () => {
     await expect(modal(page)).toBeVisible();
     await expect(pairInput(page, 'bp-high')).toHaveAttribute('aria-checked', 'true');
     await expect(pairInput(page, 'bp-review')).toHaveAttribute('aria-checked', 'true');
+    await expect(excludeButton(page)).toHaveText('Excluir de la conciliación (2)');
 
-    const post = page.waitForRequest((r) => r.method() === 'POST' && r.url().includes('action=applySuggestions'));
-    await page.getByTestId('automatch-modal-apply').click();
+    const post = requestsOf(page, 'applySuggestions');
+    await applyButton(page).click();
+    await post;
+
+    // The pairs are NOT applied here (Excluir does that): the call carries the transaction group
+    // only, and reports every pair still on screen, checked or not, because none was excluded.
+    expect(posts.applySuggestions).toHaveLength(1);
+    expect(posts.applySuggestions[0]).toEqual({
+      financialAccountId: ACCOUNT_ID,
+      groups: [{ statementLineId: TX_LINE.id, operationIds: ['trx-1'] }],
+      bounceDecisions: [
+        { groupKey: 'bp-high', decision: 'unchecked' },
+        { groupKey: 'bp-review', decision: 'unchecked' },
+        { groupKey: 'bp-amb', decision: 'sent_to_panel' },
+      ],
+    });
+    await expect(modal(page)).toHaveCount(0);
+    await expect(page.locator('[data-type="success"]').first()).toBeVisible();
+  });
+
+  test('"Excluir de la conciliación" is immediate: one call with only the pairs, the rows leave without a refetch', async ({ page }) => {
+    await login(page);
+    const { posts, autoMatchRequests } = await installMocks(page);
+    await openReconciliation(page);
+    await expect(modal(page)).toBeVisible();
+    await expect(excludeButton(page)).toHaveText('Excluir de la conciliación (1)');
+    const autoMatchBefore = autoMatchRequests.count;
+
+    const post = requestsOf(page, 'applySuggestions');
+    await excludeButton(page).click();
     await post;
 
     expect(posts.applySuggestions).toHaveLength(1);
     expect(posts.applySuggestions[0]).toEqual({
       financialAccountId: ACCOUNT_ID,
-      groups: [
-        { statementLineId: TX_LINE.id, operationIds: ['trx-1'] },
-        { kind: 'bouncePair', statementLineId: HIGH_ORIGINAL.id, counterpartLineId: HIGH_BOUNCE.id },
-        { kind: 'bouncePair', statementLineId: REVIEW_ORIGINAL.id, counterpartLineId: REVIEW_BOUNCE.id },
-      ],
-      // ETP-5581 KPI: the shown pair not applied, sent to the panel with "Revisar en el panel".
-      bounceDecisions: [{ groupKey: 'bp-amb', decision: 'sent_to_panel' }],
+      groups: [{ kind: 'bouncePair', statementLineId: HIGH_ORIGINAL.id, counterpartLineId: HIGH_BOUNCE.id }],
     });
+    expect(posts.applySuggestions[0]).not.toHaveProperty('bounceDecisions');
+
+    // The excluded row is gone, the KPI and the count drop, the modal stays open.
+    await expect(page.getByTestId('automatch-bounce-row-bp-high')).toHaveCount(0);
+    await expect(page.getByTestId('automatch-bounce-row-bp-review')).toBeVisible();
+    await expect(modal(page).getByTestId('automatch-bounce-count')).toHaveText('2');
+    const kpi = modal(page).getByText('Posibles rechazos', { exact: true });
+    await expect(kpi.locator('xpath=following-sibling::span')).toHaveText('2');
+    await expect(page.locator('[data-type="success"]').first()).toContainText('1 rechazo(s) excluido(s) de la conciliación');
+    await expect(modal(page)).toBeVisible();
+    // The transaction group is untouched and still checked; nothing reloaded the suggestions.
+    await expect(applyButton(page)).toHaveText('Conciliar seleccionadas (1)');
+    expect(autoMatchRequests.count).toBe(autoMatchBefore);
+    // Nothing is checked among the pairs that stayed: the button is disabled at N=0.
+    await expect(excludeButton(page)).toHaveText('Excluir de la conciliación (0)');
+    await expect(excludeButton(page)).toBeDisabled();
+  });
+
+  test('"Excluir de la conciliación" sends every checked pair, never the ambiguous one', async ({ page }) => {
+    await login(page);
+    const { posts } = await installMocks(page);
+    await openReconciliation(page);
+    await expect(modal(page)).toBeVisible();
+
+    await page.getByTestId('automatch-bounce-select-all').click();
+    await expect(excludeButton(page)).toHaveText('Excluir de la conciliación (2)');
+    await expect(pairInput(page, 'bp-amb')).toBeDisabled();
+    const post = requestsOf(page, 'applySuggestions');
+    await excludeButton(page).click();
+    await post;
+
+    expect(posts.applySuggestions[0].groups).toEqual([
+      { kind: 'bouncePair', statementLineId: HIGH_ORIGINAL.id, counterpartLineId: HIGH_BOUNCE.id },
+      { kind: 'bouncePair', statementLineId: REVIEW_ORIGINAL.id, counterpartLineId: REVIEW_BOUNCE.id },
+    ]);
+    // Only the ambiguous pair is left, so the count and the KPI say 1.
+    await expect(modal(page).getByTestId('automatch-bounce-count')).toHaveText('1');
+    await expect(page.getByTestId('automatch-bounce-row-bp-amb')).toBeVisible();
+    await expect(excludeButton(page)).toBeDisabled();
+  });
+
+  test('"Excluir de la conciliación" is disabled with no pair checked and sends nothing', async ({ page }) => {
+    await login(page);
+    const { posts } = await installMocks(page);
+    await openReconciliation(page);
+    await expect(modal(page)).toBeVisible();
+
+    await pairCheck(page, 'bp-high').click();
+    await expect(pairInput(page, 'bp-high')).toHaveAttribute('aria-checked', 'false');
+    await expect(excludeButton(page)).toHaveText('Excluir de la conciliación (0)');
+    await expect(excludeButton(page)).toBeDisabled();
+    await excludeButton(page).click({ force: true });
+    await page.waitForTimeout(300);
+    expect(posts.applySuggestions).toEqual([]);
+  });
+
+  test('a pair the backend refuses stays on screen with a translated error; the others are excluded', async ({ page }) => {
+    await login(page);
+    const { posts } = await installMocks(page, { refusePairs: [REVIEW_ORIGINAL.id] });
+    await openReconciliation(page);
+    await expect(modal(page)).toBeVisible();
+
+    await pairCheck(page, 'bp-review').click();
+    await expect(excludeButton(page)).toHaveText('Excluir de la conciliación (2)');
+    const post = requestsOf(page, 'applySuggestions');
+    await excludeButton(page).click();
+    await post;
+    expect(posts.applySuggestions[0].groups).toHaveLength(2);
+
+    // Partial: a warning with the count and the translated coded refusal (not the English text).
+    const warning = page.locator('[data-type="warning"]').first();
+    await expect(warning).toContainText('1 rechazo(s) excluido(s) de la conciliación');
+    await expect(warning).toContainText('1 rechazo(s) no se pudieron excluir');
+    await expect(warning).toContainText('pago registrado en Etendo');
+    await expect(warning).not.toContainText('One of the lines');
+    await expect(page.getByTestId('automatch-bounce-row-bp-high')).toHaveCount(0);
+    await expect(page.getByTestId('automatch-bounce-row-bp-review')).toBeVisible();
+    await expect(modal(page).getByTestId('automatch-bounce-count')).toHaveText('2');
+    await expect(modal(page)).toBeVisible();
+  });
+
+  test('every pair refused: an error toast with the translated refusal and every row stays', async ({ page }) => {
+    await login(page);
+    await installMocks(page, { refusePairs: [HIGH_ORIGINAL.id] });
+    await openReconciliation(page);
+    await expect(modal(page)).toBeVisible();
+
+    await excludeButton(page).click();
+    const error = page.locator('[data-type="error"]').first();
+    await expect(error).toContainText('pago registrado en Etendo');
+    await expect(error).not.toContainText('One of the lines');
+    await expect(page.locator('[data-type="success"]')).toHaveCount(0);
+    await expect(page.getByTestId('automatch-bounce-row-bp-high')).toBeVisible();
+    await expect(modal(page).getByTestId('automatch-bounce-count')).toHaveText('3');
+  });
+
+  test('closing with rows checked asks first: "Seguir trabajando" keeps the selection, "Cerrar" closes', async ({ page }) => {
+    await login(page);
+    await installMocks(page);
+    await openReconciliation(page);
+    await expect(modal(page)).toBeVisible();
+    await pairCheck(page, 'bp-review').click();
+
+    // X, Esc and "Ir a conciliación manual" all ask before closing; "Seguir trabajando" keeps the
+    // modal and the selection as they were.
+    for (const via of [
+      () => modalX(page).click(),
+      () => page.keyboard.press('Escape'),
+      () => page.getByTestId('automatch-modal-open-reconciliation').click(),
+    ]) {
+      await via();
+      await expect(closeConfirm(page)).toBeVisible();
+      await expect(closeConfirm(page)).toContainText('¿Deseas cerrar la ventana?');
+      await keepWorking(page).click();
+      await expect(closeConfirm(page)).toHaveCount(0);
+      await expect(modal(page)).toBeVisible();
+      await expect(pairInput(page, 'bp-high')).toHaveAttribute('aria-checked', 'true');
+      await expect(pairInput(page, 'bp-review')).toHaveAttribute('aria-checked', 'true');
+    }
+
+    await closeThroughConfirmation(page, () => page.getByTestId('automatch-modal-open-reconciliation').click());
+    // The suggestions are kept by the host: the Automatch button reopens them as they were.
+    await page.getByTestId('financial-account-automatch').click();
+    await expect(modal(page)).toBeVisible();
+    await expect(pairInput(page, 'bp-review')).toHaveAttribute('aria-checked', 'true');
+  });
+
+  test('the backdrop asks first too', async ({ page }) => {
+    await login(page);
+    await installMocks(page);
+    await openReconciliation(page);
+    await expect(modal(page)).toBeVisible();
+
+    await page.getByTestId('DialogOverlay__6a5928').last().click({ position: { x: 5, y: 5 } });
+    await expect(closeConfirm(page)).toBeVisible();
+    await keepWorking(page).click();
+    await expect(modal(page)).toBeVisible();
+    await expect(pairInput(page, 'bp-high')).toHaveAttribute('aria-checked', 'true');
+  });
+
+  test('with nothing checked there is no confirmation: X closes at once', async ({ page }) => {
+    await login(page);
+    await installMocks(page);
+    await openReconciliation(page);
+    await expect(modal(page)).toBeVisible();
+
+    // Uncheck the one pair and the one group that start checked.
+    await pairCheck(page, 'bp-high').click();
+    await page.getByTestId('automatch-select-all').click();
+    await expect(excludeButton(page)).toBeDisabled();
+    await expect(applyButton(page)).toBeDisabled();
+
+    await modalX(page).click();
     await expect(modal(page)).toHaveCount(0);
-    await expect(page.locator('[data-type="success"]').first()).toBeVisible();
+    await expect(closeConfirm(page)).toHaveCount(0);
   });
 
   test('"Descartadas" lists the discarded pair and "Restaurar par" sends restorePair', async ({ page }) => {
@@ -417,8 +662,7 @@ test.describe('Reconciliation — bounce-pair suggestions (mocked)', () => {
     const { posts, pendingQueries } = await installMocks(page);
     await openReconciliation(page);
     await expect(modal(page)).toBeVisible();
-    await page.getByTestId('automatch-modal-cancel').click();
-    await expect(modal(page)).toHaveCount(0);
+    await closeThroughConfirmation(page, () => modalX(page).click());
 
     await page.getByRole('button', { name: /^Pendientes \(/ }).click();
     await page.getByRole('option', { name: /^Descartadas \(2\)/ }).click();
@@ -442,17 +686,21 @@ test.describe('Reconciliation — bounce-pair suggestions (mocked)', () => {
     await expect(page.locator('[data-type="success"]').first()).toBeVisible();
   });
 
-  test('flag off: no bounce section, no bounce KPI and the original apply payload', async ({ page }) => {
+  test('flag off: no yellow card, no bounce KPI and the original apply payload', async ({ page }) => {
     await login(page);
     const { posts, pendingQueries } = await installMocks(page, { flagOn: false });
     await openReconciliation(page);
 
     await expect(modal(page)).toBeVisible();
     await expect(page.getByTestId('automatch-bounce-section')).toHaveCount(0);
-    await expect(modal(page)).not.toContainText('Rechazos bancarios');
+    await expect(modal(page)).not.toContainText('Posibles rechazos');
+    await expect(page.getByTestId('automatch-bounce-exclude')).toHaveCount(0);
+    // The green card is the whole modal, with its own button.
+    await expect(modal(page).getByTestId('automatch-statements-section')).toContainText('Líneas del extracto bancario');
+    await expect(applyButton(page)).toHaveText('Conciliar seleccionadas (1)');
 
-    const post = page.waitForRequest((r) => r.method() === 'POST' && r.url().includes('action=applySuggestions'));
-    await page.getByTestId('automatch-modal-apply').click();
+    const post = requestsOf(page, 'applySuggestions');
+    await applyButton(page).click();
     await post;
     expect(posts.applySuggestions).toEqual([{
       financialAccountId: ACCOUNT_ID,
@@ -559,12 +807,14 @@ test.describe('Reconciliation — bounce-pair KPI reporting (mocked)', () => {
     await pairCheck(page, 'bp-review').click();
     await expect(pairInput(page, 'bp-review')).toHaveAttribute('aria-checked', 'false');
 
-    const post = page.waitForRequest((r) => r.method() === 'POST' && r.url().includes('action=applySuggestions'));
-    await page.getByTestId('automatch-modal-apply').click();
+    const post = requestsOf(page, 'applySuggestions');
+    await applyButton(page).click();
     await post;
 
     expect(posts.applySuggestions).toHaveLength(1);
+    expect(posts.applySuggestions[0].groups).toEqual([{ statementLineId: TX_LINE.id, operationIds: ['trx-1'] }]);
     expect(posts.applySuggestions[0].bounceDecisions).toEqual([
+      { groupKey: 'bp-high', decision: 'unchecked' },
       { groupKey: 'bp-review', decision: 'unchecked' },
       { groupKey: 'bp-amb', decision: 'unchecked' },
     ]);
@@ -652,8 +902,8 @@ test.describe('Reconciliation — bounce suggestion events (Mixpanel, mocked)', 
       expect.objectContaining({ pairs_shown: 3, pairs_preselected: 1, auto_opened: true }),
     ]);
 
-    await page.keyboard.press('Escape');
-    await expect(modal(page)).toHaveCount(0);
+    // With rows checked every close asks first; the dismissal is reported once "Cerrar" confirms it.
+    await closeThroughConfirmation(page, () => page.keyboard.press('Escape'));
     await expect.poll(() => named(events, DISMISSED)).toEqual([
       expect.objectContaining({ pairs_shown: 3, pairs_checked_at_close: 1, auto_opened: true }),
     ]);
@@ -666,8 +916,8 @@ test.describe('Reconciliation — bounce suggestion events (Mixpanel, mocked)', 
     expect(named(events, VIEWED)[1]).toMatchObject({ pairs_shown: 3, pairs_preselected: 1, auto_opened: false });
 
     // The backdrop (a click outside the dialog content).
-    await page.getByTestId('DialogOverlay__6a5928').last().click({ position: { x: 5, y: 5 } });
-    await expect(modal(page)).toHaveCount(0);
+    await closeThroughConfirmation(
+      page, () => page.getByTestId('DialogOverlay__6a5928').last().click({ position: { x: 5, y: 5 } }));
     await expect.poll(() => named(events, DISMISSED).length).toBe(2);
     expect(named(events, DISMISSED)[1]).toMatchObject({ pairs_shown: 3, pairs_checked_at_close: 2, auto_opened: false });
 
@@ -676,7 +926,7 @@ test.describe('Reconciliation — bounce suggestion events (Mixpanel, mocked)', 
     expect(named(events, DISMISSED)).toHaveLength(2);
   });
 
-  test('"Abrir conciliación" counts as dismissed', async ({ page }) => {
+  test('"Ir a conciliación manual" counts as dismissed (once "Cerrar" confirms it)', async ({ page }) => {
     const events = await captureMixpanelEvents(page);
     await login(page);
     await installMocks(page);
@@ -684,6 +934,11 @@ test.describe('Reconciliation — bounce suggestion events (Mixpanel, mocked)', 
     await expect(modal(page)).toBeVisible();
 
     await page.getByTestId('automatch-modal-open-reconciliation').click();
+    await expect(closeConfirm(page)).toBeVisible();
+    // Asking is not dismissing: nothing is reported until the user confirms.
+    await page.waitForTimeout(500);
+    expect(named(events, DISMISSED)).toEqual([]);
+    await confirmClose(page).click();
     await expect(modal(page)).toHaveCount(0);
     await expect.poll(() => named(events, DISMISSED)).toEqual([
       expect.objectContaining({ pairs_shown: 3, pairs_checked_at_close: 1, auto_opened: true }),
@@ -698,8 +953,8 @@ test.describe('Reconciliation — bounce suggestion events (Mixpanel, mocked)', 
     await expect(modal(page)).toBeVisible();
     await expect.poll(() => named(events, VIEWED).length).toBe(1);
 
-    const post = page.waitForRequest((r) => r.method() === 'POST' && r.url().includes('action=applySuggestions'));
-    await page.getByTestId('automatch-modal-apply').click();
+    const post = requestsOf(page, 'applySuggestions');
+    await applyButton(page).click();
     await post;
     await expect(modal(page)).toHaveCount(0);
 
@@ -745,7 +1000,7 @@ test.describe('Reconciliation — bounce suggestion events (Mixpanel, mocked)', 
     await installMocks(page);
     await openReconciliation(page);
     await expect(modal(page)).toBeVisible();
-    await page.getByTestId('automatch-modal-cancel').click();
+    await closeThroughConfirmation(page, () => modalX(page).click());
     await expect.poll(() => named(events, DISMISSED).length).toBe(1);
     await expect.poll(() => named(events, 'app_started').length).toBeGreaterThan(0);
 

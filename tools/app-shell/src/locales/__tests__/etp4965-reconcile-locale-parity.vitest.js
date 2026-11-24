@@ -306,3 +306,107 @@ describe('financeReconcileBounce* — the footer and reference keys', () => {
     }
   });
 });
+
+// ETP-6359 — the automatch modal redesign: two cards, each with its own action, and no global
+// footer. The superset rules above already require parity for any key es_ES has; these pin the new
+// keys by name (so a rename cannot slip through unnoticed), their placeholders and wording, and
+// the removal of the keys the old footer / combined apply used.
+describe('financeReconcileAutomatch* — the two-card redesign', () => {
+  const NEW_KEYS = [
+    'financeReconcileAutomatchActionGoManual',
+    'financeReconcileAutomatchBounceColOriginal',
+    'financeReconcileAutomatchBounceInfo',
+    'financeReconcileAutomatchBounceExclude',
+    'financeReconcileAutomatchBounceToastExcluded',
+    'financeReconcileAutomatchBounceToastSomeFailed',
+    'financeReconcileAutomatchStatementsTitle',
+    'financeReconcileAutomatchStatementsHint',
+    'financeReconcileAutomatchStatementsInfo',
+    'financeReconcileAutomatchActionReconcile',
+    'financeReconcileAutomatchCloseTitle',
+    'financeReconcileAutomatchCloseBody',
+    'financeReconcileAutomatchCloseKeep',
+    'financeReconcileAutomatchCloseConfirm',
+    'financeReconcileBounceTagReviewPlain',
+  ];
+
+  // The footer, the combined "reconcile and discard" apply and the old toast no longer exist.
+  const REMOVED_KEYS = [
+    'financeReconcileAutomatchActionOpen',
+    'financeReconcileAutomatchFooterLink',
+    'financeReconcileAutomatchFooterCreate',
+    'financeReconcileAutomatchFooterNone',
+    'financeReconcileAutomatchActionApply',
+    'financeReconcileAutomatchFooterDiscard',
+    'financeReconcileAutomatchFooterLinkAndDiscard',
+    'financeReconcileAutomatchFooterNoneSelected',
+    'financeReconcileAutomatchActionApplyAndDiscard',
+    'financeReconcileAutomatchActionDiscardPairs',
+    'financeReconcileAutomatchToastPairsDiscarded',
+    'financeReconcileAutomatchToastSomeFailed',
+    'financeReconcileBounceTagReview',
+  ];
+
+  const LOCALES = { en_US: enUS, es_ES: esES, es_AR: esAR };
+
+  it.each(NEW_KEYS)('provides %s, non-blank, in every locale', (key) => {
+    for (const [name, dictionary] of Object.entries(LOCALES)) {
+      const value = dictionary.genericLabels?.[key];
+      expect(typeof value, `${name}.${key}`).toBe('string');
+      expect(value.trim(), `${name}.${key}`).not.toBe('');
+    }
+  });
+
+  it('ships none of the keys the removed footer and combined apply used, in any locale', () => {
+    for (const [name, dictionary] of Object.entries(LOCALES)) {
+      for (const key of REMOVED_KEYS) {
+        expect(dictionary.genericLabels, `${name}.${key}`).not.toHaveProperty(key);
+      }
+    }
+  });
+
+  it('keeps the {count} placeholder of the counted buttons and toasts in every locale', () => {
+    for (const key of [
+      'financeReconcileAutomatchBounceExclude',
+      'financeReconcileAutomatchBounceToastExcluded',
+      'financeReconcileAutomatchBounceToastSomeFailed',
+      'financeReconcileAutomatchActionReconcile',
+    ]) {
+      for (const [name, dictionary] of Object.entries(LOCALES)) {
+        expect(dictionary.genericLabels[key], `${name}.${key}`).toContain('{count}');
+      }
+    }
+  });
+
+  it('says "rechazo" (never "rebote" nor "devolución") on the new Spanish exclusion copy', () => {
+    for (const [name, dictionary] of Object.entries({ es_ES: esES, es_AR: esAR })) {
+      for (const key of [
+        'financeReconcileAutomatchBounceToastExcluded',
+        'financeReconcileAutomatchBounceToastSomeFailed',
+        'financeReconcileAutomatchBounceTitle',
+      ]) {
+        expect(dictionary.genericLabels[key], `${name}.${key}`).toMatch(/rechazo/i);
+      }
+      for (const key of NEW_KEYS) {
+        expect(dictionary.genericLabels[key], `${name}.${key}`).not.toMatch(/rebote|devoluci/i);
+      }
+    }
+  });
+
+  it('every Spanish string of the redesign is localized, not a copy of the English source', () => {
+    for (const [name, dictionary] of Object.entries({ es_ES: esES, es_AR: esAR })) {
+      for (const key of NEW_KEYS) {
+        expect(dictionary.genericLabels[key], `${name}.${key}`).not.toBe(enUS.genericLabels[key]);
+      }
+    }
+  });
+
+  it('names the two cards and the KPI as asked by the design', () => {
+    expect(esES.genericLabels.financeReconcileAutomatchBounceTitle).toBe('Posibles rechazos bancarios');
+    expect(esES.genericLabels.financeReconcileAutomatchStatementsTitle).toBe('Líneas del extracto bancario');
+    expect(esES.genericLabels.financeReconcileAutomatchKpiBouncePairs).toBe('Posibles rechazos');
+    expect(esES.genericLabels.financeReconcileAutomatchCloseTitle).toBe('¿Deseas cerrar la ventana?');
+    expect(esES.genericLabels.financeReconcileAutomatchCloseKeep).toBe('Seguir trabajando');
+  });
+});
+

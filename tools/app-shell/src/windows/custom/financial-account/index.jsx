@@ -432,6 +432,15 @@ export function FinancialAccountDetail({ recordId }) {
     reloadMovements();
     setReconciliationRefreshKey((k) => k + 1);
   }, [reloadAccountAndList, reloadAutoMatch, reloadMovements]);
+  // ETP-6359 — "Excluir de la conciliación" in the automatch modal discards bounce pairs at once. The
+  // account, its list and the movements change and the panel must show the pairs as discarded, but
+  // the cached suggestions are NOT reloaded: the modal hides the excluded pairs itself and keeps the
+  // checks of the rest (a reload would reset them).
+  const handleAutoMatchPairsExcluded = useCallback(() => {
+    reloadAccountAndList();
+    reloadMovements();
+    setReconciliationRefreshKey((k) => k + 1);
+  }, [reloadAccountAndList, reloadMovements]);
   // ETP-6151 — the same unfiltered headers feed the CSV-export fallback and (flag on) the
   // Statements tab badge. The tab owns its own copy and tells us through `onStatementsChanged`.
   const importSettingsEnabled = usePsd2ImportSettingsFlag();
@@ -692,6 +701,7 @@ export function FinancialAccountDetail({ recordId }) {
         open={autoMatchOpen && !isCashAccount && !windowReadOnly}
         onClose={closeAutoMatch}
         onSuccess={handleAutoMatchSuccess}
+        onChanged={handleAutoMatchPairsExcluded}
         // ETP-5581 — the checks live in the host, so closing the modal for "Revisar en el panel"
         // and reopening it with the Automatch button keeps them while the suggestions do not reload.
         selection={autoMatchReview.selection}

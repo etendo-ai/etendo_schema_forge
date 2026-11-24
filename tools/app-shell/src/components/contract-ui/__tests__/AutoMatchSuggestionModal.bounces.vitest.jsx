@@ -40,6 +40,10 @@ vi.mock('@/components/ui/dialog', () => ({
   ) : null),
   DialogContent: ({ children, ...rest }) => <div {...rest}>{children}</div>,
   DialogTitle: ({ children, ...rest }) => <h2 {...rest}>{children}</h2>,
+  // The close-confirmation dialog (ETP-6359) is built on these.
+  DialogHeader: ({ children }) => <div>{children}</div>,
+  DialogDescription: ({ children }) => <p>{children}</p>,
+  DialogFooter: ({ children }) => <div>{children}</div>,
 }));
 
 vi.mock('@/components/ui/money-amount', () => ({
@@ -139,13 +143,14 @@ function renderModal(overrides = {}) {
     open: true,
     onClose: vi.fn(),
     onSuccess: vi.fn(),
+    onChanged: vi.fn(),
     ...overrides,
   };
   return { ...render(<AutoMatchSuggestionModal {...props} />), props };
 }
 
 const applyButton = () => screen.getByTestId('automatch-modal-apply');
-const footerText = () => screen.getByTestId('Info__a89979').nextSibling.textContent;
+const excludeButton = () => screen.getByTestId('automatch-bounce-exclude');
 const kpiValue = (label) => screen.getByText(label).nextSibling.textContent;
 const check = (key) => screen.getByTestId(`automatch-bounce-check-${key}`);
 // The shared Checkbox puts the test id on its <label>; the state lives on the input inside it.
@@ -177,11 +182,10 @@ describe('AutoMatchSuggestionModal — flag off (no kind, no kpis.bouncePairs)',
     expect(screen.getByTestId('automatch-select-all')).toBeInTheDocument();
   });
 
-  it('keeps the original label, footer and payload, with nothing added to the group', async () => {
+  it('keeps the original payload, with nothing added to the group', async () => {
     applyMock.mockResolvedValue({ results: [{ groupKey: TX.groupKey }] });
     const { props } = renderModal({ groups: [TX], kpis: KPIS_OFF });
-    expect(applyButton()).toHaveTextContent('financeReconcileAutomatchActionApply:{"count":1}');
-    expect(footerText()).toBe('financeReconcileAutomatchFooterLink:{"count":1}');
+    expect(applyButton()).toHaveTextContent('financeReconcileAutomatchActionReconcile:{"count":1}');
 
     await clickApply();
     expect(applyMock).toHaveBeenCalledTimes(1);
@@ -193,10 +197,10 @@ describe('AutoMatchSuggestionModal — flag off (no kind, no kpis.bouncePairs)',
     expect(toast.success).toHaveBeenCalledWith('financeReconcileAutomatchToastSuccess:{"count":1}');
   });
 
-  it('says "no groups selected" (not "no suggestions") when nothing is checked', () => {
+  it('disables the button of the green card when nothing is checked', () => {
     renderModal({ groups: [TX], kpis: KPIS_OFF });
     fireEvent.click(screen.getByTestId('automatch-select-all'));
-    expect(footerText()).toBe('financeReconcileAutomatchFooterNone');
+    expect(applyButton()).toHaveTextContent('financeReconcileAutomatchActionReconcile:{"count":0}');
     expect(applyButton()).toBeDisabled();
   });
 });
@@ -230,10 +234,15 @@ describe('AutoMatchSuggestionModal — the Rechazos bancarios section', () => {
     renderModal();
     expect(screen.getByTestId('automatch-bounce-tag-high-bp-high')).toHaveTextContent('financeReconcileBounceTagHigh');
     expect(screen.queryByTestId('automatch-bounce-tag-review-bp-high')).toBeNull();
+    // ETP-6359: the badge ("Revisar") and the reason are separate elements.
     expect(screen.getByTestId('automatch-bounce-tag-review-bp-review'))
-      .toHaveTextContent(/^financeReconcileBounceTagReview:.*financeReconcileBounceReasonLateShort.*days.*3/);
+      .toHaveTextContent(/^financeReconcileBounceTagReviewPlain$/);
+    expect(screen.getByTestId('automatch-bounce-reason-bp-review'))
+      .toHaveTextContent(/^financeReconcileBounceReasonLateShort.*days.*3/);
     expect(screen.getByTestId('automatch-bounce-tag-review-bp-amb'))
-      .toHaveTextContent(/^financeReconcileBounceTagReview:.*financeReconcileBounceReasonAmbiguousShort.*count.*2/);
+      .toHaveTextContent(/^financeReconcileBounceTagReviewPlain$/);
+    expect(screen.getByTestId('automatch-bounce-reason-bp-amb'))
+      .toHaveTextContent(/^financeReconcileBounceReasonAmbiguousShort.*count.*2/);
   });
 
   it('starts with high checked, review unchecked and ambiguous disabled with its aria-label', () => {
@@ -294,7 +303,7 @@ describe('AutoMatchSuggestionModal — the Rechazos bancarios section', () => {
     expect(checkInput('bp-review')).toHaveAttribute('aria-checked', 'false');
     expect(box('automatch-bounce-select-all')).toHaveAttribute('aria-checked', 'false');
     // The transaction group is not touched by the pairs' select-all.
-    expect(applyButton()).toHaveTextContent('financeReconcileAutomatchActionApply:{"count":1}');
+    expect(applyButton()).toHaveTextContent('financeReconcileAutomatchActionReconcile:{"count":1}');
   });
 
   it('disables the pairs select-all when only ambiguous pairs are offered', () => {
@@ -328,87 +337,164 @@ describe('AutoMatchSuggestionModal — the Rechazos bancarios section', () => {
   });
 });
 
-describe('AutoMatchSuggestionModal — footer and apply label variants', () => {
-  it('groups and pairs checked: link-and-discard footer and the combined label', () => {
+describe('AutoMatchSuggestionModal — the two card buttons', () => {
+  it('green card counts the checked groups; yellow card counts the checked pairs', () => {
     renderModal();
-    expect(footerText()).toBe('financeReconcileAutomatchFooterLinkAndDiscard:{"link":1,"lines":2}');
-    expect(applyButton()).toHaveTextContent('financeReconcileAutomatchActionApplyAndDiscard:{"groups":1,"pairs":1}');
+    expect(applyButton()).toHaveTextContent('financeReconcileAutomatchActionReconcile:{"count":1}');
+    expect(excludeButton()).toHaveTextContent('financeReconcileAutomatchBounceExclude:{"count":1}');
   });
 
-  it('only groups checked: the original link footer and label', () => {
+  it('the counts follow the checks, each card on its own', () => {
     renderModal();
-    fireEvent.click(check('bp-high'));
-    expect(footerText()).toBe('financeReconcileAutomatchFooterLink:{"count":1}');
-    expect(applyButton()).toHaveTextContent('financeReconcileAutomatchActionApply:{"count":1}');
-  });
-
-  it('only pairs checked: discard footer (two lines a pair) and the discard label', () => {
-    renderModal();
-    fireEvent.click(screen.getByTestId('automatch-select-all'));
     fireEvent.click(check('bp-review'));
-    expect(footerText()).toBe('financeReconcileAutomatchFooterDiscard:{"count":4}');
-    expect(applyButton()).toHaveTextContent('financeReconcileAutomatchActionDiscardPairs:{"count":2}');
+    expect(excludeButton()).toHaveTextContent('financeReconcileAutomatchBounceExclude:{"count":2}');
+    fireEvent.click(screen.getByTestId('automatch-select-all'));
+    expect(applyButton()).toHaveTextContent('financeReconcileAutomatchActionReconcile:{"count":0}');
+    expect(excludeButton()).toHaveTextContent('financeReconcileAutomatchBounceExclude:{"count":2}');
   });
 
-  it('nothing checked while pairs are offered: "no suggestions selected" and a disabled apply', () => {
+  it('"Excluir" is disabled with no pair checked and never calls apply', () => {
     renderModal();
-    fireEvent.click(screen.getByTestId('automatch-select-all'));
     fireEvent.click(check('bp-high'));
-    expect(footerText()).toBe('financeReconcileAutomatchFooterNoneSelected');
-    expect(applyButton()).toBeDisabled();
+    expect(excludeButton()).toBeDisabled();
+    fireEvent.click(excludeButton());
+    expect(applyMock).not.toHaveBeenCalled();
+  });
+
+  it('there is no global "Confirmar" footer: the cards own their info sentence and action', () => {
+    renderModal();
+    expect(screen.getByTestId('automatch-bounce-section')).toContainElement(excludeButton());
+    expect(screen.getByTestId('automatch-statements-section')).toContainElement(applyButton());
+    expect(screen.getAllByTestId('Info__automatch-card')).toHaveLength(2);
+  });
+
+  it('puts the possible rejections card above the statement lines card', () => {
+    renderModal();
+    const bounce = screen.getByTestId('automatch-bounce-section');
+    const statements = screen.getByTestId('automatch-statements-section');
+    expect(bounce.compareDocumentPosition(statements) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
 
-describe('AutoMatchSuggestionModal — applying pairs', () => {
-  it('sends transaction groups first, then the checked pairs, in ONE applySuggestions call', async () => {
-    // The backend order puts a pair first: the payload must still lead with the groups.
+describe('AutoMatchSuggestionModal — "Conciliar seleccionadas" (transaction groups only)', () => {
+  it('sends ONLY the checked transaction groups, plus the bounceDecisions of every pair on screen', async () => {
+    // The backend order puts a pair first: the payload carries groups only, never a pair.
     renderModal({ groups: [HIGH, TX, REVIEW, AMBIGUOUS] });
     fireEvent.click(check('bp-review'));
     await clickApply();
     expect(applyMock).toHaveBeenCalledTimes(1);
     expect(applyMock.mock.calls[0][0]).toEqual({
       financialAccountId: 'acc-1',
-      groups: [
-        { statementLineId: 'line-1', operationIds: ['txn-1'] },
-        { kind: 'bouncePair', statementLineId: 'O1', counterpartLineId: 'B1' },
-        { kind: 'bouncePair', statementLineId: 'O2', counterpartLineId: 'B2' },
+      groups: [{ statementLineId: 'line-1', operationIds: ['txn-1'] }],
+      // Nothing is excluded by this call, so every pair still shown is reported as not applied,
+      // checked or not.
+      bounceDecisions: [
+        { groupKey: 'bp-high', decision: 'unchecked' },
+        { groupKey: 'bp-review', decision: 'unchecked' },
+        { groupKey: 'bp-amb', decision: 'unchecked' },
       ],
-      // The shown pair that is not applied (the ambiguous one cannot be checked).
-      bounceDecisions: [{ groupKey: 'bp-amb', decision: 'unchecked' }],
     });
   });
 
-  it('success: one toast summarising what was reconciled and what was discarded', async () => {
-    applyMock.mockResolvedValue({
-      results: [
-        { groupKey: TX.groupKey },
-        { kind: 'bouncePair', statementLineId: 'O1', counterpartLineId: 'B1', discarded: true },
-      ],
-    });
+  it('success: the plain toast of the groups, then the host reload and the close', async () => {
+    applyMock.mockResolvedValue({ results: [{ groupKey: TX.groupKey }] });
     const { props } = renderModal();
     await clickApply();
     await vi.waitFor(() => expect(toast.success).toHaveBeenCalled());
-    expect(toast.success).toHaveBeenCalledWith(
-      'financeReconcileAutomatchToastSuccess:{"count":1} financeReconcileAutomatchToastPairsDiscarded:{"count":1,"lines":2}',
-    );
+    expect(toast.success).toHaveBeenCalledWith('financeReconcileAutomatchToastSuccess:{"count":1}');
     expect(props.onSuccess).toHaveBeenCalled();
     expect(props.onClose).toHaveBeenCalled();
   });
 
-  it('success with pairs only: the toast names only the discarded pairs', async () => {
-    applyMock.mockResolvedValue({ results: [{ kind: 'bouncePair', discarded: true }] });
-    renderModal({ groups: [HIGH] });
+  it('keeps the partial toast when some groups failed', async () => {
+    applyMock.mockResolvedValue({ results: [{ groupKey: 'a' }, { groupKey: 'b', error: { message: 'x' } }] });
+    renderModal({ groups: [TX, REVIEW] });
     await clickApply();
-    await vi.waitFor(() => expect(toast.success).toHaveBeenCalled());
-    expect(toast.success).toHaveBeenCalledWith('financeReconcileAutomatchToastPairsDiscarded:{"count":1,"lines":2}');
+    await vi.waitFor(() => expect(toast.warning).toHaveBeenCalled());
+    expect(toast.warning).toHaveBeenCalledWith('financeReconcileAutomatchToastPartial:{"success":1,"failed":1}');
   });
 
-  it('partial: a warning whose description is the translated coded refusal (ETGO_BounceHasPayment)', async () => {
+  it('is not offered when only pairs exist (the green card steps aside)', () => {
+    renderModal({ groups: [HIGH] });
+    expect(screen.queryByTestId('automatch-modal-apply')).toBeNull();
+    expect(screen.queryByTestId('automatch-statements-section')).toBeNull();
+  });
+});
+
+describe('AutoMatchSuggestionModal — "Excluir de la conciliación" (pairs only, at once)', () => {
+  const clickExclude = async () => {
+    fireEvent.click(excludeButton());
+    await vi.waitFor(() => expect(applyMock).toHaveBeenCalled());
+  };
+
+  it('sends ONLY the checked pairs — no transaction group, no bounceDecisions', async () => {
+    applyMock.mockResolvedValue({
+      results: [{ kind: 'bouncePair', statementLineId: 'O1', counterpartLineId: 'B1', discarded: true }],
+    });
+    renderModal({ groups: [HIGH, TX, REVIEW, AMBIGUOUS] });
+    await clickExclude();
+    expect(applyMock).toHaveBeenCalledTimes(1);
+    expect(applyMock.mock.calls[0][0]).toEqual({
+      financialAccountId: 'acc-1',
+      groups: [{ kind: 'bouncePair', statementLineId: 'O1', counterpartLineId: 'B1' }],
+    });
+  });
+
+  it('the excluded row leaves at once, the KPI and the count drop, and the modal stays open', async () => {
+    applyMock.mockResolvedValue({
+      results: [{ kind: 'bouncePair', statementLineId: 'O1', counterpartLineId: 'B1', discarded: true }],
+    });
+    const { props } = renderModal();
+    expect(kpiValue('financeReconcileAutomatchKpiBouncePairs')).toBe('3');
+    await clickExclude();
+    await vi.waitFor(() => expect(screen.queryByTestId('automatch-bounce-row-bp-high')).toBeNull());
+    expect(screen.getByTestId('automatch-bounce-row-bp-review')).toBeInTheDocument();
+    expect(kpiValue('financeReconcileAutomatchKpiBouncePairs')).toBe('2');
+    expect(screen.getByTestId('automatch-bounce-count')).toHaveTextContent('2');
+    expect(excludeButton()).toBeDisabled();
+    expect(toast.success).toHaveBeenCalledWith('financeReconcileAutomatchBounceToastExcluded:{"count":1}');
+    expect(props.onChanged).toHaveBeenCalledTimes(1);
+    expect(props.onSuccess).not.toHaveBeenCalled();
+    expect(props.onClose).not.toHaveBeenCalled();
+    // The transaction group stays, still checked.
+    expect(applyButton()).toHaveTextContent('financeReconcileAutomatchActionReconcile:{"count":1}');
+  });
+
+  it('removes the whole yellow card when its last pairs are excluded', async () => {
+    applyMock.mockResolvedValue({
+      results: [{ kind: 'bouncePair', statementLineId: 'O1', counterpartLineId: 'B1', discarded: true }],
+    });
+    renderModal({ groups: [TX, HIGH] });
+    await clickExclude();
+    await vi.waitFor(() => expect(screen.queryByTestId('automatch-bounce-section')).toBeNull());
+  });
+
+  it('the green button then reports only the pairs that stayed', async () => {
+    applyMock.mockResolvedValueOnce({
+      results: [{ kind: 'bouncePair', statementLineId: 'O1', counterpartLineId: 'B1', discarded: true }],
+    });
+    renderModal();
+    await clickExclude();
+    await vi.waitFor(() => expect(screen.queryByTestId('automatch-bounce-row-bp-high')).toBeNull());
+    applyMock.mockResolvedValueOnce({ results: [{ groupKey: TX.groupKey }] });
+    fireEvent.click(applyButton());
+    await vi.waitFor(() => expect(applyMock).toHaveBeenCalledTimes(2));
+    expect(applyMock.mock.calls[1][0]).toEqual({
+      financialAccountId: 'acc-1',
+      groups: [{ statementLineId: 'line-1', operationIds: ['txn-1'] }],
+      bounceDecisions: [
+        { groupKey: 'bp-review', decision: 'unchecked' },
+        { groupKey: 'bp-amb', decision: 'unchecked' },
+      ],
+    });
+  });
+
+  it('partial: the refused pair stays, a warning carries the translated coded refusal', async () => {
     applyMock.mockResolvedValue({
       results: [
-        { groupKey: TX.groupKey },
+        { kind: 'bouncePair', statementLineId: 'O1', counterpartLineId: 'B1', discarded: true },
         {
-          kind: 'bouncePair', statementLineId: 'O1', counterpartLineId: 'B1',
+          kind: 'bouncePair', statementLineId: 'O2', counterpartLineId: 'B2',
           code: 'HAS_PAYMENT', message: 'One of the lines is the bank movement of a payment',
           error: {
             message: 'One of the lines is the bank movement of a payment', status: 409,
@@ -418,44 +504,67 @@ describe('AutoMatchSuggestionModal — applying pairs', () => {
       ],
     });
     const { props } = renderModal();
-    await clickApply();
+    fireEvent.click(check('bp-review'));
+    await clickExclude();
     await vi.waitFor(() => expect(toast.warning).toHaveBeenCalled());
     expect(toast.warning).toHaveBeenCalledWith(
-      'financeReconcileAutomatchToastSuccess:{"count":1} financeReconcileAutomatchToastSomeFailed:{"count":1}',
+      'financeReconcileAutomatchBounceToastExcluded:{"count":1} financeReconcileAutomatchBounceToastSomeFailed:{"count":1}',
       { description: 'T(backendError.bounceHasPayment)' },
     );
-    expect(toast.success).not.toHaveBeenCalled();
-    expect(props.onClose).toHaveBeenCalled();
+    expect(screen.queryByTestId('automatch-bounce-row-bp-high')).toBeNull();
+    expect(screen.getByTestId('automatch-bounce-row-bp-review')).toBeInTheDocument();
+    expect(props.onChanged).toHaveBeenCalledTimes(1);
   });
 
-  it('all failed: an error toast with the translated refusal', async () => {
+  it('all refused: an error toast with the translated refusal, nothing leaves, no refresh', async () => {
     applyMock.mockResolvedValue({
       results: [{
         kind: 'bouncePair', code: 'BOUNCE_SUGGESTIONS_OFF',
         error: { message: 'Bounce suggestions are not enabled for this account.', status: 403, messageKeys: ['ETGO_BounceSuggestionsOff'] },
       }],
     });
-    renderModal({ groups: [HIGH] });
-    await clickApply();
+    const { props } = renderModal({ groups: [HIGH] });
+    await clickExclude();
     await vi.waitFor(() => expect(toast.error).toHaveBeenCalled());
     expect(toast.error).toHaveBeenCalledWith('T(backendError.bounceSuggestionsOff)');
     expect(toast.warning).not.toHaveBeenCalled();
+    expect(screen.getByTestId('automatch-bounce-row-bp-high')).toBeInTheDocument();
+    expect(props.onChanged).not.toHaveBeenCalled();
   });
 
-  it('all failed with an unkeyed refusal: the backend message is shown', async () => {
+  it('all refused with an unkeyed refusal: the backend message is shown', async () => {
     applyMock.mockResolvedValue({ results: [{ kind: 'bouncePair', error: { message: 'Line not found' } }] });
     renderModal({ groups: [HIGH] });
-    await clickApply();
+    await clickExclude();
     await vi.waitFor(() => expect(toast.error).toHaveBeenCalled());
     expect(toast.error).toHaveBeenCalledWith('Line not found');
   });
 
-  it('keeps the pre-existing partial toast when no pair was sent', async () => {
-    applyMock.mockResolvedValue({ results: [{ groupKey: 'a' }, { groupKey: 'b', error: { message: 'x' } }] });
-    renderModal({ groups: [TX, REVIEW] });
-    await clickApply();
-    await vi.waitFor(() => expect(toast.warning).toHaveBeenCalled());
-    expect(toast.warning).toHaveBeenCalledWith('financeReconcileAutomatchToastPartial:{"success":1,"failed":1}');
+  it('a failed request keeps every row and shows an error toast', async () => {
+    applyMock.mockRejectedValue(new Error('network down'));
+    const { props } = renderModal({ groups: [HIGH] });
+    await clickExclude();
+    await vi.waitFor(() => expect(toast.error).toHaveBeenCalled());
+    expect(screen.getByTestId('automatch-bounce-row-bp-high')).toBeInTheDocument();
+    expect(props.onChanged).not.toHaveBeenCalled();
+  });
+
+  it('an ambiguous pair is never sent: its checkbox stays disabled and "Excluir" ignores it', async () => {
+    applyMock.mockResolvedValue({ results: [] });
+    renderModal({ groups: [AMBIGUOUS] });
+    expect(checkInput('bp-amb')).toBeDisabled();
+    expect(excludeButton()).toBeDisabled();
+  });
+
+  it('suggestions reloaded by the host bring the pairs back from the server, not from the local hiding', async () => {
+    applyMock.mockResolvedValue({
+      results: [{ kind: 'bouncePair', statementLineId: 'O1', counterpartLineId: 'B1', discarded: true }],
+    });
+    const { rerender, props } = renderModal();
+    await clickExclude();
+    await vi.waitFor(() => expect(screen.queryByTestId('automatch-bounce-row-bp-high')).toBeNull());
+    rerender(<AutoMatchSuggestionModal {...props} groups={[TX, HIGH, REVIEW, AMBIGUOUS]} />);
+    expect(screen.getByTestId('automatch-bounce-row-bp-high')).toBeInTheDocument();
   });
 });
 
@@ -469,14 +578,18 @@ describe('AutoMatchSuggestionModal — host-owned selection', () => {
     renderModal({ selection });
     expect(checkInput('bp-review')).toHaveAttribute('aria-checked', 'true');
     expect(checkInput('bp-high')).toHaveAttribute('aria-checked', 'false');
-    expect(applyButton()).toHaveTextContent('financeReconcileAutomatchActionDiscardPairs:{"count":1}');
+    expect(excludeButton()).toHaveTextContent('financeReconcileAutomatchBounceExclude:{"count":1}');
 
     fireEvent.click(check('bp-high'));
     expect(selection.toggle).toHaveBeenCalledWith(HIGH);
     fireEvent.click(screen.getByTestId('automatch-bounce-select-all'));
     expect(selection.setMany).toHaveBeenCalledWith([HIGH, REVIEW, AMBIGUOUS], true);
 
-    await clickApply();
+    applyMock.mockResolvedValue({
+      results: [{ kind: 'bouncePair', statementLineId: 'O2', counterpartLineId: 'B2', discarded: true }],
+    });
+    fireEvent.click(excludeButton());
+    await vi.waitFor(() => expect(applyMock).toHaveBeenCalled());
     expect(applyMock.mock.calls[0][0].groups).toEqual([
       { kind: 'bouncePair', statementLineId: 'O2', counterpartLineId: 'B2' },
     ]);
@@ -552,8 +665,8 @@ describe('AutoMatchSuggestionModal — the Apply button', () => {
   });
 
   it('is disabled with nothing selected and never calls apply', () => {
-    renderModal({ groups: [HIGH] });
-    fireEvent.click(check('bp-high'));
+    renderModal({ groups: [TX, HIGH] });
+    fireEvent.click(screen.getByTestId('automatch-select-all'));
     expect(applyButton()).toBeDisabled();
     fireEvent.click(applyButton());
     expect(applyMock).not.toHaveBeenCalled();
@@ -564,7 +677,7 @@ describe('AutoMatchSuggestionModal — the Apply button', () => {
     renderModal();
     expect(applyButton()).toBeDisabled();
     expect(applyButton()).toHaveTextContent('loading');
-    expect(applyButton()).not.toHaveTextContent('financeReconcileAutomatchActionApplyAndDiscard');
+    expect(applyButton()).not.toHaveTextContent('financeReconcileAutomatchActionReconcile');
   });
 });
 
@@ -684,7 +797,7 @@ describe('AutoMatchSuggestionModal — ambiguous pairs', () => {
     for (const key of ['bp-amb', 'bp-amb-2']) {
       expect(screen.getByTestId(`automatch-bounce-row-${key}`)).toBeInTheDocument();
       expect(checkInput(key)).toBeDisabled();
-      expect(screen.getByTestId(`automatch-bounce-tag-review-${key}`))
+      expect(screen.getByTestId(`automatch-bounce-reason-${key}`))
         .toHaveTextContent('financeReconcileBounceReasonAmbiguousShort');
     }
     expect(meta('original', 'bp-amb').textContent).toBe('01/05/2026 · 03/05/2026');
@@ -710,12 +823,15 @@ describe('AutoMatchSuggestionModal — ambiguous pairs', () => {
 // ---------------------------------------------------------------------------
 
 describe('AutoMatchSuggestionModal — bounceDecisions in the applySuggestions body', () => {
-  it('reports every shown pair that is not applied as unchecked, and leaves the applied ones in groups', async () => {
+  // ETP-6359: "Conciliar seleccionadas" never excludes a pair, so every pair still on screen is
+  // reported as not applied — checked or not — and no pair travels in `groups`.
+  it('reports every pair still shown as unchecked, and sends no pair in groups', async () => {
     renderModal();
     await clickApply();
     const body = applyMock.mock.calls[0][0];
-    expect(body.groups).toContainEqual({ kind: 'bouncePair', statementLineId: 'O1', counterpartLineId: 'B1' });
+    expect(body.groups.some((g) => g.kind === 'bouncePair')).toBe(false);
     expect(body.bounceDecisions).toEqual([
+      { groupKey: 'bp-high', decision: 'unchecked' },
       { groupKey: 'bp-review', decision: 'unchecked' },
       { groupKey: 'bp-amb', decision: 'unchecked' },
     ]);
@@ -732,30 +848,25 @@ describe('AutoMatchSuggestionModal — bounceDecisions in the applySuggestions b
     renderModal({ sentToPanelKeys: new Set(['bp-amb', 'bp-review']) });
     await clickApply();
     expect(applyMock.mock.calls[0][0].bounceDecisions).toEqual([
+      { groupKey: 'bp-high', decision: 'unchecked' },
       { groupKey: 'bp-review', decision: 'sent_to_panel' },
       { groupKey: 'bp-amb', decision: 'sent_to_panel' },
     ]);
   });
 
-  it('a pair sent to the panel but checked when applying is applied, not reported', async () => {
-    renderModal({ sentToPanelKeys: new Set(['bp-review']) });
+  it('a pair checked but not excluded is still reported: this call does not exclude it', async () => {
+    renderModal();
     fireEvent.click(check('bp-review'));
     await clickApply();
     const body = applyMock.mock.calls[0][0];
-    expect(body.groups).toContainEqual({ kind: 'bouncePair', statementLineId: 'O2', counterpartLineId: 'B2' });
-    expect(body.bounceDecisions).toEqual([{ groupKey: 'bp-amb', decision: 'unchecked' }]);
+    expect(body.groups.some((g) => g.kind === 'bouncePair')).toBe(false);
+    expect(body.bounceDecisions).toContainEqual({ groupKey: 'bp-review', decision: 'unchecked' });
   });
 
   it('pairs dismissed with "No es un rechazo" are not shown, so not reported', async () => {
     renderModal({ dismissedPairKeys: new Set(['bp-review', 'bp-amb']) });
     await clickApply();
-    expect(applyMock.mock.calls[0][0].bounceDecisions).toEqual([]);
-  });
-
-  it('carries the key, empty, when every shown pair is applied', async () => {
-    renderModal({ groups: [TX, HIGH] });
-    await clickApply();
-    expect(applyMock.mock.calls[0][0]).toHaveProperty('bounceDecisions', []);
+    expect(applyMock.mock.calls[0][0].bounceDecisions).toEqual([{ groupKey: 'bp-high', decision: 'unchecked' }]);
   });
 
   it('sends no bounceDecisions when the modal shows no pair', async () => {
@@ -805,17 +916,41 @@ describe('AutoMatchSuggestionModal — bounce_suggestions_viewed', () => {
 });
 
 describe('AutoMatchSuggestionModal — bounce_suggestions_dismissed', () => {
+  // ETP-6359: with rows selected every close asks first; "Cerrar" confirms it.
   it.each([
-    ['Cancelar', 'automatch-modal-cancel'],
-    ['Abrir conciliación', 'automatch-modal-open-reconciliation'],
+    ['Ir a conciliación manual', 'automatch-modal-open-reconciliation'],
     ['X / Esc / backdrop', 'dialog-dismiss'],
-  ])('%s closes and reports the dismissal with the pairs checked at close', (_label, testId) => {
+  ])('%s asks first, then closes and reports the dismissal with the pairs checked at close', (_label, testId) => {
     const { props } = renderModal({ autoOpened: true });
     fireEvent.click(check('bp-review'));
     fireEvent.click(screen.getByTestId(testId));
+    expect(props.onClose).not.toHaveBeenCalled();
+    expect(trackDismissed).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('automatch-close-confirm-action'));
     expect(props.onClose).toHaveBeenCalledTimes(1);
     expect(trackDismissed).toHaveBeenCalledTimes(1);
     expect(trackDismissed).toHaveBeenCalledWith({ pairsShown: 3, pairsCheckedAtClose: 2, autoOpened: true });
+  });
+
+  it('"Seguir trabajando" keeps the modal, the selection and reports nothing', () => {
+    const { props } = renderModal();
+    fireEvent.click(check('bp-review'));
+    fireEvent.click(screen.getByTestId('dialog-dismiss'));
+    fireEvent.click(screen.getByTestId('automatch-close-keep'));
+    expect(screen.queryByTestId('automatch-close-confirm')).toBeNull();
+    expect(props.onClose).not.toHaveBeenCalled();
+    expect(trackDismissed).not.toHaveBeenCalled();
+    expect(checkInput('bp-review')).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('closes without asking when nothing is selected', () => {
+    const { props } = renderModal();
+    fireEvent.click(screen.getByTestId('automatch-select-all'));
+    fireEvent.click(check('bp-high'));
+    fireEvent.click(screen.getByTestId('dialog-dismiss'));
+    expect(screen.queryByTestId('automatch-close-confirm')).toBeNull();
+    expect(props.onClose).toHaveBeenCalledTimes(1);
+    expect(trackDismissed).toHaveBeenCalledWith({ pairsShown: 3, pairsCheckedAtClose: 0, autoOpened: false });
   });
 
   it('is not reported on an apply', async () => {
@@ -836,8 +971,97 @@ describe('AutoMatchSuggestionModal — bounce_suggestions_dismissed', () => {
 
   it('is not reported when the modal had no bounce pair', () => {
     const { props } = renderModal({ groups: [TX], kpis: KPIS_OFF });
-    fireEvent.click(screen.getByTestId('automatch-modal-cancel'));
+    fireEvent.click(screen.getByTestId('automatch-select-all'));
+    fireEvent.click(screen.getByTestId('automatch-modal-open-reconciliation'));
     expect(props.onClose).toHaveBeenCalled();
     expect(trackDismissed).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Redesign coverage gaps (ETP-6359): the card buttons never leak into each other, and the close
+// confirmation never outlives the modal.
+// ---------------------------------------------------------------------------
+
+describe('AutoMatchSuggestionModal — the two actions never leak into each other', () => {
+  it('"Excluir" after select-all of the pairs sends every selectable pair and never the ambiguous one', async () => {
+    applyMock.mockResolvedValue({
+      results: [
+        { kind: 'bouncePair', statementLineId: 'O1', counterpartLineId: 'B1', discarded: true },
+        { kind: 'bouncePair', statementLineId: 'O2', counterpartLineId: 'B2', discarded: true },
+      ],
+    });
+    renderModal({ groups: [TX, HIGH, REVIEW, AMBIGUOUS] });
+    fireEvent.click(screen.getByTestId('automatch-bounce-select-all'));
+    expect(excludeButton()).toHaveTextContent('financeReconcileAutomatchBounceExclude:{"count":2}');
+    fireEvent.click(excludeButton());
+    await vi.waitFor(() => expect(applyMock).toHaveBeenCalledTimes(1));
+    const sent = applyMock.mock.calls[0][0];
+    expect(sent.groups).toEqual([
+      { kind: 'bouncePair', statementLineId: 'O1', counterpartLineId: 'B1' },
+      { kind: 'bouncePair', statementLineId: 'O2', counterpartLineId: 'B2' },
+    ]);
+    expect(sent).not.toHaveProperty('bounceDecisions');
+    // The ambiguous pair is neither sent nor excluded locally.
+    await vi.waitFor(() => expect(screen.queryByTestId('automatch-bounce-row-bp-review')).toBeNull());
+    expect(screen.getByTestId('automatch-bounce-row-bp-amb')).toBeInTheDocument();
+  });
+
+  it('"Excluir" asks the backend once and never reloads: the modal only hides the rows by groupKey', async () => {
+    applyMock.mockResolvedValue({
+      results: [{ kind: 'bouncePair', statementLineId: 'O1', counterpartLineId: 'B1', discarded: true }],
+    });
+    const { props } = renderModal();
+    fireEvent.click(excludeButton());
+    await vi.waitFor(() => expect(screen.queryByTestId('automatch-bounce-row-bp-high')).toBeNull());
+    expect(applyMock).toHaveBeenCalledTimes(1);
+    expect(props.onSuccess).not.toHaveBeenCalled();
+    // The pair that was not excluded stays on screen, unchecked as it started.
+    expect(screen.getByTestId('automatch-bounce-row-bp-review')).toBeInTheDocument();
+    expect(checkInput('bp-review')).toHaveAttribute('aria-checked', 'false');
+    expect(applyButton()).toHaveTextContent('financeReconcileAutomatchActionReconcile:{"count":1}');
+  });
+
+  it('"Conciliar seleccionadas" with EVERY pair checked still sends only transaction groups', async () => {
+    renderModal();
+    fireEvent.click(screen.getByTestId('automatch-bounce-select-all'));
+    await clickApply();
+    const sent = applyMock.mock.calls[0][0];
+    expect(sent.groups).toEqual([{ statementLineId: 'line-1', operationIds: ['txn-1'] }]);
+    expect(JSON.stringify(sent.groups)).not.toContain('bouncePair');
+  });
+});
+
+describe('AutoMatchSuggestionModal — the close confirmation and the modal lifecycle', () => {
+  it('"Cerrar" closes exactly once and the confirmation is gone', () => {
+    const { props } = renderModal();
+    fireEvent.click(screen.getByTestId('automatch-modal-open-reconciliation'));
+    expect(screen.getByTestId('automatch-close-confirm')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('automatch-close-confirm-action'));
+    expect(props.onClose).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('automatch-close-confirm')).toBeNull();
+  });
+
+  it('a selected transaction group alone (no pair checked) also asks before closing', () => {
+    const { props } = renderModal({ groups: [TX], kpis: KPIS_OFF });
+    fireEvent.click(screen.getByTestId('dialog-dismiss'));
+    expect(screen.getByTestId('automatch-close-confirm')).toBeInTheDocument();
+    expect(props.onClose).not.toHaveBeenCalled();
+  });
+
+  it('"Ir a conciliación manual" closes without asking when nothing is selected', () => {
+    const { props } = renderModal({ groups: [TX], kpis: KPIS_OFF });
+    fireEvent.click(screen.getByTestId('automatch-select-all'));
+    fireEvent.click(screen.getByTestId('automatch-modal-open-reconciliation'));
+    expect(screen.queryByTestId('automatch-close-confirm')).toBeNull();
+    expect(props.onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('never leaves the confirmation open behind a modal the host closed', () => {
+    const { rerender, props } = renderModal();
+    fireEvent.click(screen.getByTestId('dialog-dismiss'));
+    expect(screen.getByTestId('automatch-close-confirm')).toBeInTheDocument();
+    rerender(<AutoMatchSuggestionModal {...props} open={false} />);
+    expect(screen.queryByTestId('automatch-close-confirm')).toBeNull();
   });
 });

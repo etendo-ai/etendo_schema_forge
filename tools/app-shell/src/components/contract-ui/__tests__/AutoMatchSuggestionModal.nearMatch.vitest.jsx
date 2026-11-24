@@ -1,3 +1,5 @@
+// @covers tools/app-shell/src/components/contract-ui/AutoMatchSuggestionModal.jsx
+// @covers tools/app-shell/src/components/contract-ui/reconciliationBadges.jsx
 import { render, screen, fireEvent } from '@testing-library/react';
 import { formatCurrency } from '@/lib/formatCurrency.js';
 
@@ -149,8 +151,8 @@ function renderModal(overrides = {}) {
   return { ...render(<AutoMatchSuggestionModal {...props} />), props };
 }
 
-/** The footer summary text ("will link N / will create M"). */
-const footerText = () => screen.getByText(/financeReconcileAutomatchFooter/).textContent;
+/** The label of the green card's button ("Conciliar seleccionadas (N)"), params included. */
+const applyLabel = () => screen.getByTestId('automatch-modal-apply').textContent;
 
 /** The value rendered under a KPI label (label and value are siblings in one flex column). */
 const kpiValue = (labelKey) => screen.getByText(labelKey).parentElement.textContent.replace(labelKey, '');
@@ -191,6 +193,13 @@ describe('AutoMatchSuggestionModal — group type badge', () => {
       .toHaveTextContent('financeReconcileBadgeSuggested');
     expect(screen.getByTestId('automatch-group-kind-difference'))
       .toHaveTextContent('financeReconcileBadgeDifference');
+  });
+
+  it('puts a Sparkle icon on "Con sugerencia" only — the difference and by-rule badges carry none', () => {
+    renderModal({ groups: [GROUP_SUGGESTED, GROUP_RULE, GROUP_NEAR_AMOUNT] });
+    expect(screen.getByTestId('automatch-group-kind-suggested').querySelector('svg')).not.toBeNull();
+    expect(screen.getByTestId('automatch-group-kind-byRule').querySelector('svg')).toBeNull();
+    expect(screen.getByTestId('automatch-group-kind-difference').querySelector('svg')).toBeNull();
   });
 
   it('badges a DATE-only near match as a difference too', () => {
@@ -250,50 +259,37 @@ describe('AutoMatchSuggestionModal — difference operation row', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 3. Footer summary and KPI strip counts
+// 3. Apply-button count and KPI strip counts
 //
-// Counting a near match only as a link is what made the footer promise one movement while the apply
-// created two. A date-only near match must NOT inflate that count.
+// ETP-6359: the footer sentence that counted links and creations ("Se vincularán N… Se crearán M…")
+// left with the global footer; the green card's button now counts the checked groups, and the
+// "A crear" KPI is the backend's figure.
 // ---------------------------------------------------------------------------
 
-describe('AutoMatchSuggestionModal — footer and KPI counts', () => {
+describe('AutoMatchSuggestionModal — apply-button and KPI counts', () => {
   const MIXED = [GROUP_SUGGESTED, GROUP_RULE, GROUP_NEAR_AMOUNT, GROUP_NEAR_DATE];
 
-  it('counts a mixed batch: 3 links and 2 creations', () => {
+  it('counts every checked group of a mixed batch in the button', () => {
     renderModal({ groups: MIXED });
-    // Links: the three non-isNew groups. Creations: the rule group + the amount near match.
-    expect(footerText()).toContain('financeReconcileAutomatchFooterLink count=3');
-    expect(footerText()).toContain('financeReconcileAutomatchFooterCreate count=2');
+    expect(applyLabel()).toContain('financeReconcileAutomatchActionReconcile count=4');
   });
 
-  it('does not count a date-only near match as a creation', () => {
-    renderModal({ groups: [GROUP_NEAR_DATE] });
-    expect(footerText()).toContain('financeReconcileAutomatchFooterLink count=1');
-    expect(footerText()).not.toContain('financeReconcileAutomatchFooterCreate');
-  });
-
-  it('counts an amount near match on BOTH sides', () => {
-    renderModal({ groups: [GROUP_NEAR_AMOUNT] });
-    expect(footerText()).toContain('financeReconcileAutomatchFooterLink count=1');
-    expect(footerText()).toContain('financeReconcileAutomatchFooterCreate count=1');
-  });
-
-  it('drops both counts for a group the user unchecks', () => {
+  it('drops the count for a group the user unchecks', () => {
     renderModal({ groups: MIXED });
     fireEvent.click(screen.getByTestId(`automatch-group-check-${GROUP_NEAR_AMOUNT.groupKey}`));
-    expect(footerText()).toContain('financeReconcileAutomatchFooterLink count=2');
-    expect(footerText()).toContain('financeReconcileAutomatchFooterCreate count=1');
+    expect(applyLabel()).toContain('financeReconcileAutomatchActionReconcile count=3');
   });
 
-  it('falls back to the "nothing selected" summary when everything is unchecked', () => {
+  it('disables the button when everything is unchecked', () => {
     renderModal({ groups: MIXED });
     fireEvent.click(screen.getByTestId('automatch-select-all'));
-    expect(screen.getByText('financeReconcileAutomatchFooterNone')).toBeInTheDocument();
+    expect(applyLabel()).toContain('financeReconcileAutomatchActionReconcile count=0');
+    expect(screen.getByTestId('automatch-modal-apply')).toBeDisabled();
   });
 
   it('renders the backend willCreate KPI', () => {
     // Translated in all three locales but never rendered before this round, so the movements a run
-    // generates had no figure anywhere. It is the BACKEND's number: 7, not the 2 the footer derives.
+    // generates had no figure anywhere. It is the BACKEND's number: 7, not one derived from the checked groups.
     renderModal({ groups: MIXED });
     expect(kpiValue('financeReconcileAutomatchKpiNew')).toBe('7');
   });

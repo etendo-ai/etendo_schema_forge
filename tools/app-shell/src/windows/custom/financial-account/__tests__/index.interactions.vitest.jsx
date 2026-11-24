@@ -237,8 +237,8 @@ vi.mock('../BankConnectionFlowUI.jsx', () => ({
 // (`onReviewPair`) are surfaced the same way; `onReviewPair` and the toggle act on the `bp-review` pair.
 vi.mock('@/components/contract-ui/AutoMatchSuggestionModal', () => ({
   AutoMatchSuggestionModal: ({
-    open, onClose, onSuccess, groups, selection, dismissedPairKeys, onReviewPair, sentToPanelKeys,
-    autoOpened,
+    open, onClose, onSuccess, onChanged, groups, selection, dismissedPairKeys, onReviewPair,
+    sentToPanelKeys, autoOpened,
   }) => {
     const reviewPair = (groups ?? []).find((g) => g.groupKey === 'bp-review');
     return (
@@ -251,6 +251,7 @@ vi.mock('@/components/contract-ui/AutoMatchSuggestionModal', () => ({
         data-auto-opened={String(autoOpened)}>
         <button type="button" data-testid="stub-automatch-close" onClick={onClose} />
         <button type="button" data-testid="stub-automatch-success" onClick={onSuccess} />
+        <button type="button" data-testid="stub-automatch-changed" onClick={onChanged} />
         <button type="button" data-testid="stub-automatch-review" onClick={() => onReviewPair?.(reviewPair)} />
         <button type="button" data-testid="stub-automatch-toggle-review" onClick={() => selection?.toggle(reviewPair)} />
       </div>
@@ -545,6 +546,31 @@ describe('FinancialAccountDetail — automatch modal', () => {
     fireEvent.click(screen.getByTestId('stub-automatch-success'));
 
     // A new key forces a fresh node rather than an in-place update.
+    expect(screen.getByTestId('tab-reconciliation')).not.toBe(before);
+  });
+
+  // ETP-6359 — "Excluir de la conciliación" is immediate: the modal stays open and keeps its own
+  // checks, so the host refreshes what the exclusion changed but must NOT reload the suggestions.
+  it('reloads the account, the list and the movements after an Excluir, but NOT the cached automatch', () => {
+    render(<FinancialAccountDetail recordId="acc-1" />);
+    reloadAccountMock.mockClear();
+    reloadMovementsMock.mockClear();
+    reloadAutoMatchMock.mockClear();
+
+    fireEvent.click(screen.getByTestId('stub-automatch-changed'));
+
+    expect(reloadAccountMock).toHaveBeenCalled();
+    expect(reloadMovementsMock).toHaveBeenCalled();
+    expect(reloadAutoMatchMock).not.toHaveBeenCalled();
+  });
+
+  it('remounts the reconciliation panel after an Excluir so it shows the pairs as discarded', () => {
+    render(<FinancialAccountDetail recordId="acc-1" />);
+    fireEvent.click(screen.getByTestId('detail-tab-reconciliation'));
+    const before = screen.getByTestId('tab-reconciliation');
+
+    fireEvent.click(screen.getByTestId('stub-automatch-changed'));
+
     expect(screen.getByTestId('tab-reconciliation')).not.toBe(before);
   });
 
