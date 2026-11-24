@@ -1,8 +1,8 @@
 {
   "version": "0.16.0",
   "generatedAt": "2026-04-29T19:05:52.312Z",
-  "updatedAt": "2026-11-20T22:42:05.643Z",
-  "checksum": "37e36f5882c03c8c",
+  "updatedAt": "2026-11-24T11:36:19.633Z",
+  "checksum": "dbde002e65682f23",
   "frontendContract": {
     "window": {
       "id": "E547CE89D4C04429B6340FFA44E70716",
@@ -22,6 +22,7 @@
         "RPVOID",
         "PWNC"
       ],
+      "breadcrumb": "Treasury / Payment In",
       "customComponents": {
         "headerTable": "PaymentHeaderTable",
         "sidePanel": "PaymentDetailSidebar",
@@ -973,6 +974,7 @@
         "RPVOID",
         "PWNC"
       ],
+      "breadcrumb": "Treasury / Payment In",
       "customComponents": {
         "headerTable": "PaymentHeaderTable",
         "sidePanel": "PaymentDetailSidebar",
