@@ -13,6 +13,7 @@ import {useUI} from '@/i18n';
 import {toast} from 'sonner';
 import {SquareCheckbox} from './SquareCheckbox';
 import RequiredMark from '@/components/ui/required-mark.jsx';
+import LimitedTextField from './LimitedTextField.jsx';
 import {CopyButton} from '@/components/ui/copy-button.jsx';
 import {
     DEFAULT_COUNTRY_LIMIT,
@@ -338,10 +339,15 @@ async function resolveCountryOption({apiFetch, selectorBase, buildParams, prefer
  * as "s/n" (see `composeAddressLines`/`buildSavePayload`) rather than blocking Save. A save in
  * flight or an in-progress initial load blocks too.
  *
+ * ETP-5806 CP-13 widened it once more: a value longer than its own cap blocks the save for all
+ * three structured fields, not only for Calle, so the modal never offers a save the backend's
+ * `fieldsExceedingMaxLength` would refuse with an opaque 400.
+ *
  * Module-level so the modal body stays flat — a chain of `||` inside the component
  * counts against its cognitive complexity, which is already at its budget.
  */
-function isSaveBlocked({saving, initialLoading, structuredAddressEnabled, address, streetName, city, country}) {
+function isSaveBlocked({saving, initialLoading, structuredAddressEnabled, address, streetName,
+    buildingNumber, buildingName, city, country}) {
     if (saving || initialLoading) return true;
     // ETP-5806 — `structured-address-for-sepa` (backend-only flag, TTL 2026-11-15) off: legacy mandatory
     // fields are just the free-text address line and country, matching pre-ETP-5806 behavior.
@@ -357,6 +363,14 @@ function isSaveBlocked({saving, initialLoading, structuredAddressEnabled, addres
     // opaque 400 toast — even when the user only came to change the city. Blocking Save here is
     // what lets the field explain why, before the round-trip, instead of after it.
     if (streetName.length > STREET_NAME_MAX_LENGTH) return true;
+    // ETP-5806 CP-13 — same guard for Número and Edificio. Unlike Calle, whose composer cap (60) is
+    // narrower than its column (VARCHAR(70)), these two caps ARE their column widths, so no stored
+    // record can exceed them and this is unreachable today. It is here anyway because the field now
+    // RENDERS that state (LimitedTextField), and a visible over-limit error next to an enabled Save
+    // is the contradiction CP-6 existed to remove — if the caps and the columns ever diverge the
+    // way Calle's did, the modal already behaves correctly instead of deferring to a backend 400.
+    if (buildingNumber.length > BUILDING_NUMBER_MAX_LENGTH) return true;
+    if (buildingName.length > BUILDING_NAME_MAX_LENGTH) return true;
     if (city.trim() === '') return true;
     return country === '';
 }
@@ -693,6 +707,8 @@ export default function LocationEditorModal({
         structuredAddressEnabled,
         address: form.address,
         streetName: form.streetName,
+        buildingNumber: form.buildingNumber,
+        buildingName: form.buildingName,
         city: form.city,
         country: form.country,
     });
@@ -700,17 +716,6 @@ export default function LocationEditorModal({
     // ETP-5824: advisory only — never part of saveDisabled. See tbaiPostalCodeWarning.js.
     const tbaiContext = useTbaiPostalCodeContext({open, saveMode, bpId, apiBase: contactsApiBase});
     const showTbaiPostalCodeWarning = shouldWarnMissingTbaiPostalCode({...tbaiContext, postalCode: form.postalCode});
-
-    // ETP-5806 CP-6 (QA finding) — the two states the Calle field has to COMMUNICATE rather than
-    // silently enforce. `atLimit` is reachable by typing (the input's own `maxLength` stops there);
-    // `overLimit` is not — it can only come from a record stored before the 60-char cap existed,
-    // or from Classic, where EM_OBSEPA_StrtNm is still VARCHAR(70). Those are real: QA found
-    // addresses of 69-70 chars created on 2026-11-20 whose composed first line was already cut.
-    // Such a record is NOT silently truncated or silently accepted here: Save is blocked (see
-    // isSaveBlocked) and the message below the input says the street must be shortened, so the
-    // backend's own 400 is never what tells the user.
-    const streetNameOverLimit = form.streetName.length > STREET_NAME_MAX_LENGTH;
-    const streetNameAtLimit = form.streetName.length === STREET_NAME_MAX_LENGTH;
 
     // ETP-5806 — client-side preview only; the backend recomputes this itself and is the
     // source of truth (see composeAddressLines' own doc comment above).
@@ -1390,6 +1395,14 @@ export default function LocationEditorModal({
     const FIELD_COUNTER_OVER = { ...FIELD_COUNTER, color: 'hsl(var(--destructive))' };
     const FIELD_HINT = { fontSize: 12, color: 'hsl(var(--muted-foreground))', marginTop: 4 };
 
+    // ETP-5806 CP-13 — the look LimitedTextField renders with. The component owns the structure
+    // (counter, messages, aria wiring); this modal keeps owning how they look, so nothing about
+    // the field's appearance moves out of the file that defines every other field here.
+    const LIMITED_FIELD_STYLES = {
+        label: FIELD_LABEL, input: INPUT, error: FIELD_ERROR,
+        counter: FIELD_COUNTER, counterOver: FIELD_COUNTER_OVER, hint: FIELD_HINT,
+    };
+
     const PICKER_BTN = {
         ...INPUT, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         cursor: 'pointer', gap: 8, background: 'hsl(var(--card))',
@@ -1566,48 +1579,49 @@ export default function LocationEditorModal({
                                 Address Line 1/2 editor below renders instead. */}
                             {structuredAddressEnabled ? (
                             <>
-                            {/* Calle — ETP-5806 CP-6 (QA finding): the 60-char cap used to be
-                                enforced only by the input's `maxLength`, which drops the extra
-                                characters with no feedback at all; a user pasting or typing a long
-                                street saw it stop mid-word and had no way to know why. The limit is
-                                now stated continuously (the counter) and called out explicitly both
-                                when it is reached and when a pre-existing record exceeds it. */}
-                            <div>
-                                <div style={{ ...FIELD_LABEL, display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
-                                    <span>{ui('streetNameLabel')}<RequiredMark data-testid="RequiredMark__927831" /></span>
-                                    <span
-                                        style={streetNameOverLimit ? FIELD_COUNTER_OVER : FIELD_COUNTER}
-                                        data-testid="location-field-streetName-counter"
-                                    >
-                                        {ui('charactersUsedCounter', { used: form.streetName.length, max: STREET_NAME_MAX_LENGTH })}
-                                    </span>
-                                </div>
-                                <input autoFocus type="text" maxLength={STREET_NAME_MAX_LENGTH} value={form.streetName} onChange={e => setField('streetName', e.target.value)} data-testid="location-field-streetName" style={INPUT} />
-                                {attemptedSave && form.streetName.trim() === '' && (
-                                    <div style={FIELD_ERROR}>{ui('fieldRequiredMessage')}</div>
-                                )}
-                                {streetNameOverLimit && (
-                                    <div style={FIELD_ERROR} data-testid="location-field-streetName-over-limit">
-                                        {ui('streetNameOverLimitMessage', { max: STREET_NAME_MAX_LENGTH })}
-                                    </div>
-                                )}
-                                {streetNameAtLimit && (
-                                    <div style={FIELD_HINT} data-testid="location-field-streetName-at-limit">
-                                        {ui('streetNameMaxLengthReached', { max: STREET_NAME_MAX_LENGTH })}
-                                    </div>
-                                )}
-                            </div>
+                            {/* Calle / Número / Nombre del edificio — ETP-5806 CP-6, widened by
+                                CP-13 (QA findings). All three enforced their cap through the
+                                input's own `maxLength` alone, which drops the extra characters with
+                                no feedback at all: the user pasted a long value, watched it stop
+                                mid-word, and had no way to know why. CP-6 fixed Calle by hand and
+                                QA found the other two still doing it, in this same modal — so the
+                                three elements (counter, "limit reached" note, over-limit error)
+                                now live in one component instead of being copied per field. See
+                                LimitedTextField.jsx for the two states and the a11y wiring. */}
+                            <LimitedTextField
+                                id="location-field-streetName"
+                                label={ui('streetNameLabel')}
+                                required
+                                autoFocus
+                                value={form.streetName}
+                                max={STREET_NAME_MAX_LENGTH}
+                                onChange={e => setField('streetName', e.target.value)}
+                                error={attemptedSave && form.streetName.trim() === '' ? ui('fieldRequiredMessage') : null}
+                                testId="location-field-streetName"
+                                styles={LIMITED_FIELD_STYLES}
+                            />
 
                             {/* Número + Nombre del edificio en grid */}
                             <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 12 }}>
-                                <div>
-                                    <div style={FIELD_LABEL}>{ui('buildingNumberLabel')}</div>
-                                    <input type="text" maxLength={BUILDING_NUMBER_MAX_LENGTH} value={form.buildingNumber} onChange={e => setField('buildingNumber', e.target.value)} placeholder={ui('buildingNumberEmptyPlaceholder')} data-testid="location-field-buildingNumber" style={INPUT} />
-                                </div>
-                                <div>
-                                    <div style={FIELD_LABEL}>{ui('buildingNameLabel')}</div>
-                                    <input type="text" maxLength={BUILDING_NAME_MAX_LENGTH} value={form.buildingName} onChange={e => setField('buildingName', e.target.value)} data-testid="location-field-buildingName" style={INPUT} />
-                                </div>
+                                <LimitedTextField
+                                    id="location-field-buildingNumber"
+                                    label={ui('buildingNumberLabel')}
+                                    value={form.buildingNumber}
+                                    max={BUILDING_NUMBER_MAX_LENGTH}
+                                    onChange={e => setField('buildingNumber', e.target.value)}
+                                    placeholder={ui('buildingNumberEmptyPlaceholder')}
+                                    testId="location-field-buildingNumber"
+                                    styles={LIMITED_FIELD_STYLES}
+                                />
+                                <LimitedTextField
+                                    id="location-field-buildingName"
+                                    label={ui('buildingNameLabel')}
+                                    value={form.buildingName}
+                                    max={BUILDING_NAME_MAX_LENGTH}
+                                    onChange={e => setField('buildingName', e.target.value)}
+                                    testId="location-field-buildingName"
+                                    styles={LIMITED_FIELD_STYLES}
+                                />
                             </div>
 
                             {/* ETP-5806 — Address Line 1/2 are no longer user-editable: they are
