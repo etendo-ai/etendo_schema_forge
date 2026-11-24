@@ -1399,8 +1399,7 @@
           "dataType": {
             "type": "number"
           },
-          "reference": null,
-          "queryable": false
+          "reference": null
         },
         "id": {
           "sourceVisibility": "system",
@@ -1798,8 +1797,7 @@
           "dataType": {
             "type": "number"
           },
-          "reference": null,
-          "queryable": false
+          "reference": null
         },
         "id": {
           "sourceVisibility": "system",
@@ -2184,8 +2182,7 @@
           "dataType": {
             "type": "number"
           },
-          "reference": null,
-          "queryable": false
+          "reference": null
         },
         "id": {
           "sourceVisibility": "system",
