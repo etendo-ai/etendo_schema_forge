@@ -19,7 +19,9 @@ vi.mock('@/i18n', () => ({ useUI: () => mockUi, useLocaleSwitch: () => ({ locale
 
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { toast } from 'sonner';
-import RemittanceReturnDialog, { selectAllReturnable, toggleReturnSelection } from '@generated/remittance/custom/RemittanceReturnDialog.jsx';
+import RemittanceReturnDialog, {
+  groupReturnLines, returnGroupSummary, selectAllReturnable, toggleReturnSelection,
+} from '@generated/remittance/custom/RemittanceReturnDialog.jsx';
 import { normalizeReturnState, returnProblemsFromError } from '@generated/remittance/custom/remittanceFileApi.js';
 import { todayCalendarISO } from '@/lib/dateOnly.js';
 
@@ -81,6 +83,8 @@ describe('helpers', () => {
     const on = toggleReturnSelection(new Set(), state, 'l1');
     expect([...on].sort()).toEqual(['l1', 'l2']);
     expect(toggleReturnSelection(on, state, 'l2').size).toBe(0);
+    // A bank-instruction row hands all of its lines at once.
+    expect([...toggleReturnSelection(new Set(), state, ['l1', 'l2', 'l6'])].sort()).toEqual(['l1', 'l2', 'l6']);
   });
 
   it('selectAllReturnable takes only returnable lines, with their payment siblings', () => {
@@ -96,12 +100,13 @@ describe('helpers', () => {
 });
 
 describe('RemittanceReturnDialog', () => {
-  it('lists every line: returnable ones enabled, the rest disabled with the translated reason, none hidden', async () => {
+  it('lists one row per bank instruction: returnable ones enabled, the rest disabled with the translated reason, none hidden', async () => {
     routes();
     await renderDialog();
-    expect(screen.getAllByTestId('remittance-return-line')).toHaveLength(6);
-    expect(screen.getAllByRole('option').map((o) => o.getAttribute('aria-disabled'))).toEqual(['false', 'false', 'true', 'true', 'true', 'false']);
-    expect(checks().map((c) => c.disabled)).toEqual([false, false, true, true, true, false]);
+    // l1 + l2 share payment p1: one instruction, one row.
+    expect(screen.getAllByTestId('remittance-return-line')).toHaveLength(5);
+    expect(screen.getAllByRole('option').map((o) => o.getAttribute('aria-disabled'))).toEqual(['false', 'true', 'true', 'true', 'false']);
+    expect(checks().map((c) => c.disabled)).toEqual([false, true, true, true, false]);
     const notes = screen.getAllByTestId('remittance-return-note').map((n) => n.textContent);
     expect(notes[0]).toContain('remittanceReturnReturnedOn');
     expect(notes).toContain('remittanceReturnReasonReconciled');
@@ -124,12 +129,12 @@ describe('RemittanceReturnDialog', () => {
     expect(submit()).toBeDisabled();
   });
 
-  it('ticking one line of a shared payment ticks its sibling, and the summary follows', async () => {
+  it('ticking a shared payment selects both its lines, and the summary counts one instruction', async () => {
     routes();
     await renderDialog();
     fireEvent.click(checks()[0]);
-    expect(checks()[1]).toBeChecked();
-    expect(screen.getByTestId('remittance-return-count')).toHaveTextContent('2');
+    expect(checks()[0]).toBeChecked();
+    expect(screen.getByTestId('remittance-return-count')).toHaveTextContent('1');
     expect(submit()).toBeEnabled();
   });
 
@@ -138,7 +143,7 @@ describe('RemittanceReturnDialog', () => {
     await renderDialog();
     expect(screen.getByTestId('remittance-return-select-all')).toHaveTextContent('selectAll');
     fireEvent.click(screen.getByTestId('remittance-return-select-all'));
-    expect(checks().filter((c) => c.checked)).toHaveLength(3);
+    expect(checks().filter((c) => c.checked)).toHaveLength(2);
     expect(screen.getByTestId('remittance-return-select-all')).toHaveTextContent('deselectAll');
     fireEvent.click(screen.getByTestId('remittance-return-select-all'));
     expect(checks().some((c) => c.checked)).toBe(false);
@@ -162,7 +167,7 @@ describe('RemittanceReturnDialog', () => {
     await act(async () => { fireEvent.click(submit()); });
     expect(returnCalls()[0][0]).toBe('/remittance/rem-1/action/returnLines');
     expect(JSON.parse(returnCalls()[0][1].body)).toEqual({ fieldValues: { lineIds: ['l1', 'l2'], returnDate: todayCalendarISO() } });
-    expect(toast.success).toHaveBeenCalledWith('remittanceReturnSuccess:{"count":2}');
+    expect(toast.success).toHaveBeenCalledWith('remittanceReturnSuccess:{"count":1}');
     expect(onRefresh).toHaveBeenCalledTimes(1);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
@@ -182,9 +187,8 @@ describe('RemittanceReturnDialog', () => {
     const rows = screen.getAllByRole('option');
     fireEvent.click(rows[0]);
     expect(rows[0]).toHaveAttribute('aria-selected', 'true');
-    expect(rows[1]).toHaveAttribute('aria-selected', 'true');
-    fireEvent.click(rows[3]);
-    expect(rows[3]).toHaveAttribute('aria-selected', 'false');
+    fireEvent.click(rows[2]);
+    expect(rows[2]).toHaveAttribute('aria-selected', 'false');
   });
 
   it('a future date disables the primary button', async () => {
@@ -212,8 +216,8 @@ describe('RemittanceReturnDialog', () => {
     routes({ state: data({ ...STATE, lines: { ...STATE.lines, l4: { state: 'RETURNED', returnable: false, reasonCode: 'ALREADY_RETURNED', paymentLineIds: ['l4'] } } }) });
     await renderDialog();
     const rows = screen.getAllByTestId('remittance-return-line');
-    expect(within(rows[2]).getByTestId('remittance-return-note')).toHaveTextContent('remittanceReturnReturnedOn:{"date":"10/11/2026"}');
-    expect(within(rows[3]).getByTestId('remittance-return-note').textContent).toBe('remittanceReturnReturned');
+    expect(within(rows[1]).getByTestId('remittance-return-note')).toHaveTextContent('remittanceReturnReturnedOn:{"date":"10/11/2026"}');
+    expect(within(rows[2]).getByTestId('remittance-return-note').textContent).toBe('remittanceReturnReturned');
   });
 
   it('maps every reason code to its own translated note, and an unknown code to «not collected yet»', async () => {
@@ -232,8 +236,8 @@ describe('RemittanceReturnDialog', () => {
   it('a line the state does not know is listed disabled, not hidden', async () => {
     routes({ state: data({ collection: true, hasReturns: false, lines: { l1: STATE.lines.l1, l2: STATE.lines.l2 } }) });
     await renderDialog();
-    expect(screen.getAllByTestId('remittance-return-line')).toHaveLength(6);
-    expect(checks().map((c) => c.disabled)).toEqual([false, false, true, true, true, true]);
+    expect(screen.getAllByTestId('remittance-return-line')).toHaveLength(5);
+    expect(checks().map((c) => c.disabled)).toEqual([false, true, true, true, true]);
   });
 
   it('a search with no match lists nothing and disables select all', async () => {
@@ -259,7 +263,7 @@ describe('RemittanceReturnDialog', () => {
     await renderDialog();
     fireEvent.click(checks()[0]);
     fireEvent.change(screen.getByTestId('remittance-return-search'), { target: { value: 'beta' } });
-    expect(screen.getByTestId('remittance-return-count')).toHaveTextContent('2');
+    expect(screen.getByTestId('remittance-return-count')).toHaveTextContent('1');
     expect(submit()).toBeEnabled();
   });
 
@@ -393,5 +397,89 @@ describe('RemittanceReturnDialog', () => {
     expect(screen.getByTestId('remittance-return-problems')).toHaveTextContent('primero');
     await act(async () => { fireEvent.click(submit()); });
     expect(screen.queryByTestId('remittance-return-problems')).toBeNull();
+  });
+});
+
+// ETP-6247 — with a grouping (GGP / GGPD) several invoices share ONE payment, one instruction to the bank, and a return
+// takes it whole: the dialog lists instructions, not lines.
+describe('RemittanceReturnDialog — one row per bank instruction', () => {
+  const GROUPED_LINES = [
+    { id: 'g1', invoiceDocumentNo: 'FV1', 'businessPartner$_identifier': 'Acme', amount: 10, currency: 'EUR' },
+    { id: 'g2', invoiceDocumentNo: 'FV2', 'businessPartner$_identifier': 'Acme', amount: 20.5, currency: 'EUR' },
+    { id: 'g3', invoiceDocumentNo: 'FV3', 'businessPartner$_identifier': 'Acme', amount: 4, currency: 'EUR' },
+    { id: 's1', invoiceDocumentNo: 'FV9', 'businessPartner$_identifier': 'Beta', amount: 7, currency: 'EUR' },
+  ];
+  const settled = (paymentId, paymentLineIds) => ({ state: 'SETTLED', returnable: true, paymentId, paymentLineIds });
+  const GROUPED_STATE = {
+    collection: true, hasReturns: false,
+    lines: { g1: settled('pg', ['g1', 'g2', 'g3']), g2: settled('pg', ['g1', 'g2', 'g3']), g3: settled('pg', ['g1', 'g2', 'g3']), s1: settled('ps', ['s1']) },
+  };
+
+  it('groupReturnLines makes one group per payment, and a line without payment its own', () => {
+    const groups = groupReturnLines([...GROUPED_LINES, { id: 'x' }], normalizeReturnState({ ...GROUPED_STATE, lines: { ...GROUPED_STATE.lines, x: { state: 'PROCESSED', returnable: false, reasonCode: 'NOT_SETTLED' } } }));
+    expect(groups.map((g) => g.lineIds)).toEqual([['g1', 'g2', 'g3'], ['s1'], ['x']]);
+    expect(groups.map((g) => g.returnable)).toEqual([true, true, false]);
+    expect(groups[2].info.reasonCode).toBe('NOT_SETTLED');
+  });
+
+  it('returnGroupSummary adds the amounts and says «several» when the partners differ', () => {
+    const [group] = groupReturnLines(GROUPED_LINES, normalizeReturnState(GROUPED_STATE));
+    expect(returnGroupSummary(group)).toEqual({ documentNos: ['FV1', 'FV2', 'FV3'], partner: 'Acme', amount: 34.5, currency: 'EUR', single: false });
+    const mixed = { ...group, lines: [GROUPED_LINES[0], GROUPED_LINES[3]] };
+    expect(returnGroupSummary(mixed).partner).toBeNull();
+  });
+
+  it('three lines of one payment are one row with the partner, «3 facturas» and the invoices', async () => {
+    routes({ state: data(GROUPED_STATE), lines: data(GROUPED_LINES) });
+    await renderDialog();
+    const rows = screen.getAllByTestId('remittance-return-line');
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toHaveAttribute('data-lines', '3');
+    expect(within(rows[0]).getByTestId('remittance-return-group')).toHaveTextContent('Acme');
+    expect(within(rows[0]).getByTestId('remittance-return-group')).toHaveTextContent('remittanceReturnInvoiceCount:{"count":3}');
+    const invoices = within(rows[0]).getByTestId('remittance-return-group-invoices');
+    expect(invoices).toHaveTextContent('FV1, FV2, FV3');
+    expect(invoices).toHaveAttribute('title', 'FV1, FV2, FV3');
+    expect(rows[0].textContent).toMatch(/34,50/);
+    // A payment with one line reads as before.
+    expect(within(rows[1]).queryByTestId('remittance-return-group')).toBeNull();
+    expect(rows[1]).toHaveTextContent('FV9 · Beta');
+  });
+
+  it('one check selects the three lines; the summary counts one instruction, totals their sum, and the POST sends all three ids', async () => {
+    routes({ state: data(GROUPED_STATE), lines: data(GROUPED_LINES), ret: data({ status: 'CP', returned: ['g1', 'g2', 'g3'] }) });
+    await renderDialog();
+    fireEvent.click(checks()[0]);
+    expect(screen.getByTestId('remittance-return-count')).toHaveTextContent('1');
+    expect(screen.getByTestId('remittance-return-total').textContent).toMatch(/34,50/);
+    await act(async () => { fireEvent.click(submit()); });
+    expect(JSON.parse(returnCalls()[0][1].body).fieldValues.lineIds.sort()).toEqual(['g1', 'g2', 'g3']);
+    expect(toast.success).toHaveBeenCalledWith('remittanceReturnSuccess:{"count":1}');
+  });
+
+  it('the search finds the row by the invoice of any of its lines', async () => {
+    routes({ state: data(GROUPED_STATE), lines: data(GROUPED_LINES) });
+    await renderDialog();
+    fireEvent.change(screen.getByTestId('remittance-return-search'), { target: { value: 'fv2' } });
+    const rows = screen.getAllByTestId('remittance-return-line');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toHaveAttribute('data-lines', '3');
+  });
+
+  it('a payment of several customers reads «Varios clientes»', async () => {
+    const lines = [GROUPED_LINES[0], { ...GROUPED_LINES[1], 'businessPartner$_identifier': 'Gamma' }];
+    const state = { collection: true, hasReturns: false, lines: { g1: settled('pg', ['g1', 'g2']), g2: settled('pg', ['g1', 'g2']) } };
+    routes({ state: data(state), lines: data(lines) });
+    await renderDialog();
+    expect(screen.getByTestId('remittance-return-group')).toHaveTextContent('remittanceReturnSeveralPartners');
+  });
+
+  it('select all takes every line of every returnable instruction', async () => {
+    routes({ state: data(GROUPED_STATE), lines: data(GROUPED_LINES) });
+    await renderDialog();
+    fireEvent.click(screen.getByTestId('remittance-return-select-all'));
+    expect(screen.getByTestId('remittance-return-count')).toHaveTextContent('2');
+    await act(async () => { fireEvent.click(submit()); });
+    expect(JSON.parse(returnCalls()[0][1].body).fieldValues.lineIds.sort()).toEqual(['g1', 'g2', 'g3', 's1']);
   });
 });

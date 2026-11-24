@@ -14,7 +14,7 @@ import { CreditorIdField, CreditorIdLabel } from '@/components/financial-account
 import { dueItemsErrorMessage } from './remittanceDueItemsApi.js';
 import { fetchRemittanceTypeDirection, fetchSepaFileData } from './sepaFileDataApi.js';
 import RemittanceFileCard from './RemittanceFileCard.jsx';
-import RemittanceAdvancedOptions from './RemittanceAdvancedOptions.jsx';
+import RemittanceAdvancedOptions, { SCHEME_B2B, SCHEME_CORE } from './RemittanceAdvancedOptions.jsx';
 
 // Same keys as the Edit-account form's IBAN check (validateIbanForCountry codes).
 const IBAN_ERROR_KEYS = {
@@ -335,6 +335,17 @@ function SepaDataForRecord({ data, apiBaseUrl, onChange, registerFields, fieldEr
   const shownCreditor = creditorDraft ?? info?.creditorId ?? '';
   const creditorValid = normalizeCreditorId(shownCreditor) !== '' && !creditorIdErrorKey(shownCreditor);
   const isCollection = direction ? direction === 'collection' : (info?.collection ?? null);
+  // ETP-6247 (committee): «Remesa financiada» and the B2B scheme are collection-only. When the type turns out to be a
+  // PAYMENT (a new type, or another account whose type is a payment), a value carried over from a collection is
+  // cleared in the form: the switch is not rendered for a payment, so nothing else could take it back, and the server
+  // refuses `financed: true` / B2B on a payment (ETGO_RemittanceOptionsCollectionOnly) while it drops `false` / CORE.
+  const financedOn = data?.financed === true || data?.financed === 'Y';
+  const schemeB2b = data?.directDebitScheme === SCHEME_B2B;
+  useEffect(() => {
+    if (isCollection !== false || processed) return;
+    if (financedOn) onChange?.('financed', false);
+    if (schemeB2b) onChange?.('directDebitScheme', SCHEME_CORE);
+  }, [isCollection, processed, financedOn, schemeB2b, onChange]);
 
   const editable = Boolean(info) && !processed;
   let body;

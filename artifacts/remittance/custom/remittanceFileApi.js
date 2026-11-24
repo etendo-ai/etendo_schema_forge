@@ -16,7 +16,7 @@
 //          latestFile: { attachmentId, fileName } | null }   (the main .xml attachment)
 //     `message` is ALREADY localized server-side (request language, params substituted) and is what
 //     the block shows; `code` (ETGO_RemittanceFile*) + positional `params` are only the fallback.
-//   POST <spec>/remittance/{id}/action/confirm          { fieldValues: { grouping: 'P'|'GGPD' } }
+//   POST <spec>/remittance/{id}/action/confirm          { fieldValues: { grouping: 'P'|'GGP'|'GGPD' } }
 //     atomic: readiness, process (REM), settle every payment (automated remittance: Cobrada/Pagada,
 //     not reversible), generate the SEPA file and store it as the main attachment.
 //     → { status, attachmentId, fileName, downloadUrl (signed public link for MCP; the SPA downloads
@@ -168,7 +168,8 @@ export async function fetchFileReadiness(apiFetch, remittanceId) {
  *
  * @param {Function} apiFetch - `useApiFetch(apiBaseUrl)` of the remittance spec
  * @param {string} remittanceId
- * @param {string} grouping - 'P' (none) or 'GGPD' (by business partner and due date)
+ * @param {string} grouping - 'P' (none), 'GGP' (by business partner) or 'GGPD' (by business partner
+ *   and due date)
  * @returns {Promise<ReturnType<typeof normalizeFileResult>>}
  * @throws {Error} with `status` and `body` (messageKeys, problems) when the backend refuses
  */

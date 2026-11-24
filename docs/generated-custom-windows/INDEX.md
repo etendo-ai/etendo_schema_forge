@@ -59,12 +59,13 @@ This folder is the entry point for documentation that describes how generated an
 
 ## Treasury
 
-Menu group "Tesorería" (ETP-6389): Cobro, Pago, Cuentas, Informes (aging reports only) and Condiciones de pago, in that order.
+Menu group "Tesorería" (ETP-6389): Cobro, Pago, Remesas (moved from Finanzas in ETP-6247), Cuentas, Informes (aging reports only) and Condiciones de pago, in that order.
 
 | File | Description |
 |------|-------------|
 | [payment-in.md](payment-in.md) | Generated payment-in flow with related documents and payment actions |
 | [payment-out.md](payment-out.md) | Custom payment-out flow with related documents and multiple child surfaces |
+| [remittance.md](remittance.md) | SEPA remittances ("Remesas", ETP-6148, capability `sepaRemittances`). The `remittance` spec over the Classic REM window reuses Classic columns, including REM's own `Remittance_Status` (added in ETP-6148 on `feature/ETP-6148`): list, header form and read-only lines. The Classic process buttons are hidden; selection, XML and settlement come later |
 | [financial-account.md](financial-account.md) | Financial account detail: Movimientos, Conciliación (split panel, automatch, bounce pairs and discarded lines since ETP-5581), Extractos importados, cash close and Reconciliaciones |
 | [financial-accounts-page.md](financial-accounts-page.md) | Cuentas landing page (ETP-4095) + offline account create / edit / archive (ETP-4096) |
 | [financial-account-management.md](financial-account-management.md) | Financial account create / edit / archive, bank connection and bank sync (one sync per account, shared state across its four entry points since ETP-6154), `financial-account` spec endpoint and MCP access (ETP-4096 onwards; split out of `financial-account.md`) |
@@ -79,7 +80,6 @@ Menu group "Tesorería" (ETP-6389): Cobro, Pago, Cuentas, Informes (aging report
 
 | File | Description |
 |------|-------------|
-| [remittance.md](remittance.md) | SEPA remittances ("Remesas", ETP-6148, capability `sepaRemittances`). The `remittance` spec over the Classic REM window reuses Classic columns, including REM's own `Remittance_Status` (added in ETP-6148 on `feature/ETP-6148`): list, header form and read-only lines. The Classic process buttons are hidden; selection, XML and settlement come later |
 | [chart-of-accounts.md](chart-of-accounts.md) | Generated chart-of-accounts maintenance window |
 | [cost-center.md](cost-center.md) | Generated cost-center master window (ETP-4892) — flat accounting-dimension catalog, no hierarchy |
 | [service-project.md](service-project.md) | Generated Project master window (ETP-4892) — minimal Search Key/Name/Description/Active view of AD window "Service Project" (`C_Project`), sub-tabs and ~65 other header columns excluded |

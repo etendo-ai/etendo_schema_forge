@@ -140,15 +140,8 @@ export default function PurchaseInvoiceTopbar({ data, recordId, apiBaseUrl, onRe
             {ui('statusPending')}
             <span style={{ opacity: 0.4 }}>&middot;</span>
             <span className="font-semibold tabular-nums">{formatCurrency(currency || 'USD', badge.amount)}</span>
-            {/* ETP-6247 — `badge.amount` is the free part; the rest is in a confirmed remittance. */}
-            {badge.kind === 'partially-remitted' && (
-              <>
-                <span style={{ opacity: 0.4 }}>&middot;</span>
-                <span className="tabular-nums" data-testid="payment-status-badge-remitted">
-                  {ui('remittanceInvoiceRemittedSuffix', { amount: formatCurrency(currency || 'USD', badge.remittedAmount) })}
-                </span>
-              </>
-            )}
+            {/* ETP-6247 — on a partial remittance `badge.amount` is the free part, shown like any
+                pending figure; the remitted part is in the payments modal. */}
             {/* Same "Ver →" affordance as the sales topbar: the badge opens the payments modal. */}
             <span data-testid="payment-status-badge-view" style={{ opacity: 0.6, marginLeft: 4 }}>{ui('view')} &rarr;</span>
           </span>

@@ -16,9 +16,9 @@ const groups = {
   Purchases: 'purchase-order goods-receipt purchase-invoice return-to-vendor-shipment matched-purchase-invoices invoice-inbox',
   Inventory: 'product product-category price-list warehouse physical-inventory goods-movements internal-consumption report-viewer-inventory',
   // ETP-6389 — Tesorería: Cobro, Pago, Cuentas, an Informes link holding only the aging reports,
-  // and Condiciones de pago (moved from Settings).
-  Treasury: 'payment-in payment-out financial-account report-viewer-treasury payment-term',
-  Finance: 'remittance chart-of-accounts cost-center service-project general-ledger-configuration calendar assets asset-group amortization not-posted-documents manual-journals fiscal-monitor conversion-rates fiscal-models tax tax-category report-viewer-finance',
+  // and Condiciones de pago (moved from Settings). ETP-6247 — Remesas moved here too, after Pago.
+  Treasury: 'payment-in payment-out remittance financial-account report-viewer-treasury payment-term',
+  Finance: 'chart-of-accounts cost-center service-project general-ledger-configuration calendar assets asset-group amortization not-posted-documents manual-journals fiscal-monitor conversion-rates fiscal-models tax tax-category report-viewer-finance',
   Connections: 'authorize',
   Settings: 'organization document-sequence business-partner-category user roles api-keys document-templates acct-process-monitor fiscal-config',
 };

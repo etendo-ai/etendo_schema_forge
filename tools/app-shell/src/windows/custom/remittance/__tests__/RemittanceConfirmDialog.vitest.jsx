@@ -39,7 +39,8 @@ const RECORD = { id: 'rem-1', dueDate: '2026-12-15', processed: false };
 const CONFIRM = {
   name: 'confirm', label: 'confirm', confirmModal: true,
   params: [{ key: 'grouping', type: 'select', label: 'remittanceGrouping', defaultValue: 'P',
-    options: [{ value: 'P', label: 'remittanceGroupingNone' }, { value: 'GGPD', label: 'remittanceGroupingByBpAndDueDate' }] }],
+    options: [{ value: 'P', label: 'remittanceGroupingNone' }, { value: 'GGP', label: 'remittanceGroupingByBp' },
+      { value: 'GGPD', label: 'remittanceGroupingByBpAndDueDate' }] }],
 };
 const SUMMARY = { invoiceCount: 3, lineCount: 4, totalAmount: 1202.3, currency: 'EUR', dueDate: '2026-12-01' };
 
@@ -203,6 +204,7 @@ describe('RemittanceConfirmDialog — grouping and confirm', () => {
     expect(screen.getByTestId('remittance-confirm-grouping-P')).toBeChecked();
     expect(screen.getByRole('radiogroup')).toHaveAccessibleName('remittanceGrouping');
     expect(screen.getByRole('dialog')).toHaveTextContent('remittanceGroupingNoneDescription');
+    expect(screen.getByRole('dialog')).toHaveTextContent('remittanceGroupingByBpDescription');
     expect(screen.getByRole('dialog')).toHaveTextContent('remittanceGroupingByBpAndDueDateDescription');
     await act(async () => { fireEvent.click(submit()); });
     expect(JSON.parse(confirmCalls()[0][1].body)).toEqual({ fieldValues: { grouping: 'P' } });
@@ -215,6 +217,18 @@ describe('RemittanceConfirmDialog — grouping and confirm', () => {
     fireEvent.click(screen.getByTestId('remittance-confirm-grouping-GGPD'));
     await act(async () => { fireEvent.click(submit()); });
     expect(JSON.parse(confirmCalls()[0][1].body)).toEqual({ fieldValues: { grouping: 'GGPD' } });
+  });
+
+  // ETP-6247 — «Agrupar por cliente»: one payment per business partner whatever the due date.
+  it('offers the three groupings in order and posts GGP when «Agrupar por cliente» is picked', async () => {
+    routes();
+    await renderDialog();
+    const cards = screen.getAllByTestId(/^remittance-confirm-grouping-/).map((el) => el.dataset.testid);
+    expect(cards).toEqual(['remittance-confirm-grouping-P', 'remittance-confirm-grouping-GGP', 'remittance-confirm-grouping-GGPD']);
+    expect(screen.getByTestId('remittance-confirm-grouping-GGP')).toHaveTextContent('remittanceGroupingByBp');
+    fireEvent.click(screen.getByTestId('remittance-confirm-grouping-GGP'));
+    await act(async () => { fireEvent.click(submit()); });
+    expect(JSON.parse(confirmCalls()[0][1].body)).toEqual({ fieldValues: { grouping: 'GGP' } });
   });
 
   it('Enter on a grouping card confirms with it, but not while the check is pending or has problems', async () => {

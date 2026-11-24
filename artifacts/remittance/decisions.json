@@ -4,6 +4,7 @@
     "agentPrompt": "#REF#agent-prompts/remittance/spec.md",
     "category": "finance",
     "name": "Remittance",
+    "breadcrumb": "Treasury / Remittance",
     "detailEntity": "lines",
     "titleField": "documentNo",
     "statusEnumLabels": {
@@ -91,11 +92,12 @@
             "defaultValue": "P",
             "options": [
               { "value": "P", "label": "remittanceGroupingNone" },
+              { "value": "GGP", "label": "remittanceGroupingByBp" },
               { "value": "GGPD", "label": "remittanceGroupingByBpAndDueDate" }
             ]
           }
         ],
-        "_note": "ETP-6247 — «Confirmar» (was ETP-6148's «Procesar»): RemittanceHeaderHandler action `confirm`, atomic: it checks fileReadiness, processes the remittance with REM's REMRemittanceProcess, leaves the payments in Remesado and the invoices uncollected (the remittance ends Pendiente de envío PR and can be reactivated until «Marcar como cobrada»), generates the SEPA file and stores it as the main attachment. `confirmModal` routes the click to customComponents.processConfirmModal (RemittanceProcessConfirmModal), which re-checks fileReadiness, asks the grouping from `params` (default P «Sin agrupar», GGPD «Agrupar por cliente y vencimiento», posted as fieldValues.grouping), warns that the payments stay in Remesado until it is marked collected, posts the action itself and offers the file in its success step. Only while unprocessed and with lines."
+        "_note": "ETP-6247 — «Confirmar» (was ETP-6148's «Procesar»): RemittanceHeaderHandler action `confirm`, atomic: it checks fileReadiness, processes the remittance with REM's REMRemittanceProcess, leaves the payments in Remesado and the invoices uncollected (the remittance ends Pendiente de envío PR and can be reactivated until «Marcar como cobrada»), generates the SEPA file and stores it as the main attachment. `confirmModal` routes the click to customComponents.processConfirmModal (RemittanceProcessConfirmModal), which re-checks fileReadiness, asks the grouping from `params` (default P «Sin agrupar», GGP «Agrupar por cliente» — one payment per business partner whatever the due date —, GGPD «Agrupar por cliente y vencimiento», posted as fieldValues.grouping), warns that the payments stay in Remesado until it is marked collected, posts the action itself and offers the file in its success step. Only while unprocessed and with lines."
       },
       "markSent": {
         "add": true,

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { WarningIcon, FileTextIcon, UsersIcon } from '@phosphor-icons/react';
+import { WarningIcon, FileTextIcon, UserIcon, UsersIcon } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { useLocaleSwitch, useUI } from '@/i18n';
 import { useApiFetch } from '@/auth/useApiFetch.js';
@@ -56,6 +56,9 @@ export function confirmSummary(readiness, linesTotal, record) {
 // label key a card falls back to when its option carries none (the single «Sin agrupar» card without a param).
 const GROUPING_CARD = {
   [GROUPING_NONE]: { labelKey: 'remittanceGroupingNone', descriptionKey: 'remittanceGroupingNoneDescription', icon: FileTextIcon },
+  // ETP-6247 — GGP: one payment per business partner, whatever the due dates (the backend's own
+  // grouping value next to P and GGPD). One person icon, where GGPD's group icon reads «several».
+  GGP: { descriptionKey: 'remittanceGroupingByBpDescription', icon: UserIcon },
   GGPD: { descriptionKey: 'remittanceGroupingByBpAndDueDateDescription', icon: UsersIcon },
 };
 

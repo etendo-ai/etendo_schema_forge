@@ -90,12 +90,13 @@ describe('InvoiceTopbarExtra — payment badge with a confirmed remittance', () 
     expect(badge).toHaveTextContent('remittanceInvoiceChip · EUR:60');
   });
 
-  it('shows the free part as pending plus the remitted suffix for a partial remittance', async () => {
+  it('shows only the free part as pending, like any pending invoice, for a partial remittance', async () => {
     answerPlan([{ amount: '100', paidAmount: '0', outstandingAmount: '100', remittedAmount: '60', daysOverdue: '0' }]);
     renderTopbar();
 
     const badge = await screen.findByTestId('payment-status-badge');
-    expect(badge).toHaveTextContent('statusPending · EUR:40 · remittanceInvoiceRemittedSuffix(EUR:60)');
+    expect(badge).toHaveTextContent('statusPending · EUR:40');
+    expect(badge).not.toHaveTextContent('EUR:60');
   });
 
   it('keeps the overdue state on the free part of a partial remittance', async () => {
@@ -103,10 +104,11 @@ describe('InvoiceTopbarExtra — payment badge with a confirmed remittance', () 
     renderTopbar();
 
     const badge = await screen.findByTestId('payment-status-badge');
-    expect(badge).toHaveTextContent('statusOverdue · EUR:40 · remittanceInvoiceRemittedSuffix(EUR:60)');
+    expect(badge).toHaveTextContent('statusOverdue · EUR:40');
+    expect(badge).not.toHaveTextContent('EUR:60');
   });
 
-  it('appends the remitted suffix to the partial-paid label', async () => {
+  it('keeps the plain partial-paid label on a partial remittance', async () => {
     answerPlan([
       { amount: '50', paidAmount: '50', outstandingAmount: '0', daysOverdue: '0' },
       { amount: '50', paidAmount: '0', outstandingAmount: '50', remittedAmount: '20', daysOverdue: '0' },
@@ -114,16 +116,16 @@ describe('InvoiceTopbarExtra — payment badge with a confirmed remittance', () 
     renderTopbar();
 
     const badge = await screen.findByTestId('payment-status-badge');
-    expect(badge).toHaveTextContent('statusPartial · EUR:50 of EUR:100 · remittanceInvoiceRemittedSuffix(EUR:20)');
+    expect(badge).toHaveTextContent('statusPartial · EUR:50 of EUR:100');
+    expect(badge).not.toHaveTextContent('EUR:20');
   });
 
-  it('shows the plain pending label, no suffix, when nothing is remitted', async () => {
+  it('shows the plain pending label when nothing is remitted', async () => {
     answerPlan([{ amount: '100', paidAmount: '0', outstandingAmount: '100', daysOverdue: '0' }]);
     renderTopbar();
 
     const badge = await screen.findByTestId('payment-status-badge');
     expect(badge).toHaveTextContent('statusPending · EUR:100');
-    expect(badge).not.toHaveTextContent('remittanceInvoiceRemittedSuffix');
   });
 
   it('opens the payments modal from the remitted badge', async () => {
@@ -143,20 +145,22 @@ describe('InvoiceTopbarExtra — payment badge with a confirmed remittance', () 
       expect(badge).toHaveTextContent('remittanceInvoiceChip · EUR:100');
     });
 
-    it('shows the free part as pending plus the suffix for a partial header remittance', async () => {
+    it('shows only the free part as pending for a partial header remittance', async () => {
       answerPlan([]);
       renderTopbar({ ...DATA, etgoRemittedAmt: 30 });
 
       const badge = await screen.findByTestId('payment-status-badge');
-      expect(badge).toHaveTextContent('statusPending · EUR:70 · remittanceInvoiceRemittedSuffix(EUR:30)');
+      expect(badge).toHaveTextContent('statusPending · EUR:70');
+      expect(badge).not.toHaveTextContent('EUR:30');
     });
 
-    it('appends the suffix to the partial-paid header label', async () => {
+    it('keeps the plain partial-paid header label on a partial remittance', async () => {
       answerPlan([]);
       renderTopbar({ ...DATA, outstandingAmount: 60, etgoRemittedAmt: 20 });
 
       const badge = await screen.findByTestId('payment-status-badge');
-      expect(badge).toHaveTextContent('statusPartial · EUR:40 of EUR:100 · remittanceInvoiceRemittedSuffix(EUR:20)');
+      expect(badge).toHaveTextContent('statusPartial · EUR:40 of EUR:100');
+      expect(badge).not.toHaveTextContent('EUR:20');
     });
 
     it('keeps the plain pending header label without etgoRemittedAmt', async () => {
@@ -165,7 +169,6 @@ describe('InvoiceTopbarExtra — payment badge with a confirmed remittance', () 
 
       const badge = await screen.findByTestId('payment-status-badge');
       expect(badge).toHaveTextContent('statusPending · EUR:100');
-      expect(badge).not.toHaveTextContent('remittanceInvoiceRemittedSuffix');
     });
   });
 });

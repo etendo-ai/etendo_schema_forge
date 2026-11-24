@@ -2906,7 +2906,7 @@ outstanding drops to 0 and the invoice reads «Cobrada» as usual.
 | Case | Grid «Saldo pendiente» | Due-date dot | Topbar badge |
 |---|---|---|---|
 | Fully remitted (`etgoRemittedAmt >= outstandingAmount > 0`) | amber chip «En remesa» (`invoice-remitted`), opens the payments modal; no amount to register | neutral, never the red overdue dot | «En remesa · X» |
-| Partially remitted (`0 < remitted < outstanding`) | «40,00 € · 60,00 € en remesa» (`invoice-partially-remitted`): the amount is the FREE part | unchanged (the free part is still owed) | «Pendiente · 40,00 € · 60,00 € en remesa» — the topbar works per installment (`classifyInstallment` returns `remitted` when nothing of an installment is free; it is never `overdue`), with the header `etgoRemittedAmt` as the fallback when the plan does not load |
+| Partially remitted (`0 < remitted < outstanding`) | the usual amber pending button with only the FREE part («40,00 €»), like any pending invoice; the remitted part is in the payments modal | unchanged (the free part is still owed) | «Pendiente · 40,00 €» (the free part, no remitted suffix) — the topbar works per installment (`classifyInstallment` returns `remitted` when nothing of an installment is free; it is never `overdue`), with the header `etgoRemittedAmt` as the fallback when the plan does not load |
 
 - The payment is shown as **«Remesado»** (amber) — never «Cobro depositado» — in the payments modal, the
   preview card and the payment sidebar («Cobro confirmado · en remesa»). `paymentDisplayState` returns `remitted` for `REM_SENT`

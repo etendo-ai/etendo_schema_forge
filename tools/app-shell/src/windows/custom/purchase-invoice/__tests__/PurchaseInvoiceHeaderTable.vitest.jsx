@@ -1506,17 +1506,16 @@ describe('PurchaseInvoiceHeaderTable — confirmed remittance', () => {
     expect(screen.getByTestId('payment-history-modal')).toBeInTheDocument();
   });
 
-  it('shows the free part plus the remitted suffix for a partial remittance', () => {
-    const { getByTestId } = renderCell('outstandingAmount', { ...AP_INVOICE_ROW, etgoRemittedAmt: '300' });
-    const pill = getByTestId('invoice-partially-remitted');
-    expect(pill).toHaveTextContent('200:EUR');
-    expect(pill).toHaveTextContent('remittanceInvoiceRemittedSuffix');
+  it('shows only the free part, like any pending invoice, for a partial remittance', () => {
+    const { container, queryByTestId } = renderCell('outstandingAmount', { ...AP_INVOICE_ROW, etgoRemittedAmt: '300' });
+    expect(queryByTestId('invoice-remitted')).toBeNull();
+    expect(container.textContent).toContain('200:EUR');
+    expect(container.textContent).not.toContain('300:EUR');
   });
 
   it('keeps the plain pending amount when nothing is remitted', () => {
     const { container, queryByTestId } = renderCell('outstandingAmount', AP_INVOICE_ROW);
     expect(queryByTestId('invoice-remitted')).toBeNull();
-    expect(queryByTestId('invoice-partially-remitted')).toBeNull();
     expect(container.textContent).toContain('500:EUR');
   });
 

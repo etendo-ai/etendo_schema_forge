@@ -146,6 +146,7 @@ describe('RemittancePage — header processes', () => {
       defaultValue: 'P',
       options: [
         { value: 'P', label: 'remittanceGroupingNone' },
+        { value: 'GGP', label: 'remittanceGroupingByBp' },
         { value: 'GGPD', label: 'remittanceGroupingByBpAndDueDate' },
       ],
     }]);
@@ -184,7 +185,7 @@ describe('RemittancePage — header processes', () => {
   });
 
   it.each(LOCALES)('every process and parameter label is translated in %s', (_loc, json) => {
-    const keys = ['confirm', 'reactivate', 'remittanceGrouping', 'remittanceGroupingNone', 'remittanceGroupingByBpAndDueDate',
+    const keys = ['confirm', 'reactivate', 'remittanceGrouping', 'remittanceGroupingNone', 'remittanceGroupingByBp', 'remittanceGroupingByBpAndDueDate',
       'remittanceReactivateConfirmTitle', 'remittanceReactivateConfirmBody'];
     for (const key of keys) expect(json.genericLabels[key], key).toEqual(expect.stringMatching(/\S/));
   });

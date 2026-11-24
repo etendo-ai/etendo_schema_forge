@@ -57,8 +57,8 @@ const BADGE_STYLES = {
  * - Any overdue -> Red "Overdue . outstanding"
  * - None paid, none overdue -> Amber "Pending . outstanding"
  * - Everything still owed is in a confirmed remittance -> Amber "In remittance . remitted"
- *   (ETP-6247); a partial remittance appends ". X in remittance" to the label above and the
- *   pending/overdue figure becomes the FREE part
+ *   (ETP-6247); on a partial remittance the pending/overdue figure is the FREE part, shown like
+ *   any other pending figure (the remitted part is in the payments modal)
  * - Draft -> nothing
  *
  * The badge is the ONLY entry point. Clicking it opens the payments modal.
@@ -182,9 +182,6 @@ export default function InvoiceTopbarExtra({ data, recordId, token, apiBaseUrl }
     // remittance collects. With nothing remitted, `sumFree` equals the plain outstanding sum.
     const sumRemitted = classified.reduce((s, i) => s + installmentRemittedAmount(i), 0);
     const sumFree = classified.reduce((s, i) => s + installmentFreeAmount(i), 0);
-    const remittedSuffix = sumRemitted > REMITTANCE_EPSILON
-      ? ` · ${ui('remittanceInvoiceRemittedSuffix', { amount: fmt(sumRemitted, currency) })}`
-      : '';
 
     if (allPaid) {
       return { type: 'paid', label: `${ui('statusPaid')} · ${fmt(sumTotal, currency)}`, style: BADGE_STYLES.paid };
@@ -199,18 +196,18 @@ export default function InvoiceTopbarExtra({ data, recordId, token, apiBaseUrl }
     if (anyOverdue) {
       return {
         type: 'overdue',
-        label: `${ui('statusOverdue')} · ${fmt(sumFree, currency)}${remittedSuffix}`,
+        label: `${ui('statusOverdue')} · ${fmt(sumFree, currency)}`,
         style: BADGE_STYLES.overdue,
       };
     }
     if (hasSomePaid) {
       return {
         type: 'partial',
-        label: `${ui('statusPartial')} · ${fmt(sumPaid, currency)} ${ui('of')} ${fmt(sumTotal, currency)}${remittedSuffix}`,
+        label: `${ui('statusPartial')} · ${fmt(sumPaid, currency)} ${ui('of')} ${fmt(sumTotal, currency)}`,
         style: BADGE_STYLES.partial,
       };
     }
-    return { type: 'pending', label: `${ui('statusPending')} · ${fmt(sumFree, currency)}${remittedSuffix}`, style: BADGE_STYLES.pending };
+    return { type: 'pending', label: `${ui('statusPending')} · ${fmt(sumFree, currency)}`, style: BADGE_STYLES.pending };
   }, [installments, installmentsLoading, currency]);
 
   // Summary amounts from installments
@@ -317,9 +314,6 @@ export default function InvoiceTopbarExtra({ data, recordId, token, apiBaseUrl }
     // ETP-6247 — the header's `etgoRemittedAmt`, through the shared resolver (the same one the
     // grids use), for an invoice whose payment plan did not load.
     const headerBadge = resolveInvoicePaymentBadge(data);
-    const headerRemittedSuffix = headerBadge.kind === 'partially-remitted'
-      ? ` · ${ui('remittanceInvoiceRemittedSuffix', { amount: fmt(headerBadge.remittedAmount, currency) })}`
-      : '';
     const pendingFigure = headerBadge.kind === 'partially-remitted' ? headerBadge.amount : outstanding;
 
     let fallbackStyle = null;
@@ -332,10 +326,10 @@ export default function InvoiceTopbarExtra({ data, recordId, token, apiBaseUrl }
       fallbackLabel = `${ui('statusPaid')} · ${fmt(grandTotal, currency)}`;
     } else if (isPartial) {
       fallbackStyle = BADGE_STYLES.partial;
-      fallbackLabel = `${ui('statusPartial')} · ${fmt(paid, currency)} ${ui('of')} ${fmt(grandTotal, currency)}${headerRemittedSuffix}`;
+      fallbackLabel = `${ui('statusPartial')} · ${fmt(paid, currency)} ${ui('of')} ${fmt(grandTotal, currency)}`;
     } else if (isPending && isCompleted) {
       fallbackStyle = BADGE_STYLES.pending;
-      fallbackLabel = `${ui('statusPending')} · ${fmt(pendingFigure, currency)}${headerRemittedSuffix}`;
+      fallbackLabel = `${ui('statusPending')} · ${fmt(pendingFigure, currency)}`;
     }
 
     if (!fallbackStyle) return null;

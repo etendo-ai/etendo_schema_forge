@@ -60,7 +60,7 @@ describe('remittance SEPA i18n keys', () => {
   });
 });
 
-// The invoice side of a CONFIRMED remittance: the chip/suffix on the invoice grids and topbars, the
+// The invoice side of a CONFIRMED remittance: the chip on the invoice grids and topbars, the
 // remittance banner of the payments modal and preview card, the disabled "add payment" reason, the payment sidebar
 // label and the two backend refusals. A key missing from one locale is silent (the raw key shows).
 describe('invoice-side remittance i18n keys', () => {
@@ -79,7 +79,6 @@ describe('invoice-side remittance i18n keys', () => {
   // key → the placeholders its sentence must carry in every locale.
   const KEYS = {
     remittanceInvoiceChip: [],
-    remittanceInvoiceRemittedSuffix: ['amount'],
     remittancePaymentLink: ['documentNo'],
     cpAddPaymentBlockedByRemittance: [],
     cobroConfirmadoEnRemesa: [],

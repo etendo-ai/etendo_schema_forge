@@ -328,6 +328,33 @@ describe('RemittanceSepaFileData — collection options', () => {
     expect(onChange).toHaveBeenCalledWith('directDebitScheme', 'CORE');
     expect(onChange).toHaveBeenCalledWith('creditorIdentifier', undefined);
   });
+  // ETP-6247 (committee) — «Remesa financiada» is collection-only: hidden (not disabled) on a payment, also read-only,
+  // and a value carried over from a collection is cleared when the type turns out to be a payment.
+  it('clears a financed flag and a B2B scheme the record carries when the type is a payment', async () => {
+    backend({ info: sepa({ collection: false, directDebitScheme: 'B2B', financed: true }), items: [{ id: TYPE, label: 'Pago', direction: 'payment' }] });
+    renderBlock({ ...HEADER, remittanceType: TYPE, directDebitScheme: 'B2B', financed: true });
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith('financed', false));
+    expect(onChange).toHaveBeenCalledWith('directDebitScheme', 'CORE');
+    expect(screen.queryByTestId('remittance-financed-row')).toBeNull();
+  });
+
+  it('touches nothing on a payment type that is already not financed', async () => {
+    backend({ info: sepa({ collection: false }), items: [{ id: TYPE, label: 'Pago', direction: 'payment' }] });
+    renderBlock({ ...HEADER, remittanceType: TYPE, directDebitScheme: 'CORE', financed: false });
+    await screen.findByTestId('remittance-sepa-iban-editor');
+    await waitFor(() => expect(screen.queryByTestId('remittance-sepa-creditor')).toBeNull());
+    expect(onChange).not.toHaveBeenCalledWith('financed', expect.anything());
+  });
+
+  it('shows no financed switch on a processed payment remittance', async () => {
+    backend({ info: sepa({ collection: false, financed: false }), items: [{ id: TYPE, label: 'Pago', direction: 'payment' }] });
+    renderBlock({ ...HEADER, remittanceType: TYPE, processed: true });
+    await screen.findByTestId('remittance-sepa-file-data');
+    await waitFor(() => expect(screen.queryByTestId('remittance-sepa-creditor')).toBeNull());
+    expect(screen.queryByTestId('remittance-financed-row')).toBeNull();
+    expect(screen.queryByTestId('remittance-financed-switch')).toBeNull();
+    expect(onChange).not.toHaveBeenCalled();
+  });
 });
 
 describe('RemittanceSepaFileData — creditor identifier', () => {

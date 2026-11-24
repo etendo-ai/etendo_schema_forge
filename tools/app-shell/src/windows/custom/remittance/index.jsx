@@ -106,7 +106,7 @@ export function buildRowMenuActions(row, openStep, downloadFile) {
 }
 
 /**
- * ETP-6148 — route entry of the Remittance window (Finanzas › Remesas). The generated page
+ * ETP-6148 — route entry of the Remittance window (Tesorería › Remesas since ETP-6247). The generated page
  * already turns away a role without window access, but it knows nothing about the per-account
  * rollout. The sidebar only hides the entry, so a URL typed by hand lands here, and this guard
  * checks both axes before mounting the generated window: the `sepaRemittances` capability (the

@@ -289,9 +289,7 @@ export default function PurchaseInvoiceHeaderTable(props) {
         // credit-available pill grew a 72px inline amount box (6-digit
         // truncation + tooltip), pushing its natural width past 160px and
         // clipping the pill itself — 220px covers that plus larger amounts.
-        // ETP-6247: the partially-remitted pill carries two amounts
-        // ("40,00 € · 60,00 € en remesa") — 260px keeps it on one line.
-        minWidth: 260,
+        minWidth: 220,
         render: (row) => {
           const currency = row['currency$_identifier'] || 'EUR';
           // ETP-4841: the badge follows the SIGN of the total, not the document
@@ -376,23 +374,16 @@ export default function PurchaseInvoiceHeaderTable(props) {
             );
           }
           // `pending` / `partial` show what is still owed; `partially-remitted` (ETP-6247) shows only
-          // the FREE part as the amount to register, plus how much the remittance will pay.
-          const partiallyRemitted = badge.kind === 'partially-remitted';
+          // the FREE part, like any pending invoice — the remitted part is in the payments modal.
           return (
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); setPaymentRow(row); }}
               aria-label={t('addPago')}
-              data-testid={partiallyRemitted ? 'invoice-partially-remitted' : undefined}
               style={{...NOWRAP_FLEX,display:'inline-flex',alignItems:'center',gap:7,font:'600 13px/1 Inter',padding:'6px 11px',borderRadius:8,background:'var(--status-warning-bg)',border:'1px solid var(--status-warning-border)',color:'var(--status-warning-fg)',cursor:'pointer',fontVariantNumeric:'tabular-nums'}}
             >
               <span style={{width:8,height:8,borderRadius:'50%',background:'var(--status-warning-fg)',flexShrink:0,display:'inline-block'}}/>
               {formatCurrency(currency, badge.amount)}
-              {partiallyRemitted && (
-                <span style={{fontWeight:500,fontSize:12}}>
-                  <span style={{opacity:0.4}}>·</span> {ui('remittanceInvoiceRemittedSuffix', { amount: formatCurrency(currency, badge.remittedAmount) })}
-                </span>
-              )}
             </button>
           );
         },

@@ -655,12 +655,12 @@ describe('PurchaseInvoiceTopbar — confirmed remittance', () => {
     expect(screen.getByTestId('payment-history-modal')).toBeInTheDocument();
   });
 
-  it('shows the free part as pending plus the remitted suffix for a partial remittance', () => {
+  it('shows only the free part as pending, like any pending invoice, for a partial remittance', () => {
     render(<PurchaseInvoiceTopbar {...props} data={{ ...BASE_DATA, etgoRemittedAmt: 300 }} />);
     const badge = screen.getByTestId('payment-status-badge');
     expect(badge).toHaveTextContent('statusPending');
     expect(badge).toHaveTextContent('EUR:200');
-    expect(screen.getByTestId('payment-status-badge-remitted')).toHaveTextContent('remittanceInvoiceRemittedSuffix');
+    expect(badge).not.toHaveTextContent('EUR:300');
   });
 
   it('keeps the plain pending badge when nothing is remitted', () => {
