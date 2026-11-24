@@ -361,7 +361,7 @@
         "e2e": [
           {
             "root": "frontend",
-            "path": "e2e/tests/flows/acct-process-monitor.mocked.spec.js"
+            "path": "e2e/tests/flows/accounting/acct-process-monitor.mocked.spec.js"
           }
         ]
       },

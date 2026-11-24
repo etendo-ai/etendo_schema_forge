@@ -354,7 +354,7 @@ These correspond to the open `manual-trigger-runtime-verification` item in `flag
 - `tools/app-shell/src/components/layout/SideMenu/__tests__/SideMenu.vitest.jsx` + `windows/__tests__/navigationExpectations.js` (`catalogFeatureFlags`) + `windows/__tests__/registry.vitest.jsx` (`capabilitySiblings`) — catalog membership and flag gating. `registry.vitest.jsx` needed the `capabilitySiblings` change because a capability is a **named boolean**, not a per-entry grant: this is the second `isAdminOrClientAdmin` entry next to `roles`, which made that latent distinction visible.
 - Whole-suite result at delivery: **16,348 vitest + 2,160 node tests green**.
 
-**E2E — `e2e/tests/flows/acct-process-monitor.mocked.spec.js`** (no feature flag or `VITE_FEATURE_FLAGS` needed):
+**E2E — `e2e/tests/flows/accounting/acct-process-monitor.mocked.spec.js`** (no feature flag or `VITE_FEATURE_FLAGS` needed):
 
 - `the initial read never carries Action, so loading the page cannot fire the process`
 - `Run now converges on the new run by polling, with no manual refresh` — the mock models the real ordering (the triggering response cannot contain the new run), so the spec fails if the poll regresses
