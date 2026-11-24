@@ -350,6 +350,13 @@ function isSaveBlocked({saving, initialLoading, structuredAddressEnabled, addres
         return country === '';
     }
     if (streetName.trim() === '') return true;
+    // ETP-5806 CP-6 (QA finding) — a street LONGER than the cap can only have arrived from the
+    // server: the input's own `maxLength` stops anyone typing past it. Records created before the
+    // cap existed (and Classic, where EM_OBSEPA_StrtNm is still VARCHAR(70)) hold streets of
+    // 61-70 chars, and the backend's `fieldsExceedingMaxLength` rejects the whole save with an
+    // opaque 400 toast — even when the user only came to change the city. Blocking Save here is
+    // what lets the field explain why, before the round-trip, instead of after it.
+    if (streetName.length > STREET_NAME_MAX_LENGTH) return true;
     if (city.trim() === '') return true;
     return country === '';
 }
@@ -693,6 +700,17 @@ export default function LocationEditorModal({
     // ETP-5824: advisory only — never part of saveDisabled. See tbaiPostalCodeWarning.js.
     const tbaiContext = useTbaiPostalCodeContext({open, saveMode, bpId, apiBase: contactsApiBase});
     const showTbaiPostalCodeWarning = shouldWarnMissingTbaiPostalCode({...tbaiContext, postalCode: form.postalCode});
+
+    // ETP-5806 CP-6 (QA finding) — the two states the Calle field has to COMMUNICATE rather than
+    // silently enforce. `atLimit` is reachable by typing (the input's own `maxLength` stops there);
+    // `overLimit` is not — it can only come from a record stored before the 60-char cap existed,
+    // or from Classic, where EM_OBSEPA_StrtNm is still VARCHAR(70). Those are real: QA found
+    // addresses of 69-70 chars created on 2026-11-20 whose composed first line was already cut.
+    // Such a record is NOT silently truncated or silently accepted here: Save is blocked (see
+    // isSaveBlocked) and the message below the input says the street must be shortened, so the
+    // backend's own 400 is never what tells the user.
+    const streetNameOverLimit = form.streetName.length > STREET_NAME_MAX_LENGTH;
+    const streetNameAtLimit = form.streetName.length === STREET_NAME_MAX_LENGTH;
 
     // ETP-5806 — client-side preview only; the backend recomputes this itself and is the
     // source of truth (see composeAddressLines' own doc comment above).
@@ -1365,6 +1383,13 @@ export default function LocationEditorModal({
     // once the user has attempted to save with it still empty.
     const FIELD_ERROR = { fontSize: 12, color: 'hsl(var(--destructive))', marginTop: 4 };
 
+    // ETP-5806 CP-6 — the Calle character counter and its "you have reached the limit" note. The
+    // counter is informational (muted) until the value is over the cap, which only a pre-existing
+    // record can be, and then reads as an error alongside the message below the input.
+    const FIELD_COUNTER = { fontSize: 12, color: 'hsl(var(--muted-foreground))', fontWeight: 400, fontVariantNumeric: 'tabular-nums' };
+    const FIELD_COUNTER_OVER = { ...FIELD_COUNTER, color: 'hsl(var(--destructive))' };
+    const FIELD_HINT = { fontSize: 12, color: 'hsl(var(--muted-foreground))', marginTop: 4 };
+
     const PICKER_BTN = {
         ...INPUT, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         cursor: 'pointer', gap: 8, background: 'hsl(var(--card))',
@@ -1541,12 +1566,35 @@ export default function LocationEditorModal({
                                 Address Line 1/2 editor below renders instead. */}
                             {structuredAddressEnabled ? (
                             <>
-                            {/* Calle */}
+                            {/* Calle — ETP-5806 CP-6 (QA finding): the 60-char cap used to be
+                                enforced only by the input's `maxLength`, which drops the extra
+                                characters with no feedback at all; a user pasting or typing a long
+                                street saw it stop mid-word and had no way to know why. The limit is
+                                now stated continuously (the counter) and called out explicitly both
+                                when it is reached and when a pre-existing record exceeds it. */}
                             <div>
-                                <div style={FIELD_LABEL}>{ui('streetNameLabel')}<RequiredMark data-testid="RequiredMark__927831" /></div>
+                                <div style={{ ...FIELD_LABEL, display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+                                    <span>{ui('streetNameLabel')}<RequiredMark data-testid="RequiredMark__927831" /></span>
+                                    <span
+                                        style={streetNameOverLimit ? FIELD_COUNTER_OVER : FIELD_COUNTER}
+                                        data-testid="location-field-streetName-counter"
+                                    >
+                                        {ui('charactersUsedCounter', { used: form.streetName.length, max: STREET_NAME_MAX_LENGTH })}
+                                    </span>
+                                </div>
                                 <input autoFocus type="text" maxLength={STREET_NAME_MAX_LENGTH} value={form.streetName} onChange={e => setField('streetName', e.target.value)} data-testid="location-field-streetName" style={INPUT} />
                                 {attemptedSave && form.streetName.trim() === '' && (
                                     <div style={FIELD_ERROR}>{ui('fieldRequiredMessage')}</div>
+                                )}
+                                {streetNameOverLimit && (
+                                    <div style={FIELD_ERROR} data-testid="location-field-streetName-over-limit">
+                                        {ui('streetNameOverLimitMessage', { max: STREET_NAME_MAX_LENGTH })}
+                                    </div>
+                                )}
+                                {streetNameAtLimit && (
+                                    <div style={FIELD_HINT} data-testid="location-field-streetName-at-limit">
+                                        {ui('streetNameMaxLengthReached', { max: STREET_NAME_MAX_LENGTH })}
+                                    </div>
                                 )}
                             </div>
 
