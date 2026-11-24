@@ -1,10 +1,10 @@
 // @covers tools/app-shell/src/windows/custom/shared/preview-cards/PaymentsCard.jsx
-// @covers tools/app-shell/src/windows/custom/shared/RemittanceLink.jsx
+// @covers tools/app-shell/src/windows/custom/shared/RemittanceInfoBanner.jsx
 import { dateOnlyWithFormatter } from '@/test/dateOnlyMock.js';
 
 const caps = vi.hoisted(() => ({ current: { sepaRemittances: true } }));
-// The remittance link only links while the sepaRemittances capability is visible (its route is
-// guarded by the flag); RemittanceLink.vitest.jsx covers the plain-text variant.
+// The remittance banner offers «Ver remesa» only while the sepaRemittances capability is visible
+// (its route is guarded by the flag); RemittanceInfoBanner.vitest.jsx covers the variant without it.
 vi.mock('@/hooks/useCapabilitiesSafe.js', () => ({ useCapabilitiesSafe: () => caps.current }));
 
 const mockNavigate = vi.fn();
@@ -269,19 +269,27 @@ describe('PaymentsCard', () => {
       expect(screen.queryByText('statusDeposited')).toBeNull();
     });
 
-    it('links a remitted payment to its remittance and navigates there without opening the payment', () => {
-      render(<PaymentsCard payments={[REMITTED]} currencyCode="EUR" specName="sales-invoice" />);
-      const link = screen.getByTestId('PaymentsCard__remittance-link-0');
-      expect(link).toHaveTextContent('remittancePaymentLink');
-      fireEvent.click(link);
+    it('shows a compact remittance banner whose «Ver remesa» opens it without opening the payment', () => {
+      render(<PaymentsCard payments={[{ ...REMITTED, remittanceStatusLabel: 'Pendiente de envío' }]} currencyCode="EUR" specName="sales-invoice" />);
+      const banner = screen.getByTestId('PaymentsCard__remittance-banner');
+      expect(banner).toHaveTextContent('invoiceRemittanceBannerTitle');
+      expect(banner).toHaveTextContent('Pendiente de envío');
+      fireEvent.click(screen.getByTestId('PaymentsCard__remittance-banner-open'));
       expect(mockNavigate).toHaveBeenCalledTimes(1);
       expect(mockNavigate).toHaveBeenCalledWith('/remittance/rem-1');
     });
 
-    it('renders no remittance link for a payment that came from no remittance', () => {
+    it('shows the remittance as the method and the amount neutral, without a sign', () => {
+      render(<PaymentsCard payments={[REMITTED]} currencyCode="EUR" specName="sales-invoice" />);
+      expect(screen.getByTestId('PaymentsCard__remittance-method-0')).toHaveTextContent('remittancePaymentLink');
+      expect(screen.getByTestId('PaymentsCard__row-0')).not.toHaveTextContent('+ ');
+    });
+
+    it('renders no banner and no remittance method for a payment that came from no remittance', () => {
       const payments = [{ id: '1', amount: 10, paymentDate: '2026-01-01', documentNo: 'DOC-1', processed: true }];
       render(<PaymentsCard payments={payments} currencyCode="EUR" specName="sales-invoice" />);
-      expect(screen.queryByTestId('PaymentsCard__remittance-link-0')).toBeNull();
+      expect(screen.queryByTestId('PaymentsCard__remittance-banner')).toBeNull();
+      expect(screen.queryByTestId('PaymentsCard__remittance-method-0')).toBeNull();
     });
 
     it('splits a partial remittance into a free pending row and a remitted row', () => {
@@ -317,23 +325,19 @@ describe('PaymentsCard', () => {
       expect(screen.getByText('100,00 €')).toBeInTheDocument();
     });
 
-    it('shows an inert add label with the remittance reason when the remittance blocks it', () => {
-      const onAddPayment = vi.fn();
+    it('shows no add action at all when the remittance blocks it', () => {
+      // Nothing the user does here unblocks it, and the banner says what happens next.
       render(
-        <PaymentsCard addPaymentBlockedByRemittance onAddPayment={onAddPayment} payments={[]} totalOutstanding={100} specName="sales-invoice" />,
+        <PaymentsCard addPaymentBlockedByRemittance payments={[]} totalOutstanding={100} specName="sales-invoice" />,
       );
-      const label = screen.getByTestId('payments-card-add-blocked-remittance');
-      expect(label).toHaveTextContent('previewCardAddCollection');
-      expect(label).toHaveAttribute('title', 'cpAddPaymentBlockedByRemittance');
-      fireEvent.click(label);
-      expect(onAddPayment).not.toHaveBeenCalled();
+      expect(screen.queryByText('previewCardAddCollection')).toBeNull();
+      expect(screen.queryByTestId('payments-card-add-blocked-draft')).toBeNull();
     });
 
-    it('gives the remittance reason priority over the draft one', () => {
+    it('gives the remittance block priority over the draft one', () => {
       render(
         <PaymentsCard addPaymentBlockedByRemittance addPaymentBlockedByDraft payments={[]} totalOutstanding={100} />,
       );
-      expect(screen.getByTestId('payments-card-add-blocked-remittance')).toHaveAttribute('title', 'cpAddPaymentBlockedByRemittance');
       expect(screen.queryByTestId('payments-card-add-blocked-draft')).toBeNull();
     });
 

@@ -35,7 +35,7 @@ const processes = [
   { name: 'Payment Process', label: 'processConfirm', style: 'positive', columnName: 'aPRMProcessPayment',
     displayLogicRaw: "@status@ = 'RPAP'", confirmModal: true },
   { name: 'etprReactivatePayment', label: 'processReactivate', style: 'primary-danger', columnName: 'etprReactivatePayment',
-    displayLogicRaw: "@status@ != 'RPAP'" },
+    displayLogicRaw: "@status@ != 'RPAP' & @status@ != 'REM_SENT' & @status@ != 'REM_CANCEL'" },
 ];
 // @sf-generated-end processes:finPayment
 

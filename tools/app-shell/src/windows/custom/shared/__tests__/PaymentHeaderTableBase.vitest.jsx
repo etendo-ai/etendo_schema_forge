@@ -797,14 +797,15 @@ describe('PaymentHeaderTableBase — delete flow', () => {
 });
 
 describe('PaymentHeaderTableBase — rowQuickActions contract', () => {
-  it('never hides delete when the record is complete, gates edit as always-hidden and restricts delete to non-void rows', () => {
+  it('never hides delete when the record is complete, gates edit as always-hidden and restricts delete to non-void, non-remitted rows', () => {
     render(<PaymentHeaderTableBase {...BASE_PROPS} dir="in" data={[]} onDataMutated={vi.fn()} />);
     const { rowQuickActions } = dataTableSpy.current;
     expect(rowQuickActions.hideDeleteWhenComplete).toBe(false);
     expect(rowQuickActions.statusField).toBe('status');
     expect(rowQuickActions.sendDocument).toBeNull();
     expect(rowQuickActions.actions.edit.visibleWhen).toBe("@status@='__hidden__'");
-    expect(rowQuickActions.actions.delete.visibleWhen).toBe("@status@!='RPVOID'");
+    // ETP-6247 — nor for a payment a remittance owns (REM_SENT / REM_CANCEL).
+    expect(rowQuickActions.actions.delete.visibleWhen).toBe("@status@!='RPVOID' & @status@!='REM_SENT' & @status@!='REM_CANCEL'");
   });
 
   it('preserves any rowQuickActions passed in via props while adding its own overrides', () => {

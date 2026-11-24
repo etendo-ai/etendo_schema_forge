@@ -665,6 +665,10 @@ const BACKEND_ERROR_KEY_MAP = {
   // backend's localized text is shown — never a sentence without the number.
   ETGO_InvoiceInRemittance: 'backendError.invoiceInRemittance',
   ETGO_PaymentInRemittance: 'backendError.paymentInRemittance',
+  // The whole invoice is remitted: sent NEXT TO ETGO_InvoiceInRemittance (with error.fullyRemitted),
+  // so "solo puedes registrar 0,00 €" is never shown. translateInvoiceFullyInRemittance picks it
+  // ahead of the key route, which would otherwise take the first key.
+  ETGO_InvoiceFullyInRemittance: 'backendError.invoiceFullyInRemittance',
   // ETP-5684 — NeoAccountingAccessPolicy (com.etendoerp.go): a post/unpost from a role without
   // Show Accounting Fields. The SPA hides those actions, so this reaches only a stale screen.
   ETGO_AccountingAccessDenied: 'backendError.accountingAccessDenied',
@@ -732,6 +736,7 @@ export function extractBackendMessageParams(payload) {
 }
 
 const INVOICE_IN_REMITTANCE_KEY = 'ETGO_InvoiceInRemittance';
+const INVOICE_FULLY_IN_REMITTANCE_KEY = 'ETGO_InvoiceFullyInRemittance';
 const PAYMENT_IN_REMITTANCE_KEY = 'ETGO_PaymentInRemittance';
 
 /**
@@ -744,7 +749,11 @@ const PAYMENT_IN_REMITTANCE_KEY = 'ETGO_PaymentInRemittance';
  * backend's own text is shown instead.
  *
  * @param {object|null|undefined} payload parsed JSON error body
- * @returns {object|undefined} `{ remittance, amount? }` or undefined
+ * A WHOLLY remitted invoice (`ETGO_InvoiceFullyInRemittance` among the keys, or
+ * `error.fullyRemitted: true`) gets `{ remittance, fullyRemitted: true }` and no amount: its payable
+ * part is 0, and `translateInvoiceFullyInRemittance` renders its own sentence from it.
+ *
+ * @returns {object|undefined} `{ remittance, amount?, fullyRemitted? }` or undefined
  */
 function extractRemittanceRefusalParams(payload) {
   const keys = extractBackendMessageKeys(payload);
@@ -752,6 +761,10 @@ function extractRemittanceRefusalParams(payload) {
   const error = payload?.error ?? payload?.response?.error ?? payload;
   const remittance = nonEmptyString(error?.remittanceDocumentNo);
   if (!remittance) return undefined;
+  if (keys.includes(INVOICE_FULLY_IN_REMITTANCE_KEY)
+    || (keys.includes(INVOICE_IN_REMITTANCE_KEY) && error?.fullyRemitted === true)) {
+    return { remittance, fullyRemitted: true };
+  }
   if (keys.includes(INVOICE_IN_REMITTANCE_KEY)) {
     const payable = error?.payableAmount;
     if (payable == null || payable === '' || !Number.isFinite(Number(payable))) return { remittance };
@@ -759,6 +772,23 @@ function extractRemittanceRefusalParams(payload) {
   }
   if (keys.includes(PAYMENT_IN_REMITTANCE_KEY)) return { remittance };
   return undefined;
+}
+
+/**
+ * ETP-6247 — the refusal of a payment registered on an invoice that is WHOLLY in a confirmed
+ * remittance. The backend sends `["ETGO_InvoiceInRemittance", "ETGO_InvoiceFullyInRemittance"]`
+ * (and `error.fullyRemitted: true`); the generic key route takes the FIRST mapped key, whose
+ * sentence would read "solo puedes registrar 0,00 €". This picks the locale's own sentence instead,
+ * with the remittance number. `null` (the next routes run) when it is not this refusal or the
+ * remittance number is missing.
+ */
+function translateInvoiceFullyInRemittance(messageKeys, messageParams, t) {
+  if (!Array.isArray(messageKeys)) return null;
+  const fully = messageKeys.includes(INVOICE_FULLY_IN_REMITTANCE_KEY)
+    || (messageKeys.includes(INVOICE_IN_REMITTANCE_KEY) && messageParams?.fullyRemitted === true);
+  const remittance = nonEmptyString(messageParams?.remittance);
+  if (!fully || !remittance) return null;
+  return resolveLocaleKey(t, 'backendError.invoiceFullyInRemittance', { remittance });
 }
 
 // ETP-5175 — the Invalid-Account posting failure, rendered from its identity instead of its prose.
@@ -2271,6 +2301,10 @@ export function translateBackendError(msg, t, options = {}) {
   // ETP-5840: same position and rules as the Invalid-Account composer.
   const rateMissing = translateExchangeRateMissing(options.messageKeys, options.messageParams, t);
   if (rateMissing !== null) return rateMissing;
+
+  // ETP-6247: same reason — the wholly remitted invoice must not take the first key's sentence.
+  const fullyRemitted = translateInvoiceFullyInRemittance(options.messageKeys, options.messageParams, t);
+  if (fullyRemitted !== null) return fullyRemitted;
 
   // ETP-5826: same reason — the duplicate refusals pick their sentence from a param.
   const paymentTermConflict = translatePaymentTermConflict(options.messageKeys, options.messageParams, t);

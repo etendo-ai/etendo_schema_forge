@@ -922,6 +922,44 @@ describe('remittance refusals of the invoice (ETP-6247)', () => {
     assert.equal(translateBackendErrorBody(noAmount, es, 'f'), noAmount.error.message);
   });
 
+  // The whole invoice is remitted: the backend adds ETGO_InvoiceFullyInRemittance after the partial key
+  // (and error.fullyRemitted). The first key's sentence would read "solo puedes registrar 0,00 €".
+  const fullyBody = (keys, extra = {}) => ({
+    error: {
+      message: 'Esta factura está en la remesa R-0001; quedará saldada cuando se liquide la remesa.',
+      messageKeys: keys, remittanceDocumentNo: 'R-0001', payableAmount: 0, remittedAmount: 500,
+      currency: 'EUR', ...extra,
+    },
+  });
+
+  it('renders the locale sentence of a wholly remitted invoice, never "0,00 €"', () => {
+    const body = fullyBody(['ETGO_InvoiceInRemittance', 'ETGO_InvoiceFullyInRemittance'], { fullyRemitted: true });
+    assert.deepEqual(extractBackendMessageParams(body), { remittance: 'R-0001', fullyRemitted: true });
+    for (const t of [es, en]) {
+      const out = translateBackendErrorBody(body, t, 'f');
+      assert.equal(out, t('backendError.invoiceFullyInRemittance', { remittance: 'R-0001' }));
+      assert.doesNotMatch(out, /0,00/);
+      assert.match(out, /R-0001/);
+    }
+  });
+
+  it('treats error.fullyRemitted alone, or the second key alone, as wholly remitted', () => {
+    const expected = es('backendError.invoiceFullyInRemittance', { remittance: 'R-0001' });
+    assert.equal(translateBackendErrorBody(fullyBody(['ETGO_InvoiceInRemittance'], { fullyRemitted: true }), es, 'f'), expected);
+    assert.equal(translateBackendErrorBody(fullyBody(['ETGO_InvoiceFullyInRemittance']), es, 'f'), expected);
+  });
+
+  it('keeps the partial sentence when fullyRemitted is false', () => {
+    const out = translateBackendErrorBody(invoiceBody({ currency: 'EUR', fullyRemitted: false }), es, 'f');
+    assert.match(out, /1\.234,50\s€/);
+    assert.notEqual(out, es('backendError.invoiceFullyInRemittance', { remittance: 'R-0001' }));
+  });
+
+  it('falls back to the backend text for a wholly remitted invoice without the remittance number', () => {
+    const body = fullyBody(['ETGO_InvoiceInRemittance', 'ETGO_InvoiceFullyInRemittance'], { remittanceDocumentNo: '', fullyRemitted: true });
+    assert.equal(translateBackendErrorBody(body, es, 'f'), body.error.message);
+  });
+
   it('leaves real messageParams and unrelated bodies alone', () => {
     assert.deepEqual(extractBackendMessageParams({ error: { messageKeys: ['ETGO_InvoiceInRemittance'], messageParams: { x: 1 }, remittanceDocumentNo: 'R-1' } }), { x: 1 });
     assert.equal(extractBackendMessageParams({ error: { messageKeys: ['Other'], remittanceDocumentNo: 'R-1' } }), undefined);

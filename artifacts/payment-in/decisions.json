@@ -41,7 +41,7 @@
         "columnName": "etprReactivatePayment",
         "label": "processReactivate",
         "style": "primary-danger",
-        "displayLogicRaw": "@status@ != 'RPAP'"
+        "displayLogicRaw": "@status@ != 'RPAP' & @status@ != 'REM_SENT' & @status@ != 'REM_CANCEL'"
       }
     },
     "dateFilterKey": "paymentDate",

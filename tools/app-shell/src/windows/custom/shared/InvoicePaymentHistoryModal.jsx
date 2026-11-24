@@ -10,7 +10,8 @@ import { formatCurrency } from '@/lib/formatCurrency.js';
 import { openCenteredPopup } from '@/lib/popupWindow.js';
 import { isPaymentProcessed, paymentDisplayState } from './paymentStatuses';
 import NewPaymentEntryModal from './NewPaymentEntryModal.jsx';
-import RemittanceLink from './RemittanceLink.jsx';
+import RemittanceInfoBanner, { remittancesOf } from './RemittanceInfoBanner.jsx';
+import { ArrowsLeftRightIcon } from '@phosphor-icons/react';
 import {
   REMITTANCE_EPSILON, isBlockedByRemittance, resolvePaymentTarget, resolveRemittanceSummary,
 } from './invoiceRemittance.js';
@@ -268,6 +269,16 @@ function getOutstandingAmount({ isCreditInstrument, installments, fallbackOutsta
 }
 
 function getRowAmountMeta({ isCreditInstrument, payment, isSales }) {
+  // ETP-6247 — a remitted payment has not moved any money yet (the bank collects or pays the
+  // remittance later), so it reads neutral: no green "+", no red "−".
+  if (paymentDisplayState(payment) === 'remitted') {
+    return {
+      rowValue: payment.amount,
+      amountSign: '',
+      amountColor: 'hsl(var(--muted-foreground))',
+      amountClassName: 'text-muted-foreground',
+    };
+  }
   const isConsumption = isCreditInstrument && payment.appliedToInvoice != null;
   if (isConsumption) {
     return {
@@ -312,7 +323,6 @@ function PaymentHistoryBody({
   handleRowClick,
   handleDeleteClick,
   handleRetryClick,
-  handleRemittanceClick,
   isCreditInstrument,
   currency,
   bodyMinHeight,
@@ -396,19 +406,32 @@ function PaymentHistoryBody({
               style={{ display: 'grid', gridTemplateColumns: grid, gap: 12, padding: '11px 24px', borderBottom: '1px solid hsl(var(--muted))', alignItems: 'center', cursor: 'pointer' }}
               data-testid="InvoicePaymentHistoryModal__row"
             >
-              <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: 'hsl(var(--foreground))', fontFamily: 'JetBrains Mono, monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {payment.documentNo || payment.id}
-                </div>
-                <RemittanceLink payment={payment} ui={ui} onOpen={handleRemittanceClick} testid="InvoicePaymentHistoryModal__remittance-link" />
+              <div style={{ fontSize: 14, fontWeight: 600, color: 'hsl(var(--foreground))', fontFamily: 'JetBrains Mono, monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {payment.documentNo || payment.id}
               </div>
               <div className="tabular-nums" style={{ fontSize: 14, color: 'hsl(var(--foreground))' }}>
                 {fmtDate(payment.paymentDate)}
               </div>
               <div style={{ minWidth: 0, display: 'flex', alignItems: 'center' }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, maxWidth: '100%', padding: '2px 8px', borderRadius: 360, background: 'hsl(var(--muted))', color: 'hsl(var(--muted-foreground))', fontSize: 12, lineHeight: '16px' }}>
-                  <MethodIcon method={methodKey} data-testid="MethodIcon__b82d4f" />
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{methodRaw || '—'}</span>
+                <span
+                  data-testid={payment.remittanceDocumentNo ? 'InvoicePaymentHistoryModal__remittance-method' : undefined}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 5, maxWidth: '100%', padding: '2px 8px', borderRadius: 360, background: 'hsl(var(--muted))', color: 'hsl(var(--muted-foreground))', fontSize: 12, lineHeight: '16px' }}
+                >
+                  {/* ETP-6247 — a payment a remittance created reads as that remittance: it is
+                      how the money moves, and the banner above says where to manage it. */}
+                  {payment.remittanceDocumentNo ? (
+                    <>
+                      <ArrowsLeftRightIcon size={14} style={{ color: 'hsl(var(--text-disabled))', flexShrink: 0 }} data-testid="ArrowsLeftRight__b82d4f" />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {ui('remittancePaymentLink', { documentNo: payment.remittanceDocumentNo })}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <MethodIcon method={methodKey} data-testid="MethodIcon__b82d4f" />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{methodRaw || '—'}</span>
+                    </>
+                  )}
                 </span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center' }}>
@@ -667,17 +690,14 @@ export default function InvoicePaymentHistoryModal({
   // A credit note's remaining balance is consumed FROM other payments, never paid into.
   const invoiceTakesPayments = !isCreditInstrument && isCompleted && outstandingAmt > 0;
   const canAddPayment = invoiceTakesPayments && newPaymentTarget.amount > 0;
-  // Shown but disabled, rather than hidden, when what is in the way is a confirmed remittance or a
-  // draft already covering the invoice: the user needs to know the button exists and what unblocks
-  // it. An invoice that genuinely takes no payment (settled, a credit note, still in draft) keeps
-  // hiding it. The remittance reason wins: deleting a draft would not unblock anything there.
-  const addPaymentBlockedByRemittance = invoiceTakesPayments && !canAddPayment
-    && isBlockedByRemittance(remittance);
-  const addPaymentBlockedByDraft = invoiceTakesPayments && !canAddPayment && !addPaymentBlockedByRemittance;
-  const addPaymentBlocked = addPaymentBlockedByRemittance || addPaymentBlockedByDraft;
-  let addPaymentBlockedTitle;
-  if (addPaymentBlockedByRemittance) addPaymentBlockedTitle = ui('cpAddPaymentBlockedByRemittance');
-  else if (addPaymentBlockedByDraft) addPaymentBlockedTitle = ui('cpAddPaymentBlockedByDraft');
+  // Shown but disabled, rather than hidden, when a draft already covers the invoice: the user needs
+  // to know the button exists and what unblocks it. An invoice that genuinely takes no payment
+  // (settled, a credit note, still in draft) keeps hiding it — and so does one whose whole
+  // outstanding is in a confirmed remittance (ETP-6247): nothing the user does here unblocks it, the
+  // banner says what happens next, and a dead button only reads as broken.
+  const fullyRemitted = invoiceTakesPayments && !canAddPayment && isBlockedByRemittance(remittance);
+  const addPaymentBlockedByDraft = invoiceTakesPayments && !canAddPayment && !fullyRemitted;
+  const hasRemitted = !isCreditInstrument && remittance.remitted > REMITTANCE_EPSILON;
 
   // Table layout: Nº documento · Fecha · Método · Estado · Importe (right) · trash (draft-only).
   // 760px modal − 48px side padding − 60px column gaps (5 gaps) = 652px to distribute.
@@ -735,7 +755,20 @@ export default function InvoicePaymentHistoryModal({
           )}
         </div>
 
-        {/* Summary widget — Cliente/Proveedor · Importe total · Saldo pendiente */}
+        {/* ETP-6247 — where the remitted part sits and what happens next. */}
+        {hasRemitted && remittancesOf(payments).length > 0 && (
+          <div style={{ padding: '0 20px 12px', flexShrink: 0 }}>
+            <RemittanceInfoBanner
+              payments={payments}
+              isSales={isSales}
+              ui={ui}
+              onOpen={handleRemittanceClick}
+              testid="InvoicePaymentHistoryModal__remittance-banner" />
+          </div>
+        )}
+
+        {/* Summary widget — Cliente/Proveedor · Importe total · Saldo pendiente, or, with a
+            confirmed remittance, · En remesa · Pendiente de cobro/pago (the free part). */}
         <div style={{ padding: '0 20px 12px', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, padding: '8px 12px' }}>
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -748,29 +781,45 @@ export default function InvoicePaymentHistoryModal({
                 <MoneyAmount value={grandTotal} currency={currency} tone="neutral" currencyDisplay="narrowSymbol" data-testid="MoneyAmount__cp-history-total" />
               </div>
             </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 12, lineHeight: '16px', color: 'hsl(var(--muted-foreground))' }}>
-                {isCreditInstrument ? ui('cpFavorBadge') : ui('saldoPendiente')}
-              </div>
-              <div className="tabular-nums" style={{ fontSize: 16, lineHeight: '24px', fontWeight: 500 }}>
-                <MoneyAmount
-                  value={outstandingAmt}
-                  currency={currency}
-                  tone="neutral"
-                  className={getOutstandingClassName(isCreditInstrument, outstandingAmt)}
-                  currencyDisplay="narrowSymbol"
-                  data-testid="MoneyAmount__cp-history-pending" />
-              </div>
-              {remittance.remitted > REMITTANCE_EPSILON && (
-                <div
-                  className="tabular-nums"
-                  data-testid="InvoicePaymentHistoryModal__remitted"
-                  style={{ fontSize: 12, lineHeight: '16px', color: 'var(--status-warning-fg)' }}
-                >
-                  {ui('remittanceInvoiceRemittedSuffix', { amount: fmtAmount(remittance.remitted, currency) })}
+            {hasRemitted ? (
+              <>
+                <div style={{ flex: 1, minWidth: 0 }} data-testid="InvoicePaymentHistoryModal__remitted">
+                  <div style={{ fontSize: 12, lineHeight: '16px', color: 'hsl(var(--muted-foreground))' }}>{ui('remittanceInvoiceChip')}</div>
+                  <div className="tabular-nums" style={{ fontSize: 16, lineHeight: '24px', fontWeight: 500 }}>
+                    <MoneyAmount value={remittance.remitted} currency={currency} tone="neutral" className="text-[var(--status-warning-fg)]" currencyDisplay="narrowSymbol" data-testid="MoneyAmount__cp-history-remitted" />
+                  </div>
                 </div>
-              )}
-            </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12, lineHeight: '16px', color: 'hsl(var(--muted-foreground))' }}>
+                    {ui(isSales ? 'invoicePendingCollection' : 'invoicePendingPayment')}
+                  </div>
+                  <div className="tabular-nums" style={{ fontSize: 16, lineHeight: '24px', fontWeight: 500 }}>
+                    <MoneyAmount
+                      value={remittance.free}
+                      currency={currency}
+                      tone="neutral"
+                      className={getOutstandingClassName(false, remittance.free)}
+                      currencyDisplay="narrowSymbol"
+                      data-testid="MoneyAmount__cp-history-pending" />
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12, lineHeight: '16px', color: 'hsl(var(--muted-foreground))' }}>
+                  {isCreditInstrument ? ui('cpFavorBadge') : ui('saldoPendiente')}
+                </div>
+                <div className="tabular-nums" style={{ fontSize: 16, lineHeight: '24px', fontWeight: 500 }}>
+                  <MoneyAmount
+                    value={outstandingAmt}
+                    currency={currency}
+                    tone="neutral"
+                    className={getOutstandingClassName(isCreditInstrument, outstandingAmt)}
+                    currencyDisplay="narrowSymbol"
+                    data-testid="MoneyAmount__cp-history-pending" />
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -794,7 +843,6 @@ export default function InvoicePaymentHistoryModal({
             handleRowClick={handleRowClick}
             handleDeleteClick={handleDeleteClick}
             handleRetryClick={handleRetryClick}
-            handleRemittanceClick={handleRemittanceClick}
             isCreditInstrument={isCreditInstrument}
             currency={currency}
             bodyMinHeight={BODY_MIN_HEIGHT}
@@ -814,19 +862,20 @@ export default function InvoicePaymentHistoryModal({
               data-testid="InvoicePaymentHistoryModal__cerrar-btn"
               style={{ fontSize: 14, lineHeight: '24px', fontWeight: 500, padding: '8px 12px', borderRadius: 360, border: 'none', outline: 'none', background: 'none', color: 'hsl(var(--foreground))', cursor: 'pointer' }}
             >
-              {ui('cancel')}
+              {/* Nothing to cancel when there is no action to take: plain "Cerrar" then. */}
+              {(canAddPayment || addPaymentBlockedByDraft) ? ui('cancel') : ui('close')}
             </button>
-            {(canAddPayment || addPaymentBlocked) && (
+            {(canAddPayment || addPaymentBlockedByDraft) && (
               <button
                 type="button"
-                disabled={addPaymentBlocked}
-                title={addPaymentBlockedTitle}
+                disabled={addPaymentBlockedByDraft}
+                title={addPaymentBlockedByDraft ? ui('cpAddPaymentBlockedByDraft') : undefined}
                 onClick={() => { setEditingPayment(null); setShowPaymentModal(true); }}
                 data-testid="InvoicePaymentHistoryModal__add-btn"
-                className={addPaymentBlocked
+                className={addPaymentBlockedByDraft
                   ? 'bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]'
                   : 'bg-[hsl(var(--foreground))] text-primary-foreground hover:bg-[hsl(var(--accent-highlight))] hover:text-[hsl(var(--accent-highlight-foreground))] transition-colors'}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 14, lineHeight: '24px', fontWeight: 500, padding: '8px 14px', borderRadius: 360, border: 'none', outline: 'none', cursor: addPaymentBlocked ? 'not-allowed' : 'pointer' }}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 14, lineHeight: '24px', fontWeight: 500, padding: '8px 14px', borderRadius: 360, border: 'none', outline: 'none', cursor: addPaymentBlockedByDraft ? 'not-allowed' : 'pointer' }}
               >
                 <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
                 {isSales ? ui('addCobro') : ui('addPago')}

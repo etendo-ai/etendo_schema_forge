@@ -4,7 +4,8 @@ import { formatCalendarDate } from '@/lib/dateOnly';
 import { formatCurrency } from '@/lib/formatCurrency.js';
 import { paymentDisplayState } from '../paymentStatuses';
 import { REMITTANCE_EPSILON } from '../invoiceRemittance.js';
-import RemittanceLink from '../RemittanceLink.jsx';
+import { ArrowsLeftRightIcon } from '@phosphor-icons/react';
+import RemittanceInfoBanner, { remittancesOf } from '../RemittanceInfoBanner.jsx';
 
 
 function fmtPayDate(raw) {
@@ -101,14 +102,16 @@ function resolvePaymentsTitleRight({ isCreditNote, canAddPayment, addPaymentBloc
       </button>
     );
   }
-  if (addPaymentBlockedByRemittance || addPaymentBlockedByDraft) {
-    // Shown, but inert: the reason it is unavailable is what the user needs to act on. The
-    // remittance reason wins — deleting a draft would not unblock it (ETP-6247).
+  // ETP-6247 — the whole outstanding is in a confirmed remittance: nothing the user does here
+  // unblocks it and the banner says what happens next, so no dead action is shown.
+  if (addPaymentBlockedByRemittance) return null;
+  if (addPaymentBlockedByDraft) {
+    // Shown, but inert: the reason it is unavailable is what the user needs to act on.
     return (
       <span
         className="text-xs font-medium text-muted-foreground"
-        title={ui(addPaymentBlockedByRemittance ? 'cpAddPaymentBlockedByRemittance' : 'cpAddPaymentBlockedByDraft')}
-        data-testid={addPaymentBlockedByRemittance ? 'payments-card-add-blocked-remittance' : 'payments-card-add-blocked-draft'}
+        title={ui('cpAddPaymentBlockedByDraft')}
+        data-testid="payments-card-add-blocked-draft"
       >
         {ui(isIn ? 'previewCardAddCollection' : 'previewCardAddPayment')}
       </span>
@@ -153,8 +156,14 @@ function PaymentsEmptyState({ emptyLabel }) {
 function PaymentRow({ payment: p, idx, isLast, isIn, currencyCode, paymentWindow, ui, navigate }) {
   const methodRaw = p['paymentMethod$_identifier'] || p.paymentMethod || '';
   const methodKey = resolveMethodKey(methodRaw);
-  const amtColor = isIn ? 'var(--status-success-fg)' : 'hsl(var(--foreground))';
-  const amtSign = isIn ? '+ ' : '− ';
+  // ETP-6247 — a remitted payment has not moved money yet: neutral, no sign.
+  const remitted = paymentDisplayState(p) === 'remitted';
+  let amtColor = isIn ? 'var(--status-success-fg)' : 'hsl(var(--foreground))';
+  let amtSign = isIn ? '+ ' : '− ';
+  if (remitted) {
+    amtColor = 'hsl(var(--muted-foreground))';
+    amtSign = '';
+  }
   const currency = currencyCode || p['currency$_identifier'] || '';
   return (
     <div
@@ -177,17 +186,23 @@ function PaymentRow({ payment: p, idx, isLast, isIn, currencyCode, paymentWindow
           {p.documentNo || p.id}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2, color: 'hsl(var(--text-disabled))' }}>
-          <span style={{ display: 'inline-flex' }}>{METHOD_ICONS[methodKey]}</span>
-          <span style={{ fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {methodRaw || fmtPayDate(p.paymentDate)}
-          </span>
+          {/* ETP-6247 — a payment a remittance created reads as that remittance (its "method"). */}
+          {p.remittanceDocumentNo ? (
+            <>
+              <ArrowsLeftRightIcon size={12} style={{ flexShrink: 0 }} data-testid="ArrowsLeftRight__c6fe34" />
+              <span data-testid={`PaymentsCard__remittance-method-${idx}`} style={{ fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {ui('remittancePaymentLink', { documentNo: p.remittanceDocumentNo })}
+              </span>
+            </>
+          ) : (
+            <>
+              <span style={{ display: 'inline-flex' }}>{METHOD_ICONS[methodKey]}</span>
+              <span style={{ fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {methodRaw || fmtPayDate(p.paymentDate)}
+              </span>
+            </>
+          )}
         </div>
-        <RemittanceLink
-          payment={p}
-          ui={ui}
-          onOpen={(remittanceId) => navigate(`/remittance/${remittanceId}`)}
-          testid={`PaymentsCard__remittance-link-${idx}`}
-          style={{ fontSize: 11, marginTop: 2 }} />
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, flexShrink: 0 }}>
         <span className="tabular-nums" style={{ font: '600 13px/17px Inter', color: amtColor, whiteSpace: 'nowrap' }}>
@@ -313,6 +328,18 @@ export default function PaymentsCard({
       title={ui(isIn ? 'previewCardCollectionsTitle' : 'previewCardPayments')}
       titleRight={titleRight}
       data-testid="SectionCard__c6fe34">
+      {/* ETP-6247 — where the remitted part sits and what happens next. */}
+      {!loading && !isCreditNote && remittancesOf(payments).length > 0 && (
+        <div style={{ padding: '10px 10px 0' }}>
+          <RemittanceInfoBanner
+            payments={payments}
+            isSales={isIn}
+            ui={ui}
+            onOpen={(remittanceId) => navigate(`/remittance/${remittanceId}`)}
+            compact
+            testid="PaymentsCard__remittance-banner" />
+        </div>
+      )}
       {content}
     </SectionCard>
   );

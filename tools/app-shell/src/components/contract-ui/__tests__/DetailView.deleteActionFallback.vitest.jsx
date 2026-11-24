@@ -201,6 +201,20 @@ describe('DetailView — per-window deleteAction fallback (ETP-4479)', () => {
     expect(screen.queryByTestId('action-delete')).toBeNull();
   });
 
+  // ETP-6247 — a payment a remittance owns: REM_SENT (remitted, not collected yet; the backend
+  // refuses ETGO_PaymentInRemittance) and REM_CANCEL (settled through the remittance).
+  it.each([
+    ['payment-in', 'REM_SENT'],
+    ['payment-out', 'REM_SENT'],
+    ['payment-in', 'REM_CANCEL'],
+    ['payment-out', 'REM_CANCEL'],
+  ])('%s in remittance status %s: delete button is hidden', (windowName, status) => {
+    currentHook = makeHook({ id: '123', documentNo: 'PAY-003', status, processed: true });
+    renderDetailView({ windowName });
+
+    expect(screen.queryByTestId('action-delete')).toBeNull();
+  });
+
   it('non-payment window (regression): unaffected — hideDeleteWhenComplete still hides delete when processed', () => {
     currentHook = makeHook({ id: '123', documentNo: 'SO-001', status: 'CO', processed: true });
     renderDetailView({ windowName: 'sales-order', hideDeleteWhenComplete: true, statusField: 'status' });

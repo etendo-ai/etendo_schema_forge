@@ -61,13 +61,15 @@ describe('remittance SEPA i18n keys', () => {
 });
 
 // The invoice side of a CONFIRMED remittance: the chip/suffix on the invoice grids and topbars, the
-// link from a payment to its remittance, the disabled "add payment" reason, the payment sidebar
+// remittance banner of the payments modal and preview card, the disabled "add payment" reason, the payment sidebar
 // label and the two backend refusals. A key missing from one locale is silent (the raw key shows).
 describe('invoice-side remittance i18n keys', () => {
   const INVOICE_FILES = [
-    join(SRC, 'windows/custom/shared/RemittanceLink.jsx'),
+    join(SRC, 'windows/custom/shared/RemittanceInfoBanner.jsx'),
     join(SRC, 'windows/custom/shared/preview-cards/PaymentsCard.jsx'),
     join(SRC, 'windows/custom/shared/InvoicePaymentHistoryModal.jsx'),
+    // The preview's «Añadir cobro/pago» action keeps the disabled reason (always rendered there).
+    join(SRC, 'windows/custom/shared/InvoicePreview.jsx'),
     join(SRC, 'windows/custom/shared/PaymentDetailSidebarBase.jsx'),
     join(SRC, 'windows/custom/purchase-invoice/PurchaseInvoiceHeaderTable.jsx'),
     join(SRC, 'windows/custom/purchase-invoice/PurchaseInvoiceTopbar.jsx'),
@@ -84,6 +86,12 @@ describe('invoice-side remittance i18n keys', () => {
     pagoConfirmadoEnRemesa: [],
     'backendError.invoiceInRemittance': ['remittance', 'amount'],
     'backendError.paymentInRemittance': ['remittance'],
+    'backendError.invoiceFullyInRemittance': ['remittance'],
+    invoiceRemittanceBannerTitle: ['documentNo'],
+    invoiceRemittanceBannerHintSales: [],
+    invoiceRemittanceBannerHintPurchase: [],
+    invoiceRemittanceViewLink: [],
+    invoicePendingCollection: [],
   };
   const LOCALES = [['en_US', enUS], ['es_ES', esES], ['es_AR', esAR]];
   const labelsOf = (dictionary) => ({ ...dictionary.genericLabels, ...dictionary.ui });

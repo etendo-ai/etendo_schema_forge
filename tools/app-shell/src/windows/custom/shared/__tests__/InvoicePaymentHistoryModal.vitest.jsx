@@ -1,5 +1,5 @@
 // @covers tools/app-shell/src/windows/custom/shared/InvoicePaymentHistoryModal.jsx
-// @covers tools/app-shell/src/windows/custom/shared/RemittanceLink.jsx
+// @covers tools/app-shell/src/windows/custom/shared/RemittanceInfoBanner.jsx
 // Mocks must be hoisted before imports (Vitest hoisting)
 // NOTE (ETP-4314): the mock now interpolates params (rather than swallowing them)
 // so the delete-confirm message's fmtAmount() output actually reaches the DOM —
@@ -7,8 +7,8 @@
 // still return the bare key, so every other `getByText('someKey')` exact-match
 // assertion in this file is unaffected.
 const caps = vi.hoisted(() => ({ current: { sepaRemittances: true } }));
-// The remittance link only links while the sepaRemittances capability is visible (its route is
-// guarded by the flag); RemittanceLink.vitest.jsx covers the plain-text variant.
+// The remittance banner offers «Ver remesa» only while the sepaRemittances capability is visible
+// (its route is guarded by the flag); RemittanceInfoBanner.vitest.jsx covers the variant without it.
 vi.mock('@/hooks/useCapabilitiesSafe.js', () => ({ useCapabilitiesSafe: () => caps.current }));
 
 vi.mock('@/i18n', () => ({
@@ -1181,7 +1181,8 @@ describe('InvoicePaymentHistoryModal', () => {
       );
     }
 
-    it('disables add-btn with the remittance reason when the whole plan is remitted', async () => {
+    it('offers no add-btn, only "Cerrar", when the whole plan is remitted', async () => {
+      // Nothing the user does here unblocks it: a dead disabled button only read as broken.
       useApiFetch.mockReturnValue(makeApiFetchWithPlan(
         [{ id: 'i1', outstandingAmount: '500.00', remittedAmount: '500.00', payableAmount: '0' }],
         [REMITTED_PAYMENT],
@@ -1189,19 +1190,16 @@ describe('InvoicePaymentHistoryModal', () => {
       renderModal();
 
       await screen.findByTestId('InvoicePaymentHistoryModal__row');
-      const addBtn = screen.getByTestId('InvoicePaymentHistoryModal__add-btn');
-      expect(addBtn).toBeDisabled();
-      expect(addBtn).toHaveAttribute('title', 'cpAddPaymentBlockedByRemittance');
+      expect(screen.queryByTestId('InvoicePaymentHistoryModal__add-btn')).toBeNull();
+      expect(screen.getByTestId('InvoicePaymentHistoryModal__cerrar-btn')).toHaveTextContent('close');
     });
 
-    it('disables add-btn by remittance from the header etgoRemittedAmt when the plan is empty', async () => {
+    it('offers no add-btn from the header etgoRemittedAmt when the plan is empty', async () => {
       useApiFetch.mockReturnValue(makeApiFetchWithoutPlan([REMITTED_PAYMENT]));
       renderModal({ invoiceData: { ...INVOICE_DATA, etgoRemittedAmt: '500.00' } });
 
       await screen.findByTestId('InvoicePaymentHistoryModal__row');
-      const addBtn = screen.getByTestId('InvoicePaymentHistoryModal__add-btn');
-      expect(addBtn).toBeDisabled();
-      expect(addBtn).toHaveAttribute('title', 'cpAddPaymentBlockedByRemittance');
+      expect(screen.queryByTestId('InvoicePaymentHistoryModal__add-btn')).toBeNull();
     });
 
     it('offers a new payment only the free part of a partial remittance', async () => {
@@ -1267,33 +1265,66 @@ describe('InvoicePaymentHistoryModal', () => {
       expect(mockNavigate).toHaveBeenCalledWith('/payment-in/r1');
     });
 
-    it('links a remitted payment to its remittance without opening the payment', async () => {
+    it('names the remittance and its status in a banner whose «Ver remesa» opens it', async () => {
       const onClose = vi.fn();
       useApiFetch.mockReturnValue(makeApiFetchWithPlan(
         [{ id: 'i1', outstandingAmount: '500.00', remittedAmount: '500.00' }],
-        [REMITTED_PAYMENT],
+        [{ ...REMITTED_PAYMENT, remittanceStatus: 'PR', remittanceStatusLabel: 'Pendiente de envío' }],
       ));
       renderModal({ onClose });
 
-      const link = await screen.findByTestId('InvoicePaymentHistoryModal__remittance-link');
-      expect(link).toHaveTextContent('remittancePaymentLink');
-      expect(link).toHaveTextContent('1000123');
-      fireEvent.click(link);
+      const banner = await screen.findByTestId('InvoicePaymentHistoryModal__remittance-banner');
+      expect(banner).toHaveTextContent('invoiceRemittanceBannerTitle');
+      expect(banner).toHaveTextContent('1000123');
+      expect(banner).toHaveTextContent('Pendiente de envío');
+      expect(banner).toHaveTextContent('invoiceRemittanceBannerHintSales');
+      fireEvent.click(screen.getByTestId('InvoicePaymentHistoryModal__remittance-banner-open'));
       expect(onClose).toHaveBeenCalledOnce();
       expect(mockNavigate).toHaveBeenCalledTimes(1);
       expect(mockNavigate).toHaveBeenCalledWith('/remittance/rem-1');
     });
 
-    it('shows the "X in remittance" line under the pending balance', async () => {
+    it('offers no «Ver remesa» without the sepaRemittances capability', async () => {
+      caps.current = {};
+      try {
+        useApiFetch.mockReturnValue(makeApiFetchWithPlan(
+          [{ id: 'i1', outstandingAmount: '500.00', remittedAmount: '500.00' }],
+          [REMITTED_PAYMENT],
+        ));
+        renderModal();
+        await screen.findByTestId('InvoicePaymentHistoryModal__remittance-banner');
+        expect(screen.queryByTestId('InvoicePaymentHistoryModal__remittance-banner-open')).toBeNull();
+      } finally {
+        caps.current = { sepaRemittances: true };
+      }
+    });
+
+    it('shows the remittance as the method and the amount neutral, without a sign', async () => {
+      useApiFetch.mockReturnValue(makeApiFetchWithPlan(
+        [{ id: 'i1', outstandingAmount: '500.00', remittedAmount: '500.00' }],
+        [REMITTED_PAYMENT],
+      ));
+      renderModal();
+
+      const row = await screen.findByTestId('InvoicePaymentHistoryModal__row');
+      expect(screen.getByTestId('InvoicePaymentHistoryModal__remittance-method')).toHaveTextContent('remittancePaymentLink');
+      expect(screen.getByTestId('InvoicePaymentHistoryModal__remittance-method')).toHaveTextContent('1000123');
+      expect(row).not.toHaveTextContent('+ ');
+      expect(screen.queryByTestId('InvoicePaymentHistoryModal__remittance-link')).toBeNull();
+    });
+
+    it('splits the summary into "En remesa" and the free part still pending', async () => {
       useApiFetch.mockReturnValue(makeApiFetchWithPlan(
         [{ id: 'i1', outstandingAmount: '500.00', remittedAmount: '300.00' }],
         [{ ...REMITTED_PAYMENT, amount: '300.00' }],
       ));
       renderModal();
 
-      const line = await screen.findByTestId('InvoicePaymentHistoryModal__remitted');
-      expect(line).toHaveTextContent('remittanceInvoiceRemittedSuffix');
-      expect(line).toHaveTextContent('300,00');
+      const remitted = await screen.findByTestId('InvoicePaymentHistoryModal__remitted');
+      expect(remitted).toHaveTextContent('remittanceInvoiceChip');
+      expect(remitted).toHaveTextContent('300,00');
+      expect(screen.getByText('invoicePendingCollection')).toBeInTheDocument();
+      expect(screen.queryByText('saldoPendiente')).toBeNull();
     });
 
     it('shows no remittance line when nothing is remitted', async () => {

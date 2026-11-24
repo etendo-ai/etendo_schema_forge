@@ -53,7 +53,7 @@
         "columnName": "etprReactivatePayment",
         "label": "processReactivate",
         "style": "ghost-danger",
-        "displayLogicRaw": "@status@ != 'RPAP' & @pisLocked@ = 'N'"
+        "displayLogicRaw": "@status@ != 'RPAP' & @pisLocked@ = 'N' & @status@ != 'REM_SENT' & @status@ != 'REM_CANCEL'"
       }
     },
     "statusEnumLabels": {
