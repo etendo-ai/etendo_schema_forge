@@ -40,6 +40,7 @@ import {
 import { PORTAL_KIND_META, documentLabelKey } from './portalPresentation.js';
 import PortalDecisionActions from './PortalDecisionActions.jsx';
 import { PortalDetailsCard, PortalRelatedList } from './PortalDetailPanel.jsx';
+import { PortalLogoTile } from './PortalShell.jsx';
 
 /** Quantities may be fractional (kg, hours): never round them to an integer. */
 function formatQuantity(value) {
@@ -226,6 +227,9 @@ export default function PortalDocumentDetailView({
         >
           <ArrowLeftIcon className="h-5 w-5" aria-hidden="true" data-testid="ArrowLeft__6a1d3b" />
         </button>
+        {/* QA 24/11 CP-46: the issuing company's logo is the header's brand on mobile; Etendo's tile
+            stays as the secondary link. Decorative: "Emitido por …" names the company below. */}
+        <PortalLogoTile identity={identity} logoUrl={logoUrl} size="lg" decorative data-testid="PortalLogoTile__6a1d3b" />
         <div className="flex min-w-0 flex-1 flex-col">
           <h1 className="truncate text-xl font-semibold leading-7">{title}</h1>
           <span className="truncate text-[13px] leading-[18px] text-muted-foreground">{ui('portalIssuedBy', { name: issuer })}</span>

@@ -4,11 +4,14 @@ import assert from 'node:assert/strict';
 import {
   PORTAL_HIGHLIGHTS,
   PORTAL_KIND_GROUPS,
+  canOfferDecision,
   defaultPortalRange,
   documentLabelKey,
   initialPortalRange,
   invoicePaymentState,
   isPortalGroup,
+  isPortalSubtype,
+  joinRecipients,
   quotationValidity,
   readPortalView,
   toCalendarParam,
@@ -21,8 +24,8 @@ import {
  * The payment table is the parity guard: the portal must show an invoice's payment state exactly
  * as the app does (`resolveInvoicePaymentBadge`). Overdue follows the app on each surface: with
  * the instalments (the detail) it wins over pending and partial the way the invoice topbar orders
- * it — never over paid or over a credit note; without them (lists, home) the badge shows no
- * overdue, like the invoice list grid, whose due-date dot carries it instead.
+ * it — never over paid or over a credit note; without them (lists, home) the row's server
+ * `overdue` flag decides, so list, home and detail agree (QA CP-18).
  *
  * Instalment dates are far in the past or far in the future, so no row depends on the day the
  * suite runs.
@@ -64,9 +67,6 @@ describe('invoicePaymentState', () => {
       [installment(PAST, 100)],
       'credit-available',
     ],
-    // Lists and home have no instalments: like the invoice list grid, the badge never says
-    // overdue there, whatever the row's own flag — the due-date dot carries it.
-    ['pending, not overdue, without instalments even when the row is flagged overdue', invoice({ overdue: true }), null, 'pending'],
   ]) {
     it(`is ${label}`, () => {
       assert.equal(invoicePaymentState(document, installments).id, expected);
@@ -98,9 +98,14 @@ describe('invoicePaymentState', () => {
   }
 });
 
-// The home has no instalments but the server knows which invoices are overdue: there the badge may
-// follow the server's flag (`useServerOverdue`), with the same priorities as everywhere else.
-describe('invoicePaymentState — server overdue (home)', () => {
+// Lists and home have no instalments but the server knows which invoices are overdue: by default
+// the badge follows the server's flag (QA CP-18 — the list said "Pendiente" inside the "Vencido"
+// tab), with the same priorities as everywhere else.
+describe('invoicePaymentState — server overdue flag (lists, home), honoured by default', () => {
+  it('is pending when the caller opts out of the server flag (instalments alone decide)', () => {
+    assert.equal(invoicePaymentState(invoice({ overdue: true }), null, { useServerOverdue: false }).id, 'pending');
+  });
+
   for (const [label, document, expected] of [
     ['overdue before pending', invoice({ overdue: true }), 'overdue'],
     ['overdue before partial', invoice({ outstandingAmount: 400, overdue: true }), 'overdue'],
@@ -109,7 +114,7 @@ describe('invoicePaymentState — server overdue (home)', () => {
     ['never overdue on a credit note', invoice({ grandTotal: -100, outstandingAmount: -100, overdue: true }), 'credit-available'],
   ]) {
     it(`is ${label}`, () => {
-      assert.equal(invoicePaymentState(document, null, { useServerOverdue: true }).id, expected);
+      assert.equal(invoicePaymentState(document).id, expected);
     });
   }
 });
@@ -186,6 +191,62 @@ describe('quotationValidity', () => {
   ]) {
     it(`is ${label}`, () => {
       assert.deepEqual(quotationValidity(document), expected);
+    });
+  }
+});
+
+describe('canOfferDecision', () => {
+  // Far-future / far-past validity, so no row depends on the day the suite runs.
+  const quotation = (overrides) => ({
+    kind: 'QUOTATION', documentStatus: 'UE', validUntil: '2999-01-10',
+    canDecide: true, decision: { canDecide: true }, ...overrides,
+  });
+
+  for (const [label, document, expected] of [
+    ['offers it on a pending quotation both flags allow', quotation({}), true],
+    ['offers it on a legacy completed quotation', quotation({ documentStatus: 'CO' }), true],
+    ['offers it on a quotation without a validity date', quotation({ validUntil: null }), true],
+    ['refuses when the row says canDecide false (not a recipient)', quotation({ canDecide: false }), false],
+    ['refuses when the row has no canDecide flag', quotation({ canDecide: undefined }), false],
+    ['refuses when the decision says canDecide false', quotation({ decision: { canDecide: false } }), false],
+    ['refuses when there is no decision block', quotation({ decision: undefined }), false],
+    ['refuses once accepted, even if the flags say yes', quotation({ documentStatus: 'ETGO_AC' }), false],
+    ['refuses once rejected', quotation({ documentStatus: 'CJ' }), false],
+    ['refuses once the validity date is past', quotation({ validUntil: '2020-01-10' }), false],
+    ['refuses on another kind', quotation({ kind: 'ORDER' }), false],
+    ['refuses on no document', null, false],
+  ]) {
+    it(label, () => {
+      assert.equal(canOfferDecision(document), expected);
+    });
+  }
+});
+
+describe('joinRecipients', () => {
+  for (const [recipients, expected] of [
+    [['a@x.com'], 'a@x.com'],
+    [['a@x.com', 'b@x.com'], 'a@x.com y b@x.com'],
+    [['a@x.com', 'b@x.com', 'c@x.com'], 'a@x.com, b@x.com y c@x.com'],
+    [['a@x.com', '', null, 'b@x.com'], 'a@x.com y b@x.com'],
+    [[], ''],
+    [null, ''],
+  ]) {
+    it(`joins ${JSON.stringify(recipients)} as "${expected}"`, () => {
+      assert.equal(joinRecipients(recipients, 'y'), expected);
+    });
+  }
+});
+
+describe('isPortalSubtype', () => {
+  for (const [kind, subtype, expected] of [
+    ['INVOICE', 'invoice', true],
+    ['INVOICE', 'creditNote', true],
+    ['INVOICE', 'other', false],
+    ['INVOICE', null, false],
+    ['ORDER', 'invoice', false],
+  ]) {
+    it(`${expected ? 'accepts' : 'refuses'} ${subtype} as a document type of ${kind}`, () => {
+      assert.equal(isPortalSubtype(kind, subtype), expected);
     });
   }
 });

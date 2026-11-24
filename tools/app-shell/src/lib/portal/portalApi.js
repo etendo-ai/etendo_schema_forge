@@ -8,10 +8,14 @@ import { detectBaseUrl } from '@etendosoftware/app-shell-core/auth/api';
  * Three consequences shape this module.
  *
  * **1. The token is the whole credential, and it travels in its own header.** It arrives once,
- * as a path segment of `/portal/<token>` (that is what makes the link mailable and
- * bookmarkable), and every request made afterwards sends it as {@link PORTAL_TOKEN_HEADER}. It
- * must NEVER be appended to a query string — that is the one place it would be recorded in
- * access logs and proxy logs (plan §5.4).
+ * as the last path segment of the emailed link `/portal/{AD_Client_ID}/{token}` (an email cannot
+ * carry a header). Before anything else runs, the boot scrub (`scrubPortalUrl.boot.js`, ETP-6209
+ * CP-43) moves it into this tab's sessionStorage and rewrites the address bar to the token-free
+ * `/portal/{AD_Client_ID}`, so third-party tags never see it; the token-free URL is therefore
+ * not a bookmark (see `docs/customer-portal-link-token.md`). Every request then sends the token
+ * as {@link PORTAL_TOKEN_HEADER}, and the tenant as `X-Portal-Client` when known
+ * (`usePortalApiFetch`). It must NEVER be appended to a query string — that is the one place it
+ * would be recorded in access logs and proxy logs (plan §5.4).
  *
  * Not as `Authorization`, and that is load-bearing (ETP-6209 live test). `Authorization` belongs
  * to the app's session credential scheme: in a browser that holds an Etendo GO session the
@@ -133,6 +137,39 @@ function readableAmount(value) {
 }
 
 /**
+ * A list of e-mail addresses, trimmed and without duplicates (case-insensitive), in the order
+ * given; `fallback` alone when the list is absent or empty (a backend that only names one).
+ */
+function readRecipients(list, fallback = null) {
+  const seen = new Set();
+  const recipients = [];
+  for (const value of Array.isArray(list) ? list : []) {
+    const address = readableText(value);
+    if (address && !seen.has(address.toLowerCase())) {
+      seen.add(address.toLowerCase());
+      recipients.push(address);
+    }
+  }
+  if (recipients.length) return recipients;
+  const single = readableText(fallback);
+  return single ? [single] : [];
+}
+
+/**
+ * A total converted to the company currency (ETP-6209, QA CP-47): `{ amount, currency,
+ * approximate }`, the backend's figure over every currency of the set. `null` when absent or
+ * unusable (an older backend, or a missing exchange rate): the caller then falls back to the
+ * per-currency figures.
+ */
+export function readConvertedAmount(value) {
+  if (!value || typeof value !== 'object') return null;
+  const amount = readableAmount(value.amount);
+  const currency = readableText(value.currency);
+  if (amount == null || !currency) return null;
+  return { amount, currency, approximate: value.approximate === true };
+}
+
+/**
  * One GET against the portal servlet, with the token in the header and the status mapping
  * described in this module's docstring.
  *
@@ -183,7 +220,7 @@ async function portalGet(fetchImpl, token, path, {
  * @returns {Promise<{ state: string, businessPartnerName: string|null, email: string|null,
  *   tenantName: string|null,
  *   hasLogo: boolean, entryDocument: { kind: string, id: string }|null,
- *   entryKind: string|null }>}
+ *   entryKind: string|null, clientId: string|null }>}
  *
  * `entryKind` is set only when the link's own document is no longer visible (`entryDocument`
  * null on a valid link): the kind of list to open instead, with a notice (plan §A.8.8).
@@ -205,6 +242,9 @@ export async function fetchPortalIdentity(fetchImpl, token) {
     // exist and never has to hide a broken image. Defaults to false: a backend that predates
     // this field shows no logo rather than a placeholder.
     hasLogo: data?.hasLogo === true,
+    // ETP-6209 CP-43: the link's tenant (`AD_Client_ID`), so a pre-CP-43 `/portal/{token}` link
+    // is normalized to the token-free `/portal/{clientId}`. `null` from an older backend.
+    clientId: readableText(data?.clientId),
   };
 }
 
@@ -286,6 +326,10 @@ export async function fetchPortalHome(fetchImpl, token, { months = 12 } = {}) {
       overdueCount: Number.isFinite(b?.overdueCount) ? b.overdueCount : 0,
       overdueSince: readableText(b?.overdueSince),
     })) : [],
+    // CP-47: the outstanding balance over every currency, in the company currency.
+    convertedBalance: readConvertedAmount(data?.convertedBalance),
+    // CP-47: what was paid this year over every currency, in the company currency.
+    convertedPaidThisYear: readConvertedAmount(data?.convertedPaidThisYear),
     tiles: data?.tiles && typeof data.tiles === 'object' ? data.tiles : {},
     recent: Array.isArray(data?.recent) ? data.recent.map(normalizePortalDocument) : [],
     paidThisYear: Array.isArray(data?.paidThisYear) ? data.paidThisYear.map((p) => ({
@@ -328,12 +372,14 @@ export async function searchPortalDocuments(fetchImpl, token, query) {
  * header). Dates are calendar days (`yyyy-MM-dd`), inclusive on both ends.
  */
 export async function fetchPortalDocuments(fetchImpl, token, {
-  kind, group = null, statuses = [], dateFrom = null, dateTo = null, search = '', offset = 0,
-  limit = PORTAL_PAGE_SIZE,
+  kind, group = null, subtype = null, statuses = [], dateFrom = null, dateTo = null, search = '',
+  offset = 0, limit = PORTAL_PAGE_SIZE,
 } = {}) {
   const params = new URLSearchParams();
   params.set('type', String(kind || '').toLowerCase());
   if (group) params.set('group', group);
+  // CP-16: a document type inside the kind (`invoice` | `creditNote` for invoices).
+  if (subtype) params.set('subtype', subtype);
   if (statuses.length) params.set('status', statuses.join(','));
   if (dateFrom) params.set('dateFrom', dateFrom);
   if (dateTo) params.set('dateTo', dateTo);
@@ -358,6 +404,8 @@ export async function fetchPortalDocuments(fetchImpl, token, {
       taxBase: readableAmount(t?.taxBase),
       grandTotal: readableAmount(t?.grandTotal),
     })) : [],
+    // CP-47: the grand total over every currency of the filtered set, in the company currency.
+    convertedTotal: readConvertedAmount(data?.convertedTotal),
   };
 }
 
@@ -415,6 +463,8 @@ export async function fetchPortalDocument(fetchImpl, token, kind, id) {
       acceptAvailable: data.decision.acceptAvailable === true,
       // Where the confirmation will go, in full; named by the accept / reject popups.
       email: readableText(data.decision.email),
+      // CP-45: the To recipients of the original send (never the CC) — the confirmation goes to all.
+      confirmationRecipients: readRecipients(data.decision.confirmationRecipients, data.decision.email),
     } : null,
   };
 }
@@ -453,6 +503,9 @@ export function normalizePortalDocument(row) {
     // A quotation's generated order, when there is one in scope (the mobile card's "Pedido …").
     orderId: readableText(row?.orderId),
     orderNo: readableText(row?.orderNo),
+    // ETP-6209 CP-49: quotations only — the customer may accept / reject it now (pending, not
+    // expired, AND sent to the address this link was emailed to). `false` when absent.
+    canDecide: row?.canDecide === true,
   };
 }
 
@@ -469,6 +522,8 @@ export const PORTAL_DECISION_ERROR = Object.freeze({
   notPending: 'not_pending',
   expired: 'expired',
   noRecipient: 'no_recipient',
+  // CP-49: the quotation was not emailed to the address this link was sent to.
+  notRecipient: 'not_recipient',
   acceptUnavailable: 'accept_unavailable',
   invalidReason: 'invalid_reason',
   cooldown: 'cooldown',
@@ -492,8 +547,10 @@ async function decisionErrorOf(response) {
 }
 
 /**
- * Asks to accept or reject a quotation; the confirmation goes by email to the main recipient.
- * Resolves `{ ok: true, email }` or `{ ok: false, error }` ({@link PORTAL_DECISION_ERROR});
+ * Asks to accept or reject a quotation; the confirmation goes as a separate email to the To
+ * recipients of the original send (never the CC).
+ * Resolves `{ ok: true, email, recipients }` (`recipients`: every address the confirmation went
+ * to, the original send's To — CP-45) or `{ ok: false, error }` ({@link PORTAL_DECISION_ERROR});
  * a dead link throws {@link PORTAL_ERROR.invalidLink} like every other read.
  */
 export async function requestPortalDecision(fetchImpl, token, quotationId, {
@@ -524,7 +581,9 @@ export async function requestPortalDecision(fetchImpl, token, quotationId, {
   }
   if (response.ok) {
     const data = await response.json().catch(() => ({}));
-    return { ok: true, email: readableText(data?.email) };
+    const email = readableText(data?.email);
+    // CP-45: the confirmation goes to every To recipient of the original send (never the CC).
+    return { ok: true, email, recipients: readRecipients(data?.confirmationRecipients, email) };
   }
   return { ok: false, error: await decisionErrorOf(response) };
 }
@@ -544,6 +603,8 @@ function normalizeDecision(data) {
     // token and the quotation it opens on. Absent when the customer cannot enter.
     portalToken: readableText(data?.portalToken),
     quotationId: readableText(data?.quotationId),
+    // CP-43: the tenant of that portal link, so the landing opens `/portal/{clientId}` (token-free).
+    clientId: readableText(data?.clientId),
     // The confirmation page's summary (ETP-6209 redesign).
     date: readableText(data?.date),
     grandTotal: readableAmount(data?.grandTotal),

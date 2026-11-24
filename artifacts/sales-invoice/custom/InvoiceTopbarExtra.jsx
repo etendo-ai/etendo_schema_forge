@@ -201,6 +201,28 @@ export default function InvoiceTopbarExtra({ data, recordId, token, apiBaseUrl }
     );
   }
 
+  // The send button lives in SalesInvoiceSecondaryActions and only fires
+  // 'sales-invoice:open-send-modal'; this component hosts the modal. It must ride
+  // along with EVERY non-draft branch below — credit instrument, loading,
+  // no-installments fallback (even when that badge renders nothing) and main —
+  // or the click is swallowed silently (ETP-6209 CP-1b).
+  const sendModal = showSendModal && (
+    <SendDocumentModal
+      documentType={tMenu('Sales Invoice')}
+      documentNo={data?.documentNo}
+      bpName={data?.['businessPartner$_identifier']}
+      bPartnerId={data?.businessPartner}
+      apiBaseUrl={apiBaseUrl}
+      documentId={data?.id}
+      windowName="sales-invoice"
+      token={token}
+      pdfBlobUrl={pdfUrl}
+      pdfBlobLoading={pdfLoading}
+      onClose={() => setShowSendModal(false)}
+      data-testid="SendDocumentModal__329004" />
+  );
+  const withSendModal = (node) => (<>{node}{sendModal}</>);
+
   // Credit instruments — mirror the grid's "Saldo pendiente" cell: green "Aplicada"
   // once fully consumed, else a "Saldo a favor · remaining" badge that opens the same
   // payment history modal the grid opens (listing the payments that consumed it).
@@ -217,14 +239,14 @@ export default function InvoiceTopbarExtra({ data, recordId, token, apiBaseUrl }
       ? installments.reduce((s, i) => s + (parseFloat(i.outstandingAmount) || 0), 0)
       : parseFloat(data?.outstandingAmount ?? 0));
     if (installmentsLoading) {
-      return (
+      return withSendModal(
         <span className="inline-flex items-center gap-2 text-sm leading-6 text-muted-foreground h-10" style={{ padding: '0 12px' }}>
           {ui('loading')}
         </span>
       );
     }
     if (outstandingAbs < 0.001) {
-      return (
+      return withSendModal(
         <span
           className="inline-flex items-center gap-2 whitespace-nowrap text-sm leading-6 font-medium h-10"
           style={{ padding: '0 12px', borderRadius: '8px', backgroundColor: 'var(--status-success-bg)', color: 'var(--status-success-fg)' }}
@@ -261,13 +283,14 @@ export default function InvoiceTopbarExtra({ data, recordId, token, apiBaseUrl }
             onPaymentAdded={fetchInstallments}
             data-testid="InvoicePaymentHistoryModal__329004" />
         )}
+        {sendModal}
       </>
     );
   }
 
   // While loading, show a subtle placeholder
   if (installmentsLoading) {
-    return (
+    return withSendModal(
       <span className="inline-flex items-center gap-2 text-sm leading-6 text-muted-foreground h-10" style={{ padding: '0 12px' }}>
         {ui('loading')}
       </span>
@@ -295,9 +318,9 @@ export default function InvoiceTopbarExtra({ data, recordId, token, apiBaseUrl }
       fallbackLabel = `${ui('statusPending')} · ${fmt(outstanding, currency)}`;
     }
 
-    if (!fallbackStyle) return null;
+    if (!fallbackStyle) return withSendModal(null);
 
-    return (
+    return withSendModal(
       <button
         type="button"
         data-testid="payment-status-badge"
@@ -350,21 +373,7 @@ export default function InvoiceTopbarExtra({ data, recordId, token, apiBaseUrl }
       )}
 
       {/* Send Invoice modal */}
-      {showSendModal && (
-        <SendDocumentModal
-          documentType={tMenu('Sales Invoice')}
-          documentNo={data?.documentNo}
-          bpName={data?.['businessPartner$_identifier']}
-          bPartnerId={data?.businessPartner}
-          apiBaseUrl={apiBaseUrl}
-          documentId={data?.id}
-          windowName="sales-invoice"
-          token={token}
-          pdfBlobUrl={pdfUrl}
-          pdfBlobLoading={pdfLoading}
-          onClose={() => setShowSendModal(false)}
-          data-testid="SendDocumentModal__329004" />
-      )}
+      {sendModal}
     </>
   );
 }

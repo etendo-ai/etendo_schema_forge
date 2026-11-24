@@ -4,15 +4,19 @@ import { useLocale, useLocaleSwitch, useUI } from '@/i18n';
 import { cn } from '@/lib/utils';
 import { getStatusTone, statusLabel } from '@/lib/statusBadge.js';
 import { formatCurrency } from '@/lib/formatCurrency.js';
+import { AmountText } from '@/components/currency-summary';
 import { formatCalendarDate } from '@/lib/dateOnly.js';
 import { getDueDateDotStyle, getDueDateState } from '@/lib/invoiceDueDate.js';
 import { invoicePaymentState, quotationValidity } from './portalPresentation.js';
 
 /**
- * Where the top bar's "Creado con Etendo" pill sends the visitor: Etendo's pricing page.
- * PROVISIONAL: marketing will send the final pricing URL (with its UTM); replace it here only.
+ * Where the "Creado con Etendo · Conoce más" pill (desktop) and the compact Etendo tile (mobile)
+ * send the visitor: marketing's URL with its UTM, verbatim (ETP-6209, approved 2026-11-24). The one
+ * place it lives; both links read it. Each opens with `rel="noopener noreferrer"`, and portal
+ * pages carry `<meta name="referrer" content="same-origin">` (`lib/portal/portalLinkSession.js`),
+ * so etendo.ai never receives the portal URL as a referrer.
  */
-export const ETENDO_PRICING_URL = 'https://etendo.ai';
+export const ETENDO_PRICING_URL = 'https://etendo.ai/?utm_source=portal_clientes&utm_medium=in_app&utm_campaign=portal_clientes&utm_content=boton_conoce_mas';
 
 /**
  * Etendo's mark as the Figma draws it on the "Creado con Etendo" link: a 32×32 lime (#B8FA50)
@@ -32,7 +36,7 @@ function EtendoMark() {
  * The top bar's "Creado con Etendo / Conoce más" pill, with the Figma's exact values (2026-11-20):
  * 216×44, padding 4px, gap 8px, #1B1A1F, radius 200px; Etendo's 32px lime circle, a 128px text
  * block (12/16 500 white title, 11/16 60%-white subtitle) and a 32px 10%-white round arrow with a
- * 50%-white CaretRight. It opens the pricing page ({@link ETENDO_PRICING_URL}) in a new tab; the
+ * 50%-white CaretRight. It opens marketing's page ({@link ETENDO_PRICING_URL}) in a new tab; the
  * arrow is part of the link, not a button.
  */
 export function PortalCreatedWithPill({ className }) {
@@ -131,6 +135,46 @@ export function PortalMoney({ currency, value, className, testId }) {
 }
 
 /**
+ * A total over several currencies, converted to the company currency (ETP-6209, QA CP-47): the
+ * app's own `AmountText` (the list footer of `DataTable`, the Cuentas "Saldo"), "≈ " muted in
+ * front when a conversion was applied. One figure, never a sum per currency.
+ */
+export function PortalConvertedAmount({ converted, className, testId }) {
+  if (!converted) return null;
+  return (
+    <span className={className} data-testid={testId ? `${testId}-wrapper` : undefined}>
+      <AmountText
+        iso={converted.currency}
+        amount={converted.amount}
+        approximate={converted.approximate === true}
+        testId={testId}
+        data-testid="AmountText__7a317e" />
+    </span>
+  );
+}
+
+/**
+ * Whether a set of per-currency figures must be shown as ONE converted amount (CP-47): it spans
+ * more than one currency and the backend sent the converted figure. A single-currency set keeps
+ * its own figure (the backend's converted one then adds nothing).
+ */
+export function portalShowsConverted(perCurrency, converted) {
+  const currencies = new Set((perCurrency ?? []).map((entry) => entry?.currency ?? ''));
+  return Boolean(converted) && currencies.size > 1;
+}
+
+/**
+ * The label of a list tab (a customer-facing status group): the app's own status name when the
+ * group stands for one status (`statusCode` — "Bajo evaluación", "Anulada"…, the same
+ * `statusLabel` the badges use; QA 24/11 CP-16), else its portal key.
+ */
+export function usePortalTabLabel() {
+  const ui = useUI();
+  const dictionary = useLocale();
+  return (tab) => (tab?.statusCode ? statusLabel(tab.statusCode, dictionary, ui) : ui(tab.labelKey));
+}
+
+/**
  * Tone → the app's status tag tokens (`--status-*`, ETP-3835), drawn the way the design draws
  * every badge: 12/16 medium text, an 8px radius and a border of the tone.
  */
@@ -207,7 +251,7 @@ export function PortalDocumentStatus({ status, className, palette }) {
 
 /** An invoice's payment state, as the app shows it (see `invoicePaymentState`). */
 export function PortalPaymentStatus({
-  document, installments = null, useServerOverdue = false, className, palette,
+  document, installments = null, useServerOverdue = true, className, palette,
 }) {
   const ui = useUI();
   const state = invoicePaymentState(document, installments, { useServerOverdue });
@@ -227,7 +271,7 @@ export function PortalPaymentStatus({
 }
 
 /** The badge a row shows: an invoice's payment state, any other document's status. */
-export function PortalRowBadge({ document, className, useServerOverdue = false, palette }) {
+export function PortalRowBadge({ document, className, useServerOverdue = true, palette }) {
   return document?.kind === 'INVOICE'
     ? <PortalPaymentStatus
     document={document}

@@ -110,10 +110,10 @@ const INSTALLMENTS = [
   { amount: '1000', paidAmount: '0', outstandingAmount: '1000', daysOverdue: '0' },
 ];
 
-function renderTopbar() {
+function renderTopbar(data = DATA) {
   return render(
     <SalesInvoiceTopbar
-      data={DATA}
+      data={data}
       recordId="inv-001"
       token="tok"
       apiBaseUrl="/sws/neo/sales-invoice"
@@ -126,13 +126,14 @@ function renderTopbar() {
 
 describe('SalesInvoiceTopbar — fiscal send action ownership (ETP-5027, ETP-5700)', () => {
   beforeEach(() => {
-    global.fetch = vi.fn(() => Promise.resolve({
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({
       ok: true,
       json: () => Promise.resolve({ response: { data: INSTALLMENTS } }),
-    }));
+    })));
   });
 
   afterEach(() => {
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
@@ -148,5 +149,62 @@ describe('SalesInvoiceTopbar — fiscal send action ownership (ETP-5027, ETP-570
     expect(screen.queryAllByRole('button', { name: /^sendToSifLabel/ })).toHaveLength(0);
     // ETP-5260: "Send by email" lives in topbarSecondary, never in this tree.
     expect(screen.queryByTestId('send-document-btn')).not.toBeInTheDocument();
+  });
+});
+
+// The "Enviar / Descargar" button lives in SalesInvoiceSecondaryActions and only
+// dispatches 'sales-invoice:open-send-modal'; InvoiceTopbarExtra hosts the modal.
+// Every non-draft branch of InvoiceTopbarExtra must render it, not only the main
+// one — a credit instrument (negative total) or an invoice without installments
+// used to swallow the click silently.
+describe('InvoiceTopbarExtra — send modal opens on every non-draft branch', () => {
+  function mockInstallments(rows) {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve({ response: { data: rows } }),
+    })));
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  async function openSendModalAfterBadge() {
+    await waitFor(() => {
+      expect(screen.getByTestId('payment-status-badge')).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('send-document-modal')).not.toBeInTheDocument();
+    window.dispatchEvent(new CustomEvent('sales-invoice:open-send-modal'));
+    await waitFor(() => {
+      expect(screen.getByTestId('send-document-modal')).toBeInTheDocument();
+    });
+  }
+
+  it('opens for a completed credit note with a negative total (credit-instrument branch)', async () => {
+    mockInstallments([
+      { amount: '-500', paidAmount: '0', outstandingAmount: '-500', daysOverdue: '0' },
+    ]);
+    renderTopbar({ ...DATA, grandTotalAmount: -500, outstandingAmount: -500 });
+    await openSendModalAfterBadge();
+  });
+
+  it('opens for a completed invoice with no installments (header fallback branch)', async () => {
+    mockInstallments([]);
+    renderTopbar();
+    await openSendModalAfterBadge();
+  });
+
+  it('opens for a completed invoice whose fallback badge renders nothing', async () => {
+    mockInstallments([]);
+    // Completed, outstanding 0 and total 0: no fallback badge at all (the null case).
+    renderTopbar({ ...DATA, grandTotalAmount: 0, outstandingAmount: 0 });
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalled();
+    });
+    window.dispatchEvent(new CustomEvent('sales-invoice:open-send-modal'));
+    await waitFor(() => {
+      expect(screen.getByTestId('send-document-modal')).toBeInTheDocument();
+    });
   });
 });

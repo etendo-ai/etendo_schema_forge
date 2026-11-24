@@ -5,16 +5,16 @@ import { Button } from '@/components/ui/button';
 import { getDateBounds } from '@/lib/dateRangeBounds.js';
 import { PORTAL_ERROR, fetchPortalDocuments } from '@/lib/portal/portalApi.js';
 import { PortalListToolbar as DesktopToolbar, PortalListTable as DesktopTable } from './PortalListDesktop.jsx';
-import { PortalCustomer } from './PortalShell.jsx';
+import { PortalCustomer, PortalLogoTile } from './PortalShell.jsx';
 import {
   PortalCountChip, PortalDate, PortalDesktopHeader, PortalDocumentStatus, PortalMain,
   PortalMoney, PortalRowBadge, PortalSearchPill,
   PORTAL_ROW_FOCUS, PortalInvoiceTypeBadge,
-  PortalCreatedWithTile,
+  PortalCreatedWithTile, usePortalTabLabel,
 } from './PortalBits.jsx';
 import {
-  PORTAL_KIND_GROUPS, PORTAL_KIND_META, documentLabelKey, initialPortalRange, quotationValidity,
-  toCalendarParam,
+  PORTAL_KIND_GROUPS, PORTAL_KIND_META, documentLabelKey, initialPortalRange, isPortalSubtype,
+  quotationValidity, toCalendarParam,
 } from './portalPresentation.js';
 import { isCompletedStatus } from '../../lib/docStatus.js';
 
@@ -31,13 +31,21 @@ const SEARCH_DEBOUNCE_MS = 300;
  * payment state and outstanding; shipments carry no amounts. A totals row closes the table and
  * "Todos los registros cargados" the list. Checkboxes and "Descargar seleccionados" are out (PO
  * answer: bulk download is a performance risk; a document downloads from its detail), and so are
- * the advanced "Filtros".
+ * the advanced "Filtros"; the funnel carries the document-type quick filter (CP-16).
+ *
+ * **Every figure refers to the set shown** (QA 24/11 f): the header's count chip, "Mostrando X de
+ * Y" and the totals row all come from the current query (kind, tab, type, range, search). The
+ * rail's chips are a different figure on purpose — what needs attention (quotations to answer,
+ * overdue invoices) — and say so in their tooltip.
  */
 export default function PortalDocumentListView({
-  apiFetch, token, kind, group = null, identity = null, kindCount = null, onNavigate, onInvalid,
+  apiFetch, token, kind, group = null, identity = null, logoUrl = null, onNavigate, onInvalid,
 }) {
   const ui = useUI();
+  const tabLabel = usePortalTabLabel();
   const [range, setRange] = useState(() => initialPortalRange(group));
+  // CP-16: the document type inside the kind (invoice / credit note), from the funnel.
+  const [subtype, setSubtype] = useState(null);
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(null);
@@ -50,6 +58,7 @@ export default function PortalDocumentListView({
   // status group (`initialPortalRange`). Switching tabs inside the list keeps the chosen range.
   useEffect(() => {
     setRange(initialPortalRange(group));
+    setSubtype(null);
     setSearchInput('');
     setSearch('');
     // Only a new kind resets the range: a tab (group) change keeps what the customer chose.
@@ -66,11 +75,12 @@ export default function PortalDocumentListView({
     return {
       kind,
       group,
+      subtype: isPortalSubtype(kind, subtype) ? subtype : null,
       dateFrom: toCalendarParam(from),
       dateTo: toCalendarParam(to),
       search,
     };
-  }, [kind, group, range, search]);
+  }, [kind, group, subtype, range, search]);
 
   useEffect(() => {
     let active = true;
@@ -145,7 +155,7 @@ export default function PortalDocumentListView({
             )}
             data-testid={`portal-status-tab-${(tab.code ?? 'all').toLowerCase()}${mobile ? '-mobile' : ''}`}
           >
-            {ui(tab.labelKey)}
+            {tabLabel(tab)}
           </button>
         );
       })}
@@ -202,6 +212,9 @@ export default function PortalDocumentListView({
           {/* At 360 px the title steps down to 24 px so it, the count and the avatar (the user
               menu, with the language) share one line; the board's 28 px from 640 up. */}
           <div className="flex min-w-0 items-center gap-2.5">
+            {/* QA 24/11 CP-46: the issuing company's logo leads the mobile header; Etendo's tile
+                stays on the right as the secondary link. */}
+            <PortalLogoTile identity={identity} logoUrl={logoUrl} size="lg" data-testid="PortalLogoTile__c7f7d2" />
             <h1 className="truncate text-2xl font-bold leading-9 sm:text-[28px]">{plural}</h1>
             <PortalCountChip count={totalCount} data-testid="PortalCountChip__c7f7d2" />
           </div>
@@ -218,9 +231,9 @@ export default function PortalDocumentListView({
 
       <PortalDesktopHeader
         title={plural}
-        // The Figma's count is the kind's whole total (the home's tile figure), whatever the tab;
-        // without it (home not loaded), the current query's.
-        count={Number.isFinite(kindCount) ? kindCount : totalCount}
+        // The set shown (QA 24/11 f): the same figure as "Mostrando X de Y" and the mobile chip.
+        // It was the kind's all-time total (the home tile), which disagreed with both.
+        count={totalCount}
         breadcrumb={<>{ui('portalNavMyDocuments')} / <span className="text-[#1B1A1F]">{plural}</span></>}
         search={searchPill(false)}
         size="lg"
@@ -237,6 +250,8 @@ export default function PortalDocumentListView({
           onGroup={selectGroup}
           range={range}
           onRange={setRange}
+          subtype={subtype}
+          onSubtype={setSubtype}
           onRefresh={() => setReload((value) => value + 1)}
           data-testid="DesktopToolbar__c7f7d2" />
 
@@ -247,6 +262,8 @@ export default function PortalDocumentListView({
             <DesktopTable
               kind={kind}
               documents={documents}
+              totals={page?.totals}
+              convertedTotal={page?.convertedTotal}
               onOpen={open}
               data-testid="DesktopTable__c7f7d2" />
             <ul className="flex flex-col gap-3 md:hidden" data-testid="portal-document-cards">

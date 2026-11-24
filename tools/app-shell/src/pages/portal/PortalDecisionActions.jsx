@@ -18,7 +18,8 @@ import {
   PORTAL_DECISION_ERROR, PORTAL_ERROR, requestPortalDecision,
 } from '@/lib/portal/portalApi.js';
 import {
-  PORTAL_ACCEPT_ENABLED, PORTAL_REJECT_REASONS, PORTAL_REJECT_REASON_OTHER,
+  PORTAL_ACCEPT_ENABLED, PORTAL_REJECT_REASONS, PORTAL_REJECT_REASON_OTHER, canOfferDecision,
+  joinRecipients,
 } from './portalPresentation.js';
 import {
   PORTAL_FIGMA_BUTTON_PRIMARY, PORTAL_FIGMA_BUTTON_SECONDARY, PORTAL_FIGMA_SHADOW,
@@ -32,7 +33,17 @@ const ERROR_KEYS = Object.freeze({
   [PORTAL_DECISION_ERROR.noRecipient]: 'portalDecisionBlockedNoRecipient',
   [PORTAL_DECISION_ERROR.expired]: 'portalDecisionBlockedExpired',
   [PORTAL_DECISION_ERROR.notPending]: 'portalDecisionBlockedNotPending',
+  // CP-49: answered by a request only (a race with the detail): as a blocked reason it shows
+  // nothing, see DecisionBlockedNotice.
+  [PORTAL_DECISION_ERROR.notRecipient]: 'portalDecisionBlockedNotRecipient',
 });
+
+/** Blocked reasons that show no notice at all: the quotation simply reads without buttons. */
+const SILENT_BLOCKED_REASONS = Object.freeze([
+  PORTAL_DECISION_ERROR.notPending,
+  // CP-49: whoever entered with another document's link reads the quotation, nothing more.
+  PORTAL_DECISION_ERROR.notRecipient,
+]);
 
 /** The popup open at each step of a decision (Figma "Confirmar Presupuesto" … "Validacion"). */
 const STEP = Object.freeze({
@@ -46,8 +57,11 @@ const STEP = Object.freeze({
  * Aceptar / Rechazar on a quotation the customer can still answer (ETP-6209 Part C; the popups as
  * the designer's Figma draws them, 2026-11-17).
  *
- * Shown only when the detail says `decision.canDecide` (pending and not expired); when it cannot be
- * decided for a reason the customer can act on (no recipient, expired) the reason is shown instead.
+ * Shown only when {@link canOfferDecision} says so: the backend's `canDecide` (pending, not expired
+ * and — QA 24/11 CP-49 — emailed to the address this link was sent to), never overridden upwards by
+ * the browser. When it cannot be decided for a reason the customer can act on (no recipient,
+ * expired) the reason is shown instead; a quotation that was not sent to this address shows no
+ * buttons, no popup and no notice.
  * "Aceptar" is behind {@link PORTAL_ACCEPT_ENABLED} (PO answer to Q1: on) and the backend's
  * `acceptAvailable`.
  *
@@ -55,7 +69,8 @@ const STEP = Object.freeze({
  * - Aceptar → "¿Deseas aceptar este presupuesto?" (where the confirmation goes) → Continuar sends;
  * - Rechazar → the six reasons ("Otros" needs a text; Continuar stays disabled without it) →
  *   "Confirma tu decisión por correo" (Cancelar / Volver / Enviar solicitud) sends.
- * The request never applies anything: it emails a confirmation to the first To of the original send.
+ * The request never applies anything: it sends a confirmation as a separate email to the To
+ * recipients of the original send (never the CC — CP-45), every one of them named in the popups.
  * Its answer opens "Revisa tu correo electrónico"; once closed ("Entendido") the panel keeps saying
  * where the email went. A refused request closes the popup and says why next to the buttons.
  *
@@ -74,9 +89,11 @@ export default function PortalDecisionActions({
   const [busy, setBusy] = useState(false);
   const [sentTo, setSentTo] = useState(null);
   const [error, setError] = useState(null);
+  const [notRecipient, setNotRecipient] = useState(false);
 
   const decision = document?.decision;
   if (!decision) return null;
+  const offered = canOfferDecision(document);
 
   const acceptShown = PORTAL_ACCEPT_ENABLED && decision.acceptAvailable;
   const bar = variant === 'bar';
@@ -84,20 +101,28 @@ export default function PortalDecisionActions({
   // As items of the caller's wrapping row, a notice takes a whole line after the buttons.
   const noticeClass = inline ? 'order-last basis-full' : '';
   const close = () => setStep(null);
-  // Where the confirmation goes: the backend names the first To of the original send, in full.
-  const recipient = decision.email;
+  // Where the confirmation goes: every To recipient of the original send (never the CC), in full.
+  const recipients = decision.confirmationRecipients?.length
+    ? decision.confirmationRecipients : [decision.email].filter(Boolean);
 
+  // QA 24/11 (e): every press either sends or says why not. A press while a request is already
+  // out is ignored (the button is disabled too), never swallowed in silence otherwise.
   const submit = async (payload) => {
+    if (busy) return;
     setBusy(true);
     setError(null);
     try {
       const result = await requestPortalDecision(apiFetch, token, document.id, payload);
       if (result.ok) {
-        setSentTo(result.email ?? recipient ?? '');
+        const sent = result.recipients?.length ? result.recipients : recipients;
+        setSentTo(joinRecipients(sent, ui('portalRecipientsLastSeparator')));
         setStep(STEP.sent);
       } else {
         setStep(null);
         setError(ERROR_KEYS[result.error] ?? 'portalDecisionError');
+        // CP-49: the backend refused because this quotation was not emailed to this address — the
+        // buttons go, the reason stays.
+        if (result.error === PORTAL_DECISION_ERROR.notRecipient) setNotRecipient(true);
       }
     } catch (err) {
       setStep(null);
@@ -113,7 +138,7 @@ export default function PortalDecisionActions({
       <AcceptConfirmDialog
         open={step === STEP.acceptConfirm}
         busy={busy}
-        email={recipient}
+        recipients={recipients}
         onClose={close}
         onContinue={() => submit({ decision: 'ACCEPT' })}
         data-testid="AcceptConfirmDialog__a48dad" />
@@ -134,7 +159,7 @@ export default function PortalDecisionActions({
       <RejectConfirmDialog
         open={step === STEP.rejectConfirm}
         busy={busy}
-        email={recipient}
+        recipients={recipients}
         onClose={close}
         onBack={() => setStep(STEP.rejectReasons)}
         onSend={() => submit({
@@ -159,7 +184,14 @@ export default function PortalDecisionActions({
       </>
     );
   }
-  if (!decision.canDecide) {
+  if (notRecipient) {
+    return (
+      <p className={cn('text-sm text-muted-foreground', noticeClass)} role="status" data-testid="portal-decision-blocked">
+        {ui('portalDecisionBlockedNotRecipient')}
+      </p>
+    );
+  }
+  if (!offered) {
     return (
       <DecisionBlockedNotice
         reason={decision.blockedReason}
@@ -230,7 +262,7 @@ function DecisionSentNotice({ email, bar, className }) {
 function DecisionBlockedNotice({ reason, tenantName, className }) {
   const ui = useUI();
   const key = ERROR_KEYS[reason];
-  if (!key || reason === PORTAL_DECISION_ERROR.notPending) return null;
+  if (!key || SILENT_BLOCKED_REASONS.includes(reason)) return null;
   return (
     <p className={cn('text-sm text-muted-foreground', className)} data-testid="portal-decision-blocked">
       {ui(key, { tenantName: tenantName ?? '' })}
@@ -317,6 +349,10 @@ function PortalModal({ open, onClose, testId, children }) {
         <DialogOverlay data-testid="DialogOverlay__a48dad" />
         <DialogPrimitive.Content
           aria-describedby={undefined}
+          // QA 24/11 (e): these popups open over the detail drawer, itself a Radix dialog. A focus
+          // move between the two layers while the popup mounts must never count as "outside" and
+          // dismiss it under the customer's first press; Escape, the backdrop and the X still close.
+          onFocusOutside={(event) => event.preventDefault()}
           className={`fixed left-1/2 top-1/2 z-50 flex w-[456px] max-w-[calc(100vw-32px)] -translate-x-1/2 -translate-y-1/2 flex-col gap-2 rounded-lg bg-white py-2 outline-none ${MODAL_SHADOW}`}
           data-testid={testId}
         >
@@ -357,16 +393,26 @@ function ModalHeader({ Icon, tone, title, children }) {
   );
 }
 
-/** "Correo de confirmación" and the recipient: the 64px grey box of the Figma. */
-function ConfirmationEmail({ email }) {
+/**
+ * "Correo de confirmación" and its recipients: the grey box of the Figma (64px for one address).
+ * Several To recipients (CP-45) stack one per line, each truncated on its own.
+ */
+function ConfirmationEmail({ recipients }) {
   const ui = useUI();
-  if (!email) return null;
+  const list = (recipients ?? []).filter(Boolean);
+  if (list.length === 0) return null;
   return (
-    <div className="flex h-16 items-center gap-3 rounded-lg bg-[#F3F5F9] px-5 py-3" data-testid="portal-decision-email">
+    <div className="flex min-h-[64px] items-center gap-3 rounded-lg bg-[#F3F5F9] px-5 py-3" data-testid="portal-decision-email">
       <EnvelopeSimpleIcon size={24} className="shrink-0 text-[#81848F]" aria-hidden="true" data-testid="EnvelopeSimple__a48dad" />
       <span className="flex min-w-0 flex-col">
-        <span className="text-xs leading-4 text-[#555B6D]">{ui('portalConfirmationEmailLabel')}</span>
-        <span className="truncate text-base font-semibold leading-6 text-[#1B1A1F]">{email}</span>
+        <span className="text-xs leading-4 text-[#555B6D]">
+          {ui(list.length > 1 ? 'portalConfirmationEmailsLabel' : 'portalConfirmationEmailLabel')}
+        </span>
+        {list.map((address) => (
+          <span key={address} className="truncate text-base font-semibold leading-6 text-[#1B1A1F]" data-testid="portal-decision-email-address">
+            {address}
+          </span>
+        ))}
       </span>
     </div>
   );
@@ -378,7 +424,7 @@ function ModalNote({ children }) {
 }
 
 /** (1) "¿Deseas aceptar este presupuesto?" — Cancelar / Continuar (sends). */
-function AcceptConfirmDialog({ open, busy, email, onClose, onContinue }) {
+function AcceptConfirmDialog({ open, busy, recipients, onClose, onContinue }) {
   const ui = useUI();
   return (
     <PortalModal open={open} onClose={onClose} testId="portal-accept-modal" data-testid="PortalModal__a48dad">
@@ -386,7 +432,7 @@ function AcceptConfirmDialog({ open, busy, email, onClose, onContinue }) {
         {ui('portalAcceptConfirmDescription')}
       </ModalHeader>
       <div className="flex flex-col gap-3 px-7 pb-3">
-        <ConfirmationEmail email={email} data-testid="ConfirmationEmail__a48dad" />
+        <ConfirmationEmail recipients={recipients} data-testid="ConfirmationEmail__a48dad" />
         <ModalNote data-testid="ModalNote__a48dad">{ui('portalDecisionFinalHint')}</ModalNote>
       </div>
       <div className="flex items-center justify-between gap-3 px-7 py-3">
@@ -505,7 +551,7 @@ function RejectReasonsDialog({ open, reason, text, onReason, onText, onClose, on
 }
 
 /** (5) "Confirma tu decisión por correo" — Cancelar | Volver · Enviar solicitud (sends). */
-function RejectConfirmDialog({ open, busy, email, onClose, onBack, onSend }) {
+function RejectConfirmDialog({ open, busy, recipients, onClose, onBack, onSend }) {
   const ui = useUI();
   return (
     <PortalModal open={open} onClose={onClose} testId="portal-reject-confirm-modal" data-testid="PortalModal__a48dad">
@@ -513,7 +559,7 @@ function RejectConfirmDialog({ open, busy, email, onClose, onBack, onSend }) {
         {ui('portalRejectConfirmDescription')}
       </ModalHeader>
       <div className="flex flex-col gap-3 px-7 pb-3">
-        <ConfirmationEmail email={email} data-testid="ConfirmationEmail__a48dad" />
+        <ConfirmationEmail recipients={recipients} data-testid="ConfirmationEmail__a48dad" />
         <ModalNote data-testid="ModalNote__a48dad">{ui('portalDecisionFinalHint')}</ModalNote>
       </div>
       <div className="flex items-center justify-between gap-3 px-7 py-3">

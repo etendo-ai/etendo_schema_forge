@@ -268,12 +268,17 @@ export function PortalMobileBrandBar({ identity, logoUrl, onSearch }) {
   );
 }
 
-/** The sidebar's count chip: quotations to answer (info), overdue invoices (destructive). */
+/**
+ * The sidebar's count chip: quotations to answer (info), overdue invoices (destructive). It is
+ * NOT the kind's number of documents (QA 24/11 f: "87" beside a list of 140 read as a
+ * contradiction), so it carries what it counts as its tooltip and accessible name.
+ */
 function navBadgeOf(tiles, kind) {
   const highlight = tiles?.[kind]?.highlight;
   if (!highlight?.count) return null;
   if (highlight.code === 'awaitingAnswer' || highlight.code === 'overdue') {
-    return { count: highlight.count, tone: PORTAL_HIGHLIGHTS[highlight.code].tone };
+    const meta = PORTAL_HIGHLIGHTS[highlight.code];
+    return { count: highlight.count, tone: meta.tone, labelKey: meta.labelKey };
   }
   return null;
 }
@@ -411,7 +416,9 @@ function RailKindItem({ kind, badge, active, onNavigate }) {
           className="h-6 rounded-full px-[9px] py-0 font-normal"
           testId="portal-nav-count"
           data-testid="PortalTag__a5d12f">
-          {badge.count}
+          <span title={`${badge.count} · ${ui(badge.labelKey)}`} aria-label={`${badge.count} · ${ui(badge.labelKey)}`}>
+            {badge.count}
+          </span>
         </PortalTag>
       ) : null}
     </button>

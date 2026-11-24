@@ -14,6 +14,9 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useUI } from '@/i18n';
 import { cn } from '@/lib/utils';
 import { usePortalApiFetch } from '@/lib/portal/usePortalApiFetch.js';
+import {
+  isPortalClientId, readPortalDecision, rememberPortalDecision, rememberPortalLink,
+} from '@/lib/portal/portalLinkSession.js';
 import { usePortalFavicon } from './portal/usePortalFavicon.js';
 import {
   PORTAL_DECISION_STATE, PORTAL_ERROR, confirmPortalDecision, fetchPortalDecision,
@@ -240,12 +243,16 @@ function decisionResultTone(decision) {
 }
 
 /** The confirmation's result, with the way into the portal when the answer carries one. */
-function DecisionResult({ decision }) {
+function DecisionResult({ decision, clientId }) {
   const ui = useUI();
   const navigate = useNavigate();
-  const entryPath = portalEntryPath(decision);
-  const enter = entryPath
-    ? () => navigate(entryPath, { replace: true })
+  const entry = portalEntryPath(decision, clientId);
+  // CP-43: the fresh portal token is remembered for this tab, never put in the URL.
+  const enter = entry
+    ? () => {
+      rememberPortalLink(entry.link);
+      navigate(entry.path, { replace: true });
+    }
     : null;
   const confirmed = decision.state === PORTAL_DECISION_STATE.confirmed;
   const appliedNow = confirmed && decision.appliedNow;
@@ -267,13 +274,30 @@ function DecisionResult({ decision }) {
   );
 }
 
+/**
+ * The decision token and tenant of this landing (CP-43). The boot scrub
+ * (`lib/portal/scrubPortalUrl.boot.js`) has normally moved the token from the URL into this tab's
+ * sessionStorage already; `inUrl` is the rare in-app navigation it never saw.
+ */
+function useDecisionLink() {
+  const params = useParams();
+  const clientId = isPortalClientId(params.clientId) ? params.clientId : null;
+  const routeToken = params.token?.trim() || '';
+  if (routeToken) return { clientId, token: routeToken, inUrl: true };
+  return { clientId, token: readPortalDecision(clientId)?.token ?? '', inUrl: false };
+}
+
 export default function PortalDecisionPage({ resendDelayMs = CONFIRM_RESEND_DELAY_MS } = {}) {
-  const { token = '' } = useParams();
+  const { clientId, token, inUrl } = useDecisionLink();
+  const routerNavigate = useNavigate();
   const ui = useUI();
   // The tab icon: index.html's relative favicon does not resolve under /portal/decision/….
   usePortalFavicon();
   const baseUrl = useMemo(() => resolvePortalBaseUrl(), []);
-  const apiFetch = usePortalApiFetch(baseUrl);
+  // CP-43: the tenant from the landing's path (`/portal/{clientId}/decision`) rides every request
+  // as `X-Portal-Client`, so the backend refuses a decision token of another tenant. A pre-CP-43
+  // `/portal/decision/{token}` link has no tenant and sends no header, which keeps working.
+  const apiFetch = usePortalApiFetch(baseUrl, { clientId });
   const [view, setView] = useState(VIEW.applying);
   const [decision, setDecision] = useState(null);
 
@@ -373,12 +397,21 @@ export default function PortalDecisionPage({ resendDelayMs = CONFIRM_RESEND_DELA
       .finally(() => { inFlight.current = false; });
   }, [apiFetch, token, showResult, settleFromView, resendDelayMs]);
 
+  // CP-43: a token still in the address bar is moved out of it FIRST; the confirmation is sent
+  // only from the token-free URL, so a remount caused by the rewrite can never POST twice.
+  useEffect(() => {
+    if (!inUrl) return;
+    rememberPortalDecision({ clientId, token });
+    routerNavigate(clientId ? `/portal/${clientId}/decision` : '/portal/decision', { replace: true });
+  }, [inUrl, clientId, token, routerNavigate]);
+
   // The confirmation is the page's own POST, sent once on open (never a GET side effect).
   useEffect(() => {
+    if (inUrl) return;
     if (sentFor.current === token) return;
     sentFor.current = token;
     apply();
-  }, [apply, token]);
+  }, [apply, token, inUrl]);
 
   if (view === VIEW.applying) {
     return (
@@ -409,7 +442,7 @@ export default function PortalDecisionPage({ resendDelayMs = CONFIRM_RESEND_DELA
 
   return (
     <ResultBoundary fallback={failedCard} data-testid="ResultBoundary__be410c">
-      <DecisionResult decision={decision} data-testid="DecisionResult__be410c" />
+      <DecisionResult decision={decision} clientId={clientId} data-testid="DecisionResult__be410c" />
     </ResultBoundary>
   );
 }

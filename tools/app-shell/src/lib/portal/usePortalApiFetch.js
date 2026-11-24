@@ -1,5 +1,6 @@
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { createApiFetch } from '@etendosoftware/app-shell-core/auth';
+import { PORTAL_CLIENT_HEADER } from './portalLinkSession.js';
 
 /** The portal holds no session credential of its own: its token rides `X-Portal-Token`. */
 const NO_SESSION_TOKEN = () => null;
@@ -25,8 +26,24 @@ const NO_SESSION_TOKEN = () => null;
  * `on401: 'ignore'`), and nothing here touches the app's data cache or write announcements, which
  * only ever concern `/sws/neo` records.
  *
+ * **The tenant (ETP-6209, CP-43).** When the page knows the link's `AD_Client_ID` (from the URL
+ * `/portal/{clientId}`, or from `/me`), every request also carries it as {@link
+ * PORTAL_CLIENT_HEADER}; the backend refuses a token of another tenant with the usual
+ * invalid-link answer. Read through a ref, so learning the tenant mid-session (a pre-CP-43 link
+ * normalized after `/me`) does not hand the page a new client and refetch everything.
+ *
  * @param {string} [baseUrl] prefix for relative paths (see `resolvePortalBaseUrl`)
+ * @param {{ clientId?: string|null }} [options]
  */
-export function usePortalApiFetch(baseUrl) {
-  return useMemo(() => createApiFetch(baseUrl, NO_SESSION_TOKEN, null, null), [baseUrl]);
+export function usePortalApiFetch(baseUrl, { clientId = null } = {}) {
+  const clientRef = useRef(clientId);
+  clientRef.current = clientId;
+  return useMemo(() => {
+    const base = createApiFetch(baseUrl, NO_SESSION_TOKEN, null, null);
+    return (url, options = {}) => {
+      const tenant = clientRef.current;
+      if (!tenant) return base(url, options);
+      return base(url, { ...options, headers: { ...(options.headers ?? {}), [PORTAL_CLIENT_HEADER]: tenant } });
+    };
+  }, [baseUrl]);
 }

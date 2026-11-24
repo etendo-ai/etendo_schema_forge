@@ -27,11 +27,22 @@ const RECORD = 'a1b2c3d4e5f60718293a4b5c6d7e8f90';
 const WINDOW = 'sales-order';
 const BASE = '/go';
 
-const SAMPLE_PARAMS = { ':token': TOKEN, ':recordId': RECORD, ':windowName': WINDOW };
+// A portal tenant id (AD_Client_ID, 32 hex characters): the first segment of a portal email link.
+const CLIENT = '0123456789ABCDEF0123456789ABCDEF';
+
+// `:segment` is a tenant id or the token of a pre-CP-43 `/portal/{token}` link; the sample is the
+// token, the shape that must never leak.
+const SAMPLE_PARAMS = {
+  ':token': TOKEN, ':segment': TOKEN, ':clientId': CLIENT, ':recordId': RECORD, ':windowName': WINDOW,
+};
 
 // Routes with a parameter, and what each form must become.
 const PARAMETERIZED = {
-  'portal/:token': { router: '/portal/:recordId', browser: '/go/portal/:id' },
+  'portal/:segment': { router: '/portal/:recordId', browser: '/go/portal/:id' },
+  // The portal email link and the decision landing: tenant id and token both become `:id`.
+  'portal/:clientId/:token': { router: '/portal/:id/:id', browser: '/go/portal/:id/:id' },
+  'portal/:clientId/decision': { router: '/portal/:id/decision', browser: '/go/portal/:id/decision' },
+  'portal/:clientId/decision/:token': { router: '/portal/:id/decision/:id', browser: '/go/portal/:id/decision/:id' },
   // The quotation-decision landing: the token is a third segment, which the scrub names `:id` in
   // both forms (as it does for `/${WINDOW}/:id/lines`), never the raw token.
   'portal/decision/:token': { router: '/portal/decision/:id', browser: '/go/portal/decision/:id' },
@@ -89,7 +100,9 @@ describe('real host routes through Datadog, Mixpanel and RUM (ETP-4578 H7)', () 
 
   it('reads the route table, so the test cannot go stale silently', () => {
     assert.ok(patterns.length >= 20, `expected the host route table, found ${patterns.length} paths`);
-    assert.ok(patterns.includes('portal/:token'));
+    assert.ok(patterns.includes('portal/:segment'));
+    assert.ok(patterns.includes('portal/:clientId/:token'));
+    assert.ok(!patterns.includes('portal/:token'), 'portal/:token was replaced by portal/:segment');
     assert.ok(patterns.includes(':windowName/:recordId'));
   });
 
@@ -135,6 +148,14 @@ describe('real host routes through Datadog, Mixpanel and RUM (ETP-4578 H7)', () 
     const dirty = `/portal/${TOKEN}?code=sh0rtC0de42#access_token=abc`;
     for (const [provider, value] of Object.entries(throughProviders(dirty))) {
       assert.equal(value, '/portal/:recordId', provider);
+    }
+  });
+
+  it('never lets the tenant id or the token of a portal email link survive in any provider', () => {
+    const link = `/portal/${CLIENT}/${TOKEN}?x=1#y`;
+    for (const [provider, value] of Object.entries(throughProviders(link))) {
+      assert.equal(value, '/portal/:id/:id', provider);
+      assert.ok(!value.includes(CLIENT) && !value.includes(TOKEN), provider);
     }
   });
 });

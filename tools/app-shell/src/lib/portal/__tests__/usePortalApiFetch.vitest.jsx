@@ -75,6 +75,38 @@ describe('usePortalApiFetch — outside the app session', () => {
   });
 });
 
+// CP-43 — the backend refuses a token of another tenant only when the request names the tenant.
+describe('usePortalApiFetch — X-Portal-Client', () => {
+  const CLIENT = '0123456789ABCDEF0123456789ABCDEF';
+
+  it.each([
+    ['a known tenant', CLIENT, CLIENT],
+    ['no tenant', null, null],
+  ])('with %s, sends X-Portal-Client %s alongside the caller headers', async (_label, clientId, expected) => {
+    globalThis.fetch = vi.fn(async () => jsonResponse({}));
+    const { result } = renderHook(() => usePortalApiFetch('/sws', { clientId }));
+
+    await result.current('/portal/me', { headers: { 'X-Portal-Token': 'portal-token' }, on401: 'ignore' });
+
+    expect(sentHeader('X-Portal-Client')).toBe(expected);
+    expect(sentHeader('X-Portal-Token')).toBe('portal-token');
+  });
+
+  it('picks up a tenant learned mid-session without handing out a new client', async () => {
+    globalThis.fetch = vi.fn(async () => jsonResponse({}));
+    const { result, rerender } = renderHook(({ clientId }) => usePortalApiFetch('/sws', { clientId }), {
+      initialProps: { clientId: null },
+    });
+    const first = result.current;
+
+    rerender({ clientId: CLIENT });
+    await result.current('/portal/me', { on401: 'ignore' });
+
+    expect(result.current).toBe(first);
+    expect(sentHeader('X-Portal-Client')).toBe(CLIENT);
+  });
+});
+
 describe('usePortalApiFetch — identity of the returned client', () => {
   it('is the same function across re-renders with the same baseUrl, and a new one when it changes', () => {
     const { result, rerender } = renderHook(({ base }) => usePortalApiFetch(base), {

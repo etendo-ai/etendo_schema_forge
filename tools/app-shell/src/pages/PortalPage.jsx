@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { CircleNotchIcon, EnvelopeSimpleOpenIcon, FileTextIcon, ProhibitIcon, WarningCircleIcon } from '@phosphor-icons/react';
 import { useUI } from '@/i18n';
 import { Button } from '@/components/ui/button';
 import { usePortalApiFetch } from '@/lib/portal/usePortalApiFetch.js';
+import {
+  portalPath, rememberPortalLink, resolvePortalRoute,
+} from '@/lib/portal/portalLinkSession.js';
 import { usePortalFavicon } from './portal/usePortalFavicon.js';
 import {
   PORTAL_ERROR,
@@ -52,10 +55,15 @@ import {
  * was sent recently). A customer who is blocked or inactive, or whose supplier's plan expired,
  * gets "contact the company" and no reason.
  *
- * The token is deliberately left in the address bar. The link is meant to be bookmarkable
- * (plan §1/§4.6), and scrubbing it would break the bookmark; what §5.4 forbids is the token
- * appearing in a *query string* on the wire, which is why every request sends it in the
- * `X-Portal-Token` header instead — see `lib/portal/portalApi.js`.
+ * **The token never stays in the address bar (ETP-6209, QA CP-43).** Third-party tags (GTM,
+ * Google Analytics, HubSpot) read `location`, and the token is a password. Links are
+ * `/portal/{adClientId}/{token}`; `main.jsx`'s first import (`lib/portal/scrubPortalUrl.boot.js`)
+ * moves the token into this tab's sessionStorage and rewrites the URL to `/portal/{adClientId}`
+ * before anything else runs, so a reload keeps working for the session. A pre-CP-43
+ * `/portal/{token}` link becomes `/portal`, then `/portal/{adClientId}` once `/me` names the
+ * tenant. The price: the token-free URL is not a bookmark — a new tab needs the email link again.
+ * On the wire the token rides the `X-Portal-Token` header, never a query string (§5.4) — see
+ * `lib/portal/portalApi.js`.
  */
 
 /** The screens this page can be on. */
@@ -332,7 +340,7 @@ function portalViewBody({
           kind={current.kind}
           group={current.group ?? null}
           identity={identity}
-          kindCount={home?.tiles?.[current.kind]?.count}
+          logoUrl={logoUrl}
           onNavigate={onNavigate}
           onInvalid={onInvalid}
           data-testid="PortalDocumentListView__3db5f6" />
@@ -357,8 +365,13 @@ function portalViewBody({
 }
 
 export default function PortalPage() {
-  // The token arrives as a path segment because an email link cannot carry a header.
-  const { token = '' } = useParams();
+  // The token arrives as a path segment because an email link cannot carry a header; the boot
+  // scrub has already moved it into sessionStorage (CP-43), so it is normally read from there.
+  const params = useParams();
+  const route = resolvePortalRoute(params);
+  const { token } = route;
+  const routerNavigate = useNavigate();
+  const location = useLocation();
   const ui = useUI();
   // Desktop opens a document as a drawer over its list; mobile keeps the full-page detail.
   const isMobile = usePortalIsMobile();
@@ -368,7 +381,7 @@ export default function PortalPage() {
   // (which already points at `/sws/neo`). Memoized because `apiFetch` is memoized on it.
   // Outside the app's session scope: see `usePortalApiFetch` for why (ETP-6209).
   const baseUrl = useMemo(() => resolvePortalBaseUrl(), []);
-  const apiFetch = usePortalApiFetch(baseUrl);
+  const apiFetch = usePortalApiFetch(baseUrl, { clientId: route.clientId });
 
   const [view, setView] = useState(VIEW.loading);
   const [identity, setIdentity] = useState(null);
@@ -476,6 +489,20 @@ export default function PortalPage() {
   }, [identity?.hasLogo, apiFetch, token]);
 
   const trimmedToken = token.trim();
+
+  // CP-43 — a token still in the address bar (an in-app navigation the boot scrub never saw) is
+  // moved to sessionStorage and the URL rewritten without it; and a pre-CP-43 link, which names no
+  // tenant, is completed with the one `/me` reports. Both replace the history entry, so neither
+  // back nor forward ever lands on a URL with the token.
+  const tenantId = identity?.clientId ?? null;
+  useEffect(() => {
+    if (!trimmedToken) return;
+    const clientId = route.clientId ?? tenantId;
+    const missingTenant = !route.clientId && Boolean(tenantId);
+    if (!route.inUrl && !missingTenant) return;
+    rememberPortalLink({ clientId, token: trimmedToken });
+    routerNavigate(portalPath(clientId, location.search.replace(/^\?/, '')), { replace: true });
+  }, [route.inUrl, route.clientId, tenantId, trimmedToken, location.search, routerNavigate]);
 
   // A data read answering 401 after /me said "valid" means the link changed state mid-session
   // (expired, or the customer was blocked): re-run /me once, so the expired path renews and the

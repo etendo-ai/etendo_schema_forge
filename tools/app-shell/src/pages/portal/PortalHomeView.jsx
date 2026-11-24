@@ -29,6 +29,7 @@ import {
 import { PORTAL_KIND_ICONS, PortalMobileBrandBar } from './PortalShell.jsx';
 import {
   PortalDate, PortalDesktopHeader, PortalMain, PortalMoney, PortalRowBadge, PortalSearchPill,
+  PortalConvertedAmount, portalShowsConverted,
   PortalSection, PortalTag, PORTAL_DASHBOARD_SECTION_TITLE, PORTAL_ROW_FOCUS, usePortalLocale,
 } from './PortalBits.jsx';
 import { PORTAL_HIGHLIGHTS, PORTAL_KIND_META, documentLabelKey } from './portalPresentation.js';
@@ -103,6 +104,7 @@ export default function PortalHomeView({
 
         <MobilePendingHero
           balances={balances}
+          converted={home?.convertedBalance ?? null}
           onNavigate={onNavigate}
           data-testid="MobilePendingHero__beaeb4" />
 
@@ -142,6 +144,8 @@ export default function PortalHomeView({
             data-testid="PortalSection__beaeb4">
             <Balance
               balances={balances}
+              converted={home?.convertedBalance ?? null}
+              convertedPaid={home?.convertedPaidThisYear ?? null}
               paid={home?.paidThisYear ?? []}
               data-testid="Balance__beaeb4" />
           </PortalSection>
@@ -312,10 +316,46 @@ function Greeting({ identity, months, onMonthsChange }) {
 }
 
 /** Mobile only: the design's dark "Pendiente de pago" card, one per currency owed. */
-function MobilePendingHero({ balances, onNavigate }) {
+function MobilePendingHero({ balances, converted = null, onNavigate }) {
   const ui = useUI();
   const bcpLocale = usePortalLocale();
   const viewPending = () => onNavigate({ view: 'list', kind: 'INVOICE', group: 'pending' });
+  // CP-47: owed in several currencies → one card with the converted "≈" figure (the per-currency
+  // overdue line would mix currencies, so it is left out there).
+  if (portalShowsConverted(balances, converted)) {
+    const pendingCount = balances.reduce((sum, balance) => sum + balance.pendingCount, 0);
+    return (
+      <section
+        className="flex flex-col gap-4 rounded-2xl bg-foreground p-6 text-background md:hidden"
+        data-testid="portal-pending-hero"
+      >
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <span className="text-sm opacity-80">{ui('portalPendingPayment')}</span>
+            <span className="rounded-lg bg-[hsl(var(--accent-highlight))] px-2.5 py-0.5 text-[13px] font-medium leading-[18px] text-[hsl(var(--accent-highlight-foreground))]">
+              {ui(pendingCount === 1 ? 'portalInvoicesCount_one' : 'portalInvoicesCount_plural',
+                { count: pendingCount })}
+            </span>
+          </div>
+          <h3 className="text-[44px] font-bold leading-[52px] tabular-nums">
+            <PortalConvertedAmount
+              converted={converted}
+              testId="portal-pending-hero-converted"
+              data-testid="PortalConvertedAmount__beaeb4" />
+          </h3>
+        </div>
+        <button
+          type="button"
+          onClick={viewPending}
+          className="flex h-[52px] items-center justify-center gap-2 rounded-[10px] bg-primary font-medium text-primary-foreground"
+          data-testid="portal-view-pending-invoices"
+        >
+          {ui('portalViewPendingInvoices')}
+          <ArrowRightIcon className="h-4 w-4" aria-hidden="true" data-testid="ArrowRight__beaeb4" />
+        </button>
+      </section>
+    );
+  }
   return (
     <section
       className="flex flex-col gap-4 rounded-2xl bg-foreground p-6 text-background md:hidden"
@@ -367,7 +407,7 @@ function MobilePendingHero({ balances, onNavigate }) {
  * per currency, green for paid and red for pending. The overdue detail ("… vencidos desde …")
  * belongs to the mobile card only, as on the Movil-Inicio board.
  */
-function Balance({ balances, paid }) {
+function Balance({ balances, paid, converted = null, convertedPaid = null }) {
   const ui = useUI();
   // One badge per currency; several sit side by side and wrap (never stacked into a clipped column).
   const badge = 'whitespace-nowrap rounded-lg border px-2 text-sm leading-7 tabular-nums';
@@ -380,6 +420,8 @@ function Balance({ balances, paid }) {
       {count}
     </span>
   );
+  const paidTone = `${badge} border-[#B2EECC] bg-[#EEFBF4] text-[#17663A]`;
+  const pendingTone = `${badge} border-[#FBB1C4] bg-[#FEF0F4] text-[#D50B3E]`;
   return (
     <div className="flex flex-col gap-4 p-3">
       <div className="flex flex-col gap-2" data-testid="portal-balance-paid">
@@ -388,17 +430,13 @@ function Balance({ balances, paid }) {
           {countPill(paid.reduce((sum, entry) => sum + entry.count, 0), 'portal-balance-paid-count')}
         </span>
         <span className="flex flex-wrap gap-2">
-        {paid.length === 0 ? (
-          <span className={`${badge} border-border text-muted-foreground`}>—</span>
-        ) : paid.map((entry) => (
-          <span
-            key={entry.currency || 'none'}
-            className={`${badge} border-[#B2EECC] bg-[#EEFBF4] text-[#17663A]`}
-            data-testid="portal-balance-paid-amount"
-          >
-            {formatCurrency(entry.currency, entry.paid)}
-          </span>
-        ))}
+          <BalanceAmounts
+            entries={paid.map((entry) => ({ currency: entry.currency, amount: entry.paid }))}
+            converted={convertedPaid}
+            toneClass={paidTone}
+            emptyClass={`${badge} border-border text-muted-foreground`}
+            testId="portal-balance-paid-amount"
+            data-testid="BalanceAmounts__beaeb4" />
         </span>
       </div>
       <div className="h-px bg-border" />
@@ -408,21 +446,44 @@ function Balance({ balances, paid }) {
           {countPill(balances.reduce((sum, balance) => sum + balance.pendingCount, 0), 'portal-balance-pending-count')}
         </span>
         <span className="flex flex-wrap gap-2">
-        {balances.length === 0 ? (
-          <span className={`${badge} border-border text-muted-foreground`} data-testid="portal-balance-empty">—</span>
-        ) : balances.map((balance) => (
-          <span
-            key={balance.currency || 'none'}
-            className={`${badge} border-[#FBB1C4] bg-[#FEF0F4] text-[#D50B3E]`}
-            data-testid="portal-balance-outstanding"
-          >
-            {formatCurrency(balance.currency, balance.outstanding)}
-          </span>
-        ))}
+          <BalanceAmounts
+            entries={balances.map((balance) => ({ currency: balance.currency, amount: balance.outstanding }))}
+            converted={converted}
+            toneClass={pendingTone}
+            emptyClass={`${badge} border-border text-muted-foreground`}
+            emptyTestId="portal-balance-empty"
+            testId="portal-balance-outstanding"
+            data-testid="BalanceAmounts__beaeb4" />
         </span>
       </div>
     </div>
   );
+}
+
+/**
+ * The amount badges of one "Tu saldo" figure: a dash when there is none, ONE converted "≈" badge
+ * when the figure spans several currencies and the backend converted it (QA 24/11 CP-47: the app
+ * never shows a sum per currency), else one badge per currency.
+ */
+function BalanceAmounts({ entries, converted, toneClass, emptyClass, emptyTestId, testId }) {
+  if (entries.length === 0) {
+    return <span className={emptyClass} data-testid={emptyTestId}>—</span>;
+  }
+  if (portalShowsConverted(entries, converted)) {
+    return (
+      <span className={toneClass}>
+        <PortalConvertedAmount
+          converted={converted}
+          testId={`${testId}-converted`}
+          data-testid="PortalConvertedAmount__beaeb4" />
+      </span>
+    );
+  }
+  return entries.map((entry) => (
+    <span key={entry.currency || 'none'} className={toneClass} data-testid={testId}>
+      {formatCurrency(entry.currency, entry.amount)}
+    </span>
+  ));
 }
 
 /** The tile figure's desktop size by its number of digits (the design's 60px up to three). */

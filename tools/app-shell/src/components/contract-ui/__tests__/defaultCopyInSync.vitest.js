@@ -1,8 +1,11 @@
+// @covers tools/app-shell/src/components/contract-ui/SendDocumentModal.jsx
+// @covers tools/app-shell/src/components/contract-ui/documentEmailSend.js
 import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import esES from '@/locales/es_ES.json';
 import enUS from '@/locales/en_US.json';
+import { DOCUMENT_EMAIL_BODY_KEYS } from '../documentEmailSend.js';
 
 // ETP-5003 — the send modal composes the default subject and message itself, and the module
 // composes the same two sentences for a send that carries no edits. Two copies of one string is a
@@ -82,6 +85,28 @@ describe('document email default copy stays in sync with the module catalog', ()
     // The modal builds `${documentType} #${documentNo} — ${bpName}` inline; this pins the shape the
     // catalog uses, so a change on the module side surfaces here.
     expect(catalogSubject).toBe('{0} #{1} — {2}');
+  });
+
+  // ETP-6209 — a contract may declare its own `<contract>.body` (supplier documents keep «usted»);
+  // the module reads it before `document.body`. The modal must pick the same sentence, through
+  // DOCUMENT_EMAIL_BODY_KEYS, and the two tables must list the same contracts.
+  const contractBodies = (file) => [...readCatalog(file)]
+    .filter(([key]) => key.endsWith('.body') && key.slice(0, -'.body'.length).endsWith('-send'))
+    .map(([key, value]) => [key.slice(0, -'.body'.length), value]);
+  const asRendered = (body) => body.replace('{0}', '{documentType}').replace('{1}', '{documentNo}');
+
+  it.runIf(available)('maps every per-contract body of the catalog, and nothing else', () => {
+    expect(Object.keys(DOCUMENT_EMAIL_BODY_KEYS).sort())
+      .toEqual(contractBodies(CATALOG).map(([contract]) => contract).sort());
+  });
+
+  it.runIf(available)('says the same per-contract sentence as the catalog, in both languages', () => {
+    for (const [file, labels] of [[CATALOG, esES], [CATALOG_EN, enUS]]) {
+      for (const [contract, body] of contractBodies(file)) {
+        const key = DOCUMENT_EMAIL_BODY_KEYS[contract];
+        expect(labels.genericLabels[key], `${contract} → ${key}`).toBe(asRendered(body));
+      }
+    }
   });
 
 });

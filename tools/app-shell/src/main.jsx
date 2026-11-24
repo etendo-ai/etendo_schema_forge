@@ -1,3 +1,6 @@
+// ETP-6209 CP-43: FIRST, before anything can read `location` — moves a portal link's token out of
+// the address bar. Keep it the first import; nothing may be imported above it.
+import './lib/portal/scrubPortalUrl.boot.js';
 import { createRoot } from 'react-dom/client';
 import { installNeoRequestDedupe } from './lib/neoRequestDedupe.js';
 import { initBrowserObservability } from './lib/observability/browser.js';

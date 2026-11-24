@@ -1,5 +1,7 @@
 // @covers tools/app-shell/src/pages/PortalDecisionPage.jsx
 // @covers tools/app-shell/src/lib/portal/usePortalApiFetch.js
+// @covers tools/app-shell/src/lib/portal/portalLinkSession.js
+// @covers tools/app-shell/src/pages/portal/portalDecisionArrival.js
 
 // The decision landing is its own public route with its own page; PortalPage's tests cover the
 // portal, not this one. The confirmation call is the real `confirmPortalDecision`; only `apiFetch`
@@ -10,7 +12,9 @@ const apiFetchMock = vi.fn();
 const hookMode = { real: false };
 vi.mock('@/lib/portal/usePortalApiFetch.js', async (importOriginal) => {
   const actual = await importOriginal();
-  return { usePortalApiFetch: (base) => (hookMode.real ? actual.usePortalApiFetch(base) : apiFetchMock) };
+  return {
+    usePortalApiFetch: (base, options) => (hookMode.real ? actual.usePortalApiFetch(base, options) : apiFetchMock),
+  };
 });
 
 /** The mocked translation: the key, plus its variables, so the number and tenant show. */
@@ -44,8 +48,11 @@ import {
 } from 'react-router-dom';
 import { registerApiSession, resetApiSessionForTests } from '@etendosoftware/app-shell-core/auth';
 import PortalDecisionPage from '../PortalDecisionPage.jsx';
+import { PORTAL_DECISION_STORAGE_KEY, PORTAL_LINK_STORAGE_KEY } from '@/lib/portal/portalLinkSession.js';
 
 const DECISION_TOKEN = 'dec-0123456789abcdef';
+/** The tenant a CP-43 decision link names: `/portal/{CLIENT}/decision/{token}`. */
+const CLIENT = '0123456789ABCDEF0123456789ABCDEF';
 
 function jsonResponse(body, { status = 200 } = {}) {
   return {
@@ -57,19 +64,38 @@ function jsonResponse(body, { status = 200 } = {}) {
 }
 
 /**
- * `resendDelayMs` defaults to 0 so the lost-confirm tests do not each wait the real backoff; the
- * backoff itself has its own test below.
+ * The decision and portal routes exactly as `runtime-routes.jsx` declares them. The default path is
+ * a CP-43 email link the boot scrub never saw: the page moves the token out of the URL itself.
  */
-function renderLanding({ strict = false, path = `/portal/decision/${DECISION_TOKEN}`, resendDelayMs = 0 } = {}) {
-  const tree = (
+function landingRoutes(path, page) {
+  return (
     <MemoryRouter initialEntries={[path]}>
       <Routes>
-        <Route path="portal/decision/:token" element={<PortalDecisionPage resendDelayMs={resendDelayMs} />} />
-        <Route path="portal/:token" element={<PortalArrivalProbe />} />
+        <Route path="portal/:clientId/decision" element={<>{page}<DecisionLocationProbe /></>} />
+        <Route path="portal/:clientId/decision/:token" element={<>{page}<DecisionLocationProbe /></>} />
+        <Route path="portal/decision" element={<>{page}<DecisionLocationProbe /></>} />
+        <Route path="portal/decision/:token" element={<>{page}<DecisionLocationProbe /></>} />
+        <Route path="portal/:segment" element={<PortalArrivalProbe />} />
+        <Route path="portal" element={<PortalArrivalProbe />} />
       </Routes>
     </MemoryRouter>
   );
+}
+
+/**
+ * `resendDelayMs` defaults to 0 so the lost-confirm tests do not each wait the real backoff; the
+ * backoff itself has its own test below.
+ */
+function renderLanding({
+  strict = false, path = `/portal/${CLIENT}/decision/${DECISION_TOKEN}`, resendDelayMs = 0,
+} = {}) {
+  const tree = landingRoutes(path, <PortalDecisionPage resendDelayMs={resendDelayMs} />);
   return render(strict ? <StrictMode>{tree}</StrictMode> : tree);
+}
+
+/** The landing's own pathname, to see the token leave the address bar. */
+function DecisionLocationProbe() {
+  return <output data-testid="decision-location-probe" data-pathname={useLocation().pathname} />;
 }
 
 /** Stands in for the portal: shows where the landing sent the customer, and how. */
@@ -94,6 +120,8 @@ const APPLIED_REJECT = {
 };
 
 beforeEach(() => {
+  // The token a previous test left in this tab must not open the next one.
+  sessionStorage.clear();
   apiFetchMock.mockReset();
   apiFetchMock.mockResolvedValue(jsonResponse(APPLIED_REJECT));
 });
@@ -251,7 +279,7 @@ describe('PortalDecisionPage — a confirm whose answer was lost', () => {
     await user.click(screen.getByTestId('portal-decision-enter'));
     await waitFor(() => expect(screen.getByTestId('portal-arrival-probe')).toBeInTheDocument());
     const probe = screen.getByTestId('portal-arrival-probe');
-    expect(probe.dataset.path).toBe('/portal/tok-new?view=doc&kind=QUOTATION&id=q-1');
+    expect(probe.dataset.path).toBe(`/portal/${CLIENT}?view=doc&kind=QUOTATION&id=q-1`);
     expect(probe.dataset.navigation).toBe('REPLACE');
     // No notice travels with it (the Figma has none).
     expect(JSON.parse(probe.dataset.state)).toBeNull();
@@ -427,11 +455,7 @@ describe('PortalDecisionPage — a result that cannot be rendered', () => {
 
     render(
       <RenderFailureProbe>
-        <MemoryRouter initialEntries={[`/portal/decision/${DECISION_TOKEN}`]}>
-          <Routes>
-            <Route path="portal/decision/:token" element={<PortalDecisionPage resendDelayMs={0} />} />
-          </Routes>
-        </MemoryRouter>
+        {landingRoutes(`/portal/decision/${DECISION_TOKEN}`, <PortalDecisionPage resendDelayMs={0} />)}
       </RenderFailureProbe>,
     );
 
@@ -456,7 +480,9 @@ describe('PortalDecisionPage — the way into the portal', () => {
 
     await waitFor(() => expect(screen.getByTestId('portal-arrival-probe')).toBeInTheDocument());
     const probe = screen.getByTestId('portal-arrival-probe');
-    expect(probe.dataset.path).toBe('/portal/tok-new?view=doc&kind=QUOTATION&id=q-1');
+    // CP-43: the fresh portal token is remembered for this tab and never put in the URL.
+    expect(probe.dataset.path).toBe(`/portal/${CLIENT}?view=doc&kind=QUOTATION&id=q-1`);
+    expect(JSON.parse(sessionStorage.getItem(PORTAL_LINK_STORAGE_KEY))).toEqual({ clientId: CLIENT, token: 'tok-new' });
     // Replace: Back does not return to the landing (which would answer "already applied").
     expect(probe.dataset.navigation).toBe('REPLACE');
     // No notice travels with it: the portal shows none on arrival (the Figma has none).
@@ -472,5 +498,72 @@ describe('PortalDecisionPage — the way into the portal', () => {
     await waitFor(() => expect(screen.getByTestId('portal-decision-applied')).toBeInTheDocument());
     expect(screen.queryByTestId('portal-decision-enter')).not.toBeInTheDocument();
     expect(screen.queryByTestId('portal-arrival-probe')).not.toBeInTheDocument();
+  });
+});
+
+// QA CP-43 — the decision token is a credential too: it leaves the address bar before the POST.
+describe('PortalDecisionPage — the token out of the address bar', () => {
+  const pathname = () => screen.getByTestId('decision-location-probe').getAttribute('data-pathname');
+  const storedDecision = () => JSON.parse(sessionStorage.getItem(PORTAL_DECISION_STORAGE_KEY));
+
+  it.each([
+    ['a CP-43 link', `/portal/${CLIENT}/decision/${DECISION_TOKEN}`, `/portal/${CLIENT}/decision`, CLIENT],
+    ['a pre-CP-43 link', `/portal/decision/${DECISION_TOKEN}`, '/portal/decision', null],
+  ])('moves the token of %s to sessionStorage and POSTs once from the token-free URL', async (_label, path, clean, clientId) => {
+    renderLanding({ path });
+
+    await waitFor(() => expect(screen.getByTestId('portal-decision-applied')).toBeInTheDocument());
+    expect(pathname()).toBe(clean);
+    expect(storedDecision()).toEqual({ clientId, token: DECISION_TOKEN });
+    expect(confirmCalls()).toHaveLength(1);
+    expect(confirmCalls()[0][1].headers['X-Portal-Decision-Token']).toBe(DECISION_TOKEN);
+  });
+
+  it('reads the token from sessionStorage on a scrubbed URL (the boot scrub already ran)', async () => {
+    sessionStorage.setItem(PORTAL_DECISION_STORAGE_KEY, JSON.stringify({ clientId: CLIENT, token: DECISION_TOKEN }));
+    renderLanding({ path: `/portal/${CLIENT}/decision` });
+
+    await waitFor(() => expect(screen.getByTestId('portal-decision-applied')).toBeInTheDocument());
+    expect(confirmCalls()).toHaveLength(1);
+    expect(confirmCalls()[0][1].headers['X-Portal-Decision-Token']).toBe(DECISION_TOKEN);
+  });
+
+  it('enters the portal on /portal, with the link remembered, when the link named no tenant', async () => {
+    const user = userEvent.setup();
+    apiFetchMock.mockResolvedValue(jsonResponse({ ...APPLIED_REJECT, portalToken: 'tok-new', quotationId: 'q-1' }));
+    renderLanding({ path: `/portal/decision/${DECISION_TOKEN}` });
+
+    await waitFor(() => expect(screen.getByTestId('portal-decision-enter')).toBeInTheDocument());
+    await user.click(screen.getByTestId('portal-decision-enter'));
+
+    await waitFor(() => expect(screen.getByTestId('portal-arrival-probe')).toBeInTheDocument());
+    expect(screen.getByTestId('portal-arrival-probe').dataset.path).toBe('/portal?view=doc&kind=QUOTATION&id=q-1');
+    expect(JSON.parse(sessionStorage.getItem(PORTAL_LINK_STORAGE_KEY))).toEqual({ clientId: null, token: 'tok-new' });
+  });
+});
+
+// CP-43 — the backend refuses a decision token of another tenant only when the request names one.
+describe('PortalDecisionPage — X-Portal-Client', () => {
+  const realFetch = globalThis.fetch;
+  afterEach(() => {
+    hookMode.real = false;
+    globalThis.fetch = realFetch;
+  });
+
+  it.each([
+    ['names the tenant of a CP-43 link', `/portal/${CLIENT}/decision/${DECISION_TOKEN}`, CLIENT],
+    ['sends no tenant for a pre-CP-43 link', `/portal/decision/${DECISION_TOKEN}`, null],
+  ])('%s', async (_label, path, expected) => {
+    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify(APPLIED_REJECT), {
+      status: 200, headers: { 'Content-Type': 'application/json' },
+    }));
+    hookMode.real = true;
+    renderLanding({ path });
+
+    await waitFor(() => expect(screen.getByTestId('portal-decision-applied')).toBeInTheDocument());
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    const [, init] = globalThis.fetch.mock.calls[0];
+    expect(new Headers(init.headers).get('X-Portal-Client')).toBe(expected);
+    expect(new Headers(init.headers).get('X-Portal-Decision-Token')).toBe(DECISION_TOKEN);
   });
 });

@@ -8,6 +8,7 @@
 // @covers tools/app-shell/src/pages/portal/PortalBits.jsx
 // @covers tools/app-shell/src/components/layout/SearchBar.jsx
 // @covers tools/app-shell/src/lib/portal/usePortalApiFetch.js
+// @covers tools/app-shell/src/lib/portal/portalLinkSession.js
 // Mocks BEFORE imports.
 const apiFetchMock = vi.fn();
 
@@ -84,9 +85,11 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { registerApiSession, resetApiSessionForTests } from '@etendosoftware/app-shell-core/auth';
 import PortalPage from '../PortalPage.jsx';
-import { ETENDO_PRICING_URL, PortalCreatedWithHeaderLink } from '../portal/PortalBits.jsx';
+import { PortalCreatedWithHeaderLink } from '../portal/PortalBits.jsx';
 import { PortalListTable } from '../portal/PortalListDesktop.jsx';
+import { PortalRelatedList } from '../portal/PortalDetailPanel.jsx';
 import { saveBlobAsFile } from '@/lib/portal/portalDownload.js';
+import { PORTAL_LINK_STORAGE_KEY, rememberPortalLink } from '@/lib/portal/portalLinkSession.js';
 
 /**
  * Business Partner self-service portal page (ETP-5267, ETP-6209).
@@ -97,6 +100,9 @@ import { saveBlobAsFile } from '@/lib/portal/portalDownload.js';
  */
 
 const TOKEN = 'tok-abcdef0123456789';
+/** The tenant (AD_Client_ID) a CP-43 link names before its token. */
+const CLIENT = '0123456789ABCDEF0123456789ABCDEF';
+const OTHER_CLIENT = 'FEDCBA9876543210FEDCBA9876543210';
 
 /** A euro amount exactly as the canonical formatter produces it (non-breaking space). */
 const eur = (digits) => `${digits} €`;
@@ -225,18 +231,29 @@ let responses;
 function LocationProbe() {
   const location = useLocation();
   return (
-    <output data-testid="location-probe" data-state={JSON.stringify(location.state ?? null)}>
+    <output
+      data-testid="location-probe"
+      data-pathname={location.pathname}
+      data-state={JSON.stringify(location.state ?? null)}
+    >
       {location.search}
     </output>
   );
 }
 
-function renderPortal(path = `/portal/${TOKEN}`, { strict = false } = {}) {
+/**
+ * The portal routes exactly as `runtime-routes.jsx` declares them. The default path is a CP-43
+ * email link the boot scrub never saw (an in-app navigation): the page itself must move the token
+ * out of the URL, to `/portal/{CLIENT}`, and keep reading it from this tab's sessionStorage.
+ */
+function renderPortal(path = `/portal/${CLIENT}/${TOKEN}`, { strict = false } = {}) {
+  const page = <><PortalPage /><LocationProbe /></>;
   const tree = (
     <MemoryRouter initialEntries={[path]}>
       <Routes>
-        <Route path="portal/:token" element={<><PortalPage /><LocationProbe /></>} />
-        <Route path="portal" element={<PortalPage />} />
+        <Route path="portal/:segment" element={page} />
+        <Route path="portal/:clientId/:token" element={page} />
+        <Route path="portal" element={page} />
       </Routes>
     </MemoryRouter>
   );
@@ -257,9 +274,15 @@ const urlView = () => Object.fromEntries(new URLSearchParams(screen.getByTestId(
 /** The kind of the list on screen (its toolbar carries it). */
 const listKind = () => screen.getByTestId('portal-document-list').querySelector('[data-kind]')?.getAttribute('data-kind');
 
-/** Every "Creado con Etendo" link: the pricing page, in a new tab, with no opener, named by its label. */
+/**
+ * Marketing's URL with its UTM, verbatim (approved 2026-11-24). Written out here rather than read
+ * from `ETENDO_PRICING_URL`, so an edit of the constant cannot pass unnoticed.
+ */
+const ETENDO_MARKETING_URL = 'https://etendo.ai/?utm_source=portal_clientes&utm_medium=in_app&utm_campaign=portal_clientes&utm_content=boton_conoce_mas';
+
+/** Every "Creado con Etendo" link: marketing's page, in a new tab, with no opener, named by its label. */
 function expectEtendoLink(link) {
-  expect(link).toHaveAttribute('href', ETENDO_PRICING_URL);
+  expect(link).toHaveAttribute('href', ETENDO_MARKETING_URL);
   expect(link).toHaveAttribute('target', '_blank');
   expect(link).toHaveAttribute('rel', 'noopener noreferrer');
   expect(link).toHaveAccessibleName('portalCreatedWithLinkLabel');
@@ -295,6 +318,8 @@ const pdfReady = () => waitFor(
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // The link a previous test left in this tab must not open the next one.
+  sessionStorage.clear();
   localeState.locale = 'es_ES';
   // jsdom has no object URLs; the logo and the printable both need one.
   URL.createObjectURL = vi.fn(() => 'blob:portal-object');
@@ -384,11 +409,57 @@ describe('PortalPage — token handling (plan §5.4)', () => {
     }
   });
 
-  it('never calls the backend when the link carries no token', async () => {
-    renderPortal('/portal');
+  it('never calls the backend when the tab holds no link for the URL tenant', async () => {
+    // A link of ANOTHER tenant is held by this tab (sessionStorage, and the module's in-memory
+    // fallback): a fresh `/portal/{tenant}` without its own email link has no token.
+    rememberPortalLink({ clientId: CLIENT, token: TOKEN });
+    sessionStorage.clear();
+    renderPortal(`/portal/${OTHER_CLIENT}`);
 
     await waitFor(() => expect(screen.getByTestId('portal-invalid-link')).toBeInTheDocument());
     expect(apiFetchMock).not.toHaveBeenCalled();
+  });
+});
+
+// QA CP-43 — the token is a password that third-party tags would read from `location`.
+describe('PortalPage — the token out of the address bar', () => {
+  const pathname = () => screen.getByTestId('location-probe').getAttribute('data-pathname');
+  const storedLink = () => JSON.parse(sessionStorage.getItem(PORTAL_LINK_STORAGE_KEY));
+
+  it('moves a token still in the URL to sessionStorage and rewrites the URL, keeping the view', async () => {
+    renderPortal(`/portal/${CLIENT}/${TOKEN}?view=list&kind=INVOICE`);
+    await listReady();
+
+    await waitFor(() => expect(pathname()).toBe(`/portal/${CLIENT}`));
+    expect(urlView()).toEqual({ view: 'list', kind: 'INVOICE' });
+    expect(storedLink()).toEqual({ clientId: CLIENT, token: TOKEN });
+    for (const [, options] of apiFetchMock.mock.calls) expect(options.headers['X-Portal-Token']).toBe(TOKEN);
+  });
+
+  it('reads the token from sessionStorage on a scrubbed URL (a reload of /portal/{tenant})', async () => {
+    sessionStorage.setItem(PORTAL_LINK_STORAGE_KEY, JSON.stringify({ clientId: CLIENT, token: TOKEN }));
+    renderPortal(`/portal/${CLIENT}`);
+    await shellReady();
+
+    expect(pathname()).toBe(`/portal/${CLIENT}`);
+    expect(callsTo('/me')[0][1].headers['X-Portal-Token']).toBe(TOKEN);
+  });
+
+  it('completes a pre-CP-43 /portal/{token} link with the tenant /me reports', async () => {
+    responses.me = jsonResponse({ ...IDENTITY, clientId: CLIENT });
+    renderPortal(`/portal/${TOKEN}`);
+    await shellReady();
+
+    await waitFor(() => expect(pathname()).toBe(`/portal/${CLIENT}`));
+    expect(storedLink()).toEqual({ clientId: CLIENT, token: TOKEN });
+  });
+
+  it('leaves a pre-CP-43 link on the token-free /portal while /me names no tenant', async () => {
+    renderPortal(`/portal/${TOKEN}`);
+    await shellReady();
+
+    await waitFor(() => expect(pathname()).toBe('/portal'));
+    expect(storedLink()).toEqual({ clientId: null, token: TOKEN });
   });
 });
 
@@ -608,7 +679,7 @@ describe('PortalPage — shell', () => {
 
   // Each view draws its own headers: the link must be in every one of them, and the rail (where
   // the old etendo.ai brand lived) must not carry it.
-  for (const { view, path, width, ready, desktopHeader, mobileHeader } of [
+  for (const { view, path, width, ready, desktopHeader, mobileHeader, mobileLogo = false } of [
     {
       view: 'home',
       path: `/portal/${TOKEN}`,
@@ -623,6 +694,7 @@ describe('PortalPage — shell', () => {
       desktopHeader: () => screen.getByTestId('portal-view-header'),
       // The list's mobile header has no test id of its own; the only tile on this view is in it.
       mobileHeader: () => screen.getByTestId('portal-created-with-mobile').closest('header'),
+      mobileLogo: true,
     },
     {
       // Below md a document is a full page with both headers (desktop opens it as a drawer).
@@ -632,6 +704,7 @@ describe('PortalPage — shell', () => {
       ready: detailReady,
       desktopHeader: () => screen.getByTestId('portal-back').closest('header'),
       mobileHeader: () => screen.getByTestId('portal-back-mobile').closest('header'),
+      mobileLogo: true,
     },
   ]) {
     it(`puts the Etendo link in the ${view} desktop and mobile headers, and never in the rail`, async () => {
@@ -650,6 +723,14 @@ describe('PortalPage — shell', () => {
       ]) expectEtendoLink(link);
       const rail = within(screen.getByTestId('portal-sidebar'));
       for (const testId of ETENDO_LINK_TEST_IDS) expect(rail.queryByTestId(testId)).not.toBeInTheDocument();
+      // QA CP-46: on list and document the issuing company's logo leads the mobile header, before
+      // its title; Etendo's tile stays as the secondary link.
+      if (mobileLogo) {
+        const logo = within(mobile).getByTestId('portal-logo-tile');
+        const heading = within(mobile).getByRole('heading', { level: 1 });
+        expect(logo.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(logo).toHaveTextContent('AS');
+      }
     });
   }
 
@@ -1053,12 +1134,131 @@ describe('PortalPage — document list', () => {
     ]);
     expect(states).toEqual([
       ['FV/0001', 'false', 'paid', 'paid'],
-      // The list badge never says overdue (as in the invoice list grid); the due-date dot does.
-      ['FV/0002', 'false', 'pending', 'overdue'],
+      // The row's server `overdue` flag reaches the badge too (QA CP-18): list, home and detail
+      // agree, also inside the "Vencido" tab.
+      ['FV/0002', 'false', 'overdue', 'overdue'],
       // A credit note lives among the invoices, as a rectificative.
       ['AB/0001', 'true', 'credit-available', null],
     ]);
     expect(within(rows[2]).getByTestId('portal-invoice-type').textContent).toBe('rectificativeInvoicesTab');
+  });
+
+  // QA 24/11 f — "87" beside a list of 140 read as a contradiction: the header counts the set
+  // shown (the query's totalCount: 3), never the kind's all-time figure of the home tile (12).
+  it('counts in the header the documents of the query, not the home tile figure', async () => {
+    renderPortal(listPath('INVOICE'));
+    await listReady();
+
+    expect(HOME.tiles.INVOICE.count).not.toBe(LISTS.invoice.totalCount);
+    expect(within(screen.getByTestId('portal-view-header')).getByTestId('portal-view-count').textContent)
+      .toBe(String(LISTS.invoice.totalCount));
+  });
+
+  // QA CP-16 — a tab that stands for one status reads exactly as the app names it (the AD list
+  // translation the badges use); the others keep their portal key.
+  it.each([
+    ['QUOTATION', { awaiting: 'Bajo evaluación', accepted: 'Aceptado', rejected: 'Rechazado' }],
+    ['ORDER', { inprogress: 'statusInProcess', completed: 'Completado', voided: 'Anulada' }],
+  ])('names the %s tabs with the app status labels', async (kind, expected) => {
+    const saved = dictionary.statuses;
+    dictionary.statuses = {
+      UE: { label: 'Bajo evaluación' }, ETGO_AC: { label: 'Aceptado' }, CJ: { label: 'Rechazado' },
+      CO: { label: 'Completado' }, VO: { label: 'Anulada' },
+    };
+    responses.documents = () => jsonResponse({ documents: [{ ...order(1), kind }], totalCount: 1 });
+    try {
+      renderPortal(listPath(kind));
+      await listReady();
+
+      const toolbar = within(screen.getByTestId('portal-list-toolbar'));
+      for (const [code, label] of Object.entries(expected)) {
+        expect(toolbar.getByTestId(`portal-status-tab-${code}`)).toHaveTextContent(label);
+      }
+    } finally {
+      dictionary.statuses = saved;
+    }
+  });
+
+  it('filters invoices by document type from the funnel, sent as the subtype parameter', async () => {
+    const user = userEvent.setup();
+    renderPortal(listPath('INVOICE'));
+    await listReady();
+    expect(listQueries().some((query) => query.has('subtype'))).toBe(false);
+
+    await user.click(screen.getByTestId('portal-list-filters'));
+    await user.click(screen.getByTestId('portal-list-subtype-creditnote'));
+    await waitFor(() => expect(listQueries().at(-1).get('subtype')).toBe('creditNote'));
+
+    await user.click(screen.getByTestId('portal-list-filters'));
+    expect(screen.getByTestId('portal-list-subtype-creditnote')).toHaveAttribute('aria-checked', 'true');
+    await user.click(screen.getByTestId('portal-list-subtype-all'));
+    await waitFor(() => expect(listQueries().at(-1).has('subtype')).toBe(false));
+  });
+
+  it('offers no document-type filter on a kind with a single type', async () => {
+    const user = userEvent.setup();
+    responses.documents = () => jsonResponse({ documents: [order(1)], totalCount: 1 });
+    renderPortal(listPath('ORDER'));
+    await listReady();
+
+    await user.click(screen.getByTestId('portal-list-filters'));
+
+    expect(screen.getByTestId('portal-list-filter-completed')).toBeInTheDocument();
+    expect(screen.queryByTestId('portal-list-subtype-all')).not.toBeInTheDocument();
+  });
+
+  // QA CP-47 — a total over several currencies is ONE converted figure; otherwise the backend's
+  // per-currency totals of the whole filtered set; an older backend falls back to the rows loaded.
+  describe('the totals row', () => {
+    const usdOrder = { ...order(2), currency: 'USD', taxBase: 50, grandTotal: 60 };
+    const CONVERTED = { currency: 'EUR', amount: 1234.56, approximate: true };
+    const totalsRows = () => screen.getAllByTestId('portal-document-totals');
+
+    it('shows one approximate converted amount, and no per-currency rows, over several currencies', () => {
+      render(<PortalListTable
+        kind="ORDER"
+        documents={[order(1), usdOrder]}
+        totals={[{ currency: 'EUR', taxBase: 100, grandTotal: 121 }, { currency: 'USD', taxBase: 50, grandTotal: 60 }]}
+        convertedTotal={CONVERTED}
+        onOpen={vi.fn()} />);
+
+      expect(totalsRows()).toHaveLength(1);
+      const converted = screen.getByTestId('portal-document-totals-converted');
+      expect(converted).toHaveAttribute('data-approximate', 'true');
+      expect(converted.textContent).toContain(eur('1.234,56'));
+    });
+
+    it('keeps the backend per-currency total of the whole set when there is one currency', () => {
+      render(<PortalListTable
+        kind="ORDER"
+        documents={[order(1)]}
+        totals={[{ currency: 'EUR', taxBase: 1000, grandTotal: 1210 }]}
+        convertedTotal={{ ...CONVERTED, amount: 1210 }}
+        onOpen={vi.fn()} />);
+
+      expect(totalsRows()).toHaveLength(1);
+      expect(screen.queryByTestId('portal-document-totals-converted')).not.toBeInTheDocument();
+      expect(totalsRows()[0].textContent).toContain(eur('1.210,00'));
+    });
+
+    it('shows one row per currency when the backend sent no converted figure', () => {
+      render(<PortalListTable
+        kind="ORDER"
+        documents={[order(1), usdOrder]}
+        totals={[{ currency: 'EUR', taxBase: 100, grandTotal: 121 }, { currency: 'USD', taxBase: 50, grandTotal: 60 }]}
+        convertedTotal={null}
+        onOpen={vi.fn()} />);
+
+      expect(totalsRows()).toHaveLength(2);
+      expect(screen.queryByTestId('portal-document-totals-converted')).not.toBeInTheDocument();
+    });
+
+    it('sums the rows loaded when an older backend sends no totals', () => {
+      render(<PortalListTable kind="ORDER" documents={[order(1), order(2)]} onOpen={vi.fn()} />);
+
+      expect(totalsRows()).toHaveLength(1);
+      expect(totalsRows()[0].textContent).toContain(eur('242,00'));
+    });
   });
 
   it('shows no amount columns for shipments and a dash on the card', async () => {
@@ -1267,6 +1467,27 @@ describe('PortalPage — document detail', () => {
     await waitFor(() => expect(screen.getByTestId('portal-panel-title').textContent).toBe('portalKindOrder PV/0001'));
     expect(callsTo('/documents/order/ord-1')).toHaveLength(1);
     expect(urlView()).toEqual({ view: 'doc', kind: 'ORDER', id: 'ord-1' });
+  });
+
+  // QA 24/11 d — one invoice read "Completado" from its shipment and "Pendiente" from its order:
+  // a related row shows the DOCUMENT status for every kind, never an invoice's payment state.
+  it('shows the document status, not the payment state, of related invoices and credit notes', () => {
+    render(
+      <PortalRelatedList
+        related={[
+          { kind: 'INVOICE', id: 'inv-2', documentNo: 'FV/0002', documentStatus: 'CO', grandTotal: 500, outstandingAmount: 500, overdue: true },
+          { kind: 'INVOICE', id: 'inv-3', documentNo: 'AB/0001', documentStatus: 'CO', isCreditNote: true, grandTotal: -100, outstandingAmount: -100 },
+        ]}
+        onRefresh={vi.fn()}
+        onOpen={vi.fn()} />,
+    );
+
+    const items = screen.getAllByTestId('portal-related-item');
+    expect(items.map((item) => within(item).getByTestId('portal-document-status').getAttribute('data-status')))
+      .toEqual(['CO', 'CO']);
+    for (const item of items) expect(within(item).queryByTestId('portal-payment-status')).not.toBeInTheDocument();
+    expect(items.map((item) => item.getAttribute('aria-label')))
+      .toEqual(['portalKindInvoice #FV/0002', 'portalKindCreditNote #AB/0001']);
   });
 
   it('refreshes the related documents in place, without the loading screen', async () => {

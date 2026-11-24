@@ -75,9 +75,13 @@ function lazyRoute(path, Component, extraProps = {}) {
 }
 
 export function buildRuntimeRoutes({ windowMap, apiBaseUrl }) {
-  // ETP-5267 — the Business Partner portal, shared by both of its paths below.
+  // ETP-5267 — the Business Partner portal, shared by its paths below.
   const portalElement = (
     <Suspense fallback={LOADING_FALLBACK} data-testid="Suspense__e8c60d"><PortalPage data-testid="PortalPage__e8c60d" /></Suspense>
+  );
+  // ETP-6209 Part C — the quotation-decision landing, shared by its four paths below.
+  const decisionElement = (
+    <Suspense fallback={LOADING_FALLBACK} data-testid="Suspense__e8c60d"><PortalDecisionPage data-testid="PortalDecisionPage__e8c60d" /></Suspense>
   );
 
   return [
@@ -95,15 +99,26 @@ export function buildRuntimeRoutes({ windowMap, apiBaseUrl }) {
     // sending account, and a frontend flag would be visual gating, not authorization
     // (docs/feature-flags.md, which registers `/upgrade` the same way and for the same reason).
     // Nothing here reads a flag.
-    { path: 'portal/:token', public: true, element: portalElement },
+    //
+    // ETP-6209 CP-43 — links are `/portal/{adClientId}/{token}`, and the token never stays in the
+    // address bar: `lib/portal/scrubPortalUrl.boot.js` (main.jsx's first import) moves it into
+    // sessionStorage and rewrites the URL to `/portal/{adClientId}` before anything else runs.
+    // `:segment` is therefore a tenant id, or a token of a pre-CP-43 `/portal/{token}` link that
+    // the scrub could not see (an in-app navigation); the page tells them apart by shape. The
+    // `:clientId/:token` form is kept for the same reason; the page scrubs it on mount.
+    { path: 'portal/:segment', public: true, element: portalElement },
+    { path: 'portal/:clientId/:token', public: true, element: portalElement },
     // ETP-6209 Part C — the confirmation landing of a quotation decision, public like the portal:
-    // the token in the path is its whole credential, moved into a header by the page.
-    { path: 'portal/decision/:token', public: true, element: (
-        <Suspense fallback={LOADING_FALLBACK} data-testid="Suspense__e8c60d"><PortalDecisionPage data-testid="PortalDecisionPage__e8c60d" /></Suspense>
-      ) },
-    // Tokenless `/portal` lands on the same page, which renders the generic
-    // "link no longer valid" state — a truncated link deserves that message rather than the
-    // catch-all route's blank fallback, and it says nothing a probe could learn from.
+    // the token is its whole credential, moved into a header by the page and out of the URL by
+    // the same scrub (`/portal/{adClientId}/decision`, or `/portal/decision` for older links).
+    { path: 'portal/:clientId/decision', public: true, element: decisionElement },
+    { path: 'portal/:clientId/decision/:token', public: true, element: decisionElement },
+    { path: 'portal/decision', public: true, element: decisionElement },
+    { path: 'portal/decision/:token', public: true, element: decisionElement },
+    // `/portal` is where a pre-CP-43 `/portal/{token}` link lands after the scrub (the page reads
+    // the token from sessionStorage). With nothing stored it renders the generic "link no longer
+    // valid" state — a truncated link deserves that message rather than the catch-all route's
+    // blank fallback, and it says nothing a probe could learn from.
     { path: 'portal', public: true, element: portalElement },
     { path: 'login', public: true, element: (
         <Suspense fallback={LOADING_FALLBACK} data-testid="Suspense__e8c60d"><OnboardingPage data-testid="OnboardingPage__e8c60d" /></Suspense>

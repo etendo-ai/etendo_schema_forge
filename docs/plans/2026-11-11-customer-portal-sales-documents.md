@@ -1127,8 +1127,8 @@ arrives, so every shared piece takes the new look as an opt-in (`PortalSection v
   este presupuesto?" (the recipient's email box) → Continuar sends; Rechazar → the six reasons
   (Figma radios; "Otros" requires "Describe el motivo"; Continuar disabled until valid) → "Confirma
   tu decisión por correo" (Cancelar · Volver · Enviar solicitud) sends; both end on "Revisa tu
-  correo electrónico" (Entendido). The recipient is the backend's `decision.email` (first To
-  of the original send, shown in full). The email link's landing no longer enters the portal by itself:
+  correo electrónico" (Entendido). The recipients are the backend's `decision.confirmationRecipients`
+  (every To of the original send, never CC, each shown in full — revised in QA 24/11 CP-45, see C.3). The email link's landing no longer enters the portal by itself:
   it shows "¡Presupuesto aceptado!" / "¡Presupuesto rechazado!" with the summary (number, issue date
   or reason, total, status — app label, Figma colour) and "La empresa emisora ha sido notificada…",
   and its "Portal de clientes" button enters the portal on the quotation, with no notice (removed
@@ -1146,8 +1146,8 @@ before the PO's answers; what was built is in C.12 and C.13. Evidence paths: `go
 ## C.0 Scope
 
 In: Aceptar / Rechazar on a quotation that is pending and not expired; a mandatory reason on
-reject (fixed list, "Otros" + free text); confirmation by email to the quotation's original To recipient
-only (single-use, never-expiring link); on confirmation, re-check and apply (first confirmed
+reject (fixed list, "Otros" + free text); confirmation as a separate email to every To recipient of
+the quotation's original send, never CC (single-use, never-expiring link); on confirmation, re-check and apply (first confirmed
 wins); notice email to the user who sent the quotation; KPI hook points.
 Out (PO): generating the order, changing a confirmed decision, in-app notification, KPI semantics.
 
@@ -1203,7 +1203,15 @@ pre-seeded list; language of the stored reason name).
   Treating null as expired would hide the buttons everywhere. **Decided (user, 2026-11-13): no
   `ValidUntil` = not expired.**
 
-## C.3 Who confirms — the original To recipient (decided, user 2026-11-13)
+## C.3 Who confirms — the original To recipients (decided, user 2026-11-13; revised QA 24/11)
+
+> **Revised (QA 24/11, CP-45, Isa).** The confirmation goes to **every To recipient of the original
+> quotation send, never CC, sent as a separate email**. Sending it in the thread of the original email
+> is a follow-up with infra. "Several To addresses: the first one" and the masked-address bullet
+> below are superseded. The portal names every recipient (`confirmationRecipients`) in the popups
+> and in «Se ha enviado un correo a … para confirmar la decisión.». The other rules stand: never
+> CC, no separately resolved contact, buttons disabled with empty To. Link renewal is unchanged
+> and still goes to To + CC (Part A).
 
 The confirmation email goes to **the address the quotation was sent to**: the To recipients stored
 on the portal link's **root send**, `ETGO_PORTAL_LINK.RECIPIENTS_TO` of the row named by the session's
@@ -1232,7 +1240,7 @@ field and empty on all 29 local quotations).
 | `REASON_CODE` | list `PRICE`, `DELIVERY`, `PAYMENT_TERMS`, `OTHER_SUPPLIER`, `NOT_NEEDED`, `OTHER` | reject only |
 | `REASON_TEXT` | varchar(2000) | required when `OTHER` |
 | `TOKEN_HASH` | varchar(64), unique | SHA-256 of a 256-bit token (as `PortalTokens`); the token itself is only in the email |
-| `RECIPIENT_EMAIL` | varchar | the first To recipient of the root send (C.3), for audit |
+| `RECIPIENT_EMAIL` | varchar | the To recipient(s) of the root send the confirmation went to (C.3, revised CP-45), for audit |
 | `STATUS` | list `PENDING` / `CONFIRMED` / `VOIDED` / `NOT_APPLIED` | `NOT_APPLIED`: opened when the quotation was no longer pending / was expired |
 | `REQUESTED_AT`, `CONFIRMED_AT`, `VOIDED_AT` | timestamps | |
 | `ETGO_EMAIL_SEND_LOG_ID` | FK | the confirmation email |
@@ -1252,7 +1260,7 @@ pending-until-sent rule), so a failed send leaves no usable token.
   Scope: `findInScope(session, QUOTATION, id)`; then pending + not expired + a To recipient on the
   root send (else 409 `not_pending` / `expired` / `no_recipient`). Rate limits: the data limiter **plus** a per-quotation
   cool-down (e.g. 2 min, configurable like `PortalLinkConfig.java:48-50`) so the button cannot be used
-  to spam the contact. Answers `{state: "sent", email}`. Requires `validate` = valid (an
+  to spam the contact. Answers `{state: "sent", email, confirmationRecipients}` (every To, CP-45). Requires `validate` = valid (an
   expired link renews first, as today).
 - **`GET /decisions/me`** and **`POST /decisions/confirm`** — the confirmation landing. The token is
   read from `X-Portal-Decision-Token` (the email link is `/portal/decision/{token}`; the SPA moves it
@@ -1268,8 +1276,8 @@ pending-until-sent rule), so a failed send leaves no usable token.
 
 ## C.6 Emails (transactional contracts, `emails` skill)
 
-- **`portal-quotation-decision-confirm`** — to the first To recipient of the root send only (C.3; no
-  CC), language = the link's email language. ES: subject "Confirma tu decisión sobre el presupuesto {numero}"; body "Has pedido
+- **`portal-quotation-decision-confirm`** — to every To recipient of the root send, never CC, as a
+  separate email (C.3 revised, CP-45; threading = follow-up with infra), language = the link's email language. ES: subject "Confirma tu decisión sobre el presupuesto {numero}"; body "Has pedido
   {aceptar|rechazar} el presupuesto {numero} de {empresa}{, motivo: …}. Pulsa el botón para
   confirmarlo. Si no lo has pedido tú, ignora este correo." CTA "Confirmar decisión". EN mirror.
 - **`portal-quotation-decision-notice`** — to the user who sent the quotation (the root link's
@@ -1317,9 +1325,9 @@ pending-until-sent rule), so a failed send leaves no usable token.
 - go (JUnit): decision request (scope, pending/expired/no-contact refusals, cool-down, rate limit);
   confirm (apply accept → `ETGO_AC`, reject → `CJ` + reason + notes; first-confirmed-wins with two pending;
   idempotent second open; `not_applied` after a status change / expiry; unknown token = generic 401);
-  token hash only stored; emails (recipient = first To of the root send only, no CC; notice to the sender's account
-  email; ES/EN); reason find-or-create; `ETGO_AC` convertible (order and invoice) and advertised in `SalesQuotationHeaderHandler`; first To
-  recipient chosen, CC never mailed, empty To refused.
+  token hash only stored; emails (recipients = every To of the root send, never CC, separate email — CP-45;
+  notice to the sender's account email; ES/EN); reason find-or-create; `ETGO_AC` convertible (order and
+  invoice) and advertised in `SalesQuotationHeaderHandler`; every To mailed, CC never mailed, empty To refused.
 - sf (Vitest): buttons only with `canDecide`, disabled reason, reject modal validation ("Otros"
   requires text), sent state with the full email, landing states; mocked E2E: request → landing → confirm.
 - **Effort (rough):** backend 4.5–5.5 d (table + AD, the `ETGO_AC` list value and translations,
@@ -1338,7 +1346,7 @@ Confirmar (convert) available on them; rejected ones show the portal reason and 
 
 **Decided (user, 2026-11-13):** a quotation with no `ValidUntil` is not expired (C.2); the
 confirmation goes to the first To recipient of the root send, never CC, buttons disabled when there is
-none (C.3); the portal shows the address in full (C.3, revised to follow the Figma; it was masked first); one click on the landing confirms, opening the
+none (C.3; **revised QA 24/11 CP-45: every To recipient, never CC, as a separate email**); the portal shows the address in full (C.3, revised to follow the Figma; it was masked first); one click on the landing confirms, opening the
 link never applies (C.5). By this plan: no sender notice when the sender cannot be resolved (C.6);
 KPI: only the hook points (`decision.requested`, `decision.confirmed`, `decision.voided`,
 `decision.not_applied` call sites in the service), names and semantics per the PO's new KPI
@@ -1419,7 +1427,7 @@ Built in both repos following C.0–C.11.
    the email.
    **Accepted trade-off (the PO chose the one-step flow):** a mail scanner that executes the page's
    JavaScript could confirm a pending decision. The token is single-use, and the email only ever
-   reaches the quotation's main recipient (the first To of the original send). Review follow-ups
+   reaches the To recipients of the quotation's original send (never CC; CP-45). Review follow-ups
    (Alex W2/W3): the request's cool-down runs under the quotation row lock and ignores requests
    whose email did not leave; `confirm` re-runs the portal access checks (blocked or inactive
    customer, expired plan) and applies nothing when the portal is closed for the customer.

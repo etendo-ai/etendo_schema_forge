@@ -3,7 +3,7 @@ import { useUI } from '@/i18n';
 import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/formatCurrency.js';
 import {
-  PortalDate, PortalDocumentStatus, PortalPaymentStatus, PortalRowBadge, PORTAL_ROW_FOCUS,
+  PortalDate, PortalDocumentStatus, PortalPaymentStatus, PORTAL_ROW_FOCUS,
 } from './PortalBits.jsx';
 import { documentLabelKey } from './portalPresentation.js';
 
@@ -83,8 +83,8 @@ export function PortalDetailsCard({ document }) {
 
 /**
  * "Documentos relacionados": a 12/16 heading with a round refresh button, then one row per related
- * document — its kind and number, its date, its status (or an invoice's payment state) and a
- * chevron. The open document is not listed (user decision). Opening a row opens that document.
+ * document — its kind and number, its date, its document status (never an invoice's payment
+ * state) and a chevron. The open document is not listed (user decision). Opening a row opens that document.
  */
 export function PortalRelatedList({ related, refreshing, onRefresh, onOpen }) {
   const ui = useUI();
@@ -124,7 +124,10 @@ export function PortalRelatedList({ related, refreshing, onRefresh, onOpen }) {
                     <span className="text-sm leading-6 text-[#1B1A1F]">{label}</span>
                     <span className="text-xs leading-5 text-[#6B7280]"><PortalDate value={item.date} data-testid="PortalDate__d3c1a0" /></span>
                   </span>
-                  <PortalRowBadge document={item} palette="figma" className={PANEL_BADGE} data-testid="PortalRowBadge__d3c1a0" />
+                  {/* The DOCUMENT status for every kind, invoices and credit notes included, as the
+                      app's related-documents panel shows it (QA 24/11 d): a payment state here made
+                      one invoice read "Completado" from its shipment and "Pendiente" from its order. */}
+                  <PortalDocumentStatus status={item.documentStatus} palette="figma" className={PANEL_BADGE} data-testid="PortalDocumentStatus__d3c1a0" />
                   <CaretRightIcon size={20} className="ml-1 shrink-0 text-[#81848F]" aria-hidden="true" data-testid="CaretRight__d3c1a0" />
                 </button>
               </li>
