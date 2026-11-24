@@ -340,7 +340,7 @@ test.describe('Product price bar — single-flight per tariff row (ETP-5255)', (
    * This panel had it worse than the amortization one: `ProductPriceBar.writePrice` has no refetch
    * on the success path at all, so there was not even a losing second chance to refresh the token.
    *
-   * Closed in `@etendosoftware/app-shell-core` (`auth/api.js`): `harvestWrittenVersion` now
+   * Closed in `@etendo-ai/app-shell-core` (`auth/api.js`): `harvestWrittenVersion` now
    * returns its promise instead of leaving it floating, and `createApiFetch` serialises versioned
    * writes per record — keyed by the same (canonical entity, id) pair the version cache uses —
    * awaiting the harvest before releasing the next write. So this assertion is about a guarantee

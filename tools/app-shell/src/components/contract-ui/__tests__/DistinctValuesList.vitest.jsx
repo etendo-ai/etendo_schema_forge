@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { render, screen, act, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-vi.mock('@etendosoftware/app-shell-core', () => ({
+vi.mock('@etendo-ai/app-shell-core', () => ({
   useUI: () => (key) => key,
 }));
 

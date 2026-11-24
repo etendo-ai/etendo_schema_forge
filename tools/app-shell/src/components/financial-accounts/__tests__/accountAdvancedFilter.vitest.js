@@ -201,7 +201,7 @@ describe('buildAccountFilterColumns — offered columns', () => {
 /**
  * The two operator tables the core AdvancedFilterBuilder decides the dropdown from. Neither
  * is exported, so they are mirrored here — `OPERATORS_BY_MODE` and `NULLISH_OPS` in
- * `@etendosoftware/app-shell-core/src/components/contract-ui/AdvancedFilterBuilder.jsx`.
+ * `@etendo-ai/app-shell-core/src/components/contract-ui/AdvancedFilterBuilder.jsx`.
  *
  * Mirroring is the point rather than a compromise: this file's job is to pin what the USER
  * sees in the "Moneda …" dropdown, and replaying the two functions that produce it turns a

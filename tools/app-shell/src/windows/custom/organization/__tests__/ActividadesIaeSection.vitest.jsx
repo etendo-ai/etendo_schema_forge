@@ -36,7 +36,7 @@ vi.mock('sonner', () => ({
   toast: { error: vi.fn(), success: vi.fn(), warning: vi.fn() },
 }));
 
-// Checkbox/AddLineButton re-export from @etendosoftware/app-shell-core, which is
+// Checkbox/AddLineButton re-export from @etendo-ai/app-shell-core, which is
 // not resolvable in this test environment — mocked as plain native elements
 // preserving the props ActividadesIaeSection actually relies on (same pattern as
 // AmortizationLinesTable.vitest.jsx).

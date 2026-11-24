@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { WebMcpAgentTools, WebMcpMcpTools } from '@etendosoftware/app-shell-core/webmcp';
+import { WebMcpAgentTools, WebMcpMcpTools } from '@etendo-ai/app-shell-core/webmcp';
 import { useAuth } from '@/auth/AuthContext.jsx';
 import { useCopilot } from '@/components/CopilotContext';
 import { useCurrentWindowContext } from '@/components/CurrentWindowContext';

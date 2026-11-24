@@ -6,8 +6,8 @@ import { Input } from '@/components/ui/input';
 import { FIELD_HEIGHT } from '@/components/ui/formDensity';
 // Same header and footer chrome as DateField / DateRangePopover (ETP-4771), so the three pickers
 // render identical UI.
-import { HeaderRow, PillButton } from '@etendosoftware/app-shell-core/components/ui/date-picker-chrome.jsx';
-import { getDatePattern, formatMonthYearLabel } from '@etendosoftware/app-shell-core/lib/dateMask.js';
+import { HeaderRow, PillButton } from '@etendo-ai/app-shell-core/components/ui/date-picker-chrome.jsx';
+import { getDatePattern, formatMonthYearLabel } from '@etendo-ai/app-shell-core/lib/dateMask.js';
 import { parseCalendarDate } from '@/lib/dateOnly.js';
 import { useLocaleSwitch, useUI } from '@/i18n';
 import { cn } from '@/lib/utils';

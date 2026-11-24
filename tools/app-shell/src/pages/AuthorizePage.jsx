@@ -1,1 +1,1 @@
-export { default } from '@etendosoftware/app-shell-core/pages/AuthorizePage.jsx';
+export { default } from '@etendo-ai/app-shell-core/pages/AuthorizePage.jsx';

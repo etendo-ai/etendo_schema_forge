@@ -5,7 +5,7 @@ explains it, waits for the user to do something, and moves on — navigating
 between windows on its own when the next step lives somewhere else.
 
 The **engine is generic and lives in the core package**
-(`@etendosoftware/app-shell-core/walkthrough`, source in
+(`@etendo-ai/app-shell-core/walkthrough`, source in
 `schema_forge_core/packages/app-shell-core/src/walkthrough/`). It knows nothing
 about contacts, products or orders.
 
@@ -786,7 +786,7 @@ completion is server-owned anyway.
 
 ## 10. Core API surface
 
-Imported from `@etendosoftware/app-shell-core/walkthrough`:
+Imported from `@etendo-ai/app-shell-core/walkthrough`:
 
 | Export | Use |
 |---|---|

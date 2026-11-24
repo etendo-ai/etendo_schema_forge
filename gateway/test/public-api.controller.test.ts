@@ -6,7 +6,7 @@ import { BadGatewayException, BadRequestException, ConflictException, NotAccepta
 import { PublicApiController, toEtag, versionFromIfMatch } from '../src/public-api/public-api.controller.ts';
 import { toErrorDocument } from '../src/public-api/json-api-http.ts';
 import { mapAttributes, mapRelationships } from '../src/public-api/json-api-request.ts';
-import type { PublicApiSchema } from '@etendosoftware/api-gateway-core';
+import type { PublicApiSchema } from '@etendo-ai/api-gateway-core';
 
 const schema: PublicApiSchema = {
   apiVersion: 'v1',

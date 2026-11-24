@@ -9,7 +9,7 @@
  *
  * The readers are independent components and plain modules (`pdfUtils.js`, `listAttachments.js`,
  * `related-documents/helpers.js`) with no access to the React-side shared cache
- * (`@etendosoftware/app-shell-core/data`) and, in two cases, no agreement on the shape they expect
+ * (`@etendo-ai/app-shell-core/data`) and, in two cases, no agreement on the shape they expect
  * from the very same URL: `useEntity` caches a NORMALIZED row while `useTaxSifLineRowActions` reads
  * the raw `response.data[0]` envelope. A shared cache entry would have to pick one shape and break
  * the other. So the sharing happens one layer lower, on the response bytes: a caller gets its own

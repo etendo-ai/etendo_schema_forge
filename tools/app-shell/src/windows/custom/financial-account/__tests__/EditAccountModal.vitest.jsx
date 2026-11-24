@@ -150,7 +150,7 @@ const CONNECTED_ACCOUNT = {
 };
 
 // ETP-4553 — TabsTrigger now spreads extra props (data-testid, aria-*, etc.) onto its
-// <button> (core fix, see @etendosoftware/app-shell-core's tabs.jsx), so the
+// <button> (core fix, see @etendo-ai/app-shell-core's tabs.jsx), so the
 // `data-testid="edit-account-tab-general/accounting"` set in EditAccountModal.jsx reaches
 // the DOM. Select tabs by their real data-testid instead of the previous role+label workaround.
 const TAB_TESTID_BY_LABEL = {

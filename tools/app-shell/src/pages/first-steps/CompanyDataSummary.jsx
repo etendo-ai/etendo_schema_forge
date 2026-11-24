@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useAuthOptional } from '@etendosoftware/app-shell-core/auth';
+import { useAuthOptional } from '@etendo-ai/app-shell-core/auth';
 import { useApiFetch } from '@/auth/useApiFetch.js';
 import { getApiBase } from '@/hooks/useNeoResource.js';
 

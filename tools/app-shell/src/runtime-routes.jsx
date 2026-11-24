@@ -1,6 +1,6 @@
 import { Suspense, lazy } from 'react';
 import { Navigate } from 'react-router-dom';
-import { LogoutRoute } from '@etendosoftware/app-shell-core/auth';
+import { LogoutRoute } from '@etendo-ai/app-shell-core/auth';
 import { useLogout } from './auth/useLogout.js';
 import WindowLoader from './windows/WindowLoader.jsx';
 import PreviewPage from './preview/PreviewPage.jsx';

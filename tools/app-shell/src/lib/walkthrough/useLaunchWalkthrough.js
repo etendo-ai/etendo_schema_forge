@@ -3,8 +3,8 @@ import {
   getFlowStatus,
   markFlowStarted,
   useWalkthrough,
-} from '@etendosoftware/app-shell-core/walkthrough';
-import { useObservability } from '@etendosoftware/app-shell-core/observability';
+} from '@etendo-ai/app-shell-core/walkthrough';
+import { useObservability } from '@etendo-ai/app-shell-core/observability';
 
 /**
  * Starts a guided walkthrough by id from anywhere outside the topbar launcher

@@ -1,7 +1,7 @@
 import {
   resetSessionCredentials,
   setSessionCredentials,
-} from '@etendosoftware/app-shell-core/auth/sessionCredentials.js';
+} from '@etendo-ai/app-shell-core/auth/sessionCredentials.js';
 import { fetchUserRoleAssignments, saveUserRoleAssignments } from '../userRoleAssignmentsApi.js';
 
 // ETP-4906 — userRoleAssignmentsApi.js wraps two NEO Headless endpoints
