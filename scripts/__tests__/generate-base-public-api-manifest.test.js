@@ -257,6 +257,16 @@ describe('buildEntity — API-only input fields declared in decisions.json', () 
     assert.equal(entity.fields.date.queryable, undefined);
   });
 
+  it('keeps an input field backed by a raw column queryable', () => {
+    const entity = buildEntity({
+      specName: 'contacts', entityName: 'header', contract: contractFor('contacts', curatedFields),
+      functional, parent: null, rawEntity: { fields: [{ name: 'cityName', type: 'string' }] },
+      inputFields: inputFieldsOf(decisions, 'header'),
+    });
+    assert.equal(entity.fields.city_name.queryable, undefined);
+    assert.equal(entity.fields.secret_note.queryable, false);
+  });
+
   it('publishes none on a resource without write endpoints', () => {
     const entity = buildEntity({
       specName: 'contacts', entityName: 'header', contract: contractFor('contacts', curatedFields, { methods: ['GET'] }),
