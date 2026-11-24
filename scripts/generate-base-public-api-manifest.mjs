@@ -495,6 +495,7 @@ export function buildEntity({
     };
   }
 
+  const rawFieldNames = new Set((rawEntity?.fields ?? []).map((rawField) => rawField.name));
   for (const input of inputFields) {
     const outputOnly = input.writable === false;
     if (!writable && !outputOnly) continue;
@@ -508,8 +509,8 @@ export function buildEntity({
       internalPath: input.internalPath,
       dataType: { type: input.dataType ?? 'string' },
       reference: null,
-      // An input field is added by the entity's handler, not a column: filter and sort would hit a missing property.
-      queryable: false,
+      // An input field the handler adds (not a column): filter and sort would hit a missing property.
+      ...(rawFieldNames.has(input.internalPath) ? {} : { queryable: false }),
       ...(!outputOnly && input.required === true ? { required: true } : {}),
     };
   }
