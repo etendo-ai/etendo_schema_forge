@@ -14,7 +14,7 @@ This is the counterpart to [`not-posted-documents.md`](not-posted-documents.md).
 
 Like Not Posted Documents, this has **no backing AD window** — it is a synthetic app-shell page (no artifact, no `decisions.json`, no `ETGO_SF_SPEC` row) served by a single Etendo GO webhook.
 
-Delivered by **ETP-5269**, behind the `acct-process-monitor` feature flag (default `false`).
+Delivered by **ETP-5269** and promoted to general availability by **ETP-6425**: the `acct-process-monitor` feature flag was retired and the page is permanent.
 
 ---
 
@@ -63,7 +63,7 @@ Source of truth: `SFAcctProcessMonitor#triggerManualRun` javadoc (`§Why the cal
 ## Interaction model
 
 - **Route:** `/acct-process-monitor`, registered in `tools/app-shell/src/runtime-routes.jsx` via `lazyRoute('acct-process-monitor', AcctProcessMonitorPage)`. **Registered unconditionally** — see *Two gates* below.
-- **Menu entry:** `Settings` group in `tools/app-shell/src/menu.json`, item name `acct-process-monitor`, label `Accounting Process` / `Proceso contable`, icon `Cog`, `capability: "isAdminOrClientAdmin"`. Additionally hidden behind the `acct-process-monitor` feature flag.
+- **Menu entry:** `Settings` group in `tools/app-shell/src/menu.json`, item name `acct-process-monitor`, label `Accounting Process` / `Proceso contable`, icon `Cog`, `capability: "isAdminOrClientAdmin"`.
 - **Implementation type:** synthetic app-shell page. No artifact directory, no `decisions.json`, no `contract.json`, no `ETGO_SF_SPEC`/`ETGO_SF_ENTITY` rows, no pipeline involvement. It does not appear in `tools/app-shell/src/windows/registry.js`.
 - **Page shape:** two cards — a status card (title, subtitle, Refresh + Run now, three summary tiles, cadence hint, in-flight line, trigger outcome) and a history card (a five-column table, or an empty state).
 - **Mode:** read-mostly. The only mutation is scheduling a one-shot run; nothing on this page edits any record.
@@ -75,8 +75,7 @@ This distinction is load-bearing and has already been asserted end to end, so do
 
 | Gate | Where | What it actually does |
 |---|---|---|
-| `acct-process-monitor` feature flag | `SideMenu.jsx`, via `useFeatureFlag(ACCT_PROCESS_MONITOR)` | Hides the **menu entry**. Visual only. Anyone can flip a flag in their own browser, and the route stays reachable with the flag off. |
-| `capability: "isAdminOrClientAdmin"` in `menu.json` | `filterMenuGroupsByAccess` | Hides the **menu entry** from a non-admin. Also visual only. |
+| `capability: "isAdminOrClientAdmin"` in `menu.json` | `filterMenuGroupsByAccess` | Hides the **menu entry** (and its Favorites and command-palette entries) from a non-admin. Visual only. |
 | **`NeoAccessHelper.isAdminOrClientAdmin(role)`** | `SFAcctProcessMonitor.get`, server-side | **The real authorization boundary.** Checked before anything is read *and* before anything is scheduled. A caller with a restricted role, or with no role at all, gets the `notAuthorized` payload and the endpoint neither reads history nor touches the scheduler. |
 
 The route is registered unconditionally on purpose, following the `/upgrade` precedent documented in [`../feature-flags.md`](../feature-flags.md) §3: hiding the route would imply the flag was protecting something, which it is not. What protects the data is the server-side role check.
@@ -286,11 +285,11 @@ The memoized filter is applied to the **Favorites** group as well. Favorites are
 
 ## Manual verification
 
-Prerequisites: an Etendo GO instance with the accounting process installed and a recurring request active; a session whose role is admin or client-admin; the app served with `acct-process-monitor` enabled (`VITE_FEATURE_FLAGS='{"acct-process-monitor":true}'`, since the flag is fixed at Vite start).
+Prerequisites: an Etendo GO instance with the accounting process installed and a recurring request active; a session whose role is admin or client-admin.
 
-1. **Menu, flag on.** Expand the sidebar, open **Configuración / Settings** and confirm an **Accounting Process** / **Proceso contable** entry sits after **Roles**. Open it; the status card and history table render.
-2. **Menu, flag off.** Restart the dev server without the flag and confirm the entry is gone from Settings *and* from Favorites if it was favourited there.
-3. **Route is not flag-gated.** With the flag still off, navigate directly to `/acct-process-monitor` — the page must load normally. (This is the intended behaviour, not a leak: the backend gate is what protects the data.)
+1. **Menu.** Expand the sidebar, open **Configuración / Settings** and confirm an **Accounting Process** / **Proceso contable** entry sits after **Roles**. Open it; the status card and history table render.
+2. **Favorites and palette.** Favourite the entry and find it in the command palette; both must offer it to an admin.
+3. **Direct route.** Navigate directly to `/acct-process-monitor` — the page loads; the backend gate is what protects the data.
 4. **A bare load fires nothing.** With the network tab open, load the page and confirm the request is `GET /sws/neo/acctprocessmonitor?Limit=20` with **no `Action` parameter**, and that no new row appears in `AD_PROCESS_RUN`.
 5. **Run now — convergence.** Press **Run now**. The button must disable immediately and *"Starting the run…"* must appear; within a few seconds a new row appears at the top of the history, labelled **Manual**, **without pressing Refresh**.
 6. **Client scoping.** After that run, confirm in the DB that the new `AD_PROCESS_REQUEST` and `AD_PROCESS_RUN` rows carry the **caller's** `ad_client_id`, not `'0'`:
@@ -344,8 +343,6 @@ These correspond to the open `manual-trigger-runtime-verification` item in `flag
 - `tools/app-shell/src/lib/acctProcessMonitorApi.js` — `fetchAcctProcessStatus` / `triggerAcctProcessRun`, both through `fetchNeoWebhookJson` (shared base URL, fresh token, `{result: "<json-string>"}` unwrap).
 - `tools/app-shell/src/runtime-routes.jsx` — unconditional `lazyRoute('acct-process-monitor', …)`.
 - `tools/app-shell/src/menu.json` — Settings item, `capability: "isAdminOrClientAdmin"`.
-- `tools/app-shell/src/lib/flags/flag-keys.js` + `index.js` — `ACCT_PROCESS_MONITOR`, `FLAG_DEFAULTS[…] = false`.
-- `tools/app-shell/src/components/layout/SideMenu/SideMenu.jsx` — `flagGatedItems` / `isFlagVisible`, applied to Favorites too.
 - i18n: **43 `acctProcess*` keys**, present in all three locales (`en_US.json`, `es_ES.json`, `es_AR.json`).
 
 **Frontend tests (93 new cases):**
@@ -372,14 +369,8 @@ These correspond to the open `manual-trigger-runtime-verification` item in `flag
 Run it with (mock mode only; never `make dev-mock`, whose in-page `window.fetch` replacement bypasses `page.route()`):
 
 ```bash
-# flag off (default)
 npx vite --port 3105
 E2E_USE_MOCK=1 BASE_URL=http://localhost:3105 \
-  npx playwright test tests/flows/acct-process-monitor.mocked.spec.js --project=mocked
-
-# flag on
-VITE_FEATURE_FLAGS='{"acct-process-monitor":true}' npx vite --port 3105
-E2E_USE_MOCK=1 BASE_URL=http://localhost:3105 E2E_ACCT_PROCESS_MONITOR_FLAG=on \
   npx playwright test tests/flows/acct-process-monitor.mocked.spec.js --project=mocked
 ```
 

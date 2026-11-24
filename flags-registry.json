@@ -304,23 +304,6 @@
       "owner": "sebastianbarrozo",
       "jira": "ETP-5269",
       "created": "2026-09-10",
-      "flag": {
-        "key": "acct-process-monitor",
-        "defaultValue": false,
-        "ttl": "2026-12-31",
-        "ttlNote": "Removal target once the manual trigger has been exercised against a real accounting backlog and the page is accepted as permanent.",
-        "symbols": [
-          "acct-process-monitor",
-          "ACCT_PROCESS_MONITOR",
-          "AcctProcessMonitorPage",
-          "acctProcessMonitorApi",
-          "useAcctProcessMonitor",
-          "SFAcctProcessMonitor",
-          "acctprocessmonitor",
-          "acctProcess"
-        ],
-        "$symbolsComment": "The page/hook/api/handler names are listed alongside the key because the shared toggle points reference the feature by those identifiers rather than by the flag key: runtime-routes.jsx registers AcctProcessMonitorPage, menu.json carries the acct-process-monitor item name, and NeoPseudoSpecDispatcher routes the lowercase acctprocessmonitor pseudo-spec to SFAcctProcessMonitor. A grep for the key alone would miss every one of them. `acctProcess` is the i18n prefix: all 43 genericLabels keys this feature adds to en_US, es_ES and es_AR start with it, and none of them contains the flag key, so without this symbol retiring the flag would leave every one of them orphaned in three locale files."
-      },
       "paths": {
         "frontend": [
           "tools/app-shell/src/pages/AcctProcessMonitorPage.jsx",
@@ -331,7 +314,7 @@
           "src/com/etendoerp/go/schemaforge/webhooks/SFAcctProcessMonitor.java"
         ]
       },
-      "$pathsComment": "Owned code only. menu.json, runtime-routes.jsx, SideMenu.jsx, flag-keys.js, lib/flags/index.js and NeoPseudoSpecDispatcher.java are shared toggle points, not owned paths: each holds a single registration/gating line naming one of the symbols above, and no feature logic. Retiring the flag is deleting the owned paths plus removing what a grep for those symbols finds.",
+      "$pathsComment": "Owned code only. GA (ETP-6425): the flag was retired and the feature is permanent, so these paths stay. menu.json, runtime-routes.jsx and NeoPseudoSpecDispatcher.java are shared registration points, not owned paths: each holds a single registration line and no feature logic.",
       "deferredItems": [
         {
           "id": "manual-trigger-runtime-verification",
@@ -362,7 +345,7 @@
           {
             "root": "frontend",
             "path": "tools/app-shell/src/components/layout/SideMenu/__tests__/SideMenu.vitest.jsx",
-            "note": "Shared spec; carries the item-level flag-gate cases for this feature."
+            "note": "Shared spec; carries the menu visibility case for this feature."
           },
           {
             "root": "backend",

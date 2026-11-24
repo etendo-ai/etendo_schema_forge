@@ -59,7 +59,6 @@ vi.mock('@/components/layout/FavoritesContext', () => ({
 vi.mock('@/lib/flags', () => ({
   useFeatureFlag: (...args) => mockUseFeatureFlag(...args),
   PROOF_OF_CONCEPT_MENU: 'proof-of-concept-menu',
-  ACCT_PROCESS_MONITOR: 'acct-process-monitor',
   PUBLIC_API_KEYS: 'public-api-keys',
   DOC_TEMPLATE_SELECTION: 'doc-template-selection',
   UNIFIED_CALENDAR_POC: 'unified-calendar-poc',
@@ -908,7 +907,7 @@ describe('SideMenu', () => {
       expect(screen.queryByText('Proof of Concept')).not.toBeInTheDocument();
     });
 
-    it('hides the accounting-process item when its declared feature flag is off', () => {
+    it('renders the accounting-process item without any feature flag', () => {
       mockUseFeatureFlag.mockReturnValue(false);
       render(<SideMenu
         {...defaultProps}
@@ -919,26 +918,6 @@ describe('SideMenu', () => {
           items: [{
             name: 'acct-process-monitor',
             label: 'Accounting Process',
-            featureFlag: 'acct-process-monitor',
-          }],
-        }]}
-      />);
-
-      expect(screen.queryByTestId('menu-item-acct-process-monitor')).not.toBeInTheDocument();
-    });
-
-    it('renders the accounting-process item when its declared feature flag is on', () => {
-      mockUseFeatureFlag.mockReturnValue(true);
-      render(<SideMenu
-        {...defaultProps}
-        menuGroups={[{
-          group: 'Settings',
-          icon: 'Settings',
-          section: 'System',
-          items: [{
-            name: 'acct-process-monitor',
-            label: 'Accounting Process',
-            featureFlag: 'acct-process-monitor',
           }],
         }]}
       />);

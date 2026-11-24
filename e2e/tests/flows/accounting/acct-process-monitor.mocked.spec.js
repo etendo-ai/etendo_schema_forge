@@ -8,10 +8,9 @@ import { login, installNonAdminCapabilities } from '../../helpers/auth.js';
  *
  * Covers the three things that only show up end to end:
  *
- *   1. **Menu gating.** The `acct-process-monitor` feature flag hides the MENU ENTRY only — the
- *      route is registered unconditionally (same precedent as `/upgrade`) and
- *      `SFAcctProcessMonitor` enforces admin access itself. Both halves are asserted: the entry
- *      appears for an admin with the flag on, and is absent with it off.
+ *   1. **Menu gating.** No feature flag since GA (ETP-6425): the MENU ENTRY is gated by the
+ *      `isAdminOrClientAdmin` capability, the route is registered unconditionally (same precedent
+ *      as `/upgrade`) and `SFAcctProcessMonitor` enforces admin access itself.
  *   2. **Trigger → convergence.** The triggering response canNOT contain the new run: the
  *      backend hands the job to Quartz and returns, and the AD_PROCESS_RUN row is written later
  *      on the scheduler's own thread. The page must therefore POLL until the run appears. The
@@ -20,21 +19,13 @@ import { login, installNonAdminCapabilities } from '../../helpers/auth.js';
  *      backend omits it; the fixtures below deliberately send one anyway, so this spec fails if a
  *      future change ever surfaces it in the DOM.
  *
- * The flag is fixed when Vite starts (`VITE_FEATURE_FLAGS`, no runtime override), so the
- * menu-entry tests follow `proof-of-concept-menu.mocked.spec.js` and skip themselves rather than
- * failing when the server was started the other way:
- *
- *   npx vite --port 3105        # flag off (default) — the flag-off menu test runs
- *   VITE_FEATURE_FLAGS='{"acct-process-monitor":true}' npx vite --port 3105
- *   E2E_USE_MOCK=1 BASE_URL=http://localhost:3105 E2E_ACCT_PROCESS_MONITOR_FLAG=on \
- *     npx playwright test tests/flows/accounting/acct-process-monitor.mocked.spec.js --project=mocked
+ * Run: E2E_USE_MOCK=1 BASE_URL=http://localhost:3105 \
+ *   npx playwright test tests/flows/accounting/acct-process-monitor.mocked.spec.js --project=mocked
  *
  * Mock mode only. Routes are installed AFTER `login()` so they beat its generic `/sws/**` stub.
  * Run against plain `make dev`/`npx vite`, never `make dev-mock` — `VITE_MOCK=true` replaces
  * `window.fetch` in-page and silently bypasses every `page.route()` here.
  */
-
-const FLAG_ON = process.env.E2E_ACCT_PROCESS_MONITOR_FLAG === 'on';
 
 /** A CLOB of raw process output a regressed backend might send. Must never reach the DOM. */
 const LOG_SENTINEL = 'SECRET-PROCESS-OUTPUT-DO-NOT-LEAK';
@@ -282,24 +273,14 @@ test.describe('Accounting process monitor — page', () => {
   });
 });
 
-test.describe('Accounting process monitor — menu gating', () => {
+test.describe('Accounting process monitor — route', () => {
   test.beforeEach(async ({ page }) => {
     await login(page);
     await installMonitorMock(page);
   });
 
-  test('flag off: the menu entry is not offered', async ({ page }) => {
-    test.skip(FLAG_ON, 'Requires a dev server started without VITE_FEATURE_FLAGS');
-
-    await page.getByRole('button', { name: /configuraci[oó]n|settings/i }).hover();
-    await expect(page.getByTestId('menu-item-acct-process-monitor')).toHaveCount(0);
-  });
-
-  test('flag off: the route still works — the flag is not the authorization boundary', async ({ page }) => {
-    test.skip(FLAG_ON, 'Requires a dev server started without VITE_FEATURE_FLAGS');
-
-    // Deliberate: the route is registered unconditionally and the backend enforces admin access.
-    // If this ever starts 404ing, the gating moved to the wrong layer.
+  test('the route works without any feature flag', async ({ page }) => {
+    // The route is registered unconditionally and the backend enforces admin access.
     await openMonitor(page);
     await expect(page.getByTestId('AcctProcessMonitorPage__statusCard')).toBeVisible();
   });
@@ -315,7 +296,7 @@ test.describe('Accounting process monitor — non-admin', () => {
     await page.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => {});
   });
 
-  test('does NOT see the menu entry, whatever the flag says', async ({ page }) => {
+  test('does NOT see the menu entry', async ({ page }) => {
     await page.getByRole('button', { name: /configuraci[oó]n|settings/i }).hover();
     await expect(page.getByTestId('menu-item-acct-process-monitor')).toHaveCount(0);
   });

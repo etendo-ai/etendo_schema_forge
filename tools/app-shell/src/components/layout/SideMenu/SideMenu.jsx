@@ -73,7 +73,7 @@ import {
 import { cn } from '@/lib/utils.js';
 import { useMenuLabel, useUI, useLocaleSwitch } from '@/i18n';
 import { useFavorites } from '@/components/layout/FavoritesContext';
-import { useFeatureFlag, PROOF_OF_CONCEPT_MENU, ACCT_PROCESS_MONITOR, PUBLIC_API_KEYS, UNIFIED_CALENDAR_POC, DOC_TEMPLATE_SELECTION } from '@/lib/flags';
+import { useFeatureFlag, PROOF_OF_CONCEPT_MENU, PUBLIC_API_KEYS, UNIFIED_CALENDAR_POC, DOC_TEMPLATE_SELECTION } from '@/lib/flags';
 import { useEnvironmentSwitch } from '@/hooks/useEnvironmentSwitch.js';
 import { useSupportSession } from '@/hooks/useSupportSession.js';
 import { isSupportRestrictedMenuItem } from '@/lib/supportSession.js';
@@ -669,9 +669,6 @@ export default function SideMenu({
   // This is visual gating only. The windows remain protected by normal AD role
   // filtering; the flag merely stops offering this internal menu section.
   const showProofOfConceptMenu = useFeatureFlag(PROOF_OF_CONCEPT_MENU);
-  // ETP-5269. Item-level flag gating, where Proof of Concept above gates a whole group. Visual
-  // only: the route is registered unconditionally and SFAcctProcessMonitor enforces admin access.
-  const showAcctProcessMonitor = useFeatureFlag(ACCT_PROCESS_MONITOR);
   const showPublicApiKeys = useFeatureFlag(PUBLIC_API_KEYS);
   const showDocTemplateSelection = useFeatureFlag(DOC_TEMPLATE_SELECTION);
   const showUnifiedCalendarPoc = useFeatureFlag(UNIFIED_CALENDAR_POC);
@@ -698,7 +695,6 @@ export default function SideMenu({
   }, []);
 
   const featureFlagValues = useMemo(() => ({
-    [ACCT_PROCESS_MONITOR]: showAcctProcessMonitor,
     [PUBLIC_API_KEYS]: showPublicApiKeys,
     [DOC_TEMPLATE_SELECTION]: showDocTemplateSelection,
     // ETP-5436 — an item can now ALSO declare featureFlag: PROOF_OF_CONCEPT_MENU (e.g.
@@ -710,7 +706,7 @@ export default function SideMenu({
     // Unified Calendar PoC — item-level flag. It sits inside the Proof of Concept group, so it is
     // visible only when BOTH proof-of-concept-menu (group gate above) and this flag are on.
     [UNIFIED_CALENDAR_POC]: showUnifiedCalendarPoc,
-  }), [showAcctProcessMonitor, showPublicApiKeys, showProofOfConceptMenu, showUnifiedCalendarPoc]);
+  }), [showPublicApiKeys, showProofOfConceptMenu, showUnifiedCalendarPoc]);
 
   // Applied to Favorites TOO. Favorites are rebuilt from the user's own saved list rather than
   // from menuGroups, so returning early for that group let a favourited flag-gated item stay
