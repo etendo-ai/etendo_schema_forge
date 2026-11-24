@@ -5,7 +5,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  isImportDuaChecked, shouldShowImportDuaCards, importDuaInvoiceTypeToSet,
+  isImportDuaChecked, shouldShowImportDuaCards, importDuaInvoiceTypeToSet, needsUncheckConfirmation,
 } from '../importDua.js';
 
 describe('isImportDuaChecked', () => {
@@ -17,12 +17,28 @@ describe('isImportDuaChecked', () => {
     assert.equal(isImportDuaChecked({}), false);
     assert.equal(isImportDuaChecked(null), false);
   });
+
+  it('treats a legacy SII type F5 / LC as checked', () => {
+    assert.equal(isImportDuaChecked({ etgoImportDua: false, aeatsiiClaveTipoFc: 'F5' }), true);
+    assert.equal(isImportDuaChecked({ aeatsiiClaveTipoFc: 'LC' }), true);
+    assert.equal(isImportDuaChecked({ etgoImportDua: false, aeatsiiClaveTipoFc: 'F1' }), false);
+  });
+});
+
+describe('needsUncheckConfirmation', () => {
+  it('asks only when manual import tax lines exist', () => {
+    assert.equal(needsUncheckConfirmation({ hasManualTaxLines: true }), true);
+    assert.equal(needsUncheckConfirmation({ hasManualTaxLines: 'Y' }), true);
+    assert.equal(needsUncheckConfirmation({ hasManualTaxLines: false }), false);
+    assert.equal(needsUncheckConfirmation(null), false);
+  });
 });
 
 describe('shouldShowImportDuaCards — Lines tab cards follow the check', () => {
-  it('shows them only with the feature on and the check on, whatever the SII type', () => {
+  it('shows them with the feature on and the effective check on (stored, or type F5 / LC)', () => {
     assert.equal(shouldShowImportDuaCards({ enabled: true, record: { etgoImportDua: true } }), true);
-    assert.equal(shouldShowImportDuaCards({ enabled: true, record: { etgoImportDua: false, aeatsiiClaveTipoFc: 'F5' } }), false);
+    assert.equal(shouldShowImportDuaCards({ enabled: true, record: { etgoImportDua: false, aeatsiiClaveTipoFc: 'F5' } }), true);
+    assert.equal(shouldShowImportDuaCards({ enabled: true, record: { etgoImportDua: false, aeatsiiClaveTipoFc: 'F1' } }), false);
     assert.equal(shouldShowImportDuaCards({ enabled: false, record: { etgoImportDua: true } }), false);
   });
 });
