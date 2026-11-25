@@ -34,6 +34,16 @@ exposure events are telemetry the SDK reports to Datadog on its own, and
 | AWS RUM | `VITE_RUM_ENABLED=true` and both RUM IDs are set |
 | Mixpanel | `VITE_MIXPANEL_ENABLED=true` and `VITE_MIXPANEL_TOKEN` is set, **and** the page is served from a production host (see below) |
 
+**Customer-portal pages (ETP-6209): only AWS RUM.** When the page load starts on `/portal`,
+`/portal/…` or the decision landing (`isPortalPath` in `lib/portal/portalLinkSession.js`, decided
+once in `main.jsx` and passed as `initBrowserObservability({ portalPage })`), Datadog and Mixpanel
+are not registered at all, and `initFeatureFlags()` is not called (no portal code reads a flag, and
+the Datadog Feature Flags SDK reports exposures; a remote telemetry kill therefore does not reach a
+portal tab, only the build-time `VITE_TELEMETRY_KILL` does). Datadog is left out because its adapter always tracks click actions, may
+record session replay and sets the `_dd_s` cookie, and the portal has no consent banner. As a
+result, the portal's JS errors reach only AWS RUM (performance, errors and HTTP calls, cookies off),
+when it is enabled. See `docs/customer-portal-link-token.md`.
+
 AWS RUM is opt-in (ETP-4578): the injected IDs alone no longer switch it on. Its SDK has no
 before-send hook, so every batch is sanitized through the SDK's `clientBuilder` before it is
 serialized and signed (page titles, record ids and query strings never leave). Cookies are off
@@ -864,7 +874,10 @@ only installs it, and only:
 - on the production host (`app.etendo.ai`; `VITE_GTM_HOSTS` takes a comma-separated list, e.g. for
   a `local.etendo.ai` alias to test the cookie locally), so no developer machine feeds marketing's
   reports;
-- never in a support session.
+- never in a support session;
+- never on a customer-portal page (`/portal`, `/portal/…`, the decision landing; ETP-6209). The
+  portal has no tracking at all, because its visitors never get a consent banner. See
+  `docs/customer-portal-link-token.md`.
 
 `VITE_GTM_ID` overrides the container and `VITE_GTM_ENABLED=false` disables it. The `<noscript>`
 iframe of marketing's snippet is left out: the app does not run without JavaScript.
