@@ -234,7 +234,7 @@ export default function RemittanceReturnDialog({ record, apiBaseUrl, onRefresh, 
     setBusy(true);
     try {
       await returnRemittanceLines(apiFetch, remittanceId, selectedLines.map((l) => l.id), returnDate);
-      toast.success(ui('remittanceReturnSuccess', { count: selectedInstructions }));
+      toast.success(ui(selectedInstructions === 1 ? 'remittanceReturnSuccessOne' : 'remittanceReturnSuccess', { count: selectedInstructions }));
       onRefresh?.();
       onClose?.();
     } catch (err) {

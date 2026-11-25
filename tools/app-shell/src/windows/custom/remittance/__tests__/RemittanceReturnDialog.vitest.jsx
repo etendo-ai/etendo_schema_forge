@@ -167,7 +167,7 @@ describe('RemittanceReturnDialog', () => {
     await act(async () => { fireEvent.click(submit()); });
     expect(returnCalls()[0][0]).toBe('/remittance/rem-1/action/returnLines');
     expect(JSON.parse(returnCalls()[0][1].body)).toEqual({ fieldValues: { lineIds: ['l1', 'l2'], returnDate: todayCalendarISO() } });
-    expect(toast.success).toHaveBeenCalledWith('remittanceReturnSuccess:{"count":1}');
+    expect(toast.success).toHaveBeenCalledWith('remittanceReturnSuccessOne:{"count":1}');
     expect(onRefresh).toHaveBeenCalledTimes(1);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
@@ -289,6 +289,8 @@ describe('RemittanceReturnDialog', () => {
     expect(screen.getByTestId('remittance-return-count')).toHaveTextContent('120');
     await act(async () => { fireEvent.click(submit()); });
     expect(JSON.parse(returnCalls()[0][1].body).fieldValues.lineIds).toHaveLength(120);
+    // More than one collection reads the plural; exactly one reads «1 cobro» (remittanceReturnSuccessOne).
+    expect(toast.success).toHaveBeenCalledWith('remittanceReturnSuccess:{"count":120}');
   });
 
   it('an impossible or empty date also disables the primary button', async () => {
@@ -454,7 +456,7 @@ describe('RemittanceReturnDialog — one row per bank instruction', () => {
     expect(screen.getByTestId('remittance-return-total').textContent).toMatch(/34,50/);
     await act(async () => { fireEvent.click(submit()); });
     expect(JSON.parse(returnCalls()[0][1].body).fieldValues.lineIds.sort()).toEqual(['g1', 'g2', 'g3']);
-    expect(toast.success).toHaveBeenCalledWith('remittanceReturnSuccess:{"count":1}');
+    expect(toast.success).toHaveBeenCalledWith('remittanceReturnSuccessOne:{"count":1}');
   });
 
   it('the search finds the row by the invoice of any of its lines', async () => {

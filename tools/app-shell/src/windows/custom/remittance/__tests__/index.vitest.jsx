@@ -259,6 +259,9 @@ describe('Remittance i18n keys', () => {
   it('the parameterized messages keep their placeholders in the three locales', () => {
     for (const json of [enUS, esES, esAR]) {
       expect(json.genericLabels.remittanceReturnSuccess).toContain('{count}');
+      // The singular is written out (1 cobro / 1 collection), as remittanceLinesTotalOne.
+      expect(json.genericLabels.remittanceReturnSuccessOne).not.toContain('{count}');
+      expect(json.genericLabels.remittanceReturnSuccessOne).toMatch(/\b1\b/);
       expect(json.genericLabels.remittanceReturnReturnedOn).toContain('{date}');
       // No count on purpose: returnedCount counts payments, not the invoices the lines show.
       expect(json.genericLabels.remittanceFileIncludesReturnedLines).not.toContain('{count}');

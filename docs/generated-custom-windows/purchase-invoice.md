@@ -3269,11 +3269,16 @@ outstanding drops to 0 and the invoice reads «Pagada» as usual.
   sidebar («Pago confirmado · anulado», red dot). Its amount is grey, unsigned and struck through.
   `isPaymentProcessed` counts it (never an editable draft, never reserved against the outstanding),
   and the modal footer's «N pagos registrados» leaves it out (`countRegisteredPayments`).
-- **This invoice's share.** A remittance grouped by customer pays several invoices with ONE payment,
-  so the payment's `amount` is the whole payment. The modal and the preview card show
-  `paymentAmountOnInvoice(p)`: the row's `appliedToInvoice` (the payment's schedule details on THIS
-  invoice, sent by `paymentListItem`; it survives a void), unsigned, falling back to `amount` when the
-  backend does not send it. A payment of 55,66 € for two invoices reads 27,83 € on each.
+- **This invoice's share — every payment, not only remittances.** The amount a row shows in the
+  invoice payments modal and in the preview card is this invoice's share of the payment, not the
+  payment total: `paymentAmountOnInvoice(p)`, the row's `appliedToInvoice` (the payment's schedule
+  details on THIS invoice, sent by `paymentListItem`; it survives a void), unsigned, falling back to
+  `amount` only when the backend does not send it. That covers three cases alike: a remittance
+  payment grouped by supplier (a payment of 55,66 € for two invoices reads 27,83 € on each), a manual
+  payment that covers several invoices, and an overpayment (a payment of 100 € on an 80 € invoice reads
+  80 €; the rest is credit, not this invoice's). Drafts still use `amount`: the draft reservation
+  (`freeToAllocate`, *Drafts reserve what they are going to pay* above) and the draft delete
+  confirmation read the payment's own `amount`.
 - Every topbar payment badge (paid, «En remesa», pending) ends with the same «Ver →» affordance as
   the sales topbar (`payment-status-badge-view`); the badge opens the payments modal.
 - **Payments modal** («Cobros/Pagos de la factura», `InvoicePaymentHistoryModal`) when something is

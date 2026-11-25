@@ -18986,6 +18986,7 @@
     "remittanceReturnDate": "Return date",
     "remittanceReturnWarning": "Each selected collection is voided with all its invoices, and those invoices become pending again. The remittance ends up partially collected.",
     "remittanceReturnSuccess": "Return registered ({count} collections).",
+    "remittanceReturnSuccessOne": "Return registered (1 collection).",
     "remittanceReturnError": "The return could not be registered.",
     "remittanceReturnReturned": "Returned",
     "remittanceReturnReturnedOn": "Returned on {date}",

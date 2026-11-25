@@ -19158,6 +19158,7 @@
     "remittanceReturnDate": "Fecha de devolución",
     "remittanceReturnWarning": "Se anula cada cobro seleccionado, con todas sus facturas, y esas facturas vuelven a quedar pendientes de cobro. La remesa queda parcialmente cobrada.",
     "remittanceReturnSuccess": "Devolución registrada ({count} cobros).",
+    "remittanceReturnSuccessOne": "Devolución registrada (1 cobro).",
     "remittanceReturnError": "No se pudo registrar la devolución.",
     "remittanceReturnReturned": "Devuelta",
     "remittanceReturnReturnedOn": "Devuelta el {date}",
