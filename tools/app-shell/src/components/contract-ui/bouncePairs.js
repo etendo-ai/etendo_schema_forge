@@ -204,7 +204,14 @@ export function dismissPairPayload(financialAccountId, line, model) {
   if (!line?.id) return null;
   // ETP-6359 — only an EXPLICIT pick travels: the original the AI preselected is not a user choice,
   // so "No es un rechazo" keeps its KPI meaning (the user rejected the pair, not a counterpart).
-  const counterpartLineId = (model?.aiPreselected ? null : model?.other?.id) ?? null;
+  // A free pick (an outflow that is not one of the pair's own originals / candidates, maybe the
+  // original of ANOTHER pair) is not sent either: the backend's KPI lookup would find no proposed
+  // pair for it.
+  const picked = model?.aiPreselected ? null : model?.other ?? null;
+  const own = model?.role === 'bounce'
+    ? pairOriginalLines(rowAsGroup(line)).some((l) => l?.id === picked?.id)
+    : true;
+  const counterpartLineId = (own ? picked?.id : null) ?? null;
   return {
     financialAccountId,
     statementLineId: line.id,
@@ -449,7 +456,9 @@ function bounceRoleModel(line, pair, { chosenOriginalId, chosenOriginalLine, aiA
   if (!chosen && chosenOriginalId != null && chosenOriginalLine?.id === chosenOriginalId) {
     chosen = chosenOriginalLine;
   }
-  const explicitPick = chosen != null;
+  // Only a pick that DIFFERS from the default is an explicit one: re-clicking the single original
+  // of a non-ambiguous pair changes nothing (and must not report a 'user' choice).
+  const explicitPick = chosen != null && (ambiguous || chosen.id !== options[0]?.id);
   let aiPreselected = false;
   if (!chosen && ambiguous) {
     const aiId = aiDefaultChoice(assessment, options);
@@ -683,9 +692,32 @@ export const BOUNCE_WINDOW_DAYS = 60;
  */
 export function canPairOutflow(outflow, bounce) {
   if (!outflow || !bounce) return false;
-  const a = Math.round((Number(outflow.amount) || 0) * 100);
-  const b = Math.round((Number(bounce.amount) || 0) * 100);
-  if (a === 0 || a + b !== 0) return false;
+  const a = decimalParts(outflow.amount);
+  const b = decimalParts(bounce.amount);
+  if (!a || !b || a.abs === '0' || a.neg === b.neg || a.abs !== b.abs) return false;
   const days = daysBetween(outflow.date, bounce.date);
   return days == null || (days >= 0 && days <= BOUNCE_WINDOW_DAYS);
+}
+
+/**
+ * A decimal amount (number or numeric string) as its sign and canonical absolute digits, so two
+ * amounts compare EXACTLY and symmetrically, like the server's BigDecimal compare (no scaling by
+ * 100 and rounding, which is asymmetric for negatives: -1.005 vs 1.005). A number is read through
+ * 15 significant digits, so a float artifact (0.30000000000000004) equals 0.3.
+ *
+ * @param {number|string|null|undefined} value
+ * @returns {{ neg: boolean, abs: string }|null} null when it is not a finite decimal
+ */
+function decimalParts(value) {
+  if (value == null || value === '') return { neg: false, abs: '0' };
+  // A number goes through 15 significant digits (the precision of a double that survives JSON), so
+  // a float artifact (0.1 + 0.2) reads as the decimal it was meant to be; a string is taken as is.
+  let text = typeof value === 'string' ? value.trim() : Number(value).toPrecision(15);
+  if (/e/i.test(text)) text = Number(text).toFixed(12);
+  const m = /^([+-]?)(\d*)(?:\.(\d*))?$/.exec(text);
+  if (!m || (m[2] === '' && !m[3])) return null;
+  const int = m[2].replace(/^0+/, '') || '0';
+  const frac = (m[3] ?? '').replace(/0+$/, '');
+  const abs = frac ? `${int}.${frac}` : int;
+  return { neg: m[1] === '-' && abs !== '0', abs };
 }

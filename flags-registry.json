@@ -2355,6 +2355,18 @@
         "unit": [
           {
             "root": "backend",
+            "path": "src-test/src/com/etendoerp/go/schemaforge/BankBounceAiTest.java",
+            "expected": true,
+            "note": "Covered (ETP-6359, the AI second layer of the same flag; tester-go): the BankBounceAi orchestrator (annotate, cache, back-off, caps, stale check of a choiceSource ai)."
+          },
+          {
+            "root": "backend",
+            "path": "src-test/src/com/etendoerp/go/schemaforge/BankBounceAiQuestionsTest.java",
+            "expected": true,
+            "note": "Covered (ETP-6359; tester-go): the pure part of the AI layer (components, aliases, question building, answer validation, the 80/30 rule and the shared-outflow dedup)."
+          },
+          {
+            "root": "backend",
             "path": "src-test/src/com/etendoerp/go/schemaforge/BankBounceSuggestionsFlagTest.java",
             "expected": true,
             "note": "Covered (ETP-5581 part 1): the ETGO_ACCOUNT email reaches the provider context through the real GoFeatureFlags into a capturing provider, as targeting key and as Email/email attributes, with the account resolved for real by GoAccountResolver over mocked OBContext/OBDal; a targeted account reads true and a non-targeted one false; no OBContext, no user, no account, a null email, a failed account query or a failure reading the user read false and hand the provider no identity; unset, non-boolean and failing provider read false; the key is bank-bounce-suggestions."
@@ -2400,6 +2412,24 @@
             "path": "tools/app-shell/src/components/contract-ui/__tests__/ReconciliationSplitPanel.bounces.vitest.jsx",
             "expected": true,
             "note": "Covered (ETP-5581 part 2), with a fake usePendingStatementLines that reloads on a filter change: flag off offers neither entry and sends no status param, a Classic discarded line offers Descartadas only; the Posible rechazo badge, the bounce and discarded entries with their counts, bounce lines counted under Pendientes and the Posibles rechazos filter; the bounce panel replaces the candidates (useCandidateOperations gets a null line id, a plain line still gets its own); the original of a high pair (source, bounce row and badge, high notice with the signal, net, discardPair body); the bounce of an ambiguous pair (radios, nothing preselected, choose notice, discard disabled), choosing by radio or row, then discardPair {original, bounce} -> success toast, reload and onReconcileSuccess; a coded refusal toasts the translated ETGO_BounceHasPayment and does not reload, a bodiless one the action fallback; 'No es un rechazo' locally (lines back to pending, counts moved) and through the bounceReview prop (onDismiss with the groupKey, its dismissedKeys read back); the Descartadas filter (status=discarded, the default answer's counts kept, back to Pendientes drops the param), a paired discarded line (counterpart row and badge, discard date notice, Restaurar par, no dismiss/discard), restore of 2 lines vs 1 (Par restaurado vs Linea restaurada, Restaurar linea and the alone notice), a translated restore refusal; read-only disables Descartar par and Restaurar par and keeps 'No es un rechazo'; the focus request (filter to bounce, search cleared, line selected and scrolled into view, consumed once; widening to any date once; giving up when the line is not there). Post-review round: a second 'Revisar en el panel' with the lines loaded and the filter already on Posibles rechazos selects the line (the request effect depends on focus; selectLine is stable); while Descartadas is active at any date the request waits for the reload instead of giving up on the discarded lines; after a restore on Descartadas the default counts are re-read (a failed re-read keeps the last ones, no error); the restore failure toast names a single line for a line discarded alone; each candidate radio is named by its date, amount and bank reference. KPI reporting (ETP-5581 part 3): No es un rechazo also posts dismissPair with the selected line and the other line of the pair (the chosen original of an ambiguous pair; no counterpart while none is chosen); a rejected or a synchronously throwing dismissPair changes nothing on screen and shows no error; under the read-only tier the pair is hidden and nothing is posted."
+          },
+          {
+            "root": "frontend",
+            "path": "tools/app-shell/src/components/contract-ui/__tests__/AutoMatchCard.vitest.jsx",
+            "expected": true,
+            "note": "Covered (ETP-6359 Phase A redesign of the automatch modal; tester-functional): the tinted card frame, title, subtitle, footer and header row."
+          },
+          {
+            "root": "frontend",
+            "path": "tools/app-shell/src/components/contract-ui/__tests__/AutoMatchPairRow.vitest.jsx",
+            "expected": true,
+            "note": "Covered (ETP-6359 Phase A redesign of the automatch modal; tester-functional): the shared pair row: checkbox column, two cells, selected and hover looks."
+          },
+          {
+            "root": "frontend",
+            "path": "tools/app-shell/src/components/contract-ui/__tests__/AutoMatchCloseConfirmDialog.vitest.jsx",
+            "expected": true,
+            "note": "Covered (ETP-6359 Phase A redesign of the automatch modal; tester-functional): the close confirmation dialog of the modal."
           },
           {
             "root": "frontend",

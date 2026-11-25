@@ -156,8 +156,8 @@ function PairRow({ row, model, onChoose, currency, bcpLocale }) {
   const chosen = row.id === model.chosenId;
   const amount = Number(row.amount) || 0;
   const ref = String(row.referenceNo ?? '').trim();
-  // ETP-6359 — the AI's percentage for this original (absent without AI) and, on the row it
-  // recommends, a text badge: the percentage is spoken through aria-describedby, not by colour.
+  // ETP-6359 — the AI's mark for this original (sparkle + percentage, absent without AI): the
+  // percentage is spoken through aria-describedby, the sparkle is decorative.
   const pct = model.percents?.[row.id] ?? null;
   const pctId = `recon-bounce-ai-pct-${row.id}`;
   return (

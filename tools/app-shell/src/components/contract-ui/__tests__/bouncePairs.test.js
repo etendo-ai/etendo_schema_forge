@@ -851,6 +851,29 @@ describe('rowAsGroup / buildBouncePairRows / buildBounceOutflows / countBouncePa
   });
 });
 
+describe('canPairOutflow — exact, symmetric decimal comparison (as the server\'s BigDecimal)', () => {
+  const pair = (a, b) => canPairOutflow({ amount: a, date: '2026-08-24' }, { amount: b, date: '2026-08-24' });
+  it('is symmetric for amounts that a *100 rounding handles asymmetrically', () => {
+    assert.equal(pair(-0.615, 0.615), true);
+    assert.equal(pair(-1.005, 1.005), true);
+    assert.equal(pair(-2.675, 2.675), true);
+  });
+  it('treats a float artifact as the decimal it was meant to be', () => {
+    assert.equal(pair(-(0.1 + 0.2), 0.3), true);
+  });
+  it('accepts numeric strings and mixed forms', () => {
+    assert.equal(pair('-1.005', '1.005'), true);
+    assert.equal(pair('-80.00', 80), true);
+    assert.equal(pair(-80, '80.0'), true);
+  });
+  it('refuses a difference of a single digit, equal signs and zero', () => {
+    assert.equal(pair(-0.615, 0.616), false);
+    assert.equal(pair(-1.005, 1.004), false);
+    assert.equal(pair(1.005, 1.005), false);
+    assert.equal(pair(0, 0), false);
+  });
+});
+
 describe('bouncePanelModel — an explicit pick outside the pair\'s originals (two-table view)', () => {
   const o1 = { id: 'O1', amount: -5, date: '2026-10-01' };
   const x = { id: 'X', amount: -5, date: '2026-10-02' };
@@ -865,5 +888,34 @@ describe('bouncePanelModel — an explicit pick outside the pair\'s originals (t
     assert.equal(model.explicitPick, true);
     assert.deepEqual(model.discard, { statementLineId: 'X', counterpartLineId: 'B' });
     assert.equal(model.net, 0);
+  });
+});
+
+describe('dismissPairPayload — only a pick among the pair\'s own originals travels', () => {
+  const c1 = { id: 'C1', amount: -8, date: '2026-10-01' };
+  const c2 = { id: 'C2', amount: -8, date: '2026-10-02' };
+  const foreign = { id: 'F', amount: -8, date: '2026-10-02' };
+  const line = {
+    id: 'B', state: BOUNCE_STATE, amount: 8, date: '2026-10-03',
+    bouncePair: { role: 'bounce', ambiguous: true, confidence: 'review', candidates: [{ line: c1 }, { line: c2 }] },
+  };
+  const ai = { B: { probabilities: { C1: 10, C2: 85 }, none: 5, recommendedLineId: 'C2' } };
+  it('sends a pick among its own candidates', () => {
+    const model = bouncePanelModel(line, { chosenOriginalId: 'C1' });
+    assert.deepEqual(dismissPairPayload('A', line, model), { financialAccountId: 'A', statementLineId: 'B', counterpartLineId: 'C1' });
+  });
+  it('omits a free pick of a foreign outflow', () => {
+    const model = bouncePanelModel(line, { chosenOriginalId: 'F', chosenOriginalLine: foreign });
+    assert.deepEqual(dismissPairPayload('A', line, model), { financialAccountId: 'A', statementLineId: 'B' });
+  });
+  it('still omits the AI default', () => {
+    const model = bouncePanelModel(line, { aiAssessments: ai });
+    assert.equal(model.aiPreselected, true);
+    assert.deepEqual(dismissPairPayload('A', line, model), { financialAccountId: 'A', statementLineId: 'B' });
+  });
+  it('re-clicking the single original of a non-ambiguous pair is not an explicit pick', () => {
+    const single = { ...line, bouncePair: { role: 'bounce', ambiguous: false, counterpartLine: c1 } };
+    assert.equal(bouncePanelModel(single, { chosenOriginalId: 'C1' }).explicitPick, false);
+    assert.equal(bouncePanelModel(single, { chosenOriginalId: 'F', chosenOriginalLine: foreign }).explicitPick, true);
   });
 });

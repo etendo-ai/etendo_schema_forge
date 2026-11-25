@@ -82,6 +82,13 @@ describe('aiNoneWins / visibleAiPercent (one rule for the modal and the panel)',
   });
 });
 
+describe('sortOptionsByAi when none wins', () => {
+  it('keeps the detector order (the percentages are hidden)', () => {
+    const wins = { probabilities: { 'L-OUT-A': 10, 'L-OUT-B': 40 }, none: 50 };
+    assert.deepEqual(sortOptionsByAi([A, B], wins), [A, B]);
+  });
+});
+
 describe('sortOptionsByAi', () => {
   it('orders by descending percentage', () => {
     assert.deepEqual(sortOptionsByAi([A, B], ASSESSMENT), [B, A]);

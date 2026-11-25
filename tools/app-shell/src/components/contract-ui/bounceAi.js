@@ -85,7 +85,8 @@ export function visibleAiPercent(assessment, lineId) {
  * @returns {Array<object|string>}
  */
 export function sortOptionsByAi(options, assessment) {
-  if (!assessment || !Array.isArray(options) || options.length < 2) return options;
+  // No percentage is shown when "none" wins, so the detector's order is kept too.
+  if (!assessment || !Array.isArray(options) || options.length < 2 || aiNoneWins(assessment)) return options;
   return options
     .map((option, index) => ({ option, index, pct: aiPercent(assessment, optionId(option)) ?? -1 }))
     .sort((a, b) => b.pct - a.pct || a.index - b.index)

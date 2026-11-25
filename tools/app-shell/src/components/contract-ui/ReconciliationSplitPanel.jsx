@@ -1,4 +1,4 @@
-import { Children, Fragment, cloneElement, createContext, useContext, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Children, Fragment, cloneElement, createContext, useContext, useCallback, useEffect, useMemo, useState } from 'react';
 import { gridViewColumnId, useGridView } from '@/hooks/useGridView.js';
 import { useFeatureFlag, GRID_COLUMN_VIEWS } from '@/lib/flags';
 import { GridViewControls } from './GridViewControls.jsx';
@@ -611,9 +611,9 @@ function ProgressCell({ line, currency, cellClassName, gridWidth }) {
  *   pair: the row's anchor (the bounce line) goes to `onSelectLine`, so the pair panel's model and
  *   hooks keep working untouched (`parts`, from `useBouncePairPanel`).
  * Selecting a rejection highlights its outflows on the left (the original, or the candidates, which
- * then carry the radio and the AI mark "✦ pct %"); clicking an outflow
- * picks it for the selected rejection when it is one of its candidates, else selects the first
- * rejection that lists it. The notice sits above both tables and the footer (net effect, "No es un
+ * then carry the radio and the AI mark "✦ pct %"); clicking an outflow is an explicit pick for
+ * the selected rejection when they can be paired (any outflow, not only its candidates), else the
+ * selection re-targets to the first rejection that can take it. The notice sits above both tables and the footer (net effect, "No es un
  * rechazo", "Descartar par") below them. No sort headers, no sorting, no total: the order is the
  * backend's. Outside the personal column grid: the persisted layout of the flat list is untouched.
  */
@@ -645,10 +645,15 @@ function PairTablesView({
   // it, the selection RE-TARGETS to the first rejection (date order) that can, preferring one that
   // lists it as a candidate, and the outflow becomes the pick there (`pendingPick`, applied once
   // that rejection is the selected one). When none can, nothing changes and the row says why.
+  // The pending pick is dropped if the selection moves anywhere else before its anchor lands.
   const [pendingPick, setPendingPick] = useState(null);
   useEffect(() => {
-    if (pendingPick && parts?.line?.id === pendingPick.anchorId) {
+    if (!pendingPick) return;
+    const current = parts?.line?.id ?? null;
+    if (current === pendingPick.anchorId) {
       parts.onChoose(pendingPick.outflow);
+      setPendingPick(null);
+    } else if (current !== pendingPick.fromId) {
       setPendingPick(null);
     }
   }, [pendingPick, parts]);
@@ -660,7 +665,7 @@ function PairTablesView({
     const target = entries.find((e) => e.outflowIds.includes(outflow.id) && canPairOutflow(outflow, e.anchor))
       ?? entries.find((e) => canPairOutflow(outflow, e.anchor));
     if (!target) return;
-    setPendingPick({ anchorId: target.anchor.id, outflow });
+    setPendingPick({ anchorId: target.anchor.id, outflow, fromId: parts?.line?.id ?? null });
     onSelectLine(target.anchor);
   };
 
@@ -672,7 +677,9 @@ function PairTablesView({
     const pct = candidate ? model?.percents?.[line.id] ?? null : null;
     // The hint only when no rejection at all can take this outflow (else a click re-targets).
     const unpairable = !entries.some((e) => canPairOutflow(line, e.anchor));
-    const noMatch = unpairable ? ui('financeReconcileBounceOutflowNoMatch') : undefined;
+    const noMatchId = unpairable ? `recon-outflow-nomatch-${line.id}` : undefined;
+    const describedBy = [pct == null ? null : `recon-bounce-ai-pct-${line.id}`, noMatchId]
+      .filter(Boolean).join(' ') || undefined;
     const cellBg = cn('transition-colors', highlighted ? 'bg-[hsl(var(--muted))]' : 'bg-card');
     const ref = String(line.referenceNo ?? '').trim();
     return (
@@ -680,7 +687,6 @@ function PairTablesView({
         key={line.id}
         data-testid={`recon-outflow-row-${line.id}`}
         onClick={() => pickOutflow(line)}
-        title={noMatch}
         className={cn(
           'group relative h-[62px] cursor-pointer border-b border-[hsl(var(--border-subtle))] bg-card transition-shadow',
           highlighted ? `z-10 ${ELEVATED_SHADOW}` : 'hover:z-10 hover:bg-card hover:shadow-lg',
@@ -693,7 +699,8 @@ function PairTablesView({
             type="radio"
             name="recon-bounce-original"
             aria-label={chooseLabel(ui, line, currency, bcpLocale)}
-            aria-describedby={pct == null ? undefined : `recon-bounce-ai-pct-${line.id}`}
+            aria-describedby={describedBy}
+            aria-disabled={unpairable ? 'true' : undefined}
             checked={chosen}
             onChange={() => pickOutflow(line)}
             data-testid={candidate ? `recon-bounce-radio-${line.id}` : `recon-outflow-radio-${line.id}`}
@@ -721,6 +728,14 @@ function PairTablesView({
                   data-testid={`recon-bounce-ref-${line.id}`} />
               ) : null}
               <AiPercentText rowId={line.id} pct={pct} />
+              {unpairable ? (
+                <span
+                  id={noMatchId}
+                  className="text-xs font-normal leading-4 text-[hsl(var(--muted-foreground))]"
+                  data-testid={`recon-outflow-nomatch-${line.id}`}>
+                  {ui('financeReconcileBounceOutflowNoMatch')}
+                </span>
+              ) : null}
             </div>
           </div>
         </TableCell>
@@ -741,6 +756,12 @@ function PairTablesView({
     const original = group.ambiguous ? null : group.statementLine;
     const { badge, reason } = pairBadgeAndReason(ui, group, original, null, 'financeReconcileBounceTagLowConfidence');
     const ref = String(anchor.referenceNo ?? '').trim();
+    // Each rejection radio is named by its date, signed amount and bank reference (like the
+    // outflow radios), so identical-looking rejections are told apart.
+    const labelParams = { date: formatDate(anchor.date, bcpLocale), amount: formatSigned(anchor.amount, currency) };
+    const rejectionLabel = ref
+      ? ui('financeReconcileBounceSelectRejectionRef', { ...labelParams, ref })
+      : ui('financeReconcileBounceSelectRejection', labelParams);
     return (
       <TableRow
         key={entry.key}
@@ -757,7 +778,7 @@ function PairTablesView({
           <input
             type="radio"
             name="recon-statement-line"
-            aria-label={ui('financeReconcileColSelect')}
+            aria-label={rejectionLabel}
             checked={selected}
             onChange={() => onSelectLine(anchor)}
             data-testid={`recon-line-radio-${anchor.id}`}
@@ -802,7 +823,7 @@ function PairTablesView({
     <div
       className="flex min-w-[30%] flex-1 flex-col overflow-hidden"
       data-testid={parts ? 'recon-bounce-panel' : 'recon-bounce-pairs-view'}>
-      {parts && model && model.mode === BOUNCE_STATE ? (
+      {selectedEntry && parts && model && model.mode === BOUNCE_STATE ? (
         <div className="pt-2">
           <BounceNotice model={model} bcpLocale={bcpLocale} />
         </div>
@@ -1223,6 +1244,7 @@ function RightEmptyState({ titleKey = 'financeReconcileRightEmptyTitle', hintKey
   const ui = useUI();
   return (
     <div
+      role="status"
       className={cn('flex min-w-[30%] flex-1 flex-col items-center justify-center px-0 text-center', className)}
       data-testid="recon-right-empty">
       <div className="flex w-full flex-col items-center gap-1 px-5">
@@ -2121,18 +2143,21 @@ export function ReconciliationSplitPanel({
     () => (pairMode ? buildBouncePairRows(lines, { query: leftSearch }) : null),
     [pairMode, lines, leftSearch],
   );
-  // While "Descartadas" is shown `lines` holds the discarded ones only, so the last figure of the
-  // default answer is kept (like the counts, see useBounceLines).
-  const lastPairCountRef = useRef(null);
   const bounceOutflows = useMemo(
     () => (pairMode ? buildBounceOutflows(lines, { query: leftSearch }) : []),
     [pairMode, lines, leftSearch],
   );
-  const bouncePairCount = useMemo(() => {
-    if (statusCounts?.bounce == null) return null;
-    if (leftStatus !== 'discarded') lastPairCountRef.current = countBouncePairs(lines);
-    return lastPairCountRef.current;
-  }, [statusCounts, lines, leftStatus]);
+  // While "Descartadas" is shown, or the lines are still loading, `lines` does not hold the default
+  // answer: the last settled figure is kept (like the counts, see useBounceLines), so the filter
+  // never flashes 0 meanwhile.
+  const currentPairCount = useMemo(() => countBouncePairs(lines), [lines]);
+  const pairCountSettled = !linesLoading && leftStatus !== 'discarded' && statusCounts?.bounce != null;
+  const [lastPairCount, setLastPairCount] = useState(null);
+  useEffect(() => {
+    if (pairCountSettled) setLastPairCount(currentPairCount);
+  }, [pairCountSettled, currentPairCount]);
+  let bouncePairCount = null;
+  if (statusCounts?.bounce != null) bouncePairCount = pairCountSettled ? currentPairCount : lastPairCount;
 
   // A pair's original / candidate line selected under another filter reads as its pair here: the
   // selection moves to the pair's bounce row (the anchor), which the pair panel's model keys on.

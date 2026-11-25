@@ -45,6 +45,7 @@ const pending = {
   answer: () => ({ lines: [], counts: {} }),
   calls: [],
   reload: vi.fn(),
+  refetchOnReload: false,
 };
 const candidateLineIds = [];
 
@@ -53,7 +54,8 @@ vi.mock('@/hooks/useReconciliation', async () => {
   return {
     usePendingStatementLines: (accountId, filters = {}) => {
       pending.calls.push({ accountId, ...filters });
-      const key = JSON.stringify(filters);
+      const [version, setVersion] = React.useState(0);
+      const key = JSON.stringify({ filters, version });
       const [state, setState] = React.useState({ key: null, data: null });
       React.useEffect(() => {
         let alive = true;
@@ -69,7 +71,8 @@ vi.mock('@/hooks/useReconciliation', async () => {
         total: data.lines.length,
         counts: data.counts,
         loading: state.key !== key,
-        reload: pending.reload,
+        // `pending.refetchOnReload` makes a reload behave like the real hook: it asks again.
+        reload: () => { pending.reload(); if (pending.refetchOnReload) setVersion((v) => v + 1); },
         draftReconciliationCount: 0,
       };
     },
@@ -97,6 +100,7 @@ vi.mock('@/hooks/useBouncePairActions.js', () => ({
 }));
 
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 import { toast } from 'sonner';
 import { ReconciliationSplitPanel } from '@/components/contract-ui/ReconciliationSplitPanel.jsx';
@@ -196,6 +200,7 @@ beforeEach(() => {
   pairActions.restoring = false;
   pending.calls = [];
   pending.reload = vi.fn();
+  pending.refetchOnReload = false;
   candidateLineIds.length = 0;
   discardPairMock.mockReset().mockResolvedValue({ discarded: true });
   restorePairMock.mockReset().mockResolvedValue({ restored: ['D1', 'D2'] });
@@ -1439,8 +1444,11 @@ describe('ReconciliationSplitPanel — "Posibles rechazos" two-table view detail
     openPairView();
     fireEvent.click(screen.getByTestId('recon-outflow-row-O1'));
     expect(screen.getByTestId('recon-line-radio-B1')).toBeChecked();
-    expect(screen.getByTestId('recon-outflow-row-O9')).toHaveAttribute('title', 'financeReconcileBounceOutflowNoMatch');
-    expect(screen.getByTestId('recon-outflow-row-O1')).not.toHaveAttribute('title');
+    // The hint is visible text, linked to the radio (aria-describedby) which is aria-disabled.
+    expect(screen.getByTestId('recon-outflow-nomatch-O9')).toHaveTextContent('financeReconcileBounceOutflowNoMatch');
+    expect(screen.getByTestId('recon-outflow-radio-O9')).toHaveAttribute('aria-describedby', 'recon-outflow-nomatch-O9');
+    expect(screen.getByTestId('recon-outflow-radio-O9')).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.queryByTestId('recon-outflow-nomatch-O1')).toBeNull();
     fireEvent.click(screen.getByTestId('recon-outflow-row-O9'));
     expect(screen.getByTestId('recon-line-radio-B1')).toBeChecked();
     expect(screen.queryAllByTestId(/^recon-line-row-/).map((el) => el.dataset.testid)).toEqual(['recon-line-row-B1']);
@@ -1523,5 +1531,256 @@ describe('BouncePairPanel building blocks — AiPercentText, BounceNotice, Bounc
     );
     expect(screen.getByTestId('recon-bounce-discard')).toBeDisabled();
     expect(screen.getByTestId('recon-bounce-dismiss')).toBeEnabled();
+  });
+});
+
+// ── Hidden selection, keyboard, re-target ties and the state after a free pick (ETP-6359) ──
+
+const X1_SHORT = { id: 'X1', amount: -80, date: '2026-10-02', description: 'Otra salida' };
+const B4_SHORT = { id: 'B4', amount: 80, date: '2026-10-06', description: 'Abono otro' };
+const X_PAIR = { groupKey: 'g-x', ambiguous: false, confidence: 'review', signal: 'counterparty', signals: ['counterparty'] };
+const X1 = { ...X1_SHORT, state: 'bounce', status: 'pending', bouncePair: { ...X_PAIR, role: 'original', counterpartLine: B4_SHORT } };
+const B4 = { ...B4_SHORT, state: 'bounce', status: 'pending', bouncePair: { ...X_PAIR, role: 'bounce', counterpartLine: X1_SHORT } };
+const withX = () => {
+  pending.answer = () => ({ lines: [PLAIN, O1, B1, C1, C2, B3, X1, B4], counts: { ...BOUNCE_COUNTS, all: 8, bounce: 7 } });
+};
+const outflowRadio = (id) => screen.queryByTestId(`recon-bounce-radio-${id}`) ?? screen.getByTestId(`recon-outflow-radio-${id}`);
+const rejectionIds = () => screen.queryAllByTestId(/^recon-line-row-/).map((el) => el.dataset.testid);
+
+describe('ReconciliationSplitPanel — the left filters hide the selected pair', () => {
+  it('the search hiding the selected pair reverts the right side to the placeholder and drops the footer; clearing it restores everything', async () => {
+    renderPanel();
+    await screen.findByTestId('recon-line-row-B3');
+    openPairView();
+    fireEvent.click(screen.getByTestId('recon-outflow-row-O1'));
+    expect(screen.getByTestId('recon-bounce-footer')).toBeInTheDocument();
+    expect(screen.getByTestId('recon-bounce-discard')).toBeEnabled();
+
+    // "Abono" matches only the ambiguous pair (B3 / C1 / C2): the selected pair g-high is hidden.
+    fireEvent.change(screen.getByTestId('recon-left-search'), { target: { value: 'Abono' } });
+    expect(screen.getByTestId('recon-right-empty')).toBeInTheDocument();
+    expect(screen.queryByTestId('recon-bounce-footer')).toBeNull();
+    expect(screen.queryByTestId('recon-bounce-discard')).toBeNull();
+    expect(screen.queryByTestId('recon-rejections-table')).toBeNull();
+    expect(screen.queryByTestId('recon-outflow-row-O1')).toBeNull();
+    // Nothing could be discarded from the hidden state.
+    expect(discardPairMock).not.toHaveBeenCalled();
+
+    // Clearing the filter brings the same selection back (the line stayed selected).
+    fireEvent.change(screen.getByTestId('recon-left-search'), { target: { value: '' } });
+    expect(screen.queryByTestId('recon-right-empty')).toBeNull();
+    expect(screen.getByTestId('recon-line-radio-B1')).toBeChecked();
+    expect(screen.getByTestId('recon-bounce-discard')).toBeEnabled();
+    fireEvent.click(screen.getByTestId('recon-bounce-discard'));
+    await waitFor(() => expect(discardPairMock).toHaveBeenCalledWith({
+      financialAccountId: 'ACC-1', statementLineId: 'O1', counterpartLineId: 'B1',
+    }));
+    expect(discardPairMock).toHaveBeenCalledTimes(1);
+  });
+
+  // The notice is gated on the selected pair being shown, like the footer: a pair hidden by the
+  // search leaves no stale notice above the placeholder.
+  it('the notice of the hidden selected pair disappears with the footer', async () => {
+    renderPanel();
+    await screen.findByTestId('recon-line-row-B3');
+    openPairView();
+    fireEvent.click(screen.getByTestId('recon-outflow-row-O1'));
+    fireEvent.change(screen.getByTestId('recon-left-search'), { target: { value: 'Abono' } });
+    expect(screen.getByTestId('recon-right-empty')).toBeInTheDocument();
+    expect(screen.queryByTestId('recon-bounce-notice')).toBeNull();
+  });
+
+  it('a search that still matches the selected pair keeps the footer and the selection', async () => {
+    renderPanel();
+    await screen.findByTestId('recon-line-row-B3');
+    openPairView();
+    fireEvent.click(screen.getByTestId('recon-outflow-row-O1'));
+    fireEvent.change(screen.getByTestId('recon-left-search'), { target: { value: 'DEVOLUCION' } });
+    expect(screen.getByTestId('recon-line-radio-B1')).toBeChecked();
+    expect(screen.getByTestId('recon-bounce-footer')).toBeInTheDocument();
+    expect(screen.queryByTestId('recon-right-empty')).toBeNull();
+  });
+});
+
+describe('ReconciliationSplitPanel — keyboard on the outflow radios', () => {
+  // The radios share one group (`name="recon-bounce-original"`): an arrow key moves the focus to the
+  // next radio AND checks it, which calls the same handler as a click. Actual behaviour:
+  // - onto a pairable outflow it picks it (or re-targets the selection to a rejection that can take it);
+  // - onto an unpairable one nothing changes in the selection, the radio stays unchecked and the
+  //   focus stays on it (aria-disabled is not `disabled`), so the next arrow key moves on: no trap.
+  const O9_SHORT = { id: 'O9', amount: -33, date: '2026-06-01', description: 'Cuota anual' };
+  const B9_SHORT = { id: 'B9', amount: 33, date: '2026-09-09', description: 'CUOTA DEVUELTA' };
+  const P9 = { groupKey: 'g-o9', ambiguous: false, confidence: 'review', signal: 'counterparty', signals: ['counterparty'] };
+  const O9 = { ...O9_SHORT, state: 'bounce', status: 'pending', bouncePair: { ...P9, role: 'original', counterpartLine: B9_SHORT } };
+  const B9 = { ...B9_SHORT, state: 'bounce', status: 'pending', bouncePair: { ...P9, role: 'bounce', counterpartLine: O9_SHORT } };
+
+  it('arrowing among the outflow radios re-targets, keeps the focus on the arrowed radio and never traps it on an unpairable one', async () => {
+    pending.answer = () => ({ lines: [PLAIN, O1, B1, C1, C2, B3, O9, B9], counts: { ...BOUNCE_COUNTS, all: 8, bounce: 7 } });
+    const user = userEvent.setup();
+    renderPanel();
+    await screen.findByTestId('recon-line-row-B3');
+    openPairView();
+    // Date order of the left table: O9, C1, O1, C2.
+    expect(screen.queryAllByTestId(/^recon-outflow-row-/).map((el) => el.dataset.testid))
+      .toEqual(['recon-outflow-row-O9', 'recon-outflow-row-C1', 'recon-outflow-row-O1', 'recon-outflow-row-C2']);
+    await user.click(outflowRadio('O1'));
+    expect(screen.getByTestId('recon-line-radio-B1')).toBeChecked();
+    expect(document.activeElement).toBe(outflowRadio('O1'));
+
+    // ArrowDown onto C2 (-80): B1 cannot take it, the selection re-targets to B3 and C2 is the pick.
+    await user.keyboard('{ArrowDown}');
+    expect(screen.getByTestId('recon-line-radio-B3')).toBeChecked();
+    expect(outflowRadio('C2')).toBeChecked();
+    expect(document.activeElement).toBe(outflowRadio('C2'));
+
+    // ArrowDown wraps onto O9: no rejection can take it, nothing changes, the focus is there.
+    await user.keyboard('{ArrowDown}');
+    expect(document.activeElement).toBe(outflowRadio('O9'));
+    expect(outflowRadio('O9')).not.toBeChecked();
+    expect(outflowRadio('O9')).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByTestId('recon-line-radio-B3')).toBeChecked();
+    expect(outflowRadio('C2')).toBeChecked();
+
+    // Another arrow key moves on from the unpairable one: the focus is not trapped.
+    await user.keyboard('{ArrowDown}');
+    expect(document.activeElement).toBe(outflowRadio('C1'));
+    expect(outflowRadio('C1')).toBeChecked();
+    expect(discardPairMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('ReconciliationSplitPanel — re-targeting with a shared outflow', () => {
+  beforeEach(() => { pending.answer = sharedAnswer; });
+
+  it('with nothing selected, the first rejection in the backend order that lists the shared outflow is selected', async () => {
+    renderPanel();
+    await screen.findByTestId('recon-line-row-R-B2');
+    openPairView();
+    fireEvent.click(screen.getByTestId('recon-outflow-row-R-C2'));
+    expect(screen.getByTestId('recon-line-radio-R-B1')).toBeChecked();
+    expect(screen.getByTestId('recon-line-radio-R-B2')).not.toBeChecked();
+    expect(screen.getByTestId('recon-bounce-radio-R-C2')).toBeChecked();
+  });
+
+  it('follows the order of the lines, not the ids: reversed lines select the other rejection', async () => {
+    pending.answer = (filters) => {
+      const base = sharedAnswer(filters);
+      return filters.status === 'discarded' ? base : { ...base, lines: [PLAIN, R_C3, R_B2, R_C2, R_B1, R_C1, O1, B1] };
+    };
+    renderPanel();
+    await screen.findByTestId('recon-line-row-R-B2');
+    openPairView();
+    fireEvent.click(screen.getByTestId('recon-outflow-row-R-C2'));
+    expect(screen.getByTestId('recon-line-radio-R-B2')).toBeChecked();
+    expect(screen.getByTestId('recon-line-radio-R-B1')).not.toBeChecked();
+  });
+});
+
+describe('ReconciliationSplitPanel — after discarding with a free pick of another pair\'s outflow', () => {
+  it('the reload leaves no half-pair, no ghost footer and no reused pick: the placeholder returns and the next pick is clean', async () => {
+    withX();
+    pending.refetchOnReload = true;
+    // After the discard, X1 and B3 are gone; the backend re-detects B4 against the freed candidates.
+    discardPairMock.mockImplementation(async () => {
+      const g = { groupKey: 'g-x2', ambiguous: true, confidence: 'review', signal: 'counterparty', signals: ['counterparty'] };
+      const c1 = { ...C1_SHORT }; const c2 = { ...C2_SHORT };
+      const b4 = { ...B4, bouncePair: { ...g, role: 'bounce', candidates: [{ line: c1 }, { line: c2 }] } };
+      const cand = (c) => ({ ...c, state: 'bounce', status: 'pending', bouncePair: { ...g, role: 'candidate', counterpartLine: B4_SHORT } });
+      pending.answer = () => ({ lines: [PLAIN, O1, B1, cand(c1), cand(c2), b4], counts: { ...BOUNCE_COUNTS, all: 6, bounce: 5 } });
+      return { discarded: true };
+    });
+    renderPanel();
+    await screen.findByTestId('recon-line-row-B3');
+    openPairView();
+    fireEvent.click(screen.getByTestId('recon-outflow-row-C1'));
+    fireEvent.click(screen.getByTestId('recon-outflow-row-X1'));
+    expect(outflowRadio('X1')).toBeChecked();
+    fireEvent.click(screen.getByTestId('recon-bounce-discard'));
+    await waitFor(() => expect(discardPairMock).toHaveBeenCalledWith({
+      financialAccountId: 'ACC-1', statementLineId: 'X1', counterpartLineId: 'B3',
+    }));
+    // The selected rejection B3 is gone: placeholder, no footer, no notice, X1 no longer listed.
+    await waitFor(() => expect(screen.getByTestId('recon-right-empty')).toBeInTheDocument());
+    expect(screen.queryByTestId('recon-bounce-footer')).toBeNull();
+    expect(screen.queryByTestId('recon-bounce-notice')).toBeNull();
+    expect(screen.queryByTestId('recon-outflow-row-X1')).toBeNull();
+    expect(screen.queryByTestId('recon-line-row-B3')).toBeNull();
+    expect(screen.queryAllByTestId(/^recon-outflow-row-/).map((el) => el.dataset.testid))
+      .toEqual(['recon-outflow-row-C1', 'recon-outflow-row-O1', 'recon-outflow-row-C2']);
+
+    // The next pick is clean: B4 (re-detected over C1 / C2) is selected with C1 as the pick, and the
+    // footer names C1, never the discarded X1.
+    fireEvent.click(screen.getByTestId('recon-outflow-row-C1'));
+    expect(screen.getByTestId('recon-line-radio-B4')).toBeChecked();
+    expect(screen.getByTestId('recon-bounce-radio-C1')).toBeChecked();
+    expect(rejectionIds()).toEqual(['recon-line-row-B4']);
+    // The footer's counterpart is C1 (1 Oct), never the discarded X1 (2 Oct).
+    expect(screen.getByTestId('recon-bounce-total-other-meta')).toHaveTextContent(formatDate('2026-10-01', 'es-ES'));
+    expect(screen.getByTestId('recon-bounce-total-other-meta')).not.toHaveTextContent(formatDate('2026-10-02', 'es-ES'));
+    fireEvent.click(screen.getByTestId('recon-bounce-discard'));
+    await waitFor(() => expect(discardPairMock).toHaveBeenCalledTimes(2));
+    expect(discardPairMock).toHaveBeenLastCalledWith({
+      financialAccountId: 'ACC-1', statementLineId: 'C1', counterpartLineId: 'B4',
+    });
+  });
+
+  it('a pending re-target pick is dropped when the selection moves elsewhere first', async () => {
+    withX();
+    renderPanel();
+    await screen.findByTestId('recon-line-row-B3');
+    openPairView();
+    fireEvent.click(screen.getByTestId('recon-outflow-row-O1'));
+    expect(screen.getByTestId('recon-line-radio-B1')).toBeChecked();
+    // X1 re-targets to B4 and is the pick there; then the user selects another rejection.
+    fireEvent.click(screen.getByTestId('recon-outflow-row-X1'));
+    expect(screen.getByTestId('recon-line-radio-B4')).toBeChecked();
+    fireEvent.click(screen.getByTestId('recon-outflow-row-O1'));
+    expect(screen.getByTestId('recon-line-radio-B1')).toBeChecked();
+    // No stale pick leaked onto B1: its only original stays chosen and discard sends it.
+    fireEvent.click(screen.getByTestId('recon-bounce-discard'));
+    await waitFor(() => expect(discardPairMock).toHaveBeenCalledWith({
+      financialAccountId: 'ACC-1', statementLineId: 'O1', counterpartLineId: 'B1',
+    }));
+  });
+});
+
+describe('ReconciliationSplitPanel — "No es un rechazo" after a free pick (two-table view)', () => {
+  it('a free pick of another pair\'s outflow reports no counterpartLineId; a pick among its own candidates reports it', async () => {
+    withX();
+    renderPanel();
+    await screen.findByTestId('recon-line-row-B3');
+    openPairView();
+    fireEvent.click(screen.getByTestId('recon-outflow-row-C1'));
+    fireEvent.click(screen.getByTestId('recon-outflow-row-X1'));
+    expect(outflowRadio('X1')).toBeChecked();
+    fireEvent.click(screen.getByTestId('recon-bounce-dismiss'));
+    expect(dismissPairMock).toHaveBeenLastCalledWith({ financialAccountId: 'ACC-1', statementLineId: 'B3' });
+  });
+
+  it('after a pick of its own candidate the counterpart travels', async () => {
+    withX();
+    renderPanel();
+    await screen.findByTestId('recon-line-row-B3');
+    openPairView();
+    fireEvent.click(screen.getByTestId('recon-outflow-row-C2'));
+    expect(outflowRadio('C2')).toBeChecked();
+    fireEvent.click(screen.getByTestId('recon-bounce-dismiss'));
+    expect(dismissPairMock).toHaveBeenLastCalledWith({
+      financialAccountId: 'ACC-1', statementLineId: 'B3', counterpartLineId: 'C2',
+    });
+  });
+});
+
+describe('ReconciliationSplitPanel — accessible names of the rejection radios', () => {
+  it('each rejection radio is named by its date, amount and reference, and the placeholder is a status region', async () => {
+    withX();
+    renderPanel();
+    await screen.findByTestId('recon-line-row-B3');
+    openPairView();
+    expect(screen.getByTestId('recon-right-empty')).toHaveAttribute('role', 'status');
+    fireEvent.click(screen.getByTestId('recon-outflow-row-C2'));
+    const names = ['B3', 'B4'].map((id) => screen.getByTestId(`recon-line-radio-${id}`).getAttribute('aria-label'));
+    expect(names[0]).not.toBe(names[1]);
+    for (const name of names) expect(name).toMatch(/^financeReconcileBounceSelectRejection:/);
   });
 });

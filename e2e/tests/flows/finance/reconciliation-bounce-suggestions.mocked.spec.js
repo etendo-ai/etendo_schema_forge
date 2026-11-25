@@ -228,6 +228,35 @@ function answers(flagOn) {
   };
 }
 
+/**
+ * What the backend answers after the FREE pick of the 'free' pair's original was discarded against
+ * the ambiguous pair's rejection: both of those lines are gone, and the 'free' rejection is
+ * re-detected against the candidates the ambiguous pair freed (a new ambiguous pair).
+ */
+function freeReloadAnswer() {
+  const candidates = [AMB_CAND_1, AMB_CAND_2].map((line) => ({ line, signals: ['counterparty'], signal: 'counterparty' }));
+  const reGroup = pair({
+    groupKey: 'bp-free-re', confidence: 'review', ambiguous: true, signal: 'counterparty', signals: ['counterparty'],
+    statementLine: null, counterpartLine: FREE_BOUNCE, candidates,
+  });
+  const lines = [
+    { ...TX_LINE, status: 'pending', state: 'suggested' },
+    bounceLine(HIGH_ORIGINAL, annotate(HIGH_PAIR, 'original', HIGH_BOUNCE)),
+    bounceLine(HIGH_BOUNCE, annotate(HIGH_PAIR, 'bounce', HIGH_ORIGINAL)),
+    bounceLine(REVIEW_ORIGINAL, annotate(REVIEW_PAIR, 'original', REVIEW_BOUNCE)),
+    bounceLine(REVIEW_BOUNCE, annotate(REVIEW_PAIR, 'bounce', REVIEW_ORIGINAL)),
+    bounceLine(AMB_CAND_1, annotate(reGroup, 'candidate', FREE_BOUNCE)),
+    bounceLine(AMB_CAND_2, annotate(reGroup, 'candidate', FREE_BOUNCE)),
+    bounceLine(FREE_BOUNCE, annotate(reGroup, 'bounce', null, { candidates })),
+  ];
+  return {
+    groups: [TX_GROUP, HIGH_PAIR, REVIEW_PAIR, reGroup],
+    kpis: { pendingLines: lines.length, groupsFound: 1, opsToLink: 1, willCreate: 0, bouncePairs: 3 },
+    lines,
+    counts: { ...PENDING_COUNTS, all: lines.length, bounce: lines.length - 1 },
+  };
+}
+
 const MOVEMENTS_PAYLOAD = {
   response: {
     data: {
@@ -259,6 +288,10 @@ const json = (route, body, status = 200) => route.fulfill({
  *   the backend-only AI flag off. `discardPairStale`: `discardPair` answers the 409 stale-AI refusal (true = always, N = the first N
  *   calls). `aiAfterReload`: the AI layer of the automatch answers after the first one.
  *   `longDescriptions`: the second candidate and the bounce carry a very long bank text.
+ *   `discardRefusals`: refusals (`{ status, code, key }`) the first `discardPair` calls answer, in
+ *   order (409 HAS_PAYMENT / AMOUNT_MISMATCH / DISCARD_NOT_ALLOWED). `reloadAfterDiscard`: 'free'
+ *   = once a discard succeeds, the lines / groups the next reads answer are those of FREE_RELOAD
+ *   (the discarded pair's lines are gone and the other pair is re-detected).
  *   `extraPairs`: 'free' and/or 'orphan', see EXTRA_PAIRS. `onlyPairs`: the answer holds possible
  *   rejections only (no transaction group).
  * @returns {Promise<{ posts: Record<string, object[]>, pendingQueries: URLSearchParams[],
@@ -266,7 +299,7 @@ const json = (route, body, status = 200) => route.fulfill({
  */
 async function installMocks(page, {
   flagOn = true, dismissPairStatus = 200, refusePairs = [], ai = null, discardPairStale = false,
-  longDescriptions = false, aiAfterReload, extraPairs = [], onlyPairs = false,
+  longDescriptions = false, aiAfterReload, extraPairs = [], onlyPairs = false, discardRefusals = [], reloadAfterDiscard = null,
 } = {}) {
   let data = answers(flagOn);
   if (onlyPairs) {
@@ -302,6 +335,8 @@ async function installMocks(page, {
   }
   // `discardPairStale`: true = every discardPair is refused as stale; a number = the first N only.
   let staleLeft = discardPairStale === true ? Infinity : Number(discardPairStale) || 0;
+  const refusalsLeft = [...discardRefusals];
+  let reloadPending = reloadAfterDiscard;
   const posts = { discardPair: [], restorePair: [], applySuggestions: [], dismissPair: [] };
   const pendingQueries = [];
   const autoMatchRequests = { count: 0 };
@@ -326,6 +361,13 @@ async function installMocks(page, {
       const body = JSON.parse(req.postData() ?? '{}');
       if (action === 'discardPair') {
         posts.discardPair.push(body);
+        const refusal = refusalsLeft.shift();
+        if (refusal) {
+          await json(route, {
+            error: { status: refusal.status ?? 409, code: refusal.code, message: 'Refused', messageKeys: [refusal.key] },
+          }, refusal.status ?? 409);
+          return;
+        }
         if (staleLeft > 0) {
           staleLeft -= 1;
           const message = 'The AI suggestion is stale';
@@ -334,6 +376,7 @@ async function installMocks(page, {
           }, 409);
           return;
         }
+        if (reloadPending === 'free') { data = freeReloadAnswer(); reloadPending = null; }
         await json(route, { response: { data: { discarded: true, ...body, signal: 'counterparty', confidence: 'review' } } });
         return;
       }
@@ -416,6 +459,30 @@ const confirmClose = (page) => page.getByTestId('automatch-close-confirm-action'
 const keepWorking = (page) => page.getByTestId('automatch-close-keep');
 const requestsOf = (page, action) => page.waitForRequest(
   (r) => r.method() === 'POST' && r.url().includes(`action=${action}`));
+
+/**
+ * A deterministic barrier for "nothing else happened" assertions (instead of a fixed sleep): two
+ * animation frames let any pending render / handler run, then a round trip through the page's own
+ * routes (answered in order) guarantees every request the page made before it has already been
+ * seen by the route handlers and the `request` listeners.
+ */
+async function settle(page) {
+  await page.evaluate(async () => {
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    await fetch('/sws/neo/bank-reconciliation?action=candidates').then((r) => r.text());
+  });
+}
+
+/**
+ * Activates "Descartar par" from the keyboard. A toast of a previous attempt sits over the
+ * bottom-right footer and intercepts the pointer (and Sonner keeps it open while the cursor is over
+ * it), so the retry does not depend on the toast being gone.
+ */
+async function pressDiscard(page) {
+  const button = page.getByTestId('recon-bounce-panel').getByTestId('recon-bounce-discard');
+  await button.focus();
+  await page.keyboard.press('Enter');
+}
 
 /** The X of the modal's own dialog (the close-confirmation dialog has its own, and is not open). */
 const modalX = (page) => modal(page).getByRole('button', { name: 'Close' });
@@ -645,7 +712,7 @@ test.describe('Reconciliation — bounce-pair suggestions (mocked)', () => {
     await expect(excludeButton(page)).toHaveText('Excluir de la conciliación (0)');
     await expect(excludeButton(page)).toBeDisabled();
     await excludeButton(page).click({ force: true });
-    await page.waitForTimeout(300);
+    await settle(page);
     expect(posts.applySuggestions).toEqual([]);
   });
 
@@ -942,7 +1009,7 @@ test.describe('Reconciliation — bounce-pair KPI reporting (mocked)', () => {
     await expect(page.getByTestId(`recon-line-row-${REVIEW_BOUNCE.id}`)).toHaveCount(0);
     await expect(page.getByTestId(`recon-outflow-row-${REVIEW_ORIGINAL.id}`)).toHaveCount(0);
     await expect(page.getByTestId(`recon-outflow-row-${HIGH_ORIGINAL.id}`)).toBeVisible();
-    await page.waitForTimeout(500);
+    await settle(page);
     expect(dismissRequests).toEqual([]);
     expect(posts.dismissPair).toEqual([]);
   });
@@ -1028,7 +1095,7 @@ test.describe('Reconciliation — bounce suggestion events (Mixpanel, mocked)', 
     await expect.poll(() => named(events, DISMISSED).length).toBe(2);
     expect(named(events, DISMISSED)[1]).toMatchObject({ pairs_shown: 3, pairs_checked_at_close: 2, auto_opened: false });
 
-    await page.waitForTimeout(500);
+    await settle(page);
     expect(named(events, VIEWED)).toHaveLength(2);
     expect(named(events, DISMISSED)).toHaveLength(2);
   });
@@ -1043,7 +1110,7 @@ test.describe('Reconciliation — bounce suggestion events (Mixpanel, mocked)', 
     await page.getByTestId('automatch-modal-open-reconciliation').click();
     await expect(closeConfirm(page)).toBeVisible();
     // Asking is not dismissing: nothing is reported until the user confirms.
-    await page.waitForTimeout(500);
+    await settle(page);
     expect(named(events, DISMISSED)).toEqual([]);
     await confirmClose(page).click();
     await expect(modal(page)).toHaveCount(0);
@@ -1065,7 +1132,7 @@ test.describe('Reconciliation — bounce suggestion events (Mixpanel, mocked)', 
     await post;
     await expect(modal(page)).toHaveCount(0);
 
-    await page.waitForTimeout(1000);
+    await settle(page);
     expect(named(events, DISMISSED)).toEqual([]);
     expect(named(events, VIEWED)).toHaveLength(1);
   });
@@ -1082,7 +1149,7 @@ test.describe('Reconciliation — bounce suggestion events (Mixpanel, mocked)', 
     await expect(modal(page)).toHaveCount(0);
     await expect(page.getByTestId('recon-bounce-panel')).toBeVisible();
 
-    await page.waitForTimeout(1000);
+    await settle(page);
     expect(named(events, DISMISSED)).toEqual([]);
   });
 
@@ -1096,7 +1163,7 @@ test.describe('Reconciliation — bounce suggestion events (Mixpanel, mocked)', 
 
     // Control: telemetry does flow in this page, so the empty result below means something.
     await expect.poll(() => named(events, 'app_started').length).toBeGreaterThan(0);
-    await page.waitForTimeout(1000);
+    await settle(page);
     expect(named(events, VIEWED)).toEqual([]);
     expect(named(events, DISMISSED)).toEqual([]);
   });
@@ -1375,10 +1442,11 @@ test.describe('Reconciliation — AI suggestion on bank rejections (mocked)', ()
     await expect(panel.getByTestId(`recon-bounce-ai-pct-${AMB_CAND_1.id}`)).toHaveText('80 %');
     await expect(panel.locator('[data-testid^="recon-bounce-ai-badge-"]')).toHaveCount(0);
 
-    // The error toast sits over the bottom-right footer: let it go before clicking "Descartar par".
-    await expect(page.locator('[data-type="error"]')).toHaveCount(0, { timeout: 10_000 });
+    // The error toast sits over the bottom-right footer, exactly where the cursor just clicked, and
+    // Sonner pauses its timer while the cursor is over the toast: it would never leave. The retry
+    // is activated from the keyboard, so it neither depends on the toast nor on the pointer.
     const post = requestsOf(page, 'discardPair');
-    await panel.getByTestId('recon-bounce-discard').click();
+    await pressDiscard(page);
     await post;
     expect(posts.discardPair).toHaveLength(2);
     expect(posts.discardPair[1]).toEqual({
@@ -1609,10 +1677,18 @@ test.describe('Reconciliation — "Posibles rechazos" as two tables (mocked)', (
     await page.getByTestId(`recon-outflow-row-${REVIEW_ORIGINAL.id}`).click();
     await expect(page.getByTestId(`recon-line-radio-${REVIEW_BOUNCE.id}`)).toBeChecked();
 
-    const hint = 'El importe o la fecha no coinciden con el rechazo seleccionado';
+    // The reason is VISIBLE text on the row, tied to the (aria-disabled) radio; a pairable outflow has none.
     const orphan = page.getByTestId(`recon-outflow-row-${ORPHAN_ORIGINAL.id}`);
-    await expect(orphan).toHaveAttribute('title', hint);
-    await expect(page.getByTestId(`recon-outflow-row-${HIGH_ORIGINAL.id}`)).not.toHaveAttribute('title', hint);
+    const hint = page.getByTestId(`recon-outflow-nomatch-${ORPHAN_ORIGINAL.id}`);
+    await expect(hint).toBeVisible();
+    await expect(hint).toHaveText('Ningún rechazo puede emparejarse con esta salida (importe o fecha)');
+    const orphanRadio = page.getByTestId(`recon-outflow-radio-${ORPHAN_ORIGINAL.id}`);
+    await expect(orphanRadio).toHaveAttribute('aria-disabled', 'true');
+    await expect(orphanRadio).toHaveAttribute('aria-describedby', `recon-outflow-nomatch-${ORPHAN_ORIGINAL.id}`);
+    await expect(orphan).not.toHaveAttribute('title', /.+/);
+    await expect(page.getByTestId(`recon-outflow-nomatch-${HIGH_ORIGINAL.id}`)).toHaveCount(0);
+    await expect(page.getByTestId(`recon-bounce-radio-${REVIEW_ORIGINAL.id}`).or(
+      page.getByTestId(`recon-outflow-radio-${REVIEW_ORIGINAL.id}`))).not.toHaveAttribute('aria-disabled', 'true');
     await orphan.click();
     // Nothing changed: same rejection selected, same right list, the pick is still the original.
     await expect(page.getByTestId(`recon-line-radio-${REVIEW_BOUNCE.id}`)).toBeChecked();
@@ -1686,9 +1762,11 @@ test.describe('Reconciliation — auto-open with only possible rejections (mocke
     await page.route(/\/sws\/neo\/bank-reconciliation\?.*action=autoMatch/, async (route) => {
       await json(route, { response: { data: { groups: [], kpis: { pendingLines: 0, groupsFound: 0, opsToLink: 0, willCreate: 0, bouncePairs: 0 } } } });
     });
+    const answered = page.waitForResponse((r) => r.url().includes('action=autoMatch'));
     await openReconciliation(page);
+    await answered;
     await expect(page.getByTestId('detail-tab-reconciliation')).toBeVisible();
-    await page.waitForTimeout(500);
+    await settle(page);
     await expect(modal(page)).toHaveCount(0);
   });
 
@@ -1702,5 +1780,167 @@ test.describe('Reconciliation — auto-open with only possible rejections (mocke
     await expect(page.getByTestId('recon-right-empty')).toHaveCount(0);
     await expect(page.getByTestId(`recon-line-radio-${REVIEW_BOUNCE.id}`)).toBeChecked();
     await expect(page.getByTestId('recon-bounce-panel')).toBeVisible();
+  });
+});
+
+// ── Free picks in the two-table view: after the discard, refusals, dismissals, a11y, read-only ──
+
+const REFUSALS = [
+  { code: 'HAS_PAYMENT', key: 'ETGO_BounceHasPayment', text: 'pago registrado en Etendo' },
+  { code: 'AMOUNT_MISMATCH', key: 'ETGO_BounceAmountMismatch', text: 'exactamente el mismo importe' },
+  { code: 'DISCARD_NOT_ALLOWED', key: 'ETGO_BounceDiscardNotAllowed', text: 'Este rechazo no se puede descartar' },
+];
+
+test.describe('Reconciliation — free picks in the two-table view (mocked)', () => {
+  test('discarding with a free pick of another pair\'s outflow, then the reload: no half-pair, no ghost footer, the old pick is not reused', async ({ page }) => {
+    await login(page);
+    const { posts } = await installMocks(page, { extraPairs: ['free'], reloadAfterDiscard: 'free' });
+    await openReconciliation(page);
+    await openPairViewFromModal(page);
+    await page.getByTestId(`recon-outflow-row-${AMB_CAND_1.id}`).click();
+    await expect(page.getByTestId(`recon-line-radio-${AMB_BOUNCE.id}`)).toBeChecked();
+    // FREE_ORIGINAL belongs to ANOTHER pair; picking it is a free pick for AMB_BOUNCE.
+    await page.getByTestId(`recon-outflow-row-${FREE_ORIGINAL.id}`).click();
+    await expect(page.getByTestId(`recon-outflow-radio-${FREE_ORIGINAL.id}`)).toBeChecked();
+
+    const post = requestsOf(page, 'discardPair');
+    await page.getByTestId('recon-bounce-discard').click();
+    await post;
+    expect(posts.discardPair).toEqual([{
+      financialAccountId: ACCOUNT_ID, statementLineId: FREE_ORIGINAL.id, counterpartLineId: AMB_BOUNCE.id,
+    }]);
+    await expect(page.locator('[data-type="success"]').first()).toBeVisible();
+
+    // The selected rejection is gone: the placeholder returns, the footer and notice with it.
+    await expect(page.getByTestId('recon-right-empty')).toBeVisible();
+    await expect(page.getByTestId('recon-bounce-footer')).toHaveCount(0);
+    await expect(page.getByTestId('recon-bounce-notice')).toHaveCount(0);
+    await expect(page.getByTestId(`recon-outflow-row-${FREE_ORIGINAL.id}`)).toHaveCount(0);
+    await expect(page.getByTestId(`recon-line-row-${AMB_BOUNCE.id}`)).toHaveCount(0);
+    expect(await outflowOrder(page)).toEqual([HIGH_ORIGINAL, REVIEW_ORIGINAL, AMB_CAND_1, AMB_CAND_2].map((l) => `recon-outflow-row-${l.id}`));
+    await expect(page.getByTestId('recon-outflows-table')).toContainText('Salidas (4)');
+
+    // The next pick starts clean: FREE_BOUNCE (re-detected over the freed candidates) is selected
+    // with the clicked outflow as the pick; the footer never names the discarded FREE_ORIGINAL.
+    await page.getByTestId(`recon-outflow-row-${AMB_CAND_2.id}`).click();
+    await expect(page.getByTestId(`recon-line-radio-${FREE_BOUNCE.id}`)).toBeChecked();
+    expect(await rejectionRows(page)).toEqual([`recon-line-row-${FREE_BOUNCE.id}`]);
+    await expect(page.getByTestId(`recon-bounce-radio-${AMB_CAND_2.id}`)).toBeChecked();
+    await expect(page.getByTestId('recon-bounce-total-other-meta')).toContainText(`Ref. ${AMB_CAND_2.referenceNo}`);
+    await expect(page.getByTestId('recon-bounce-footer')).not.toContainText(FREE_ORIGINAL.referenceNo);
+    const second = requestsOf(page, 'discardPair');
+    await page.getByTestId('recon-bounce-discard').click();
+    await second;
+    expect(posts.discardPair[1]).toEqual({
+      financialAccountId: ACCOUNT_ID, statementLineId: AMB_CAND_2.id, counterpartLineId: FREE_BOUNCE.id,
+    });
+  });
+
+  for (const refusal of REFUSALS) {
+    test(`a free pick refused by the server (409 ${refusal.code}): translated toast, no reload, the pick stays and a retry works, choiceSource "user"`, async ({ page }) => {
+      await login(page);
+      const { posts, autoMatchRequests, pendingQueries } = await installMocks(page, {
+        ai: AI_85_10, extraPairs: ['free'], discardRefusals: [{ status: 409, code: refusal.code, key: refusal.key }],
+      });
+      await openReconciliation(page);
+      const panel = await reviewAmbiguousInPanel(page);
+      await panel.getByTestId(`recon-outflow-row-${FREE_ORIGINAL.id}`).click();
+      await expect(panel.getByTestId(`recon-outflow-radio-${FREE_ORIGINAL.id}`)).toBeChecked();
+      const reloadsBefore = { auto: autoMatchRequests.count, lines: pendingQueries.length };
+
+      const first = requestsOf(page, 'discardPair');
+      await panel.getByTestId('recon-bounce-discard').click();
+      await first;
+      const toastError = page.locator('[data-type="error"]').first();
+      await expect(toastError).toContainText(refusal.text);
+      await expect(toastError).not.toContainText('Refused');
+      await expect(page.locator('[data-type="success"]')).toHaveCount(0);
+      // No reload after a refusal, and the user's pick (and the right list) are untouched.
+      await settle(page);
+      expect({ auto: autoMatchRequests.count, lines: pendingQueries.length }).toEqual(reloadsBefore);
+      await expect(panel.getByTestId(`recon-outflow-radio-${FREE_ORIGINAL.id}`)).toBeChecked();
+      await expect(panel.getByTestId(`recon-line-radio-${AMB_BOUNCE.id}`)).toBeChecked();
+      await expect(panel.getByTestId('recon-bounce-discard')).toBeEnabled();
+
+      // Retry (from the keyboard: the toast covers the button): same body, accepted this time.
+      const retry = requestsOf(page, 'discardPair');
+      await pressDiscard(page);
+      await retry;
+      const body = {
+        financialAccountId: ACCOUNT_ID, statementLineId: FREE_ORIGINAL.id, counterpartLineId: AMB_BOUNCE.id, choiceSource: 'user',
+      };
+      expect(posts.discardPair).toEqual([body, body]);
+      await expect(page.locator('[data-type="success"]').first()).toBeVisible();
+      expect(posts.discardPair.some((b) => b.choiceSource === 'ai')).toBe(false);
+    });
+  }
+
+  test('"No es un rechazo" after a free pick of a FOREIGN outflow posts no counterpartLineId; after a pick of an own candidate it posts it', async ({ page }) => {
+    await login(page);
+    const { posts } = await installMocks(page, { extraPairs: ['free'] });
+    await openReconciliation(page);
+    const panel = await reviewAmbiguousInPanel(page);
+
+    // An own candidate: the counterpart travels.
+    await panel.getByTestId(`recon-outflow-row-${AMB_CAND_1.id}`).click();
+    await expect(panel.getByTestId(`recon-bounce-radio-${AMB_CAND_1.id}`)).toBeChecked();
+    // Then the foreign one replaces it, and is what the dismissal is evaluated against.
+    await panel.getByTestId(`recon-outflow-row-${FREE_ORIGINAL.id}`).click();
+    await expect(panel.getByTestId(`recon-outflow-radio-${FREE_ORIGINAL.id}`)).toBeChecked();
+    const post = requestsOf(page, 'dismissPair');
+    await panel.getByTestId('recon-bounce-dismiss').click();
+    await post;
+    expect(posts.dismissPair).toHaveLength(1);
+    expect(posts.dismissPair[0]).toEqual({ financialAccountId: ACCOUNT_ID, statementLineId: AMB_BOUNCE.id });
+    expect(posts.dismissPair[0]).not.toHaveProperty('counterpartLineId');
+  });
+
+  test('"No es un rechazo" after a pick of an own candidate posts it as counterpartLineId', async ({ page }) => {
+    await login(page);
+    const { posts } = await installMocks(page, { extraPairs: ['free'] });
+    await openReconciliation(page);
+    const panel = await reviewAmbiguousInPanel(page);
+    await panel.getByTestId(`recon-outflow-row-${AMB_CAND_1.id}`).click();
+    await expect(panel.getByTestId(`recon-bounce-radio-${AMB_CAND_1.id}`)).toBeChecked();
+    const post = requestsOf(page, 'dismissPair');
+    await panel.getByTestId('recon-bounce-dismiss').click();
+    await post;
+    expect(posts.dismissPair).toEqual([{
+      financialAccountId: ACCOUNT_ID, statementLineId: AMB_BOUNCE.id, counterpartLineId: AMB_CAND_1.id,
+    }]);
+  });
+
+  test('the rejection radios have distinct accessible names and the placeholder is a status region', async ({ page }) => {
+    await login(page);
+    await installMocks(page, { extraPairs: ['free'] });
+    await openReconciliation(page);
+    await openPairViewFromModal(page);
+    await expect(page.getByTestId('recon-right-empty')).toHaveAttribute('role', 'status');
+    // -80 can be paired with both +80 rejections: two rows, two radios.
+    await page.getByTestId(`recon-outflow-row-${AMB_CAND_2.id}`).click();
+    const radios = page.getByRole('radio', { name: /^Seleccionar el rechazo del / });
+    await expect(radios).toHaveCount(2);
+    const names = await radios.evaluateAll((els) => els.map((el) => el.getAttribute('aria-label')));
+    expect(new Set(names).size).toBe(2);
+    expect(names.some((n) => n.endsWith(`Ref. ${AMB_BOUNCE.referenceNo}`))).toBe(true);
+    expect(names.some((n) => n.endsWith(`Ref. ${FREE_BOUNCE.referenceNo}`))).toBe(true);
+    // Reachable by that name.
+    await expect(page.getByRole('radio', { name: new RegExp(`Ref\\. ${FREE_BOUNCE.referenceNo}$`) })).toBeVisible();
+  });
+
+  test('read-only tier in the two-table view: "Descartar par" is disabled and nothing is POSTed', async ({ page }) => {
+    await login(page, { windowAccessOverrides: { [FINANCIAL_ACCOUNT_WINDOW_ID]: 'read-only' } });
+    const { posts } = await installMocks(page);
+    await openReconciliation(page);
+    await selectBounceLineInPanel(page, REVIEW_BOUNCE.id, REVIEW_ORIGINAL.id);
+    const panel = page.getByTestId('recon-bounce-panel');
+    await expect(panel.getByTestId('recon-bounce-discard')).toBeDisabled();
+    await expect(panel.getByTestId('recon-bounce-dismiss')).toBeEnabled();
+    await panel.getByTestId('recon-bounce-discard').click({ force: true });
+    await panel.getByTestId('recon-bounce-discard').focus();
+    await page.keyboard.press('Enter');
+    await settle(page);
+    expect(posts.discardPair).toEqual([]);
+    await expect(page.locator('[data-type="success"]')).toHaveCount(0);
   });
 });
