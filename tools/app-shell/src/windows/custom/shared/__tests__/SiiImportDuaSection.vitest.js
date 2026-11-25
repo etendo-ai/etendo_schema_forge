@@ -120,6 +120,46 @@ describe('SiiImportDuaSection — rendering', () => {
   });
 });
 
+describe('SiiImportDuaSection — one block, DUA required only for SII', () => {
+  const ui = key => key;
+  const getVal = () => '';
+  const base = { ui, siiTypeKey: 'F5', getVal, getDateVal: getVal, onChange: vi.fn(), readOnly: false };
+
+  beforeEach(() => { flag.enabled = true; });
+
+  it('renders the import tax lines inside the same card, after the DUA fields, with no step number', () => {
+    render(h(SiiImportDuaSection, base, h('div', { 'data-testid': 'stub-import-taxes' })));
+    const card = screen.getByTestId('SiiImportDuaSection__card');
+    const fields = screen.getByTestId('SiiImportDuaSection__fields');
+    const taxes = screen.getByTestId('stub-import-taxes');
+    expect(card).toContainElement(fields);
+    expect(card).toContainElement(taxes);
+    // eslint-disable-next-line no-bitwise
+    expect(fields.compareDocumentPosition(taxes) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByTestId('SiiImportDuaSection__card__step')).toBeNull();
+  });
+
+  it('marks DUA and Fecha DUA required (asterisk + outline) only when SII requires them', () => {
+    const { unmount } = render(h(SiiImportDuaSection, { ...base, duaRequired: true }));
+    expect(screen.getByTestId('RequiredMark__sif_sif-dua')).toBeInTheDocument();
+    expect(screen.getByTestId('RequiredMark__sif_sif-duaDate')).toBeInTheDocument();
+    expect(screen.getByTestId('Input__siiDua')).toHaveAttribute('aria-invalid', 'true');
+    unmount();
+    render(h(SiiImportDuaSection, { ...base, duaRequired: false }));
+    expect(screen.queryByTestId('RequiredMark__sif_sif-dua')).toBeNull();
+    expect(screen.queryByTestId('RequiredMark__sif_sif-duaDate')).toBeNull();
+    expect(screen.getByTestId('Input__siiDua')).not.toHaveAttribute('aria-invalid');
+  });
+
+  it('defaults to optional, and Multiple DUA or read-only drop the requirement', () => {
+    const { unmount } = render(h(SiiImportDuaSection, base));
+    expect(screen.queryByTestId('RequiredMark__sif_sif-dua')).toBeNull();
+    unmount();
+    render(h(SiiImportDuaSection, { ...base, duaRequired: true, readOnly: true }));
+    expect(screen.queryByTestId('RequiredMark__sif_sif-dua')).toBeNull();
+  });
+});
+
 describe('SiiLcPrefixHint — the LC prefix warning of the SIF tab', () => {
   const ui = key => key;
   it('warns on LC with a wrong prefix, with the tax-type text', () => {

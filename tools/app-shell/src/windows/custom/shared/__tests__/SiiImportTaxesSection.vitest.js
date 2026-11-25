@@ -54,7 +54,7 @@ import SiiImportTaxesSection from '../SiiImportTaxesSection.jsx';
 import {
   selectImportTaxOptions, isImportTaxName, isCompensatoryTaxName, compensatoryBaseName,
   compensatoryNameRate, findCompensatoryTax, planCompensatoryLines, parseRate, rateLabel,
-  useSiiDeferredVat,
+  useSiiDeferredVat, missingImportTaxFields, buildImportTaxBody,
 } from '../SiiImportTaxesSection.jsx';
 
 describe('selectImportTaxOptions — the import-tax picker offers import taxes only', () => {
@@ -263,6 +263,24 @@ describe('useSiiDeferredVat — the compensatory line is offered only on deferre
   });
 });
 
+describe('missingImportTaxFields / buildImportTaxBody — per-line DUA only required for SII', () => {
+  const row = { tax: 'imp21', taxableAmount: 100, taxAmount: 21, aeatsiiDua: '', aeatsiiFechaDua: '' };
+
+  it('with Multiple DUA, lacks the DUA and its date only when SII requires them', () => {
+    expect([...missingImportTaxFields(row, true)]).toEqual(['aeatsiiDua', 'aeatsiiFechaDua']);
+    expect([...missingImportTaxFields(row, true, true)]).toEqual(['aeatsiiDua', 'aeatsiiFechaDua']);
+    expect(missingImportTaxFields(row, true, false).size).toBe(0);
+    expect(missingImportTaxFields(row, false, true).size).toBe(0);
+  });
+
+  it('an optional empty DUA or date travels as null with Multiple DUA', () => {
+    expect(buildImportTaxBody(row, true)).toEqual({
+      tax: 'imp21', taxableAmount: 100, taxAmount: 21, aeatsiiDua: null, aeatsiiFechaDua: null,
+    });
+    expect(buildImportTaxBody(row, false)).toEqual({ tax: 'imp21', taxableAmount: 100, taxAmount: 21 });
+  });
+});
+
 describe('SiiImportTaxesSection — the card', () => {
   const ui = key => key;
   const RECORD = 'inv-1';
@@ -299,7 +317,7 @@ describe('SiiImportTaxesSection — the card', () => {
     const onHeaderRefresh = vi.fn();
     const utils = render(h(SiiImportTaxesSection, {
       ui, multiDua: false, recordId: RECORD, data: { id: RECORD }, apiBaseUrl: '/api/purchase-invoice',
-      token: 't', readOnly: false, onHeaderRefresh, step: 2, ...props,
+      token: 't', readOnly: false, onHeaderRefresh, ...props,
     }));
     return { ...utils, onHeaderRefresh };
   }
@@ -439,5 +457,43 @@ describe('SiiImportTaxesSection — the card', () => {
     renderCard({ multiDua: false, readOnly: true, accountingRegisterDate: '2026-11-05' });
     await screen.findByTestId('SiiImportTaxesSection__row_a');
     expect(screen.queryByTestId('SiiImportTaxesSection__dateHint')).toBeNull();
+  });
+
+  it('is a section of the import block: title, no step number and no totals summary', async () => {
+    serverRows = [SERVER_ROW, AUTO_ROW];
+    renderCard();
+    await screen.findByTestId('SiiImportTaxesSection__row_tl-1');
+    expect(screen.getByTestId('SiiImportTaxesSection__card__title')).toHaveTextContent('sifDataTabs.importTaxes.title');
+    expect(screen.queryByTestId('SiiImportTaxesSection__card__step')).toBeNull();
+    expect(screen.queryByTestId('SiiImportTaxesSection__summary')).toBeNull();
+    expect(screen.queryByText('sifDataTabs.importTaxes.duaTotal')).toBeNull();
+    // The per-row amounts stay.
+    expect(screen.getByTestId('SiiImportTaxesSection__amount')).toBeInTheDocument();
+    expect(screen.getByTestId('Button__siiImportTaxAdd')).toBeInTheDocument();
+  });
+
+  it('Multiple DUA: the per-line DUA carries the asterisk only when SII requires it', async () => {
+    serverRows = [{ ...SERVER_ROW, aeatsiiDua: 'D1', aeatsiiFechaDua: '2026-11-01' }, AUTO_ROW];
+    const mark = () => screen.queryAllByTestId(/^RequiredMark__siiImportTax_/);
+    const { unmount } = renderCard({ multiDua: true, duaRequired: true });
+    await screen.findByTestId('SiiImportTaxesSection__row_tl-1');
+    expect(mark()).toHaveLength(2);
+    unmount();
+    renderCard({ multiDua: true, duaRequired: false });
+    await screen.findByTestId('SiiImportTaxesSection__row_tl-1');
+    expect(mark()).toHaveLength(0);
+  });
+
+  it('Multiple DUA, organization not in SII: a row without DUA is saved with a null DUA', async () => {
+    const { onHeaderRefresh } = renderCard({ multiDua: true, duaRequired: false });
+    await waitFor(() => expect(mockApiFetch).toHaveBeenCalledWith(expect.stringMatching(/^\/tax\?parentId=inv-1/)));
+    fireEvent.click(screen.getByTestId('Button__siiImportTaxAdd'));
+    fireEvent.click(screen.getByTestId('stub-selector-pick'));
+    serverRows = [AUTO_ROW, { ...SERVER_ROW, id: 'tl-new', lineNo: 40 }];
+    fireEvent.change(screen.getByTestId('MaskedAmountInput__siiImportTaxBase'), { target: { value: '100' } });
+    await waitFor(() => expect(onHeaderRefresh).toHaveBeenCalledTimes(1));
+    const posts = writes('POST').filter(([u]) => u === '/tax');
+    expect(posts).toHaveLength(1);
+    expect(JSON.parse(posts[0][1].body)).toMatchObject({ aeatsiiDua: null, aeatsiiFechaDua: null });
   });
 });

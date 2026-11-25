@@ -11,11 +11,13 @@ import { useCapabilitiesSafe } from '@/hooks/useCapabilitiesSafe.js';
 import { SII_IMPORT_DUA_CAPABILITY, isCapabilityVisible } from '@/lib/capabilityVisibility.js';
 
 /**
- * ETP-6284 — "Importación (DUA)" card of the purchase invoice, shown in the Lines tab while the
+ * ETP-6284 — the import-with-DUA block of the purchase invoice, shown in the Lines tab while the
  * header check "Importación con DUA" (`etgoImportDua`, `ImportDuaLinesSection`) is on, behind the
- * `siiImportDua` capability (backend flag `sii-import-dua`, see `useSiiImportDuaEnabled`). It does
- * NOT depend on SII: an organization that imports but does not file SII from Etendo uses it too.
- * SII reads the same columns (C_Invoice.EM_Aeatsii_Dua / _Fecha_Dua / _Multi_Dua) when it sends.
+ * `siiImportDua` capability (backend flag `sii-import-dua`, see `useSiiImportDuaEnabled`). One
+ * card, no step numbers: the DUA data first, then `children` — the import tax lines
+ * (`SiiImportTaxesSection`). It does NOT depend on SII: an organization that imports but does not
+ * file SII from Etendo uses it too. SII reads the same columns (C_Invoice.EM_Aeatsii_Dua /
+ * _Fecha_Dua / _Multi_Dua) when it sends.
  *
  *   - Multiple DUA (`aeatsiiMultiDua`): the "Múltiple DUA" switch at the top right of the card.
  *   - DUA (`aeatsiiDua`) and DUA date (`aeatsiiFechaDua`): shown while Multiple DUA is off. With
@@ -23,10 +25,12 @@ import { SII_IMPORT_DUA_CAPABILITY, isCapabilityVisible } from '@/lib/capability
  *
  * Read-only: `readOnly` from the caller (completed, sent to SII, or a read-only role).
  *
- * Required: with the check on, DUA and DUA date are required unless Multiple DUA is checked
- * (com.etendoerp.go `PurchaseInvoiceImportDua` refuses the save otherwise, on every channel — the
- * rule Classic `FacturasEventHandler.checkDUAFields` applies to F5 / LC only), so both carry the
- * red `*` (and the error outline while empty).
+ * Required (`duaRequired`): only when the organization files SII for the invoice (the caller
+ * resolves it like the SIF tab: `getInvoiceFiscalTargets(...).showSii` plus the SII adoption date
+ * vs the accounting date). Then DUA and DUA date are required unless Multiple DUA is checked
+ * (com.etendoerp.go `PurchaseInvoiceImportDua` refuses the save otherwise, on every channel), so
+ * both carry the red `*` (and the error outline while empty). For any other organization they stay
+ * optional: no `*`, no outline.
  *
  * LC (customs complementary liquidation, SII invoice type): the field holds the liquidation number,
  * not a DUA — no 18-character counter when `siiTypeKey` is LC. The LC prefix warning belongs to the
@@ -39,7 +43,7 @@ import { SII_IMPORT_DUA_CAPABILITY, isCapabilityVisible } from '@/lib/capability
  * Fecha registro contable (`aeatsiiFechaRegCont`); no warning while that date is empty. Classic
  * checks it only at send time (`SIIUtils.invoicePreviousValidations`), and the automatic background
  * send skips the invoice without a message, so the user is told here. With Multiple DUA the same
- * warning is shown by the import-taxes card over its rows' dates (`isDuaDateAfterAccountingDate`).
+ * warning is shown by the import-taxes section over its rows' dates (`isDuaDateAfterAccountingDate`).
  *
  * Writes go through `onChange` into DetailView's shared editing state, like every other header
  * field; the header save persists them.
@@ -140,13 +144,14 @@ export function SiiLcPrefixHint({ ui, siiTypeKey, dua, multiDua, siiTaxType = nu
 }
 
 export default function SiiImportDuaSection({
-  ui, siiTypeKey = null, getVal, getDateVal, onChange, readOnly, step,
+  ui, siiTypeKey = null, getVal, getDateVal, onChange, readOnly, duaRequired: siiRequires = false,
+  children,
 }) {
   const enabled = useSiiImportDuaEnabled();
   if (!enabled) return null;
 
   const multiDua = isChecked(getVal('aeatsiiMultiDua'));
-  const duaRequired = !multiDua && !readOnly;
+  const duaRequired = siiRequires && !multiDua && !readOnly;
   const dua = String(getVal('aeatsiiDua') ?? '');
   const duaDate = getDateVal('aeatsiiFechaDua');
   const duaMissing = duaRequired && !dua.trim();
@@ -172,7 +177,6 @@ export default function SiiImportDuaSection({
 
   return (
     <SiiPanelCard
-      step={step}
       title={ui('sifDataTabs.option.importDua')}
       subtitle={ui('sifDataTabs.dua.subtitle')}
       action={modeControl}
@@ -241,6 +245,7 @@ export default function SiiImportDuaSection({
           )}
         </div>
       )}
+      {children}
     </SiiPanelCard>
   );
 }

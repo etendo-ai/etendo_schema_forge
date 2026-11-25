@@ -12,7 +12,7 @@ import { useFiscalConfig } from '@/windows/custom/fiscal-config/useFiscalConfig.
 import { normalizeDateInputValue } from '@/windows/custom/fiscal-config/fiscalConfig.utils.js';
 import SiiImportDuaSection, { useSiiImportDuaEnabled } from '@/windows/custom/shared/SiiImportDuaSection.jsx';
 import SiiImportTaxesSection, { useSiiDeferredVat } from '@/windows/custom/shared/SiiImportTaxesSection.jsx';
-import { getInvoiceFiscalTargets } from '@/windows/custom/shared/fiscalTargets.js';
+import { getInvoiceFiscalTargets, isSifEligibleByDate } from '@/windows/custom/shared/fiscalTargets.js';
 import { resolveInvoiceOrgId } from '@/windows/custom/shared/resolveInvoiceOrgId.js';
 import {
   importDuaUncheckPatch, isImportDuaChecked, isImportDuaLockedOn, isImportDuaTypeKey,
@@ -27,21 +27,36 @@ function isYes(value) {
   return value === true || value === 'Y';
 }
 
-/** Whether the organization of the invoice files SII; only asked while the type is F5 / LC. */
-function useOrgFilesSii(data, apiBaseUrl, active) {
+/**
+ * Whether the organization of the invoice files SII, read only while `active` (the block is shown,
+ * or the type is F5 / LC) so other invoices cost no fiscal-config requests. The same criterion as
+ * the SIF tab (`useSifFieldPatcher`):
+ *   - `showSii`: SII applies to the organization (`getInvoiceFiscalTargets`) — drives the uncheck
+ *     patch (Tipo factura back to F1);
+ *   - `adopted`: plus the invoice's accounting date on or after the organization's SII adoption
+ *     (`isSifEligibleByDate`) — the invoice is filed to SII, so DUA and Fecha DUA are required.
+ * Both read false while the configuration loads.
+ */
+function useOrgSii(data, apiBaseUrl, active) {
   const { selectedOrg } = useAuth();
   const orgId = active ? resolveInvoiceOrgId(data, selectedOrg?.id) : null;
-  const { profile, tbaiRecord } = useFiscalConfig(orgId, apiBaseUrl);
+  const { profile, tbaiRecord, earliestSiiCutoverDate } = useFiscalConfig(orgId, apiBaseUrl);
   const territory = tbaiRecord?.etsgSifTerritory ?? null;
-  return active && getInvoiceFiscalTargets('purchase-invoice', profile, territory).showSii;
+  const showSii = active && getInvoiceFiscalTargets('purchase-invoice', profile, territory).showSii;
+  const adopted = showSii && isSifEligibleByDate(data?.accountingDate, earliestSiiCutoverDate);
+  return { showSii, adopted };
 }
 
 /**
  * ETP-6284 — "Importación con DUA" in the purchase-invoice Lines tab (rendered by
  * PurchaseInvoiceBottomPanel above the totals). A switch bound to the header field `etgoImportDua`
- * (C_Invoice.EM_Etgo_Import_Dua, com.etendoerp.go); while it is on, the DUA card and the
- * import-taxes card follow. Available for any organization — it does not depend on SII. For an
- * organization in SII the SIF tab reports the invoice as F5 (`importDuaInvoiceTypeToSet`).
+ * (C_Invoice.EM_Etgo_Import_Dua, com.etendoerp.go); while it is on, one block follows: the DUA data
+ * first, then the import tax lines (`SiiImportDuaSection` with `SiiImportTaxesSection` inside), with
+ * no step numbers and no totals of its own (the invoice totals below already include the manual
+ * tax lines). Available for any organization — it does not depend on SII. Only the required-ness
+ * of DUA and Fecha DUA does: required only when the organization files SII for the invoice
+ * (`useOrgSii().adopted`). For an organization in SII the SIF tab reports the invoice as F5
+ * (`importDuaInvoiceTypeToSet`).
  *
  * Behind the `siiImportDua` capability (backend flag `sii-import-dua`): off, nothing renders.
  *
@@ -91,7 +106,8 @@ export default function ImportDuaLinesSection({
   const checked = isImportDuaChecked(data);
   const savedId = data?.id || recordId || null;
   const showCards = shouldShowImportDuaCards({ enabled, record: data });
-  const orgFilesSii = useOrgFilesSii(data, apiBaseUrl, enabled && isImportDuaTypeKey(data));
+  const { showSii: orgFilesSii, adopted: siiAdopted } = useOrgSii(
+    data, apiBaseUrl, showCards || (enabled && isImportDuaTypeKey(data)));
   const deferredVat = useSiiDeferredVat({
     apiBaseUrl,
     recordId: savedId,
@@ -149,19 +165,19 @@ export default function ImportDuaLinesSection({
         onConfirm={() => { setConfirmUncheck(false); uncheck(); }}
         data-testid="UncheckConfirmDialog__importDua" />
       {showCards && (
-        <>
-          <SiiImportDuaSection
-            ui={ui}
-            siiTypeKey={getVal('aeatsiiClaveTipoFc') || null}
-            getVal={getVal}
-            getDateVal={getDateVal}
-            onChange={onFieldChange}
-            readOnly={readOnly}
-            step={1}
-            data-testid="SiiImportDuaSection__importDua" />
+        <SiiImportDuaSection
+          ui={ui}
+          siiTypeKey={getVal('aeatsiiClaveTipoFc') || null}
+          getVal={getVal}
+          getDateVal={getDateVal}
+          onChange={onFieldChange}
+          readOnly={readOnly}
+          duaRequired={siiAdopted}
+          data-testid="SiiImportDuaSection__importDua">
           <SiiImportTaxesSection
             ui={ui}
             multiDua={isYes(getVal('aeatsiiMultiDua'))}
+            duaRequired={siiAdopted}
             recordId={savedId}
             data={data}
             apiBaseUrl={apiBaseUrl}
@@ -170,9 +186,8 @@ export default function ImportDuaLinesSection({
             onHeaderRefresh={onHeaderRefresh}
             deferredVat={deferredVat}
             accountingRegisterDate={getDateVal('aeatsiiFechaRegCont')}
-            step={2}
             data-testid="SiiImportTaxesSection__importDua" />
-        </>
+        </SiiImportDuaSection>
       )}
     </div>
   );

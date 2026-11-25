@@ -22688,8 +22688,6 @@
     "sifDataTabs.dua.importCheckHelp": "Marca la factura como importación: muestra el DUA y los impuestos de importación. En una organización acogida al SII se envía como Importación (DUA).",
     "sifDataTabs.importTaxes.subtitle": "Introduce la base liquidada en el DUA; la cuota se calcula según el tipo.",
     "sifDataTabs.importTaxes.rate": "Tipo",
-    "sifDataTabs.importTaxes.summaryTaxAmount": "Cuota IVA importación",
-    "sifDataTabs.importTaxes.duaTotal": "Total DUA",
     "sifDataTabs.importTaxes.taxableAmount": "Base imponible",
     "sifDataTabs.importTaxes.taxAmount": "Cuota",
     "sifDataTabs.importTaxes.add": "Añadir impuesto",

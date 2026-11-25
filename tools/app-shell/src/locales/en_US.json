@@ -22452,8 +22452,6 @@
     "sifDataTabs.dua.importCheckHelp": "Marks the invoice as an import: shows the DUA and the import taxes. For an organization in SII it is sent as Import (DUA).",
     "sifDataTabs.importTaxes.subtitle": "Enter the base assessed in the DUA; the tax amount is calculated from the rate.",
     "sifDataTabs.importTaxes.rate": "Rate",
-    "sifDataTabs.importTaxes.summaryTaxAmount": "Import VAT amount",
-    "sifDataTabs.importTaxes.duaTotal": "DUA total",
     "sifDataTabs.importTaxes.taxableAmount": "Taxable base",
     "sifDataTabs.importTaxes.taxAmount": "Tax amount",
     "sifDataTabs.importTaxes.add": "Add tax",
