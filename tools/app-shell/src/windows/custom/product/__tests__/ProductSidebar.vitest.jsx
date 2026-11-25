@@ -455,6 +455,36 @@ describe('ProductSidebar', () => {
       vi.useRealTimers();
     });
 
+    describe('panel chart canvas (drawn at its real width, never stretched)', () => {
+      const panelSvg = async () => (await screen.findByTestId('StockChartPanelCanvas')).querySelector('svg');
+      const gridXs = (svg) => [...svg.querySelectorAll('line[stroke-dasharray="4,3"]')].map(l => [Number(l.getAttribute('x1')), Number(l.getAttribute('x2'))]);
+
+      it('uses a 268 px canvas until measured: 176 px high, 28 px y-label column, 4 px right margin, no stretching', async () => {
+        mockFetchResponses(twoWarehouses);
+        render(<ProductSidebar {...defaultProps} />);
+        const svg = await panelSvg();
+        expect(svg.getAttribute('viewBox')).toBe('0 0 268 176');
+        expect(svg.getAttribute('preserveAspectRatio')).not.toBe('none');
+        expect(new Set(gridXs(svg).flat())).toEqual(new Set([28, 264]));
+      });
+
+      it('takes its width from the measured container (320 px panel -> plot from 28 to W - 4)', async () => {
+        const original = Element.prototype.getBoundingClientRect;
+        Element.prototype.getBoundingClientRect = function rect() {
+          const width = this.dataset?.testid === 'StockChartPanelCanvas' ? 320 : 0;
+          return { x: 0, y: 0, left: 0, top: 0, right: width, bottom: 0, width, height: 0, toJSON() {} };
+        };
+        try {
+          mockFetchResponses(twoWarehouses);
+          render(<ProductSidebar {...defaultProps} />);
+          await waitFor(async () => expect((await panelSvg()).getAttribute('viewBox')).toBe('0 0 320 176'));
+          expect(new Set(gridXs(await panelSvg()).flat())).toEqual(new Set([28, 316]));
+        } finally {
+          Element.prototype.getBoundingClientRect = original;
+        }
+      });
+    });
+
     it('renders the legend as one left-aligned row with 16 px gaps, in the panel and in the modal', async () => {
       mockFetchResponses(twoWarehouses);
       render(<ProductSidebar {...defaultProps} />);
@@ -472,15 +502,47 @@ describe('ProductSidebar', () => {
       expect(screen.getAllByTestId('StockChartLegend')).toHaveLength(2);
     });
 
-    it('starts the 12-month X axis at the month of the range start, labelled every 2 months with the year only on the first label and on Ene', async () => {
+    it('labels the 12-month X axis every 2 months, year on the first visible label and on the year change, and drops a colliding partial first month', async () => {
       mockFetchResponses(twoWarehouses);
       render(<ProductSidebar {...defaultProps} />);
       await screen.findByTestId('StockChartLegend');
       const labels = screen.getAllByTestId('StockChartXLabel');
-      expect(labels.map(l => l.children[0].textContent)).toEqual(['Oct', 'Dic', 'Feb', 'Abr', 'Jun', 'Ago', 'Oct']);
-      expect(labels.map(l => l.children[1]?.textContent ?? null)).toEqual(['2025', null, '2026', null, null, null, null]);
+      // The window starts on 15 Oct 2025 (a partial month); "Oct" and "Dic" would touch on the 236 px plot, so Oct goes.
+      expect(labels.map(l => l.children[0].textContent)).toEqual(['Dic', 'Feb', 'Abr', 'Jun', 'Ago', 'Oct']);
+      expect(labels.map(l => l.children[1]?.textContent ?? null)).toEqual(['2025', '2026', null, null, null, null]);
       expect(labels[0].children[0].getAttribute('font-weight')).toBe('400');
-      expect(labels[0].children[0].getAttribute('text-anchor')).toBe('start');
+      expect(labels[0].children[0].getAttribute('text-anchor')).toBe('middle');
+    });
+
+    it('keeps at least 4 px between consecutive X labels', async () => {
+      mockFetchResponses(twoWarehouses);
+      render(<ProductSidebar {...defaultProps} />);
+      await screen.findByTestId('StockChartLegend');
+      const widthOf = (t) => [...t].reduce((acc, ch) => acc + (/\d/.test(ch) ? 6 : 6.5), 0);
+      const extents = screen.getAllByTestId('StockChartXLabel').map((g) => {
+        const [month, year] = g.children;
+        const x = Number(month.getAttribute('x'));
+        const w = Math.max(widthOf(month.textContent), year ? widthOf(year.textContent) : 0);
+        const anchor = month.getAttribute('text-anchor');
+        return anchor === 'start' ? [x, x + w] : anchor === 'end' ? [x - w, x] : [x - w / 2, x + w / 2];
+      });
+      for (let i = 1; i < extents.length; i += 1) expect(extents[i][0] - extents[i - 1][1]).toBeGreaterThanOrEqual(4);
+    });
+
+    it('grows the left padding so the widest Y label is never clipped by the svg (min 28 px)', async () => {
+      mockFetchResponses({
+        stockRows: [{ storageBin: 'LOC1', 'warehouse$_identifier': 'WH-Alpha', quantityOnHand: 2500 }],
+        transactions: [{ movementDate: '2026-05-10', movementQuantity: 2500, storageBin: 'LOC1' }],
+      });
+      render(<ProductSidebar {...defaultProps} />);
+      const svg = (await screen.findByTestId('StockChartPanelCanvas')).querySelector('svg');
+      const grid = [...svg.querySelectorAll('line[stroke-dasharray="4,3"]')];
+      const plotLeft = Number(grid[0].getAttribute('x1'));
+      expect(plotLeft).toBeGreaterThan(28); // "2.500" is wider than the 28 px column
+      const yLabels = [...svg.querySelectorAll('text[text-anchor="end"]')].filter(t => /\d/.test(t.textContent));
+      const widest = Math.max(...yLabels.map(t => [...t.textContent].reduce((a, ch) => a + (/\d/.test(ch) ? 6 : 3), 0)));
+      for (const t of yLabels) expect(Number(t.getAttribute('x')) - widest).toBeGreaterThanOrEqual(0);
+      expect(Number(grid[0].getAttribute('x2'))).toBe(264); // right margin stays 4 px of the 268 px canvas
     });
 
     it('shows date, rows sorted largest first and a Total row in the hover tooltip', async () => {
@@ -522,8 +584,8 @@ describe('ProductSidebar', () => {
       const tx = globalThis.fetch.mock.calls.map(c => c[0]).filter(u => u.includes('/transactions'));
       expect(tx).toHaveLength(1);
       const params = new URL(tx[0], 'http://x').searchParams;
-      expect(params.get('_sortBy')).toMatch(/^-movementDate/);
-      expect(JSON.parse(params.get('criteria'))).toEqual([{ fieldName: 'movementDate', operator: 'greaterOrEqual', value: '2025-10-15' }]);
+      expect(params.get('_sortBy')).toMatch(/^-transactionProcessDate/);
+      expect(JSON.parse(params.get('criteria'))).toEqual([{ fieldName: 'transactionProcessDate', operator: 'greaterOrEqual', value: '2025-10-15' }]);
       expect(globalThis.fetch.mock.calls.filter(c => c[0].includes('/stock'))).toHaveLength(1);
     });
 

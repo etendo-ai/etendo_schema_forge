@@ -23,11 +23,14 @@ import {
   MOVEMENTS_DEFAULT_SORT,
   MOVEMENTS_PAGE_SIZE,
   MOVEMENTS_TABLE_MIN_HEIGHT,
+  MOVEMENTS_TABLE_COMPACT_MIN_HEIGHT,
+  MOVEMENTS_TABLE_SCROLL_TOLERANCE_PX,
   buildAnyMovementQuery,
   buildMovementsQuery,
   buildTypeLabelOrder,
   extractMovementTotals,
   formatProcessTime,
+  movementDateTime,
   isMovementsSortKey,
   isStorableProduct,
   isUnfilteredMovements,
@@ -106,7 +109,7 @@ function MovementRow({ row, ui, currency }) {
   return (
     <div role="row" className={`${GRID} border-b border-border/50 px-3 py-2 text-sm`} data-testid="product-movements-row">
       <div role="cell" className="flex items-baseline gap-2 whitespace-nowrap">
-        <span className="font-medium tabular-nums">{formatCalendarDate(row.movementDate)}</span>
+        <span className="font-medium tabular-nums">{formatCalendarDate(movementDateTime(row))}</span>
         {time ? <span className="text-xs tabular-nums text-muted-foreground" data-testid="product-movements-time">{time}</span> : null}
       </div>
       <div role="cell" className="flex min-w-0 flex-nowrap items-center gap-2 whitespace-nowrap">
@@ -143,6 +146,10 @@ function totalColor(netQuantity) {
 // is deliberate headroom for font scaling. It is also the scroll padding the box keeps at its bottom, so
 // keyboard focus and scrollIntoView clear the sticky total that overlays the box's lower edge.
 const TOTAL_ROW_RESERVE_PX = 48;
+// Room kept below the table box so that box + Total end exactly at the bottom of the content column: the Total's
+// own height (41 px; its `-mb-4` cancels the 8 px `p-2` of the custom-tab wrapper and the 8 px `pb-2` of Product's
+// content column). Measured live: Total bottom == column bottom with no outer scroll above ~980 px of viewport.
+const TOTAL_ROW_BOTTOM_GAP_PX = 41;
 
 /**
  * Period total, OUTSIDE the table's scroll box and sticky at the bottom of the content column's scroller, so it
@@ -192,7 +199,7 @@ const MovementsTotalRow = forwardRef(function MovementsTotalRow({ ui, row, scrol
       ref={setRef}
       role="group"
       aria-label={ui('productMovementsTotalLabel')}
-      className="sticky -bottom-2 z-40 -ml-2 -mr-4 -mt-3 overflow-hidden border-t border-border bg-[var(--surface-subtle)]"
+      className="sticky -bottom-2 z-40 -ml-2 -mr-4 -mb-4 -mt-3 overflow-hidden border-t border-border bg-[var(--surface-subtle)]"
       style={{ paddingRight: scrollbarWidth }}
       data-testid="product-movements-total">
       <div className={`${GRID} px-3 py-2.5 text-sm`} style={gridWidth ? { minWidth: gridWidth } : undefined}>
@@ -472,9 +479,13 @@ export default function ProductMovementsTab({ data, apiBaseUrl, isActive, onVisi
   // computed for (a sort does not change it), `value` is null when the backend sent none.
   const [totals, setTotals] = useState(null);
   // The tab's own scroll box is bounded by the room left in the content column (inline maxHeight wins
-  // over the class, which only stays as the pre-measure fallback), so the page itself never scrolls.
-  const remaining = useRemainingHeight({ active: Boolean(isActive), minHeight: MOVEMENTS_TABLE_MIN_HEIGHT, bottomGap: 20 + TOTAL_ROW_RESERVE_PX });
-  const scrollBoxStyle = { ...remaining.style, minHeight: MOVEMENTS_TABLE_MIN_HEIGHT, scrollPaddingBottom: TOTAL_ROW_RESERVE_PX };
+  // over the class, which only stays as the pre-measure fallback), so the page itself never scrolls. `fill` also sets
+  // the height to that room, so the total row sits at the card bottom whether there are few rows or many.
+  const fitContent = !state.loading && !state.error;
+  const remaining = useRemainingHeight({ active: Boolean(isActive), minHeight: fitContent ? MOVEMENTS_TABLE_COMPACT_MIN_HEIGHT : MOVEMENTS_TABLE_MIN_HEIGHT, bottomGap: TOTAL_ROW_BOTTOM_GAP_PX, fill: true, fitContent, scrollTolerance: state.hasMore ? 0 : MOVEMENTS_TABLE_SCROLL_TOLERANCE_PX });
+  // With the hook's measured floor (min of 200 px and the natural height of header + rows) a short table does not
+  // keep 340 px of empty box; before it is measured, and in the skeleton / error / empty states, the floor stays 340.
+  const scrollBoxStyle = { minHeight: MOVEMENTS_TABLE_MIN_HEIGHT, ...remaining.style, scrollPaddingBottom: TOTAL_ROW_RESERVE_PX };
 
   // The tab survives a change of record, so nothing of the previous product may outlive it: its
   // warehouses and its warehouse filter (an option the new product may not have). The state is reset

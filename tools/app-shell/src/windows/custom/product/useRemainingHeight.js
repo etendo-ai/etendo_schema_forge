@@ -22,19 +22,27 @@ function findScrollParent(el) {
 }
 
 /**
- * Returns `{ ref, style }` for the scroll box. `style.maxHeight` is the room left below the box in its
+ * Returns `{ ref, style }` for the scroll box (`fill: true` adds `height` equal to `maxHeight`). `style.maxHeight` is the room left below the box in its
  * nearest scrolling ancestor (viewport when there is none), re-measured on resize and whenever a
  * sibling above it changes size (banner shown/hidden, form rows wrapping, panel collapsed).
  */
-export function useRemainingHeight({ active = true, bottomGap = 20, minHeight = 200 } = {}) {
+export function useRemainingHeight({ active = true, bottomGap = 20, minHeight = 200, fill = false, fitContent = false, scrollTolerance = 0 } = {}) {
   const ref = useRef(null);
-  const [maxHeight, setMaxHeight] = useState(null);
+  const [measured, setMeasured] = useState(null);
 
   const measure = useCallback(() => {
     const el = ref.current;
     if (!el) return;
     const container = findScrollParent(el);
     const box = el.getBoundingClientRect();
+    // `fitContent`: the floor is the smaller of `minHeight` and the natural height of the box content (the sum of its
+    // children, which never depends on the box height, unlike its scrollHeight), so a short table does not leave
+    // empty space that pushes the Total below the fold.
+    // The box's own horizontal scrollbar (offsetHeight - clientHeight) is part of what the floor must hold.
+    const content = fitContent
+      ? Array.from(el.children).reduce((sum, child) => sum + child.getBoundingClientRect().height, 0) + (el.offsetHeight - el.clientHeight)
+      : null;
+    const floor = content != null && content > 0 ? Math.min(minHeight, Math.ceil(content)) : minHeight;
     const next = container
       ? computeRemainingHeight({
         boxTop: box.top,
@@ -42,13 +50,13 @@ export function useRemainingHeight({ active = true, bottomGap = 20, minHeight = 
         containerClientHeight: container.clientHeight,
         containerScrollTop: container.scrollTop,
         bottomGap,
-        minHeight,
+        minHeight: floor,
       })
       : computeRemainingHeight({
-        boxTop: box.top, containerTop: 0, containerClientHeight: globalThis.innerHeight, containerScrollTop: 0, bottomGap, minHeight,
+        boxTop: box.top, containerTop: 0, containerClientHeight: globalThis.innerHeight, containerScrollTop: 0, bottomGap, minHeight: floor,
       });
-    if (next != null) setMaxHeight((prev) => (prev === next ? prev : next));
-  }, [bottomGap, minHeight]);
+    if (next != null) setMeasured((prev) => (prev?.height === next && prev?.floor === floor && prev?.content === content ? prev : { height: next, floor, content }));
+  }, [bottomGap, minHeight, fitContent]);
 
   useLayoutEffect(() => {
     if (!active) return undefined;
@@ -77,5 +85,15 @@ export function useRemainingHeight({ active = true, bottomGap = 20, minHeight = 
     return () => { if (id != null) globalThis.cancelAnimationFrame?.(id); };
   });
 
-  return { ref, style: maxHeight == null ? undefined : { maxHeight } };
+  // `fill` also emits `height`: the box takes all the room that is left (never below `minHeight`, which the caller
+  // sets as CSS min-height) instead of only being capped by it, so whatever follows the box sits at the bottom.
+  if (measured == null) return { ref, style: undefined };
+  const style = { maxHeight: measured.height };
+  if (fill) style.height = measured.height;
+  if (fitContent) style.minHeight = measured.floor;
+  // A shortfall of a few px (the content is `scrollTolerance` px or less taller than the box) would only show a tiny,
+  // useless scrollbar: hide vertical overflow then. Callers pass 0 when more content can still load by scrolling.
+  const shortfall = measured.content == null ? 0 : measured.content - measured.height;
+  if (scrollTolerance > 0 && shortfall > 0 && shortfall <= scrollTolerance) style.overflowY = 'hidden';
+  return { ref, style };
 }

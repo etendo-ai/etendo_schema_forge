@@ -63,7 +63,7 @@ const OUT_MOVEMENT = {
 };
 
 const STOCK_ROWS = [{ storageBin: 'LOC1', 'warehouse$_identifier': 'Main warehouse', quantityOnHand: 1530 }];
-const HISTORY_ROWS = [{ movementDate: '2026-10-20', movementQuantity: 1530, storageBin: 'LOC1' }];
+const HISTORY_ROWS = [{ movementDate: '2026-10-20', etgoProcessTime: '2026-10-20T14:35:10', movementQuantity: 1530, storageBin: 'LOC1' }];
 
 // Two warehouses: the stock card shows "2 ubicaciones" and the chart draws two series.
 const TWO_WAREHOUSE_STOCK = [
@@ -71,8 +71,8 @@ const TWO_WAREHOUSE_STOCK = [
   { storageBin: 'LOC2', warehouse: 'WH-2', 'warehouse$_identifier': 'Second warehouse', quantityOnHand: 530 },
 ];
 const TWO_WAREHOUSE_HISTORY = [
-  { movementDate: '2026-10-20', movementQuantity: 1000, storageBin: 'LOC1' },
-  { movementDate: '2026-10-21', movementQuantity: 530, storageBin: 'LOC2' },
+  { movementDate: '2026-10-20', etgoProcessTime: '2026-10-20T09:12:00', movementQuantity: 1000, storageBin: 'LOC1' },
+  { movementDate: '2026-10-21', etgoProcessTime: '2026-10-21T16:40:30', movementQuantity: 530, storageBin: 'LOC2' },
 ];
 
 // Design tokens (index.css), as the browser computes them.
@@ -188,14 +188,17 @@ test.describe('Product movements tab — layout and sort', () => {
     await expect(outQty).toHaveCSS('color', NEGATIVE_FG);
   });
 
-  test('the scroll box has no frame, keeps 340 px of height and a white sticky header', async ({ page }) => {
+  test('the scroll box has no frame, a compact floor (at most 200 px, never the old 340) and a white sticky header', async ({ page }) => {
     await expect(page.getByTestId('product-movements-row').first()).toBeVisible({ timeout: 10_000 });
     const box = page.getByTestId('product-movements-scroll');
-    await expect(box).toHaveCSS('min-height', '340px');
+    // Loaded rows use the compact floor: min(MOVEMENTS_TABLE_COMPACT_MIN_HEIGHT = 200, content), not 340.
+    const minHeight = Number.parseFloat(await box.evaluate((el) => getComputedStyle(el).minHeight));
+    expect(minHeight).toBeGreaterThan(0);
+    expect(minHeight).toBeLessThanOrEqual(200);
     await expect(box).toHaveCSS('border-top-width', '0px');
     await expect(box).toHaveCSS('border-left-width', '0px');
     await expect(box).toHaveCSS('border-top-left-radius', '0px');
-    expect((await box.boundingBox()).height).toBeGreaterThanOrEqual(339);
+    expect((await box.boundingBox()).height).toBeGreaterThanOrEqual(minHeight - 1);
 
     const header = box.locator('[role="row"]').first();
     await expect(header.getByRole('columnheader').first()).toBeVisible();
@@ -214,8 +217,8 @@ test.describe('Product movements tab — layout and sort', () => {
     });
     const criteria = JSON.parse(new URL(tabCalls(calls)[0]).searchParams.get('criteria'));
     expect(criteria).toEqual(expect.arrayContaining([
-      { fieldName: 'movementDate', operator: 'greaterOrEqual', value: from },
-      { fieldName: 'movementDate', operator: 'lessOrEqual', value: to },
+      { fieldName: 'transactionProcessDate', operator: 'greaterOrEqual', value: from },
+      { fieldName: 'transactionProcessDate', operator: 'lessOrEqual', value: to },
     ]));
   });
 
@@ -287,6 +290,18 @@ const NUMERIC_ROWS = (n) => Array.from({ length: n }, (_, i) => ({
 }));
 
 test.describe('Product movements tab — column geometry', () => {
+  test('the Fecha column reads day and time from the process timestamp (TrxProcessDate), not from the movement date', async ({ page }) => {
+    // The movement date says 01/01 but the transaction was processed on 20/10 at 14:35: the tab shows the latter.
+    const calls = await openMovementsWith(page, () => [200, page_([{ ...MOVEMENT, movementDate: '2026-01-01' }])]);
+    const row = page.getByTestId('product-movements-row').first();
+    await expect(row).toBeVisible({ timeout: 10_000 });
+    await expect(row.locator('[role="cell"]').first()).toContainText('20/10/2026');
+    await expect(row.locator('[role="cell"]').first()).not.toContainText('01/01/2026');
+    await expect(row.getByTestId('product-movements-time')).toHaveText('14:35');
+    // Newest-first by the same field, id as the tie-break.
+    expect(new URL(tabCalls(calls)[0]).searchParams.get('_sortBy')).toBe('-transactionProcessDate,-id');
+  });
+
   test('the cost header is 170 px wide and never truncates its label, with no sort and in both sort directions', async ({ page }) => {
     await openMovementsWith(page, () => [200, page_([MOVEMENT, OUT_MOVEMENT], { netQuantity: -3, count: 2 })]);
     await expect(page.getByTestId('product-movements-row').first()).toBeVisible({ timeout: 10_000 });
@@ -346,11 +361,11 @@ test.describe('Product movements tab — column geometry', () => {
   });
 
   test('no scrollbar gutter is reserved: the Total padding is 0 without overflow and equals the live scrollbar with it', async ({ page }) => {
-    let dataset = NUMERIC_ROWS(4);
+    let dataset = NUMERIC_ROWS(3);
     await openMovementsWith(page, () => [200, page_(dataset, { netQuantity: 1, count: dataset.length })]);
     const box = page.getByTestId('product-movements-scroll');
     const total = page.getByTestId('product-movements-total');
-    await expect(page.getByTestId('product-movements-row')).toHaveCount(4, { timeout: 10_000 });
+    await expect(page.getByTestId('product-movements-row')).toHaveCount(3, { timeout: 10_000 });
     await expect(total).toBeVisible();
 
     const scrollbar = () => box.evaluate((el) => el.offsetWidth - el.clientWidth);
@@ -360,8 +375,8 @@ test.describe('Product movements tab — column geometry', () => {
       return { header: e.header.row.right, row: e.rows[0].row.right, total: e.total.row.right, e };
     };
 
-    // Short list: nothing overflows vertically.
-    expect(await box.evaluate((el) => el.scrollHeight <= el.clientHeight)).toBe(true);
+    // Short list (3 rows: header + rows + the 1014 px grid's horizontal scrollbar stay under the 200 px compact cap): no vertical scrollbar (a shortfall of up to MOVEMENTS_TABLE_SCROLL_TOLERANCE_PX = 4 px is clipped, not scrolled).
+    expect(await box.evaluate((el) => el.scrollHeight - el.clientHeight <= 4)).toBe(true);
     expect(await scrollbar()).toBe(0);
     expect(await paddingRight()).toBe(0);
     let edges = await rightEdges();
@@ -386,9 +401,9 @@ test.describe('Product movements tab — column geometry', () => {
     expectAlignedColumns(edges.e);
 
     // Back to a short list: the reserved width is released, never stale.
-    dataset = NUMERIC_ROWS(4);
+    dataset = NUMERIC_ROWS(3);
     await page.getByTestId('product-movements-direction').getByRole('button').nth(0).click();
-    await expect(page.getByTestId('product-movements-row')).toHaveCount(4, { timeout: 10_000 });
+    await expect(page.getByTestId('product-movements-row')).toHaveCount(3, { timeout: 10_000 });
     await expect.poll(scrollbar).toBe(0);
     await expect.poll(paddingRight).toBe(0);
     edges = await rightEdges();
@@ -399,6 +414,8 @@ test.describe('Product movements tab — column geometry', () => {
 
 test.describe('Product movements tab — period total row', () => {
   test('a sticky last row sums the period: count, net quantity in dark red with U+2212, bold 15 px', async ({ page }) => {
+    // The compact floor lets a 2-row table fit the column at 1280x720; this test needs the column to overflow (it scrolls it to the end).
+    await page.setViewportSize({ width: 1280, height: 560 });
     const calls = await openMovementsWith(page, () => [200, page_([MOVEMENT, OUT_MOVEMENT], { netQuantity: -3, count: 2 })]);
     const total = page.getByTestId('product-movements-total');
     await expect(total).toBeVisible({ timeout: 10_000 });
@@ -463,11 +480,11 @@ test.describe('Product movements tab — period total row', () => {
     };
   }
 
-  // 720 is the supported minimum height; 900 the config default. The mocked product page is shorter than a real one
+  // 720 is the supported minimum height; 780 is the tallest viewport where the mocked column still overflows now that the box can shrink to its 200 px compact floor (at 900 it fits and never scrolls). The mocked product page is shorter than a real one
   // (fewer banners above the table), so the geometry that once clamped a Total nested in the table block (table top
-  // within one Total height of the column bottom) is only reached at 600 (at 640 the table top equals the threshold exactly, not past it). The test asserts that precondition with the
+  // within one Total height of the column bottom) is only reached at 560 (the 2-row Description puts the table top at about 546, so 600 no longer reaches it). The test asserts that precondition with the
   // measured numbers so it cannot pass vacuously.
-  for (const height of [900, 720, 600]) {
+  for (const height of [780, 720, 560]) {
     test(`at 1280x${height} nothing paints over the total: its label and value are hit-testable, inside the viewport, flush with the column bottom`, async ({ page }) => {
       await page.setViewportSize({ width: 1280, height });
       const MANY = Array.from({ length: 45 }, (_, i) => ({ ...MOVEMENT, id: `mov-many-${i}`, etgoDocLabel: `GR-${String(i).padStart(4, '0')}` }));
@@ -489,7 +506,7 @@ test.describe('Product movements tab — period total row', () => {
 
       const scrollBox = await page.getByTestId('product-movements-scroll').boundingBox();
       console.log(`GEOMETRY height=${height} tableTop=${scrollBox.y} columnBottom=${columnBottom} totalHeight=${box.height} threshold=${columnBottom - box.height}`);
-      if (height === 600) {
+      if (height === 560) {
         expect(scrollBox.y, 'precondition: the table top must be within one Total height of the column bottom').toBeGreaterThan(columnBottom - box.height);
       }
 
@@ -514,6 +531,32 @@ test.describe('Product movements tab — period total row', () => {
         const b = await page.getByTestId('product-movements-scroll').boundingBox();
         return Math.abs(t.y - (b.y + b.height));
       }).toBeLessThanOrEqual(1);
+    });
+  }
+
+  // The table box fills the room left (never below its compact floor), so with FEW rows the Total still sits at the bottom of
+  // the content column instead of floating under a short table.
+  for (const height of [720, 955, 1100]) {
+    test(`with two rows at 1850x${height} the total bottom equals the content column bottom`, async ({ page }) => {
+      await page.setViewportSize({ width: 1850, height });
+      await openMovementsWith(page, () => [200, page_([MOVEMENT, OUT_MOVEMENT], { netQuantity: -3, count: 2 })]);
+      const total = page.getByTestId('product-movements-total');
+      await expect(total).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByTestId('product-movements-row')).toHaveCount(2);
+      await expect.poll(async () => total.evaluate((el) => {
+        let col = el.parentElement;
+        while (col && !['auto', 'scroll'].includes(getComputedStyle(col).overflowY)) col = col.parentElement;
+        col.scrollTop = 0;
+        const box = document.querySelector('[data-testid="product-movements-scroll"]').getBoundingClientRect();
+        return {
+          gap: Math.round(col.getBoundingClientRect().bottom - el.getBoundingClientRect().bottom),
+          boxHeight: Math.round(box.height),
+          outerOverflow: col.scrollHeight - col.clientHeight,
+        };
+      })).toMatchObject({ gap: 0 });
+      // Two rows: the box floor is its content (header + 2 rows, about 120 px), never the old fixed 340.
+      const box = await page.getByTestId('product-movements-scroll').boundingBox();
+      expect(box.height).toBeGreaterThanOrEqual(100);
     });
   }
 
@@ -566,6 +609,86 @@ test.describe('Product movements tab — period total row', () => {
     expect(new URL(laterUrl).searchParams.has('etgoTotals')).toBe(false);
     await expect(page.getByTestId('product-movements-total-count')).toHaveText('· 51 movimientos');
     await expect(page.getByTestId('product-movements-total-value')).toHaveText('+612');
+  });
+});
+
+/** Geometry of the table box and of the content column that scrolls the tab (the nearest vertical scroller above it). */
+async function boxGeometry(page) {
+  return page.getByTestId('product-movements-scroll').evaluate((box) => {
+    let col = box.parentElement;
+    while (col && !['auto', 'scroll'].includes(getComputedStyle(col).overflowY)) col = col.parentElement;
+    col.scrollTop = 0;
+    const content = [...box.children].reduce((sum, child) => sum + child.getBoundingClientRect().height, 0) + (box.offsetHeight - box.clientHeight);
+    const total = document.querySelector('[data-testid="product-movements-total"]');
+    return {
+      clientHeight: box.clientHeight,
+      content: Math.round(content),
+      inner: box.scrollHeight - box.clientHeight,
+      outer: col.scrollHeight - col.clientHeight,
+      overflowY: getComputedStyle(box).overflowY,
+      scrollbar: box.offsetWidth - box.clientWidth,
+      totalGap: total ? Math.round(col.getBoundingClientRect().bottom - total.getBoundingClientRect().bottom) : null,
+    };
+  });
+}
+
+test.describe('Product movements tab — compact floor and scroll tolerance', () => {
+  const VIEWPORT_WIDTH = 1422;
+
+  test('an empty state does not make the form column scroll at 1422x802', async ({ page }) => {
+    await page.setViewportSize({ width: VIEWPORT_WIDTH, height: 802 });
+    await openMovementsWith(page, () => [200, page_([])]);
+    await expect(page.getByTestId('product-movements-empty')).toBeVisible({ timeout: 10_000 });
+    await expect.poll(async () => (await boxGeometry(page)).outer).toBeLessThanOrEqual(0);
+  });
+
+  test('3 rows at 1422x802: no outer form scroll, no inner scroll and the Total at the card bottom', async ({ page }) => {
+    await page.setViewportSize({ width: VIEWPORT_WIDTH, height: 802 });
+    await openMovementsWith(page, () => [200, page_(NUMERIC_ROWS(3), { netQuantity: 3, count: 3 })]);
+    await expect(page.getByTestId('product-movements-row')).toHaveCount(3, { timeout: 10_000 });
+    await expect.poll(async () => (await boxGeometry(page)).outer).toBeLessThanOrEqual(0);
+    const g = await boxGeometry(page);
+    expect(g.inner).toBeLessThanOrEqual(4);
+    expect(g.totalGap).toBe(0);
+  });
+
+  test('many rows at 1422x802: the table scrolls inside and the form column does not (one scroll)', async ({ page }) => {
+    await page.setViewportSize({ width: VIEWPORT_WIDTH, height: 802 });
+    await openMovementsWith(page, () => [200, page_(NUMERIC_ROWS(14), { netQuantity: 14, count: 14 })]);
+    await expect(page.getByTestId('product-movements-row')).toHaveCount(14, { timeout: 10_000 });
+    await expect.poll(async () => (await boxGeometry(page)).outer).toBeLessThanOrEqual(0);
+    const g = await boxGeometry(page);
+    expect(g.inner).toBeGreaterThan(4);
+    expect(g.overflowY).toBe('auto');
+    expect(g.totalGap).toBe(0);
+  });
+
+  test('a shortfall of 1-4 px clips the box without a vertical scrollbar, 0 and 5 px or more keep overflow-y auto', async ({ page }) => {
+    const ROWS = NUMERIC_ROWS(7);
+    await page.setViewportSize({ width: VIEWPORT_WIDTH, height: 1000 });
+    await openMovementsWith(page, () => [200, page_(ROWS, { netQuantity: 7, count: 7 })]);
+    await expect(page.getByTestId('product-movements-row')).toHaveCount(7, { timeout: 10_000 });
+    // The box grows 1 px per px of viewport height while it fills the room left, so the viewport height that leaves
+    // a given shortfall (content minus box) follows from one measurement at a taller viewport.
+    const shortfallAt = async (wanted) => {
+      let current = await boxGeometry(page);
+      const height = (await page.viewportSize()).height + (current.content - wanted - current.clientHeight);
+      await page.setViewportSize({ width: VIEWPORT_WIDTH, height });
+      await expect.poll(async () => { current = await boxGeometry(page); return current.content - current.clientHeight; }).toBe(wanted);
+      return current;
+    };
+    for (const wanted of [5, 8, 4, 2, 1]) {
+      const g = await shortfallAt(wanted);
+      if (wanted <= 4) {
+        expect(g.overflowY, `shortfall ${wanted}`).toBe('hidden');
+        expect(g.scrollbar, `shortfall ${wanted}`).toBe(0);
+      } else {
+        expect(g.overflowY, `shortfall ${wanted}`).toBe('auto');
+      }
+    }
+    // Fitting exactly (shortfall 0) leaves the default overflow.
+    const exact = await shortfallAt(0);
+    expect(exact.overflowY).toBe('auto');
   });
 });
 
@@ -799,5 +922,14 @@ test.describe('Product header — Save and tabs', () => {
     await movementsTab.click();
     await expect(movementsTab).toHaveCSS('color', PRIMARY);
     await expect(movementsTab).toHaveText('Movimientos');
+  });
+
+  test('the Description textarea declares 2 rows (decisions.json rows: 2): no 96 px floor, 58 px high', async ({ page }) => {
+    await openStockedProduct(page);
+    const description = page.getByTestId('field-description');
+    await expect(description).toBeVisible({ timeout: 10_000 });
+    await expect(description).toHaveAttribute('rows', '2');
+    // 2 rows x 20 px line height + 2 x 8 px padding + 2 x 1 px border.
+    expect(Math.round((await description.boundingBox()).height)).toBe(58);
   });
 });

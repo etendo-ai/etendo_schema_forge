@@ -128,6 +128,22 @@ describe('toMovements', () => {
     const out = toMovements([{ movementDate: '2026-10-28', movementQuantity: '2' }, { movementDate: null, movementQuantity: 1 }]);
     expect(out).toEqual([{ day: d(2026, 10, 28), qty: 2 }]);
   });
+
+  it('buckets by the day of the process timestamp (TrxProcessDate), not by the movement date', () => {
+    const out = toMovements([
+      { movementDate: '2026-01-01', etgoProcessTime: '2026-04-16T23:59:59', movementQuantity: 3 },
+      { movementDate: '2026-01-01', etgoProcessTime: '2026-04-17T00:00:00', movementQuantity: 4 },
+    ]);
+    expect(out).toEqual([{ day: d(2026, 4, 16), qty: 3 }, { day: d(2026, 4, 17), qty: 4 }]);
+  });
+
+  it('falls back to the movement date when the backend sent no usable process timestamp', () => {
+    const out = toMovements([
+      { movementDate: '2026-10-28', movementQuantity: 1 },
+      { movementDate: '2026-10-29', etgoProcessTime: 'garbage', movementQuantity: 2 },
+    ]);
+    expect(out).toEqual([{ day: d(2026, 10, 28), qty: 1 }, { day: d(2026, 10, 29), qty: 2 }]);
+  });
 });
 
 describe('buildChartModel', () => {
