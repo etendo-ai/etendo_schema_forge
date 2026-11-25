@@ -672,9 +672,9 @@ jobs:
         working-directory: sf
         # The pin sits in devDependencies; scripts/public-api-e2e-ci.mjs reads it from either.
         run: |
-          v="$(node -p "const p = require('./package.json'); (p.dependencies || {})['@etendosoftware/schema-forge-core'] || (p.devDependencies || {})['@etendosoftware/schema-forge-core'] || ''")"
+          v="$(node -p "const p = require('./package.json'); (p.dependencies || {})['@etendo-ai/schema-forge-core'] || (p.devDependencies || {})['@etendo-ai/schema-forge-core'] || ''")"
           if ! printf '%s' "$v" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-            echo "::error::@etendosoftware/schema-forge-core is pinned to '$v' in package.json, expected an exact x.y.z (the core's tag)."
+            echo "::error::@etendo-ai/schema-forge-core is pinned to '$v' in package.json, expected an exact x.y.z (the core's tag)."
             exit 1
           fi
           echo "schema_forge_core: $v"

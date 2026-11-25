@@ -30,7 +30,7 @@ import {
 // run, so this file is never a merge blocker for the core bump.
 let fixtures = null;
 try {
-  const mod = await import('@etendosoftware/app-shell-core/lib/csv/csvNeutralizationFixtures.js');
+  const mod = await import('@etendo-ai/app-shell-core/lib/csv/csvNeutralizationFixtures.js');
   if (Array.isArray(mod.CSV_NEUTRALIZATION_FIXTURES)) fixtures = mod;
 } catch {
   // Subpath not resolvable yet (pre-publish); the fixture-driven suites are skipped.
@@ -38,7 +38,7 @@ try {
 
 const fixtureSkip = fixtures
   ? false
-  : '@etendosoftware/app-shell-core/lib/csv/csvNeutralizationFixtures.js is not published yet';
+  : '@etendo-ai/app-shell-core/lib/csv/csvNeutralizationFixtures.js is not published yet';
 
 const ARTIFACT_DIR = resolve(import.meta.dirname, '../../../artifacts/report-general-ledger');
 

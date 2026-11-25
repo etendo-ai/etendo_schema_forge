@@ -6,9 +6,9 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { sanitizeDatadogEvent } from '@etendosoftware/app-shell-core/observability/adapters/datadog';
-import { sanitizeMixpanelEvent } from '@etendosoftware/app-shell-core/observability/adapters/mixpanel';
-import { sanitizeRumRequest } from '@etendosoftware/app-shell-core/observability/adapters/rum';
+import { sanitizeDatadogEvent } from '@etendo-ai/app-shell-core/observability/adapters/datadog';
+import { sanitizeMixpanelEvent } from '@etendo-ai/app-shell-core/observability/adapters/mixpanel';
+import { sanitizeRumRequest } from '@etendo-ai/app-shell-core/observability/adapters/rum';
 
 // ETP-4578 H7 (D5) — the host's REAL routes, through the three providers.
 //

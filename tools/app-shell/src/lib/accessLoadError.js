@@ -16,7 +16,7 @@
  * cached, so a re-run would not even re-record it); `AppLayout` clears it when it unmounts, and
  * the screen's retry reloads the page.
  */
-import { isSessionAliveUnauthorized } from '@etendosoftware/app-shell-core/auth/api';
+import { isSessionAliveUnauthorized } from '@etendo-ai/app-shell-core/auth/api';
 
 let failed = false;
 const listeners = new Set();

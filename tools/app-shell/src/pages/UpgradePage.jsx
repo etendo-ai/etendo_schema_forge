@@ -8,7 +8,7 @@ import {
   CircleNotchIcon,
   RocketLaunchIcon,
 } from '@phosphor-icons/react';
-import { initialSetupSteps, applyProgressMessage, fetchEnvironments } from '@etendosoftware/etendo-go-core/onboarding';
+import { initialSetupSteps, applyProgressMessage, fetchEnvironments } from '@etendo-ai/etendo-go-core/onboarding';
 import { useUI, getStoredLocale } from '@/i18n';
 import { detectBaseUrl } from '@/auth/api.js';
 import { useApiFetch } from '@/auth/useApiFetch.js';

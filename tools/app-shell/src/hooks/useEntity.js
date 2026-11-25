@@ -17,7 +17,7 @@ import { incrementSurveyCounter } from '@/lib/surveys/survey-state.js';
 import { isInvoiceSpec, isOrderSpec } from '@/lib/surveys/surveys.js';
 import { emitSurveyTrigger } from '@/lib/surveys/survey-engine.js';
 import { isEmailField, getEmailFieldError, getWebsiteFieldError, getPhoneFieldError } from '@/components/contract-ui/recipientEdits.js';
-import { createQueryKey, useOptionalDataCache } from '@etendosoftware/app-shell-core/data';
+import { createQueryKey, useOptionalDataCache } from '@etendo-ai/app-shell-core/data';
 import {
     getContactsTextFieldError,
     getContactsTaxIdError,
@@ -38,7 +38,7 @@ import { useApiFetch } from '@/auth/useApiFetch.js';
 // ETP-5073 / DOC-04: the optimistic-locking token is remembered here (the one place every
 // record and every list row is parsed) and injected by apiFetch on the way out, so no call
 // site has to thread `updated` through by hand.
-import { rememberRecordVersion, forgetRecordVersion } from '@etendosoftware/app-shell-core/lib/recordVersions.js';
+import { rememberRecordVersion, forgetRecordVersion } from '@etendo-ai/app-shell-core/lib/recordVersions.js';
 // ETP-5073 / DOC-04: the conflict prompt is a dialog, not a toast — it is a blocking decision
 // with a destructive option. See lib/saveConflict.js for why the toast was abandoned.
 import { openSaveConflict, dismissSaveConflict } from '@/lib/saveConflict.js';

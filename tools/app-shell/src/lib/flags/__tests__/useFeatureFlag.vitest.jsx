@@ -21,7 +21,7 @@ const authState = vi.hoisted(() => ({ current: {} }));
 const sessionFetch = vi.hoisted(() => vi.fn());
 vi.mock('@/auth/AuthContext.jsx', () => ({ useAuth: () => authState.current }));
 vi.mock('@/hooks/useNeoResource.js', () => ({ getApiBase: () => '' }));
-vi.mock('@etendosoftware/app-shell-core/auth/api', () => ({
+vi.mock('@etendo-ai/app-shell-core/auth/api', () => ({
   apiFetch: sessionFetch,
   authHeaders: token => token ? { Authorization: `Bearer ${token}` } : {},
 }));

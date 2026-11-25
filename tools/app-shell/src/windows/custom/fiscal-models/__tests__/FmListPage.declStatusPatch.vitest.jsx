@@ -25,7 +25,7 @@ import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import { registerApiSession, resetApiSessionForTests } from '@/auth/api.js';
 
-vi.mock('@etendosoftware/app-shell-core', () => ({
+vi.mock('@etendo-ai/app-shell-core', () => ({
   useUI: () => (key) => key,
 }));
 vi.mock('sonner', () => ({

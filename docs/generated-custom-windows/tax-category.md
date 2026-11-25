@@ -49,7 +49,7 @@ Applied the same combo used on the `tax` window to Tax Category:
 - `window.hideDeleteButton: true` — hides the Delete button/icon in BOTH the detail toolbar (`DetailView.jsx`) and the list-row hover actions (`RowQuickActions.jsx`, via `DataTable`'s `rowQuickActions.hideDeleteButton`), for every record regardless of status.
 - `window.hideDelete: true` — disables the CRUD delete capability at the contract/API level (defense in depth).
 
-Generator support ships in `@etendosoftware/schema-forge-cli@0.3.6` (already installed). Regenerated via `make regen ONLY=tax-category SKIP_EXTRACT=1`. `artifacts/tax-category/generated/web/tax-category/TaxCategoryPage.jsx` now emits `hideCreate` and `hideDeleteButton` on `ListView`, `rowQuickActions={{"hideDeleteButton":true}}` on the list table, and `hideDeleteButton` on `DetailView`; `contract.json` exposes `apiPrediction.crud.taxCategory.delete: false`. `sf-validate-pipeline --scope=tax-category` reports 0 violations.
+Generator support ships in `@etendo-ai/schema-forge-cli@0.3.6` (already installed). Regenerated via `make regen ONLY=tax-category SKIP_EXTRACT=1`. `artifacts/tax-category/generated/web/tax-category/TaxCategoryPage.jsx` now emits `hideCreate` and `hideDeleteButton` on `ListView`, `rowQuickActions={{"hideDeleteButton":true}}` on the list table, and `hideDeleteButton` on `DetailView`; `contract.json` exposes `apiPrediction.crud.taxCategory.delete: false`. `sf-validate-pipeline --scope=tax-category` reports 0 violations.
 
 ## Public API — read-only `tax-category` — ETP-6174
 

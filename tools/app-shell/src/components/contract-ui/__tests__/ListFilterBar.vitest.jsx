@@ -17,8 +17,8 @@ vi.mock('@/i18n', () => ({
 // Mock dependencies
 // ListFilterBar reads its dictionary from the core package: pass the real one through unless a
 // test installs a dictionary (e.g. translated status labels with accents).
-vi.mock('@etendosoftware/app-shell-core', async () => {
-  const actual = await vi.importActual('@etendosoftware/app-shell-core');
+vi.mock('@etendo-ai/app-shell-core', async () => {
+  const actual = await vi.importActual('@etendo-ai/app-shell-core');
   return { ...actual, useLocale: () => localeOverride.current ?? actual.useLocale() };
 });
 

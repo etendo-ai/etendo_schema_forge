@@ -16,7 +16,7 @@ import userEvent from '@testing-library/user-event';
 const toastMock = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
 vi.mock('sonner', () => ({ toast: toastMock }));
 
-vi.mock('@etendosoftware/app-shell-core/i18n', () => ({
+vi.mock('@etendo-ai/app-shell-core/i18n', () => ({
   useUI: () => (key) => key,
 }));
 
@@ -26,7 +26,7 @@ vi.mock('@etendosoftware/app-shell-core/i18n', () => ({
  *  - `onNext(form)` carrying `fiscalIdValue`,
  *  - and rendering NO wrapper element, so the "no extra DOM" contract stays visible here too.
  */
-vi.mock('@etendosoftware/etendo-go-core/onboarding', () => {
+vi.mock('@etendo-ai/etendo-go-core/onboarding', () => {
   const CompanyStep = ({ onNext, onBack }) => (
     <>
       <input id="fiscalIdValue" defaultValue="" data-testid="nif" />

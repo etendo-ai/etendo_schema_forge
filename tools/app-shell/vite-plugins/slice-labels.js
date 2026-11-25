@@ -9,7 +9,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
  * on disk before Vite bundles (build) or serves (dev). This plugin regenerates
  * them in `buildStart`, which runs for both `vite` and `vite build`.
  *
- * The slicer itself lives in the core package `@etendosoftware/schema-forge-cli`
+ * The slicer itself lives in the core package `@etendo-ai/schema-forge-cli`
  * (`sf-slice-labels` bin / `./slice-labels` export). This plugin is only the app-side
  * adapter: it resolves schema_forge's own directories and hands them to the pure,
  * path-agnostic `sliceAll()`. The import is dynamic so this module loads without the
@@ -47,7 +47,7 @@ function slicerSpecifier() {
     const coreRepo = process.env.SCHEMA_FORGE_CORE || join(APP_ROOT, '..', 'schema_forge_core');
     return pathToFileURL(join(coreRepo, 'cli', 'src', 'slice-labels.js')).href;
   }
-  return '@etendosoftware/schema-forge-cli/slice-labels';
+  return '@etendo-ai/schema-forge-cli/slice-labels';
 }
 
 /**

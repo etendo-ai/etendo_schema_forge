@@ -45,7 +45,7 @@ Schema Forge is now **two sibling repos + one runtime module**:
 | **schema_forge_core** (platform/tooling) | `etendosoftware/schema_forge_core` (sibling `../schema_forge_core`) | `packages/**`, pipeline CLI (generators, extractors, `pipeline.js`, `push-to-neo.js`, `resolve-curated.js`), `templates/`, `schemas/` | none — out of scope for this agent; tell the coordinator |
 | **com.etendoerp.go** (runtime) | `{etendo_root}/modules/com.etendoerp.go` | NEO Headless engine (Java), ETGO_SF_* tables | none — JUnit is `tester-go`'s |
 
-**What this means for you:** the app-shell React/Vitest tests and the Playwright E2E flows live HERE in `etendo_schema_forge` — your `cd tools/app-shell && npx vitest run …`, `node --test 'tools/app-shell/src/**/__tests__/*.test.js'`, and `cd e2e && npx playwright test` commands are all still correct, and the `@` → `tools/app-shell/src/` alias is unchanged. But tests for the **pipeline tooling** (generators, extractors, `resolve-curated`, `push-to-neo`, contract generation) belong in `schema_forge_core` and are written/run from that checkout — this repo consumes that tooling as a published npm package (`@etendosoftware/schema-forge-cli`), so there is no generator source here to unit-test. If asked to test a generator/pipeline behavior, stop and tell the coordinator: it is outside this agent's scope, which is the functional repo only.
+**What this means for you:** the app-shell React/Vitest tests and the Playwright E2E flows live HERE in `etendo_schema_forge` — your `cd tools/app-shell && npx vitest run …`, `node --test 'tools/app-shell/src/**/__tests__/*.test.js'`, and `cd e2e && npx playwright test` commands are all still correct, and the `@` → `tools/app-shell/src/` alias is unchanged. But tests for the **pipeline tooling** (generators, extractors, `resolve-curated`, `push-to-neo`, contract generation) belong in `schema_forge_core` and are written/run from that checkout — this repo consumes that tooling as a published npm package (`@etendo-ai/schema-forge-cli`), so there is no generator source here to unit-test. If asked to test a generator/pipeline behavior, stop and tell the coordinator: it is outside this agent's scope, which is the functional repo only.
 
 > **Local-source dev mode (opt-in, env-gated — implemented):** the `LOCAL_CORE` flag pulls the CLI + React from a local `../schema_forge_core` checkout — wired in the `Makefile` and `tools/app-shell/vite.config.js`, strictly opt-in and never the default. Do not rely on it for tests — CI uses the published packages. See `docs/repo-topology.md`.
 </repo_topology>
@@ -462,7 +462,7 @@ const mockApiFetch = vi.fn();
 vi.mock('@/auth/useApiFetch.js', () => ({ useApiFetch: () => mockApiFetch }));
 
 // Plain module under test instead:
-// vi.mock('@etendosoftware/app-shell-core/auth/api', () => ({ apiFetch: mockApiFetch }));
+// vi.mock('@etendo-ai/app-shell-core/auth/api', () => ({ apiFetch: mockApiFetch }));
 
 // Successful NEO response
 mockApiFetch.mockResolvedValue({
@@ -480,7 +480,7 @@ mockApiFetch.mockResolvedValue({
 ```
 
 A test that needs a token supplies a **session**, not a `token` prop: mock `useAuthOptional` from
-`@etendosoftware/app-shell-core/auth`, spreading the original, and return a stable object (see
+`@etendo-ai/app-shell-core/auth`, spreading the original, and return a stable object (see
 `docs/request-policy.md`).
 
 ## Running Tests

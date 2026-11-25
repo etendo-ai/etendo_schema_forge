@@ -113,7 +113,7 @@ vi.mock('../ListFilterBar.jsx', () => ({
   ListFilterBar: (props) => { filterBarProps = props; return <div data-testid="list-filter-bar" />; },
 }));
 
-vi.mock('@etendosoftware/app-shell-core/components/ui/scroll-pane.jsx', () => ({
+vi.mock('@etendo-ai/app-shell-core/components/ui/scroll-pane.jsx', () => ({
   ScrollPane: ({ children }) => <div data-testid="scroll-pane">{children}</div>,
 }));
 

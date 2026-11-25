@@ -1,7 +1,7 @@
 // @covers tools/app-shell/src/windows/custom/invoice-inbox/useInvoiceInboxUpload.js
 // @covers tools/app-shell/src/windows/custom/invoice-inbox/invoiceInboxUploadLog.js
 import { renderHook, act, waitFor } from '@testing-library/react';
-import { isNetworkError } from '@etendosoftware/app-shell-core/auth';
+import { isNetworkError } from '@etendo-ai/app-shell-core/auth';
 
 const mockUpload = vi.fn();
 vi.mock('../invoiceInboxApi.js', () => ({ uploadInboxFile: (...args) => mockUpload(...args) }));

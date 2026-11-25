@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LifebuoyIcon, CircleNotchIcon, SignOutIcon } from '@phosphor-icons/react';
-import { whenSessionRevokeSettles } from '@etendosoftware/app-shell-core/auth';
+import { whenSessionRevokeSettles } from '@etendo-ai/app-shell-core/auth';
 import { Button } from '@/components/ui/button';
 import { useLocaleSwitch, useUI } from '@/i18n';
 import { useLogout } from '@/auth/useLogout.js';
