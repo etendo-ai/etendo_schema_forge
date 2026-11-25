@@ -42,7 +42,7 @@ local-env worktree rm ETP-1234                 # stops that SPA too
 ```
 
 For local SPA flags, add one `feature-flag <key>=<boolean|number>` line per override
-to the worktree's `worktree.conf`, for example `feature-flag acct-process-monitor=true`.
+to the worktree's `worktree.conf`, for example `feature-flag proof-of-concept-menu=true`.
 On `local-env up`, the plugin combines these into `VITE_FEATURE_FLAGS` for the SPA
 process. They do not need a shell `VITE_FEATURE_FLAGS=...` assignment. The SPA reads
 them only at startup; restart the SPA/environment to apply edits. The **boolean** ones
