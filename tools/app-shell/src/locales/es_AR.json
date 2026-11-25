@@ -16666,7 +16666,7 @@
     "convRateStatusHistoric": "Histórico",
     "convRateEditAction": "Modificar tasa",
     "convRateDeleteAction": "Eliminar tasa",
-    "convRateEditSummaryTitle": "Se actualizarán las dos tasas",
+    "convRateEditSummaryTitle": "Se actualizará la tasa",
     "convRateSaveChanges": "Guardar cambios",
     "convRateValidFromFuture": "El inicio no puede ser posterior a la fecha y hora actuales.",
     "convRateDeleteTitle": "Eliminar tasa",

@@ -16461,7 +16461,7 @@
     "convRateStatusHistoric": "Historic",
     "convRateEditAction": "Edit rate",
     "convRateDeleteAction": "Delete rate",
-    "convRateEditSummaryTitle": "Both rates will be updated",
+    "convRateEditSummaryTitle": "The rate will be updated",
     "convRateSaveChanges": "Save changes",
     "convRateValidFromFuture": "The start cannot be later than the current date and time.",
     "convRateDeleteTitle": "Delete rate",
