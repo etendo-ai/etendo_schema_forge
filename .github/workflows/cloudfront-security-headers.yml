@@ -1,10 +1,11 @@
 name: CloudFront security headers
 
 # ETP-4573 (ADR-0002 D1). Manual only; each environment is an explicit choice.
-#   policy   create/update the account-global policy. ALWAYS runs in the reviewed
+#   policy   create/update the account-global policy named by `policy`. ALWAYS runs in the reviewed
 #            `production-cloudfront` environment, whatever environment is selected.
-#   apply    attach the policy to every behavior of ONE distribution.
-#   verify   read-only check of every behavior.
+#   apply    attach the policy to the behaviors of ONE distribution (`paths`: required for any policy other than v1).
+#   verify   read-only check of those behaviors.
+#   verify-live  probe the host's real response headers (exact values) with scripts/verify-security-headers.mjs.
 #   rollback restore the policy ids from the snapshot artifact of an earlier apply run.
 on:
   workflow_dispatch:
@@ -18,12 +19,13 @@ on:
           - staging
           - experimental
       action:
-        description: 'policy (gated), apply, verify or rollback'
+        description: 'policy (gated), apply, verify, verify-live or rollback'
         required: true
         default: verify
         type: choice
         options:
           - verify
+          - verify-live
           - apply
           - policy
           - rollback
@@ -37,6 +39,26 @@ on:
         required: false
         default: false
         type: boolean
+      policy:
+        description: 'policy file name (default: etendo-go-security-headers-v1)'
+        required: false
+        default: 'etendo-go-security-headers-v1'
+        type: string
+      paths:
+        description: 'apply/verify: comma-separated behaviors (default or path patterns); required for any policy other than v1, empty = every behavior (v1 only)'
+        required: false
+        default: ''
+        type: string
+      asset:
+        description: 'verify-live only: path of a content-hashed asset, e.g. /assets/index-<hash>.js'
+        required: false
+        default: ''
+        type: string
+      host:
+        description: 'verify-live only: hostname to probe (default: the environment host in scripts/verify-security-headers.mjs)'
+        required: false
+        default: ''
+        type: string
       snapshot_run_id:
         description: 'rollback only: run id of the apply run that uploaded cf-snapshot-<env>-<run_id>'
         required: false
@@ -73,8 +95,10 @@ jobs:
       - name: Create or update the policy
         env:
           DRY_RUN: ${{ inputs.dry_run }}
+          POLICY: ${{ inputs.policy }}
+          CSP_CONNECT_ORIGINS: ${{ vars.CSP_CONNECT_ORIGINS }}
         run: |
-          ARGS=()
+          ARGS=(--policy "$POLICY")
           if [[ "$DRY_RUN" == "true" ]]; then ARGS+=(--dry-run); fi
           node scripts/cloudfront-security-headers.mjs policy "${ARGS[@]}"
 
@@ -83,7 +107,7 @@ jobs:
     if: inputs.action != 'policy'
     runs-on: ubuntu-latest
     # Production writes need the reviewed environment; staging/experimental have their own.
-    environment: ${{ inputs.environment == 'production' && (inputs.action == 'verify' || (inputs.action == 'apply' && inputs.dry_run)) && 'production-cloudfront-readonly' || format('{0}-cloudfront', inputs.environment) }}
+    environment: ${{ inputs.environment == 'production' && (inputs.action == 'verify' || inputs.action == 'verify-live' || (inputs.action == 'apply' && inputs.dry_run)) && 'production-cloudfront-readonly' || format('{0}-cloudfront', inputs.environment) }}
     concurrency:
       group: cloudfront-security-headers-${{ inputs.environment }}
       cancel-in-progress: false
@@ -139,30 +163,61 @@ jobs:
           github-token: ${{ github.token }}
           path: cf-snapshot-in
 
+      - name: Refuse v2 policies on experimental (HSTS gate)
+        if: inputs.environment == 'experimental' && inputs.action == 'apply' && inputs.dry_run == false && endsWith(inputs.policy, '-v2')
+        run: |
+          echo "v2 policies would introduce includeSubDomains; preload on experimental, which serves no HSTS today." >&2
+          echo "Attach the HTTPS inventory to ETP-4574 and lift this gate first (docs/ops/cloudfront-security-headers.md)." >&2
+          exit 1
+
       - name: Run
+        if: inputs.action != 'verify-live'
         env:
           DIST: ${{ steps.target.outputs.id }}
           ACTION: ${{ inputs.action }}
           DRY_RUN: ${{ inputs.dry_run }}
           REPLACE_EXISTING: ${{ inputs.replace_existing }}
+          POLICY: ${{ inputs.policy }}
+          PATHS: ${{ inputs.paths }}
+          CSP_CONNECT_ORIGINS: ${{ vars.CSP_CONNECT_ORIGINS }}
         run: |
+          SEL=(--policy "$POLICY")
+          if [[ -n "$PATHS" ]]; then SEL+=(--paths "$PATHS"); fi
           case "$ACTION" in
             apply)
-              ARGS=(--snapshot-dir cf-snapshots)
+              ARGS=(--snapshot-dir cf-snapshots "${SEL[@]}")
               if [[ "$DRY_RUN" == "true" ]]; then ARGS+=(--dry-run); fi
               if [[ "$REPLACE_EXISTING" == "true" ]]; then ARGS+=(--replace-existing); fi
               node scripts/cloudfront-security-headers.mjs apply --distribution "$DIST" "${ARGS[@]}" ;;
             verify)
-              node scripts/cloudfront-security-headers.mjs verify --distribution "$DIST" ;;
+              node scripts/cloudfront-security-headers.mjs verify --distribution "$DIST" "${SEL[@]}" ;;
             rollback)
               node scripts/cloudfront-security-headers.mjs rollback --distribution "$DIST" --snapshot-dir cf-snapshot-in ;;
           esac
 
-      - name: Verify every behavior
+      - name: Verify the selected behaviors
         if: inputs.action == 'apply' && inputs.dry_run == false
         env:
           DIST: ${{ steps.target.outputs.id }}
-        run: node scripts/cloudfront-security-headers.mjs verify --distribution "$DIST"
+          POLICY: ${{ inputs.policy }}
+          PATHS: ${{ inputs.paths }}
+          CSP_CONNECT_ORIGINS: ${{ vars.CSP_CONNECT_ORIGINS }}
+        run: |
+          SEL=(--policy "$POLICY")
+          if [[ -n "$PATHS" ]]; then SEL+=(--paths "$PATHS"); fi
+          node scripts/cloudfront-security-headers.mjs verify --distribution "$DIST" "${SEL[@]}"
+
+      - name: Verify live response headers
+        if: inputs.action == 'verify-live'
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+          ASSET: ${{ inputs.asset }}
+          HOST: ${{ inputs.host }}
+          CSP_CONNECT_ORIGINS: ${{ vars.CSP_CONNECT_ORIGINS }}
+        run: |
+          ARGS=(--env "$ENVIRONMENT" --asset "$ASSET")
+          if [[ -n "$HOST" ]]; then ARGS+=(--host "$HOST"); fi
+          node scripts/verify-security-headers.mjs "${ARGS[@]}"
 
       - name: Upload pre-change snapshot
         if: always() && inputs.action == 'apply'
