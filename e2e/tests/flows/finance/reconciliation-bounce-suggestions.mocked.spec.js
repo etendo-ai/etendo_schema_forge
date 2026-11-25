@@ -4,6 +4,9 @@
 // @covers tools/app-shell/src/components/contract-ui/AutoMatchPairRow.jsx
 // @covers tools/app-shell/src/components/contract-ui/AutoMatchCloseConfirmDialog.jsx
 // @covers tools/app-shell/src/components/contract-ui/BouncePairPanel.jsx
+// @covers tools/app-shell/src/components/contract-ui/ReconciliationSplitPanel.jsx
+// @covers tools/app-shell/src/components/contract-ui/bouncePairs.js
+// @covers tools/app-shell/src/components/contract-ui/bounceAi.js
 // @covers tools/app-shell/src/components/contract-ui/useBouncePairReview.jsx
 // @covers tools/app-shell/src/hooks/useAutoMatchReview.js
 // @covers tools/app-shell/src/windows/custom/financial-account/index.jsx
@@ -54,6 +57,11 @@ import { login } from '../../helpers/auth.js';
  *  11. (E2E_TELEMETRY=configured only) the `bounce_suggestions_viewed` / `_dismissed` Mixpanel
  *      events, read from the requests to the Mixpanel host — see the describe below.
  *
+ *  13. (ETP-6359) the "Posibles rechazos" filter is TWO native tables: left "Salidas (N)" (every
+ *      distinct outflow once, date order), right "Rechazos (N)"; nothing selected shows only the
+ *      placeholder; clicking an outflow selects / re-targets a rejection and narrows the right
+ *      list; any pairable outflow is an explicit pick; the footer lives in the right column only;
+ *      the modal also auto-opens when the run found only pairs (see the describe at the end).
  *  12. the AI second layer (`bounceAiAssessments` on the autoMatch answer): the modal shows the
  *      percentage without making the pair selectable; the panel sorts the options, pre-checks the
  *      recommended one (badge + notice) and `discardPair` carries `choiceSource` 'ai' / 'user';
@@ -108,6 +116,14 @@ const AMB_CAND_1 = { id: 'bsl-amb-out-1', date: day(6), description: AMB_LONG_DE
 const AMB_CAND_2 = { id: 'bsl-amb-out-2', date: day(5), description: 'Pago ACME factura 2', amount: -80, referenceNo: 'REF-AMB-OUT-2' };
 const AMB_BOUNCE = { id: 'bsl-amb-in', date: day(3), description: 'Abono ACME', amount: 80, referenceNo: 'REF-AMB-IN' };
 
+// Extra pairs some tests add (`extraPairs` of installMocks). FREE: an outflow of the same amount
+// as the ambiguous pair's candidates that the detector did NOT offer for it (a free pick).
+// ORPHAN: an outflow whose rejection came more than 60 days later, so no rejection can take it.
+const FREE_ORIGINAL = { id: 'bsl-free-out', date: day(10), description: 'Pago ACME factura 3', amount: -80, referenceNo: 'REF-FREE-OUT' };
+const FREE_BOUNCE = { id: 'bsl-free-in', date: day(2), description: 'RECIBO DEVUELTO ACME 3', amount: 80, referenceNo: 'REF-FREE-IN' };
+const ORPHAN_ORIGINAL = { id: 'bsl-orph-out', date: day(100), description: 'Cuota anual', amount: -33 };
+const ORPHAN_BOUNCE = { id: 'bsl-orph-in', date: day(2), description: 'CUOTA DEVUELTA', amount: 33 };
+
 const TX_GROUP = {
   kind: 'transaction',
   groupKey: 'grp-tx',
@@ -138,6 +154,16 @@ const AMB_PAIR = pair({
     { line: AMB_CAND_2, signals: ['counterparty'], signal: 'counterparty' },
   ],
 });
+
+const FREE_PAIR = pair({
+  groupKey: 'bp-free', confidence: 'review', signal: 'return_text', signals: ['return_text'],
+  statementLine: FREE_ORIGINAL, counterpartLine: FREE_BOUNCE,
+});
+const ORPHAN_PAIR = pair({
+  groupKey: 'bp-orph', confidence: 'review', signal: 'return_text', signals: ['return_text'],
+  statementLine: ORPHAN_ORIGINAL, counterpartLine: ORPHAN_BOUNCE,
+});
+const EXTRA_PAIRS = { free: FREE_PAIR, orphan: ORPHAN_PAIR };
 
 /** The `bouncePair` annotation `pendingLines` puts on each line of a pair. */
 function annotate(group, role, counterpartLine, extra = {}) {
@@ -233,14 +259,40 @@ const json = (route, body, status = 200) => route.fulfill({
  *   the backend-only AI flag off. `discardPairStale`: `discardPair` answers the 409 stale-AI refusal (true = always, N = the first N
  *   calls). `aiAfterReload`: the AI layer of the automatch answers after the first one.
  *   `longDescriptions`: the second candidate and the bounce carry a very long bank text.
+ *   `extraPairs`: 'free' and/or 'orphan', see EXTRA_PAIRS. `onlyPairs`: the answer holds possible
+ *   rejections only (no transaction group).
  * @returns {Promise<{ posts: Record<string, object[]>, pendingQueries: URLSearchParams[],
  *   autoMatchRequests: { count: number } }>}
  */
 async function installMocks(page, {
   flagOn = true, dismissPairStatus = 200, refusePairs = [], ai = null, discardPairStale = false,
-  longDescriptions = false, aiAfterReload,
+  longDescriptions = false, aiAfterReload, extraPairs = [], onlyPairs = false,
 } = {}) {
   let data = answers(flagOn);
+  if (onlyPairs) {
+    // A run that found only possible rejections: no transaction group, and its line is not pending.
+    data = {
+      ...data,
+      groups: data.groups.filter((g) => g.kind === 'bouncePair'),
+      kpis: { ...data.kpis, groupsFound: 0, opsToLink: 0 },
+      lines: data.lines.filter((l) => l.id !== TX_LINE.id),
+      counts: { ...data.counts, all: data.counts.all - 1, suggested: 0 },
+    };
+  }
+  for (const key of extraPairs) {
+    const group = EXTRA_PAIRS[key];
+    const extraLines = [
+      bounceLine(group.statementLine, annotate(group, 'original', group.counterpartLine)),
+      bounceLine(group.counterpartLine, annotate(group, 'bounce', group.statementLine)),
+    ];
+    data = {
+      ...data,
+      groups: [...data.groups, group],
+      kpis: { ...data.kpis, bouncePairs: data.kpis.bouncePairs + 1, pendingLines: data.kpis.pendingLines + 2 },
+      lines: [...data.lines, ...extraLines],
+      counts: { ...data.counts, all: data.counts.all + 2, bounce: data.counts.bounce + 2 },
+    };
+  }
   if (longDescriptions) {
     // The bank text of the second candidate and of the bounce, as very long strings (one with an
     // unbroken IBAN-like token), in the groups and in the panel's lines alike.
@@ -448,7 +500,10 @@ test.describe('Reconciliation — bounce-pair suggestions (mocked)', () => {
     await expect(page.getByTestId('recon-bounce-review-banner')).toHaveCount(0);
     await expect(page.getByTestId('recon-bounce-review-back')).toHaveCount(0);
     // The filter moved to "Posibles rechazos": the suggested transaction line is gone.
-    await expect(page.getByRole('button', { name: /^Posibles rechazos \(7\)/ })).toBeVisible();
+    // The figure is the number of PAIRS (3), not the backend's count of lines.
+    await expect(page.getByRole('button', { name: /^Posibles rechazos \(3\)/ })).toBeVisible();
+    // The rejection is selected directly: the right side is never the placeholder.
+    await expect(page.getByTestId('recon-right-empty')).toHaveCount(0);
     await expect(page.getByTestId(`recon-line-row-${TX_LINE.id}`)).toHaveCount(0);
     await expect(page.getByTestId(`recon-line-radio-${AMB_BOUNCE.id}`)).toBeChecked();
 
@@ -766,11 +821,20 @@ function recordDismissPairRequests(page) {
   return seen;
 }
 
-/** Selects a line of the panel through the "Posibles rechazos" entry of the status filter. */
-async function selectBounceLineInPanel(page, lineId) {
+/** Switches the panel to the "Posibles rechazos" entry of the status filter (the two tables). */
+async function openPairView(page) {
   await page.getByRole('button', { name: /^Pendientes \(/ }).click();
   await page.getByRole('option', { name: /^Posibles rechazos/ }).click();
-  await page.getByTestId(`recon-line-row-${lineId}`).click();
+}
+
+/**
+ * Selects a rejection in the panel: in the pair view the rejection rows only exist once an outflow
+ * is chosen, so the user clicks the outflow first, which selects the rejection it can be paired with.
+ */
+async function selectBounceLineInPanel(page, bounceId, outflowId) {
+  await openPairView(page);
+  await page.getByTestId(`recon-outflow-row-${outflowId}`).click();
+  await page.getByTestId(`recon-line-row-${bounceId}`).click();
 }
 
 test.describe('Reconciliation — bounce-pair KPI reporting (mocked)', () => {
@@ -796,9 +860,11 @@ test.describe('Reconciliation — bounce-pair KPI reporting (mocked)', () => {
       counterpartLineId: REVIEW_ORIGINAL.id,
     }]);
     await expect(page.locator('[data-type="success"]').first()).toBeVisible();
-    // The pair is hidden for the session: neither of its lines is left in the list.
+    // The pair is hidden for the session: neither of its lines is left in either table, while
+    // the other pairs' outflows stay.
     await expect(page.getByTestId(`recon-line-row-${REVIEW_BOUNCE.id}`)).toHaveCount(0);
-    await expect(page.getByTestId(`recon-line-row-${REVIEW_ORIGINAL.id}`)).toHaveCount(0);
+    await expect(page.getByTestId(`recon-outflow-row-${REVIEW_ORIGINAL.id}`)).toHaveCount(0);
+    await expect(page.getByTestId(`recon-outflow-row-${HIGH_ORIGINAL.id}`)).toBeVisible();
   });
 
   test('a failing dismissPair changes nothing on screen and shows no error', async ({ page }) => {
@@ -819,7 +885,7 @@ test.describe('Reconciliation — bounce-pair KPI reporting (mocked)', () => {
     // Exactly what a successful report leaves: the confirmation, and the pair hidden.
     await expect(page.locator('[data-type="success"]').first()).toBeVisible();
     await expect(page.getByTestId(`recon-line-row-${REVIEW_BOUNCE.id}`)).toHaveCount(0);
-    await expect(page.getByTestId(`recon-line-row-${REVIEW_ORIGINAL.id}`)).toHaveCount(0);
+    await expect(page.getByTestId(`recon-outflow-row-${REVIEW_ORIGINAL.id}`)).toHaveCount(0);
     await expect(page.locator('[data-type="error"]')).toHaveCount(0);
     // Still hidden when the modal is reopened: the failure did not undo the dismissal.
     await page.getByTestId('financial-account-automatch').click();
@@ -865,14 +931,17 @@ test.describe('Reconciliation — bounce-pair KPI reporting (mocked)', () => {
     await openReconciliation(page);
 
     // The suggestions did load (the bounce lines are in the panel), yet nothing pops.
-    await selectBounceLineInPanel(page, REVIEW_BOUNCE.id);
+    await selectBounceLineInPanel(page, REVIEW_BOUNCE.id, REVIEW_ORIGINAL.id);
     await expect(page.getByTestId('recon-bounce-panel')).toBeVisible();
     await expect(modal(page)).toHaveCount(0);
     await expect(page.getByTestId('financial-account-automatch')).toHaveCount(0);
 
     await page.getByTestId('recon-bounce-panel').getByTestId('recon-bounce-dismiss').click();
-    // The session-only hide still happens; only the report is skipped.
+    // The session-only hide still happens; only the report is skipped. Both tables drop the pair
+    // (the outflow row is the non-vacuous check: it was on screen before the dismissal).
     await expect(page.getByTestId(`recon-line-row-${REVIEW_BOUNCE.id}`)).toHaveCount(0);
+    await expect(page.getByTestId(`recon-outflow-row-${REVIEW_ORIGINAL.id}`)).toHaveCount(0);
+    await expect(page.getByTestId(`recon-outflow-row-${HIGH_ORIGINAL.id}`)).toBeVisible();
     await page.waitForTimeout(500);
     expect(dismissRequests).toEqual([]);
     expect(posts.dismissPair).toEqual([]);
@@ -1022,7 +1091,7 @@ test.describe('Reconciliation — bounce suggestion events (Mixpanel, mocked)', 
     await login(page, { windowAccessOverrides: { [FINANCIAL_ACCOUNT_WINDOW_ID]: 'read-only' } });
     await installMocks(page);
     await openReconciliation(page);
-    await selectBounceLineInPanel(page, REVIEW_BOUNCE.id);
+    await selectBounceLineInPanel(page, REVIEW_BOUNCE.id, REVIEW_ORIGINAL.id);
     await page.getByTestId('recon-bounce-panel').getByTestId('recon-bounce-dismiss').click();
 
     // Control: telemetry does flow in this page, so the empty result below means something.
@@ -1082,7 +1151,10 @@ test.describe('Reconciliation — bounce suggestion events (Mixpanel, mocked)', 
 const AI_85_10 = { [AMB_BOUNCE.id]: { probabilities: { [AMB_CAND_1.id]: 10, [AMB_CAND_2.id]: 85 }, none: 5, recommendedLineId: AMB_CAND_2.id } };
 const AI_60_40 = { [AMB_BOUNCE.id]: { probabilities: { [AMB_CAND_1.id]: 40, [AMB_CAND_2.id]: 60 }, none: 0, recommendedLineId: null } };
 
-const aiPanelRows = (panel) => panel.locator('[data-testid^="recon-bounce-row-"]');
+// The left list is DATE ordered (oldest first), never sorted by the AI.
+const DATE_ORDERED_OUTFLOWS = [HIGH_ORIGINAL, REVIEW_ORIGINAL, AMB_CAND_1, AMB_CAND_2].map((l) => `recon-outflow-row-${l.id}`);
+const outflowOrder = (page) => page.locator('[data-testid^="recon-outflow-row-"]')
+  .evaluateAll((els) => els.map((el) => el.dataset.testid));
 
 /** Sends the ambiguous pair to the panel, as "Revisar en el panel" does. */
 async function reviewAmbiguousInPanel(page) {
@@ -1102,7 +1174,7 @@ test.describe('Reconciliation — AI suggestion on bank rejections (mocked)', ()
 
     await expect(modal(page)).toBeVisible();
     const pct = page.getByTestId('automatch-bounce-ai-pct-bp-amb');
-    await expect(pct).toHaveText('85 % de ser la pareja');
+    await expect(pct).toHaveText('85 %');
     // Its own element next to the badge: the badge keeps "Revisar", the reason keeps its text.
     await expect(page.getByTestId('automatch-bounce-tag-review-bp-amb')).toHaveText('Revisar');
     await expect(page.getByTestId('automatch-bounce-reason-bp-amb')).not.toContainText('%');
@@ -1124,15 +1196,20 @@ test.describe('Reconciliation — AI suggestion on bank rejections (mocked)', ()
     await openReconciliation(page);
     const panel = await reviewAmbiguousInPanel(page);
 
-    // Sorted by probability, the percentage on each row.
-    await expect(aiPanelRows(panel)).toHaveCount(2);
-    await expect(aiPanelRows(panel).first()).toHaveAttribute('data-testid', `recon-bounce-row-${AMB_CAND_2.id}`);
+    // The left list stays in date order (the AI sorts nothing); the percentage is on each candidate.
+    expect(await outflowOrder(page)).toEqual(DATE_ORDERED_OUTFLOWS);
     await expect(panel.getByTestId(`recon-bounce-ai-pct-${AMB_CAND_2.id}`)).toHaveText('85 %');
     await expect(panel.getByTestId(`recon-bounce-ai-pct-${AMB_CAND_1.id}`)).toHaveText('10 %');
     // The recommended radio is pre-checked and flagged in text, the notice says so.
     await expect(panel.getByTestId(`recon-bounce-radio-${AMB_CAND_2.id}`)).toBeChecked();
     await expect(panel.getByTestId(`recon-bounce-radio-${AMB_CAND_1.id}`)).not.toBeChecked();
-    await expect(panel.getByTestId(`recon-bounce-ai-badge-${AMB_CAND_2.id}`)).toContainText('Sugerida por IA');
+    // ONE discreet mark (sparkle + percentage): no "Sugerida por IA" badge anywhere.
+    await expect(panel.locator('[data-testid^="recon-bounce-ai-badge-"]')).toHaveCount(0);
+    await expect(panel).not.toContainText('Sugerida por IA');
+    await expect(panel).not.toContainText('de ser la pareja');
+    // Only the chosen outflow has the selected background.
+    await expect(panel.getByTestId(`recon-outflow-row-${AMB_CAND_2.id}`).locator('td').first()).toHaveClass(/bg-\[hsl\(var\(--muted\)\)\]/);
+    await expect(panel.getByTestId(`recon-outflow-row-${AMB_CAND_1.id}`).locator('td').first()).not.toHaveClass(/bg-\[hsl\(var\(--muted\)\)\]/);
     await expect(panel.getByTestId('recon-bounce-notice')).toContainText('La IA sugiere la salida marcada (85 %)');
     await expect(panel.getByTestId('recon-bounce-notice')).not.toContainText('Elige la salida original');
     await expect(panel.getByTestId('recon-bounce-discard')).toBeEnabled();
@@ -1193,9 +1270,9 @@ test.describe('Reconciliation — AI suggestion on bank rejections (mocked)', ()
     await installMocks(page, { ai: AI_60_40 });
     await openReconciliation(page);
 
-    await expect(page.getByTestId('automatch-bounce-ai-pct-bp-amb')).toHaveText('60 % de ser la pareja');
+    await expect(page.getByTestId('automatch-bounce-ai-pct-bp-amb')).toHaveText('60 %');
     const panel = await reviewAmbiguousInPanel(page);
-    await expect(aiPanelRows(panel).first()).toHaveAttribute('data-testid', `recon-bounce-row-${AMB_CAND_2.id}`);
+    expect(await outflowOrder(page)).toEqual(DATE_ORDERED_OUTFLOWS);
     await expect(panel.getByTestId(`recon-bounce-ai-pct-${AMB_CAND_2.id}`)).toHaveText('60 %');
     await expect(panel.getByTestId(`recon-bounce-ai-pct-${AMB_CAND_1.id}`)).toHaveText('40 %');
     await expect(panel.getByTestId(`recon-bounce-radio-${AMB_CAND_1.id}`)).not.toBeChecked();
@@ -1242,7 +1319,7 @@ test.describe('Reconciliation — AI suggestion on bank rejections (mocked)', ()
     await expect(modal(page)).toBeVisible();
     await expect(page.locator('[data-testid^="automatch-bounce-ai-pct-"]')).toHaveCount(0);
     const panel = await reviewAmbiguousInPanel(page);
-    await expect(aiPanelRows(panel).first()).toHaveAttribute('data-testid', `recon-bounce-row-${AMB_CAND_1.id}`);
+    expect(await outflowOrder(page)).toEqual(DATE_ORDERED_OUTFLOWS);
     await expect(panel.locator('[data-testid^="recon-bounce-ai-pct-"]')).toHaveCount(0);
     await expect(panel.getByTestId(`recon-bounce-radio-${AMB_CAND_1.id}`)).not.toBeChecked();
     await expect(panel.getByTestId(`recon-bounce-radio-${AMB_CAND_2.id}`)).not.toBeChecked();
@@ -1295,9 +1372,11 @@ test.describe('Reconciliation — AI suggestion on bank rejections (mocked)', ()
     await panel.getByTestId('recon-bounce-discard').click();
     await expect(page.locator('[data-type="error"]').first()).toContainText('La sugerencia de la IA está desactualizada');
     await expect(panel.getByTestId(`recon-bounce-radio-${AMB_CAND_1.id}`)).toBeChecked();
-    await expect(panel.getByTestId(`recon-bounce-ai-badge-${AMB_CAND_1.id}`)).toContainText('Sugerida por IA');
-    await expect(aiPanelRows(panel).first()).toHaveAttribute('data-testid', `recon-bounce-row-${AMB_CAND_1.id}`);
+    await expect(panel.getByTestId(`recon-bounce-ai-pct-${AMB_CAND_1.id}`)).toHaveText('80 %');
+    await expect(panel.locator('[data-testid^="recon-bounce-ai-badge-"]')).toHaveCount(0);
 
+    // The error toast sits over the bottom-right footer: let it go before clicking "Descartar par".
+    await expect(page.locator('[data-type="error"]')).toHaveCount(0, { timeout: 10_000 });
     const post = requestsOf(page, 'discardPair');
     await panel.getByTestId('recon-bounce-discard').click();
     await post;
@@ -1323,7 +1402,7 @@ test.describe('Reconciliation — AI percentage with long bank text on a narrow 
     await expect(modal(page)).toBeVisible();
 
     const pct = page.getByTestId('automatch-bounce-ai-pct-bp-amb');
-    await expect(pct).toHaveText('90 % de ser la pareja');
+    await expect(pct).toHaveText('90 %');
     await expect(pct).toBeVisible();
     await expect(page.getByTestId('automatch-bounce-original-bp-amb')).toContainText('TRANSFERENCIA INMEDIATA');
 
@@ -1347,7 +1426,7 @@ test.describe('Reconciliation — AI percentage with long bank text on a narrow 
     expect(overflow.pageScroll).toBeLessThanOrEqual(overflow.pageClient);
   });
 
-  test('panel: the row keeps its percentage and badge with long bank text, without sideways page scroll', async ({ page }) => {
+  test('panel: the row keeps its percentage mark with long bank text, inside the panel and without sideways page scroll', async ({ page }) => {
     await page.setViewportSize(NARROW);
     await login(page);
     await installMocks(page, { ai: AI_LONG, longDescriptions: true });
@@ -1355,23 +1434,273 @@ test.describe('Reconciliation — AI percentage with long bank text on a narrow 
     const panel = await reviewAmbiguousInPanel(page);
 
     const pct = panel.getByTestId(`recon-bounce-ai-pct-${AMB_CAND_2.id}`);
-    const badge = panel.getByTestId(`recon-bounce-ai-badge-${AMB_CAND_2.id}`);
     await expect(pct).toHaveText('90 %');
     await expect(pct).toBeVisible();
-    await expect(badge).toContainText('Sugerida por IA');
-    await expect(badge).toBeVisible();
-    // Both sit inside the panel's own box: a cell that clips them hides them from the user even
-    // though Playwright still reports the element as visible.
+    // The mark is one element: no "Sugerida por IA" badge next to it.
+    await expect(panel.locator('[data-testid^="recon-bounce-ai-badge-"]')).toHaveCount(0);
+    // It sits inside the panel's own box AND inside its own row: a cell that clips it hides it
+    // from the user even though Playwright still reports the element as visible.
     const panelBox = await panel.boundingBox();
-    for (const el of [pct, badge]) {
-      const box = await el.boundingBox();
-      expect(box).not.toBeNull();
-      expect(box.x).toBeGreaterThanOrEqual(panelBox.x);
-      expect(box.x + box.width).toBeLessThanOrEqual(panelBox.x + panelBox.width + 1);
-    }
+    const rowBox = await panel.getByTestId(`recon-outflow-row-${AMB_CAND_2.id}`).boundingBox();
+    const box = await pct.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box.x).toBeGreaterThanOrEqual(panelBox.x);
+    expect(box.x + box.width).toBeLessThanOrEqual(panelBox.x + panelBox.width + 1);
+    expect(box.x + box.width).toBeLessThanOrEqual(rowBox.x + rowBox.width + 1);
+    expect(box.y + box.height).toBeLessThanOrEqual(rowBox.y + rowBox.height + 1);
+    // The right column (footer) is not pushed out of the panel either.
+    const footerBox = await panel.getByTestId('recon-bounce-footer').boundingBox();
+    expect(footerBox.x + footerBox.width).toBeLessThanOrEqual(panelBox.x + panelBox.width + 1);
     const pageOverflow = await page.evaluate(() => ({
       scroll: document.documentElement.scrollWidth, client: document.documentElement.clientWidth,
     }));
     expect(pageOverflow.scroll).toBeLessThanOrEqual(pageOverflow.client);
+  });
+});
+
+// ── The two-table "Posibles rechazos" view (ETP-6359) ──────────────────────────
+
+/** Closes the auto-opened modal (rows are checked, so it asks first) and opens the pair view. */
+async function openPairViewFromModal(page) {
+  await expect(modal(page)).toBeVisible();
+  await closeThroughConfirmation(page, () => modalX(page).click());
+  await openPairView(page);
+}
+
+const rejectionRows = (page) => page.locator('[data-testid^="recon-line-row-"]')
+  .evaluateAll((els) => els.map((el) => el.dataset.testid));
+const SELECTED_BG = /bg-\[hsl\(var\(--muted\)\)\]/;
+
+test.describe('Reconciliation — "Posibles rechazos" as two tables (mocked)', () => {
+  test('nothing selected shows only the placeholder; clicking an outflow narrows the right list to the rejections it can be paired with', async ({ page }) => {
+    await login(page);
+    await installMocks(page);
+    await openReconciliation(page);
+    await openPairViewFromModal(page);
+
+    // Left: every distinct outflow once, in date order, no sort headers, a radio on every row.
+    const outflows = page.getByTestId('recon-outflows-table');
+    await expect(outflows).toContainText('Salidas (4)');
+    expect(await outflowOrder(page)).toEqual(DATE_ORDERED_OUTFLOWS);
+    for (const o of [HIGH_ORIGINAL, REVIEW_ORIGINAL, AMB_CAND_1, AMB_CAND_2]) {
+      const row = page.getByTestId(`recon-outflow-row-${o.id}`);
+      await expect(row).toContainText('Posible salida original');
+      await expect(row.getByRole('radio')).toBeEnabled();
+      await expect(row.getByRole('radio')).not.toBeChecked();
+    }
+    await expect(outflows.locator('th button')).toHaveCount(0);
+    // Right: ONLY the placeholder, no rejections table, toolbar, notice, footer or toggle.
+    const empty = page.getByTestId('recon-right-empty');
+    await expect(empty).toBeVisible();
+    await expect(empty).toContainText('Selecciona una salida');
+    await expect(empty).toContainText('Elige una salida para ver los rechazos con los que se puede emparejar.');
+    await expect(page.getByTestId('recon-rejections-table')).toHaveCount(0);
+    await expect(page.getByTestId('recon-rejections-title')).toHaveCount(0);
+    await expect(page.getByTestId('recon-bounce-footer')).toHaveCount(0);
+    await expect(page.getByTestId('recon-bounce-notice')).toHaveCount(0);
+    expect(await rejectionRows(page)).toEqual([]);
+
+    // Clicking an outflow selects the rejection it can be paired with and narrows the list.
+    await page.getByTestId(`recon-outflow-row-${REVIEW_ORIGINAL.id}`).click();
+    await expect(empty).toHaveCount(0);
+    await expect(page.getByTestId('recon-rejections-title')).toHaveText('Rechazos (1)');
+    expect(await rejectionRows(page)).toEqual([`recon-line-row-${REVIEW_BOUNCE.id}`]);
+    await expect(page.getByTestId(`recon-line-radio-${REVIEW_BOUNCE.id}`)).toBeChecked();
+    await expect(page.getByTestId('recon-rejections-toggle')).toHaveCount(0);
+    // The panel's wording for a doubtful pair is "Confianza baja" (the modal says "Revisar").
+    await expect(page.getByTestId(`automatch-bounce-tag-review-${REVIEW_PAIR.groupKey}`)).toHaveText('Confianza baja');
+    await expect(page.getByTestId('recon-bounce-notice')).toContainText('Posible rechazo · Confianza baja:');
+    await expect(page.getByTestId('recon-bounce-notice')).not.toContainText('Revisar');
+    // Only the chosen outflow has the selected background.
+    await expect(page.getByTestId(`recon-outflow-row-${REVIEW_ORIGINAL.id}`).locator('td').first()).toHaveClass(SELECTED_BG);
+    await expect(page.getByTestId(`recon-outflow-row-${HIGH_ORIGINAL.id}`).locator('td').first()).not.toHaveClass(SELECTED_BG);
+  });
+
+  test('the footer lives only in the right column; the left one ends with an empty bar', async ({ page }) => {
+    await login(page);
+    await installMocks(page);
+    await openReconciliation(page);
+    await openPairViewFromModal(page);
+    await page.getByTestId(`recon-outflow-row-${HIGH_ORIGINAL.id}`).click();
+
+    const footer = page.getByTestId('recon-bounce-footer');
+    await expect(footer).toHaveCount(1);
+    await expect(footer).toContainText('Rechazo seleccionado');
+    await expect(footer).toContainText('Salida seleccionada');
+    await expect(footer).toContainText('Efecto neto del par');
+    await expect(footer.getByTestId('recon-bounce-dismiss')).toHaveText(/No es un rechazo/);
+    await expect(footer.getByTestId('recon-bounce-discard')).toHaveText(/Descartar par/);
+    await expect(page.getByTestId('recon-outflows-table').getByTestId('recon-bounce-footer')).toHaveCount(0);
+    await expect(page.getByTestId('recon-outflows-footer')).toBeEmpty();
+    const [footerBox, leftBox] = [await footer.boundingBox(), await page.getByTestId('recon-outflows-table').boundingBox()];
+    expect(footerBox.x).toBeGreaterThanOrEqual(leftBox.x + leftBox.width - 1);
+    // The left list has no total.
+    await expect(page.getByTestId('recon-outflows-table')).not.toContainText('Total');
+  });
+
+  test('re-targeting: an outflow of another amount selects the rejection that can take it and discards with it', async ({ page }) => {
+    await login(page);
+    const { posts } = await installMocks(page);
+    await openReconciliation(page);
+    await openPairViewFromModal(page);
+
+    await page.getByTestId(`recon-outflow-row-${REVIEW_ORIGINAL.id}`).click();
+    await expect(page.getByTestId(`recon-line-radio-${REVIEW_BOUNCE.id}`)).toBeChecked();
+    // -80 cannot be paired with the +45 rejection: the selection moves to the +80 one (which
+    // lists it as a candidate), the right list follows and the outflow is the pick there.
+    await page.getByTestId(`recon-outflow-row-${AMB_CAND_2.id}`).click();
+    await expect(page.getByTestId(`recon-line-radio-${AMB_BOUNCE.id}`)).toBeChecked();
+    await expect(page.getByTestId('recon-rejections-title')).toHaveText('Rechazos (1)');
+    expect(await rejectionRows(page)).toEqual([`recon-line-row-${AMB_BOUNCE.id}`]);
+    await expect(page.getByTestId(`recon-bounce-radio-${AMB_CAND_2.id}`)).toBeChecked();
+    // Another amount again (-120): back to the +120 rejection.
+    await page.getByTestId(`recon-outflow-row-${HIGH_ORIGINAL.id}`).click();
+    await expect(page.getByTestId(`recon-line-radio-${HIGH_BOUNCE.id}`)).toBeChecked();
+    expect(await rejectionRows(page)).toEqual([`recon-line-row-${HIGH_BOUNCE.id}`]);
+
+    await page.getByTestId(`recon-outflow-row-${AMB_CAND_1.id}`).click();
+    await expect(page.getByTestId(`recon-bounce-radio-${AMB_CAND_1.id}`)).toBeChecked();
+    const post = requestsOf(page, 'discardPair');
+    await page.getByTestId('recon-bounce-discard').click();
+    await post;
+    expect(posts.discardPair).toEqual([{
+      financialAccountId: ACCOUNT_ID, statementLineId: AMB_CAND_1.id, counterpartLineId: AMB_BOUNCE.id,
+    }]);
+  });
+
+  test('a free pick: an outflow the detector did not offer for the rejection is an explicit user pick', async ({ page }) => {
+    await login(page);
+    const { posts } = await installMocks(page, { ai: AI_85_10, extraPairs: ['free'] });
+    await openReconciliation(page);
+    const panel = await reviewAmbiguousInPanel(page);
+    // The AI default is preselected; the free outflow is listed (5 outflows) with a radio but
+    // no AI mark, since it is not a candidate.
+    await expect(panel.getByTestId(`recon-bounce-radio-${AMB_CAND_2.id}`)).toBeChecked();
+    await expect(panel.getByTestId('recon-outflows-table')).toContainText('Salidas (5)');
+    await expect(panel.getByTestId(`recon-outflow-radio-${FREE_ORIGINAL.id}`)).toBeEnabled();
+    await expect(panel.getByTestId(`recon-bounce-ai-pct-${FREE_ORIGINAL.id}`)).toHaveCount(0);
+    await expect(panel.getByTestId('recon-bounce-notice')).toContainText('La IA sugiere la salida marcada (85 %). Revísala antes de descartar.');
+
+    await panel.getByTestId(`recon-outflow-row-${FREE_ORIGINAL.id}`).click();
+    await expect(panel.getByTestId(`recon-outflow-radio-${FREE_ORIGINAL.id}`)).toBeChecked();
+    await expect(panel.getByTestId(`recon-line-radio-${AMB_BOUNCE.id}`)).toBeChecked();
+    // The AI preselection and its sentence are gone: the user chose.
+    await expect(panel.getByTestId('recon-bounce-notice')).not.toContainText('La IA sugiere');
+    await expect(panel.getByTestId('recon-bounce-total-other')).toContainText('Salida seleccionada');
+    // Only the chosen outflow keeps the selected background; the candidates keep their AI marks.
+    await expect(panel.getByTestId(`recon-outflow-row-${FREE_ORIGINAL.id}`).locator('td').first()).toHaveClass(SELECTED_BG);
+    await expect(panel.getByTestId(`recon-outflow-row-${AMB_CAND_2.id}`).locator('td').first()).not.toHaveClass(SELECTED_BG);
+    await expect(panel.getByTestId(`recon-bounce-ai-pct-${AMB_CAND_2.id}`)).toHaveText('85 %');
+
+    const post = requestsOf(page, 'discardPair');
+    await panel.getByTestId('recon-bounce-discard').click();
+    await post;
+    expect(posts.discardPair).toEqual([{
+      financialAccountId: ACCOUNT_ID, statementLineId: FREE_ORIGINAL.id, counterpartLineId: AMB_BOUNCE.id,
+      choiceSource: 'user',
+    }]);
+  });
+
+  test('an outflow no rejection can take keeps the selection and says why', async ({ page }) => {
+    await login(page);
+    const { posts } = await installMocks(page, { extraPairs: ['orphan'] });
+    await openReconciliation(page);
+    await openPairViewFromModal(page);
+    await page.getByTestId(`recon-outflow-row-${REVIEW_ORIGINAL.id}`).click();
+    await expect(page.getByTestId(`recon-line-radio-${REVIEW_BOUNCE.id}`)).toBeChecked();
+
+    const hint = 'El importe o la fecha no coinciden con el rechazo seleccionado';
+    const orphan = page.getByTestId(`recon-outflow-row-${ORPHAN_ORIGINAL.id}`);
+    await expect(orphan).toHaveAttribute('title', hint);
+    await expect(page.getByTestId(`recon-outflow-row-${HIGH_ORIGINAL.id}`)).not.toHaveAttribute('title', hint);
+    await orphan.click();
+    // Nothing changed: same rejection selected, same right list, the pick is still the original.
+    await expect(page.getByTestId(`recon-line-radio-${REVIEW_BOUNCE.id}`)).toBeChecked();
+    await expect(page.getByTestId(`recon-outflow-radio-${ORPHAN_ORIGINAL.id}`)).not.toBeChecked();
+    await expect(page.getByTestId(`recon-bounce-radio-${REVIEW_ORIGINAL.id}`).or(
+      page.getByTestId(`recon-outflow-radio-${REVIEW_ORIGINAL.id}`))).toBeChecked();
+    expect(await rejectionRows(page)).toEqual([`recon-line-row-${REVIEW_BOUNCE.id}`]);
+    expect(posts.discardPair).toEqual([]);
+  });
+});
+
+// ── One rule for the AI percentage: when "none" wins, no percentage anywhere ───
+
+test.describe('Reconciliation — AI "none" outweighing the candidates (mocked)', () => {
+  const none = (noneValue) => ({
+    [AMB_BOUNCE.id]: { probabilities: { [AMB_CAND_1.id]: 30, [AMB_CAND_2.id]: 40 }, none: noneValue, recommendedLineId: null },
+  });
+
+  test('none strictly above the best candidate: no percentage in the modal nor in the panel', async ({ page }) => {
+    await login(page);
+    await installMocks(page, { ai: none(60) });
+    await openReconciliation(page);
+    await expect(modal(page)).toBeVisible();
+    await expect(page.locator('[data-testid^="automatch-bounce-ai-pct-"]')).toHaveCount(0);
+    const panel = await reviewAmbiguousInPanel(page);
+    await expect(panel.locator('[data-testid^="recon-bounce-ai-pct-"]')).toHaveCount(0);
+    await expect(panel.getByTestId(`recon-bounce-radio-${AMB_CAND_2.id}`)).not.toHaveAttribute('aria-describedby', /.+/);
+    await expect(panel.getByTestId('recon-bounce-notice')).toContainText('Elige la salida original');
+  });
+
+  test('a tie with the best candidate still shows the percentage (modal and panel)', async ({ page }) => {
+    await login(page);
+    await installMocks(page, { ai: none(40) });
+    await openReconciliation(page);
+    await expect(page.getByTestId('automatch-bounce-ai-pct-bp-amb')).toHaveText('40 %');
+    const panel = await reviewAmbiguousInPanel(page);
+    await expect(panel.getByTestId(`recon-bounce-ai-pct-${AMB_CAND_2.id}`)).toHaveText('40 %');
+    await expect(panel.getByTestId(`recon-bounce-ai-pct-${AMB_CAND_1.id}`)).toHaveText('30 %');
+  });
+
+  test('conflict abstention (no assessment entry for the rejection): no mark at all', async ({ page }) => {
+    await login(page);
+    await installMocks(page, { ai: { 'some-other-bounce': { probabilities: { x: 90 }, none: 0, recommendedLineId: null } } });
+    await openReconciliation(page);
+    await expect(modal(page)).toBeVisible();
+    await expect(page.locator('[data-testid^="automatch-bounce-ai-pct-"]')).toHaveCount(0);
+    const panel = await reviewAmbiguousInPanel(page);
+    await expect(panel.locator('[data-testid^="recon-bounce-ai-pct-"]')).toHaveCount(0);
+  });
+});
+
+// ── The modal opens by itself when the run found only possible rejections ──────
+
+test.describe('Reconciliation — auto-open with only possible rejections (mocked)', () => {
+  test('a fresh load with only bouncePair groups (groupsFound 0) opens the modal with the yellow card and no green one', async ({ page }) => {
+    await login(page);
+    await installMocks(page, { onlyPairs: true });
+    await openReconciliation(page);
+
+    await expect(modal(page)).toBeVisible();
+    await expect(modal(page).getByTestId('automatch-bounce-section')).toBeVisible();
+    await expect(modal(page).getByTestId('automatch-bounce-count')).toHaveText('3');
+    // The green card steps aside when the run found pairs and no transaction group.
+    await expect(page.getByTestId('automatch-statements-section')).toHaveCount(0);
+    await expect(page.getByTestId(`automatch-bounce-row-${HIGH_PAIR.groupKey}`)).toBeVisible();
+  });
+
+  test('flag on but nothing found (no group, no pair): the modal does not open', async ({ page }) => {
+    await login(page);
+    await installMocks(page, { onlyPairs: true, extraPairs: [] });
+    await page.route(/\/sws\/neo\/bank-reconciliation\?.*action=autoMatch/, async (route) => {
+      await json(route, { response: { data: { groups: [], kpis: { pendingLines: 0, groupsFound: 0, opsToLink: 0, willCreate: 0, bouncePairs: 0 } } } });
+    });
+    await openReconciliation(page);
+    await expect(page.getByTestId('detail-tab-reconciliation')).toBeVisible();
+    await page.waitForTimeout(500);
+    await expect(modal(page)).toHaveCount(0);
+  });
+
+  test('"Revisar en el panel" from a pairs-only modal selects the rejection directly, never the placeholder', async ({ page }) => {
+    await login(page);
+    await installMocks(page, { onlyPairs: true });
+    await openReconciliation(page);
+    await expect(modal(page)).toBeVisible();
+    await page.getByTestId('automatch-bounce-review-bp-review').click();
+    await expect(modal(page)).toHaveCount(0);
+    await expect(page.getByTestId('recon-right-empty')).toHaveCount(0);
+    await expect(page.getByTestId(`recon-line-radio-${REVIEW_BOUNCE.id}`)).toBeChecked();
+    await expect(page.getByTestId('recon-bounce-panel')).toBeVisible();
   });
 });

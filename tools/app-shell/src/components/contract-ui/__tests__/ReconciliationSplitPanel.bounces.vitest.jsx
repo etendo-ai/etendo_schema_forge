@@ -101,6 +101,8 @@ import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 import { toast } from 'sonner';
 import { ReconciliationSplitPanel } from '@/components/contract-ui/ReconciliationSplitPanel.jsx';
 import { formatDate, formatSigned } from '@/lib/formatSigned';
+import { AiPercentText, BounceNotice, BounceFooter } from '@/components/contract-ui/BouncePairPanel.jsx';
+import { bouncePanelModel } from '@/components/contract-ui/bouncePairs.js';
 
 // ── Fixtures ───────────────────────────────────────────────────────────────────
 
@@ -1380,5 +1382,146 @@ describe('ReconciliationSplitPanel — discarding with the AI suggestion', () =>
     expect(dismissPairMock).toHaveBeenCalledWith({
       financialAccountId: 'ACC-1', statementLineId: 'B3', counterpartLineId: 'C1',
     });
+  });
+});
+
+// ── The pair view's wording, placeholder, hint and footer placement (ETP-6359) ──
+
+function openPairView() {
+  selectStatus('financeReconcileFilterStatusPending', 'financeReconcileFilterStatusBounce');
+}
+
+describe('ReconciliationSplitPanel — "Posibles rechazos" two-table view details', () => {
+  it('a doubtful pair is tagged "Confianza baja" in the panel (never the modal\'s "Revisar") and the notice says so', async () => {
+    renderPanel();
+    await screen.findByTestId('recon-line-row-B3');
+    openPairView();
+    fireEvent.click(screen.getByTestId('recon-outflow-row-C1'));
+    const tag = screen.getByTestId('automatch-bounce-tag-review-g-amb');
+    expect(tag).toHaveTextContent(/^financeReconcileBounceTagLowConfidence$/);
+    expect(tag).not.toHaveTextContent('financeReconcileBounceTagReviewPlain');
+    expect(screen.getByTestId('recon-bounce-notice')).toHaveTextContent('financeReconcileBounceNoticeLowConfidence');
+  });
+
+  it('with nothing selected only the placeholder shows on the right: no notice, footer or rejections table', async () => {
+    renderPanel();
+    await screen.findByTestId('recon-line-row-B3');
+    openPairView();
+    const empty = screen.getByTestId('recon-right-empty');
+    expect(empty).toHaveTextContent('financeReconcileBounceRightEmptyTitle');
+    expect(empty).toHaveTextContent('financeReconcileBounceRightEmptyHint');
+    expect(screen.queryByTestId('recon-rejections-table')).toBeNull();
+    expect(screen.queryByTestId('recon-bounce-footer')).toBeNull();
+    expect(screen.queryByTestId('recon-bounce-notice')).toBeNull();
+    // The left table title counts the outflows listed (O1, C1, C2).
+    expect(screen.getByTestId('recon-outflows-table')).toHaveTextContent('financeReconcileBounceViewOutflows:{"count":3}');
+  });
+
+  it('the outflows are not sorted: they come in date order (oldest first)', async () => {
+    renderPanel();
+    await screen.findByTestId('recon-line-row-B3');
+    openPairView();
+    expect(screen.queryAllByTestId(/^recon-outflow-row-/).map((el) => el.dataset.testid))
+      .toEqual(['recon-outflow-row-C1', 'recon-outflow-row-O1', 'recon-outflow-row-C2']);
+    expect(within(screen.getByTestId('recon-outflows-table')).queryAllByRole('button')).toHaveLength(0);
+  });
+
+  it('an outflow no rejection can take shows the "does not match" hint and a click changes nothing', async () => {
+    // O9's rejection came 100 days later: no rejection can take it, so it is not re-targetable.
+    const O9_SHORT = { id: 'O9', amount: -33, date: '2026-06-01', description: 'Cuota anual' };
+    const B9_SHORT = { id: 'B9', amount: 33, date: '2026-09-09', description: 'CUOTA DEVUELTA' };
+    const P9 = { groupKey: 'g-o9', ambiguous: false, confidence: 'review', signal: 'counterparty', signals: ['counterparty'] };
+    const O9 = { ...O9_SHORT, state: 'bounce', status: 'pending', bouncePair: { ...P9, role: 'original', counterpartLine: B9_SHORT } };
+    const B9 = { ...B9_SHORT, state: 'bounce', status: 'pending', bouncePair: { ...P9, role: 'bounce', counterpartLine: O9_SHORT } };
+    pending.answer = () => ({ lines: [PLAIN, O1, B1, O9, B9], counts: { ...BOUNCE_COUNTS, bounce: 4 } });
+    renderPanel();
+    await screen.findByTestId('recon-line-row-B1');
+    openPairView();
+    fireEvent.click(screen.getByTestId('recon-outflow-row-O1'));
+    expect(screen.getByTestId('recon-line-radio-B1')).toBeChecked();
+    expect(screen.getByTestId('recon-outflow-row-O9')).toHaveAttribute('title', 'financeReconcileBounceOutflowNoMatch');
+    expect(screen.getByTestId('recon-outflow-row-O1')).not.toHaveAttribute('title');
+    fireEvent.click(screen.getByTestId('recon-outflow-row-O9'));
+    expect(screen.getByTestId('recon-line-radio-B1')).toBeChecked();
+    expect(screen.queryAllByTestId(/^recon-line-row-/).map((el) => el.dataset.testid)).toEqual(['recon-line-row-B1']);
+    expect(discardPairMock).not.toHaveBeenCalled();
+  });
+
+  it('the footer exists once, outside the outflows table, which ends with an empty bar', async () => {
+    renderPanel();
+    await screen.findByTestId('recon-line-row-B3');
+    openPairView();
+    fireEvent.click(screen.getByTestId('recon-outflow-row-O1'));
+    expect(screen.getAllByTestId('recon-bounce-footer')).toHaveLength(1);
+    expect(within(screen.getByTestId('recon-outflows-table')).queryByTestId('recon-bounce-footer')).toBeNull();
+    expect(screen.getByTestId('recon-outflows-footer')).toBeEmptyDOMElement();
+    expect(screen.getByTestId('recon-bounce-total-selected')).toHaveTextContent('financeReconcileBounceSelectedBounce');
+    expect(screen.getByTestId('recon-bounce-total-other')).toHaveTextContent('financeReconcileBounceTotalOriginal');
+    expect(screen.getByTestId('recon-bounce-total-net')).toHaveTextContent('financeReconcileBounceTotalNet');
+  });
+
+  it('the normal view keeps the default placeholder texts', async () => {
+    renderPanel();
+    await screen.findByTestId('recon-line-row-P1');
+    expect(screen.getByTestId('recon-right-empty')).toHaveTextContent('financeReconcileRightEmptyTitle');
+  });
+});
+
+describe('BouncePairPanel building blocks — AiPercentText, BounceNotice, BounceFooter', () => {
+  it('AiPercentText renders a sparkle plus the percentage, with the panel test id and an id for aria-describedby', () => {
+    const { container } = render(<AiPercentText rowId="L1" pct={96} />);
+    const el = screen.getByTestId('recon-bounce-ai-pct-L1');
+    expect(el).toHaveTextContent('financeReconcileBounceAiProbability:{"pct":"96"}');
+    expect(el).toHaveAttribute('id', 'recon-bounce-ai-pct-L1');
+    expect(container.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+    expect(el).not.toHaveTextContent('IA');
+  });
+
+  it('AiPercentText renders nothing without a percentage and honours a testId override (no panel id)', () => {
+    const { container, rerender } = render(<AiPercentText rowId="L1" pct={null} />);
+    expect(container).toBeEmptyDOMElement();
+    rerender(<AiPercentText rowId="L1" pct={60} testId="automatch-bounce-ai-pct-g1" />);
+    const el = screen.getByTestId('automatch-bounce-ai-pct-g1');
+    expect(el).not.toHaveAttribute('id');
+    expect(screen.queryByTestId('recon-bounce-ai-pct-L1')).toBeNull();
+  });
+
+  it('BounceNotice for a doubtful pair uses the "Confianza baja" notice and, with the AI default, the AI sentence', () => {
+    const line = { ...B3, bouncePair: { ...B3.bouncePair, ambiguous: true } };
+    const aiAssessments = { B3: { probabilities: { C1: 10, C2: 85 }, none: 5, recommendedLineId: 'C2' } };
+    const model = bouncePanelModel(line, { aiAssessments });
+    render(<BounceNotice model={model} bcpLocale="es-ES" />);
+    const notice = screen.getByTestId('recon-bounce-notice');
+    expect(notice).toHaveTextContent('financeReconcileBounceNoticeLowConfidence');
+    expect(notice).toHaveTextContent('financeReconcileBounceNoticeAi:{"pct":"85"}');
+    expect(notice).not.toHaveTextContent('financeReconcileBounceNoticeChoose');
+  });
+
+  it('BounceFooter shows the selected line, its counterpart and the net, and wires dismiss / discard', () => {
+    const model = bouncePanelModel(B1);
+    const onDismiss = vi.fn();
+    const onDiscard = vi.fn();
+    render(
+      <BounceFooter model={model} line={B1} currency="EUR" bcpLocale="es-ES" onDismiss={onDismiss} onDiscard={onDiscard} onRestore={vi.fn()} />,
+    );
+    expect(screen.getByTestId('recon-bounce-total-selected')).toHaveTextContent('financeReconcileBounceSelectedBounce');
+    expect(screen.getByTestId('recon-bounce-total-other')).toHaveTextContent('financeReconcileBounceTotalOriginal');
+    fireEvent.click(screen.getByTestId('recon-bounce-dismiss'));
+    fireEvent.click(screen.getByTestId('recon-bounce-discard'));
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+    expect(onDiscard).toHaveBeenCalledTimes(1);
+  });
+
+  it('BounceFooter disables the discard while busy and under the read-only tier, but keeps "No es un rechazo" enabled', () => {
+    const model = bouncePanelModel(B1);
+    const { rerender } = render(
+      <BounceFooter model={model} line={B1} currency="EUR" bcpLocale="es-ES" onDismiss={vi.fn()} onDiscard={vi.fn()} onRestore={vi.fn()} busy />,
+    );
+    expect(screen.getByTestId('recon-bounce-discard')).toBeDisabled();
+    rerender(
+      <BounceFooter model={model} line={B1} currency="EUR" bcpLocale="es-ES" onDismiss={vi.fn()} onDiscard={vi.fn()} onRestore={vi.fn()} windowReadOnly />,
+    );
+    expect(screen.getByTestId('recon-bounce-discard')).toBeDisabled();
+    expect(screen.getByTestId('recon-bounce-dismiss')).toBeEnabled();
   });
 });

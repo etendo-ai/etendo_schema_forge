@@ -41,6 +41,10 @@ import {
   withBounceDecisions,
   dismissPairPayload,
   canPairOutflow,
+  rowAsGroup,
+  buildBouncePairRows,
+  buildBounceOutflows,
+  countBouncePairs,
 } from '../bouncePairs.js';
 
 const MODULE_URL = pathToFileURL(
@@ -745,6 +749,105 @@ describe('canPairOutflow (the backend discardPair shape: opposite sign, exact am
     assert.equal(canPairOutflow({ amount: -0.61, date: '2026-08-25' }, bounce), false);
     assert.equal(canPairOutflow({ amount: -0.61, date: '2026-06-24' }, bounce), false);
     assert.equal(canPairOutflow(null, bounce), false);
+    assert.equal(canPairOutflow({ amount: -0.61, date: '2026-08-24' }, null), false);
+  });
+  it('compares to the exact cent and never pairs a zero amount', () => {
+    assert.equal(canPairOutflow({ amount: -0.6, date: '2026-08-24' }, { amount: 0.61, date: '2026-08-24' }), false);
+    assert.equal(canPairOutflow({ amount: -0.1 - 0.2, date: '2026-08-24' }, { amount: 0.3, date: '2026-08-24' }), true);
+    assert.equal(canPairOutflow({ amount: 0, date: '2026-08-24' }, { amount: 0, date: '2026-08-24' }), false);
+  });
+  it('does not hold a missing date against the pair, and counts the 60th day as inside the window', () => {
+    assert.equal(canPairOutflow({ amount: -0.61 }, bounce), true);
+    assert.equal(canPairOutflow({ amount: -0.61, date: '2026-06-25' }, bounce), true);
+    assert.equal(canPairOutflow({ amount: -0.61, date: '2026-08-24' }, { amount: 0.61 }), true);
+  });
+});
+
+// --- The "Posibles rechazos" two-table view (ETP-6359) --------------------
+
+describe('rowAsGroup / buildBouncePairRows / buildBounceOutflows / countBouncePairs', () => {
+  const ann = (groupKey, role, extra = {}) => ({
+    groupKey, role, ambiguous: false, confidence: 'review', signals: ['x'], signal: 'x', ...extra,
+  });
+  const line = (id, date, amount, bouncePair, extra = {}) => ({
+    id, date, amount, state: BOUNCE_STATE, status: 'pending', bouncePair, ...extra,
+  });
+  // Plain pair P1; ambiguous pairs A1 / A2 share the candidate C2 (full row "C2" with partner).
+  const o1 = { id: 'O1', date: '2026-05-01', amount: -45, description: 'Recibo gimnasio' };
+  const c1 = { id: 'C1', date: '2026-05-02', amount: -80, description: 'Pago ACME 1' };
+  const c2 = { id: 'C2', date: '2026-05-03', amount: -80, description: 'Pago ACME 2' };
+  const c3 = { id: 'C3', date: '2026-04-20', amount: -80, description: 'Pago ACME 0' };
+  const lines = [
+    line('B-A1', '2026-05-09', 80, ann('A1', 'bounce', { ambiguous: true, candidates: [{ line: c1 }, { line: c2 }] })),
+    line('B-P1', '2026-05-06', 45, ann('P1', 'bounce', { counterpartLine: o1 })),
+    line('B-A2', '2026-05-10', 80, ann('A2', 'bounce', { ambiguous: true, candidates: [{ line: c2 }, { line: c3 }] })),
+    line('C2', '2026-05-03', -80, ann('A1', 'candidate', { ambiguous: true, counterpartLine: { id: 'B-A1' } }), { partnerName: 'ACME SL' }),
+    { id: 'PLAIN', state: 'pending', amount: 1, date: '2026-05-01' },
+    { id: 'DISC', state: DISCARDED_STATE, amount: 1, date: '2026-05-01' },
+  ];
+
+  it('rowAsGroup: a bounce row is the rejection and its annotation holds the original', () => {
+    const g = rowAsGroup(lines[1]);
+    assert.equal(g.kind, BOUNCE_PAIR_KIND);
+    assert.equal(g.groupKey, 'P1');
+    assert.equal(g.counterpartLine, lines[1]);
+    assert.deepEqual(g.statementLine, o1);
+    assert.equal(g.ambiguous, false);
+  });
+  it('rowAsGroup: an ambiguous bounce row has no original and carries its candidates', () => {
+    const g = rowAsGroup(lines[0]);
+    assert.equal(g.ambiguous, true);
+    assert.equal(g.statementLine, null);
+    assert.deepEqual(g.candidates.map((c) => c.line.id), ['C1', 'C2']);
+  });
+  it('rowAsGroup: an original / candidate row is the original, the annotation holds the rejection', () => {
+    const g = rowAsGroup(lines[3]);
+    assert.equal(g.statementLine, lines[3]);
+    assert.deepEqual(g.counterpartLine, { id: 'B-A1' });
+    assert.deepEqual(g.candidates.map((c) => c.line.id), ['C2']);
+  });
+
+  it('buildBouncePairRows: one entry per pair, in the order the lines come, anchored on the bounce row', () => {
+    const rows = buildBouncePairRows(lines);
+    assert.deepEqual(rows.map((r) => r.groupKey), ['A1', 'P1', 'A2']);
+    assert.deepEqual(rows.map((r) => r.anchor.id), ['B-A1', 'B-P1', 'B-A2']);
+    assert.deepEqual(rows[0].outflowIds, ['C1', 'C2']);
+    assert.deepEqual(rows[1].outflowIds, ['O1']);
+  });
+  it('buildBouncePairRows: ignores non-bounce rows, tolerates no lines and anchors on any row when the bounce is cut off', () => {
+    assert.deepEqual(buildBouncePairRows(null), []);
+    assert.equal(buildBouncePairRows(lines).some((r) => r.key === 'PLAIN' || r.key === 'DISC'), false);
+    const onlyCandidate = buildBouncePairRows([lines[3]]);
+    assert.equal(onlyCandidate.length, 1);
+    assert.equal(onlyCandidate[0].anchor.id, 'C2');
+  });
+  it('buildBouncePairRows: the query keeps a pair matching either side (description, partner or reference)', () => {
+    assert.deepEqual(buildBouncePairRows(lines, { query: 'gimnasio' }).map((r) => r.groupKey), ['P1']);
+    assert.deepEqual(buildBouncePairRows(lines, { query: '  ACME SL ' }).map((r) => r.groupKey), ['A1']);
+    assert.deepEqual(buildBouncePairRows(lines, { query: 'pago acme 0' }).map((r) => r.groupKey), ['A2']);
+    assert.deepEqual(buildBouncePairRows(lines, { query: 'zzz' }), []);
+  });
+
+  it('buildBounceOutflows: every distinct outflow once, by date, listing the pairs that offer it', () => {
+    const outs = buildBounceOutflows(lines);
+    assert.deepEqual(outs.map((o) => o.line.id), ['C3', 'O1', 'C1', 'C2']);
+    assert.deepEqual(outs.find((o) => o.line.id === 'C2').pairKeys, ['A1', 'A2']);
+    assert.deepEqual(outs.find((o) => o.line.id === 'O1').pairKeys, ['P1']);
+  });
+  it('buildBounceOutflows: the full pendingLines row wins over the short annotation object', () => {
+    const c2 = buildBounceOutflows(lines).find((o) => o.line.id === 'C2');
+    assert.equal(c2.line.partnerName, 'ACME SL');
+  });
+  it('buildBounceOutflows: the query narrows the outflows to those of the pairs that match', () => {
+    assert.deepEqual(buildBounceOutflows(lines, { query: 'gimnasio' }).map((o) => o.line.id), ['O1']);
+    assert.deepEqual(buildBounceOutflows(null), []);
+  });
+
+  it('countBouncePairs counts pairs, not lines', () => {
+    assert.equal(lines.filter((l) => l.state === BOUNCE_STATE).length, 4);
+    assert.equal(countBouncePairs(lines), 3);
+    assert.equal(countBouncePairs([]), 0);
+    assert.equal(countBouncePairs(undefined), 0);
   });
 });
 
