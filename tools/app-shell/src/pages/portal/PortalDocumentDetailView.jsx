@@ -8,7 +8,7 @@ import {
   MagnifyingGlassPlusIcon,
   XIcon,
 } from '@phosphor-icons/react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useUI } from '@/i18n';
 import { cn } from '@/lib/utils';
@@ -91,7 +91,7 @@ function PortalDetailDrawer({ title, onClose, children }) {
 
 export default function PortalDocumentDetailView({
   apiFetch, token, kind, id, identity, logoUrl, onNavigate, onInvalid,
-  listGroup = null, presentation = 'page',
+  listGroup = null, presentation = 'page', origin = null,
 }) {
   const ui = useUI();
   const [document, setDocument] = useState(null);
@@ -99,11 +99,16 @@ export default function PortalDocumentDetailView({
   const [pdf, setPdf] = useState({ status: 'idle', blob: null, url: null });
   const [lightboxOpen, setLightboxOpen] = useState(false);
 
+  // ETP-6209 KPIs: where this open came from (`?origin=`), read once per document: a later change of
+  // the navigation state must not refetch it.
+  const originRef = useRef(origin);
+  originRef.current = origin;
+
   useEffect(() => {
     let active = true;
     setState('loading');
     setDocument(null);
-    fetchPortalDocument(apiFetch, token, kind, id).then((loaded) => {
+    fetchPortalDocument(apiFetch, token, kind, id, { origin: originRef.current }).then((loaded) => {
       if (!active) return;
       setDocument(loaded);
       setState('ready');
@@ -130,7 +135,8 @@ export default function PortalDocumentDetailView({
     let active = true;
     let objectUrl = null;
     setPdf({ status: 'loading', blob: null, url: null });
-    fetchPortalDocumentPdf(apiFetch, token, kind, id).then((blob) => {
+    // The automatic preview is not a download (ETP-6209 KPIs): `purpose=preview`.
+    fetchPortalDocumentPdf(apiFetch, token, kind, id, { purpose: 'preview' }).then((blob) => {
       if (!active) return;
       const typed = new Blob([blob], { type: 'application/pdf' });
       objectUrl = URL.createObjectURL(typed);
@@ -153,16 +159,29 @@ export default function PortalDocumentDetailView({
   }, [apiFetch, token, kind, id, document?.hasPdf, onInvalid]);
 
   const fileName = portalPdfFileName(document ?? { id });
+  // The Download button re-requests the printable as a `download` (ETP-6209 KPIs: the preview is
+  // not a download). Should that request fail, the preview's copy is still saved: the customer
+  // gets the file either way.
   const downloadPdf = useCallback(() => {
-    if (pdf.blob) saveBlobAsFile(pdf.blob, fileName);
-  }, [pdf.blob, fileName]);
+    if (!pdf.blob) return;
+    const fallback = pdf.blob;
+    fetchPortalDocumentPdf(apiFetch, token, kind, id, { purpose: 'download', origin: 'detail' })
+      .then((blob) => saveBlobAsFile(new Blob([blob], { type: 'application/pdf' }), fileName))
+      .catch((error) => {
+        if (error?.code === PORTAL_ERROR.invalidLink) {
+          onInvalid();
+          return;
+        }
+        saveBlobAsFile(fallback, fileName);
+      });
+  }, [pdf.blob, fileName, apiFetch, token, kind, id, onInvalid]);
 
   // "Documentos relacionados" refresh: re-reads the document quietly (no loading screen) and
   // keeps everything else on the page as it is.
   const [refreshingRelated, setRefreshingRelated] = useState(false);
   const refreshRelated = useCallback(() => {
     setRefreshingRelated(true);
-    fetchPortalDocument(apiFetch, token, kind, id).then(setDocument).catch((error) => {
+    fetchPortalDocument(apiFetch, token, kind, id, { origin: 'refresh' }).then(setDocument).catch((error) => {
       if (error?.code === PORTAL_ERROR.invalidLink) onInvalid();
     }).finally(() => setRefreshingRelated(false));
   }, [apiFetch, token, kind, id, onInvalid]);
@@ -325,7 +344,7 @@ export default function PortalDocumentDetailView({
                 related={document.related}
                 refreshing={refreshingRelated}
                 onRefresh={refreshRelated}
-                onOpen={(item) => onNavigate({ view: 'doc', kind: item.kind, id: item.id, ...(listGroup && item.kind === kind ? { group: listGroup } : {}) })}
+                onOpen={(item) => onNavigate({ view: 'doc', kind: item.kind, id: item.id, ...(listGroup && item.kind === kind ? { group: listGroup } : {}) }, 'related')}
                 data-testid="PortalRelatedList__6a1d3b" />
             </div>
           </div>
@@ -354,7 +373,7 @@ export default function PortalDocumentDetailView({
               related={document.related}
               refreshing={refreshingRelated}
               onRefresh={refreshRelated}
-              onOpen={(item) => onNavigate({ view: 'doc', kind: item.kind, id: item.id })}
+              onOpen={(item) => onNavigate({ view: 'doc', kind: item.kind, id: item.id }, 'related')}
               data-testid="PortalRelatedList__6a1d3b" />
             {/* Part C on mobile: the board's bottom action bar (Movil-Documento). */}
             <div>

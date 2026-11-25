@@ -36,6 +36,17 @@ export const PORTAL_LINK_STORAGE_KEY = 'etgo.portal.link';
 /** sessionStorage key of a decision-confirmation link: `{ clientId: string|null, token: string }`. */
 export const PORTAL_DECISION_STORAGE_KEY = 'etgo.portal.decision';
 
+/**
+ * sessionStorage key of the portal's KPI session id (ETP-6209): an opaque 32-hex id the backend
+ * mints and rotates (`X-Portal-Session`). It grants nothing — the token still authorizes every
+ * request — and it never goes into a URL. Per tab, so a reload keeps the session and a new tab
+ * from the email starts another.
+ */
+export const PORTAL_SESSION_STORAGE_KEY = 'etgo.portal.session';
+
+/** Header carrying the KPI session id, both ways (`PortalServlet`). */
+export const PORTAL_SESSION_HEADER = 'X-Portal-Session';
+
 /** The path segment of the decision-confirmation landing. */
 const DECISION_SEGMENT = 'decision';
 
@@ -171,6 +182,45 @@ export function rememberPortalDecision({ clientId = null, token }, win = globalT
   write(PORTAL_DECISION_STORAGE_KEY, { clientId: isPortalClientId(clientId) ? clientId : null, token }, win);
 }
 
+/** Whether a value has the shape of a portal session id (32 hex characters). */
+export function isPortalSessionId(value) {
+  return typeof value === 'string' && /^[0-9a-f]{32}$/i.test(value);
+}
+
+/** The KPI session id this tab holds, or `null`. */
+export function readPortalSession(win = globalThis.window) {
+  const storage = storageOf(win);
+  let value;
+  try {
+    // The in-memory copy only stands in for a storage that cannot be used at all.
+    value = storage ? storage.getItem(PORTAL_SESSION_STORAGE_KEY) : memory.get(PORTAL_SESSION_STORAGE_KEY);
+  } catch {
+    value = memory.get(PORTAL_SESSION_STORAGE_KEY);
+  }
+  return isPortalSessionId(value) ? value : null;
+}
+
+/** Remembers the session id the backend answered with (only a well-formed one). */
+export function rememberPortalSession(sessionId, win = globalThis.window) {
+  if (!isPortalSessionId(sessionId)) return;
+  memory.set(PORTAL_SESSION_STORAGE_KEY, sessionId);
+  try {
+    storageOf(win)?.setItem(PORTAL_SESSION_STORAGE_KEY, sessionId);
+  } catch {
+    // Blocked storage: the in-memory copy serves this page load.
+  }
+}
+
+/** Forgets the session id: a token that arrives in a URL (a new email click) is a new session. */
+export function clearPortalSession(win = globalThis.window) {
+  memory.delete(PORTAL_SESSION_STORAGE_KEY);
+  try {
+    storageOf(win)?.removeItem(PORTAL_SESSION_STORAGE_KEY);
+  } catch {
+    // Nothing to clear.
+  }
+}
+
 /**
  * The token-free portal path of a link, for `navigate()` (router-relative, with the search).
  *
@@ -266,6 +316,8 @@ export function scrubPortalTokenFromLocation({ win = globalThis.window, routerBa
   if (!parsed) return false;
   applyReferrerPolicy(win.document);
   if (!parsed.token) return false;
+  // A token in the URL is a new click on an email link: a new KPI session (ETP-6209).
+  clearPortalSession(win);
   if (parsed.kind === 'decision') {
     rememberPortalDecision({ clientId: parsed.clientId, token: parsed.token }, win);
   } else {

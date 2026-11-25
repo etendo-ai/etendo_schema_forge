@@ -61,7 +61,8 @@ export default function PortalHomeView({
   const balances = home?.balances ?? [];
   const tiles = home?.tiles ?? {};
   const recent = home?.recent ?? [];
-  const open = (document) => onNavigate({ view: 'doc', kind: document.kind, id: document.id });
+  // ETP-6209 KPIs: an open says where it came from (navigation state, never the URL).
+  const openFrom = (origin) => (document) => onNavigate({ view: 'doc', kind: document.kind, id: document.id }, origin);
   // "Ver todos" opens the list of the newest document's kind: the recent list mixes every kind,
   // and that is the list it most likely continues.
   const viewAll = () => onNavigate({ view: 'list', kind: recent[0]?.kind ?? 'INVOICE' });
@@ -74,7 +75,7 @@ export default function PortalHomeView({
       label={ui('portalSearch')}
       testId="portal-global-search"
       data-testid="PortalSearchPill__beaeb4">
-      <SearchResults search={search} onOpen={open} data-testid="SearchResults__beaeb4" />
+      <SearchResults search={search} onOpen={openFrom('search')} data-testid="SearchResults__beaeb4" />
     </PortalSearchPill>
   );
 
@@ -195,7 +196,7 @@ export default function PortalHomeView({
             testId="portal-recent"
             variant="dashboard"
             data-testid="PortalSection__beaeb4">
-            <RecentDocuments recent={recent} onOpen={open} data-testid="RecentDocuments__beaeb4" />
+            <RecentDocuments recent={recent} onOpen={openFrom('home')} data-testid="RecentDocuments__beaeb4" />
           </PortalSection>
 
           <PortalSection

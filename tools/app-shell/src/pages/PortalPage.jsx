@@ -5,7 +5,7 @@ import { useUI } from '@/i18n';
 import { Button } from '@/components/ui/button';
 import { usePortalApiFetch } from '@/lib/portal/usePortalApiFetch.js';
 import {
-  portalPath, rememberPortalLink, resolvePortalRoute,
+  clearPortalSession, portalPath, rememberPortalLink, rememberPortalSession, resolvePortalRoute,
 } from '@/lib/portal/portalLinkSession.js';
 import { usePortalFavicon } from './portal/usePortalFavicon.js';
 import {
@@ -17,9 +17,10 @@ import {
   fetchPortalLogoBlob,
   renewPortalLink,
   resolvePortalBaseUrl,
+  sendPortalEtendoClick,
 } from '@/lib/portal/portalApi.js';
 import PortalShell from './portal/PortalShell.jsx';
-import { PortalClientContext } from './portal/PortalBits.jsx';
+import { PortalClientContext, PortalEtendoClickContext } from './portal/PortalBits.jsx';
 import PortalHomeView from './portal/PortalHomeView.jsx';
 import PortalDocumentListView from './portal/PortalDocumentListView.jsx';
 import PortalDocumentDetailView from './portal/PortalDocumentDetailView.jsx';
@@ -310,7 +311,7 @@ function resolvePortalLocation(requested, identity) {
  */
 function portalViewBody({
   current, isMobile, apiFetch, token, identity, logoUrl, home, months, onMonthsChange, onNavigate,
-  onInvalid,
+  onInvalid, origin = null,
 }) {
   if (current.view !== 'list' && current.view !== 'doc') {
     return (
@@ -357,6 +358,7 @@ function portalViewBody({
           presentation={isMobile ? 'page' : 'drawer'}
           identity={identity}
           logoUrl={logoUrl}
+          origin={origin}
           onNavigate={onNavigate}
           onInvalid={onInvalid}
           data-testid="PortalDocumentDetailView__3db5f6" />
@@ -371,6 +373,16 @@ export default function PortalPage() {
   const params = useParams();
   const route = resolvePortalRoute(params);
   const { token } = route;
+  // A token still in the address bar is a new email click: a new KPI session (ETP-6209). The real
+  // guard is the boot scrub (`scrubPortalTokenFromLocation`, first import of main.jsx), which
+  // clears it on every page load with a token. This is its in-page twin, like the inUrl effect
+  // below: a token the boot scrub never saw (an in-app navigation to a token URL). Cleared during
+  // render, so before the first request reads it, and once per token.
+  const sessionClearedFor = useRef(null);
+  if (route.inUrl && route.token && sessionClearedFor.current !== route.token) {
+    sessionClearedFor.current = route.token;
+    clearPortalSession();
+  }
   const routerNavigate = useNavigate();
   const location = useLocation();
   const ui = useUI();
@@ -450,6 +462,7 @@ export default function PortalPage() {
     fetchPortalIdentity(apiFetch, trimmed).then((loadedIdentity) => {
       if (!active) return null;
       setIdentity(loadedIdentity);
+      rememberPortalSession(loadedIdentity.sessionId);
       if (loadedIdentity.state === PORTAL_LINK_STATE.expired) {
         renewOnce();
         return null;
@@ -533,10 +546,19 @@ export default function PortalPage() {
   const requested = readPortalView(searchParams);
   const { current, entryHidden } = resolvePortalLocation(requested, identity);
 
-  const navigate = useCallback((target) => {
+  // ETP-6209 KPIs: a document open says where it came from (`origin`: home, search, list,
+  // related…) in the router's navigation STATE, never in the URL; the detail sends it as
+  // `?origin=`. Back / forward / reload replay the state; the backend dedupes per session.
+  const navigate = useCallback((target, origin = null) => {
     recheckedRef.current = false;
-    setSearchParams(writePortalView(target));
+    setSearchParams(writePortalView(target), origin ? { state: { portalOrigin: origin } } : undefined);
   }, [setSearchParams]);
+  // The open's origin: the navigation's, else `link` when the page landed on the link's own document.
+  const openOrigin = location.state?.portalOrigin ?? (requested ? null : 'link');
+  // Clicks on the etendo.ai links (Isa: count clicks only): fire-and-forget, see sendPortalEtendoClick.
+  const onEtendoClick = useCallback((reference, where) => {
+    sendPortalEtendoClick(apiFetch, trimmedToken, { reference, location: where });
+  }, [apiFetch, trimmedToken]);
 
   const statusScreen = portalStatusScreen(view, ui, identity?.tenantName,
     () => setAttempt((value) => value + 1));
@@ -554,11 +576,13 @@ export default function PortalPage() {
     onMonthsChange: changeMonths,
     onNavigate: navigate,
     onInvalid: showInvalid,
+    origin: openOrigin,
   });
 
   // The portal's tenant id for the etendo.ai links' `portal_ref` (never the token).
   return (
     <PortalClientContext.Provider value={route.clientId ?? tenantId}>
+    <PortalEtendoClickContext.Provider value={onEtendoClick}>
     <PortalShell
       identity={identity}
       logoUrl={logoUrl}
@@ -577,6 +601,7 @@ export default function PortalPage() {
       )}
       {body}
     </PortalShell>
+    </PortalEtendoClickContext.Provider>
     </PortalClientContext.Provider>
   );
 }

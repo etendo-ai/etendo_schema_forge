@@ -281,8 +281,8 @@ describe('PortalDecisionPage — a confirm whose answer was lost', () => {
     const probe = screen.getByTestId('portal-arrival-probe');
     expect(probe.dataset.path).toBe(`/portal/${CLIENT}?view=doc&kind=QUOTATION&id=q-1`);
     expect(probe.dataset.navigation).toBe('REPLACE');
-    // No notice travels with it (the Figma has none).
-    expect(JSON.parse(probe.dataset.state)).toBeNull();
+    // No notice travels with it (the Figma has none): only the KPI origin of the open (ETP-6209).
+    expect(JSON.parse(probe.dataset.state)).toEqual({ portalOrigin: 'link' });
     expect(confirmCalls()).toHaveLength(2);
     expect(confirmCalls()[1][1]).toStrictEqual(confirmCalls()[0][1]);
     expect(viewCalls()).toHaveLength(0);
@@ -485,8 +485,9 @@ describe('PortalDecisionPage — the way into the portal', () => {
     expect(JSON.parse(sessionStorage.getItem(PORTAL_LINK_STORAGE_KEY))).toEqual({ clientId: CLIENT, token: 'tok-new' });
     // Replace: Back does not return to the landing (which would answer "already applied").
     expect(probe.dataset.navigation).toBe('REPLACE');
-    // No notice travels with it: the portal shows none on arrival (the Figma has none).
-    expect(JSON.parse(probe.dataset.state)).toBeNull();
+    // No notice travels with it (the Figma has none): only the KPI origin of the open (ETP-6209),
+    // in router state, never in the URL.
+    expect(JSON.parse(probe.dataset.state)).toEqual({ portalOrigin: 'link' });
     expect(screen.queryByTestId('portal-decision-applied')).not.toBeInTheDocument();
     expect(confirmCalls()).toHaveLength(1);
   });

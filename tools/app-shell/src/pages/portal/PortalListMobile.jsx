@@ -305,7 +305,7 @@ export function usePortalCardActions({ apiFetch, token, tenantName, onInvalid })
   const [decisionTarget, setDecisionTarget] = useState(null);
 
   const download = useCallback((document) => {
-    fetchPortalDocumentPdf(apiFetch, token, document.kind, document.id).then((blob) => {
+    fetchPortalDocumentPdf(apiFetch, token, document.kind, document.id, { purpose: 'download', origin: 'list' }).then((blob) => {
       saveBlobAsFile(new Blob([blob], { type: 'application/pdf' }), portalPdfFileName(document));
     }).catch((error) => {
       if (error?.code === PORTAL_ERROR.invalidLink) {
@@ -317,7 +317,8 @@ export function usePortalCardActions({ apiFetch, token, tenantName, onInvalid })
   }, [apiFetch, token, onInvalid, ui]);
 
   const decide = useCallback((document, step) => {
-    fetchPortalDocument(apiFetch, token, document.kind, document.id).then((detail) => {
+    // A pre-read for the popups, not a customer's open (ETP-6209 KPIs): `origin=action`.
+    fetchPortalDocument(apiFetch, token, document.kind, document.id, { origin: 'action' }).then((detail) => {
       setDecisionTarget({ document: detail, step });
     }).catch((error) => {
       if (error?.code === PORTAL_ERROR.invalidLink) onInvalid();

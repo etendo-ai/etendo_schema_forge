@@ -16,6 +16,7 @@ import {
   requestPortalDecision,
   resolvePortalBaseUrl,
   searchPortalDocuments,
+  sendPortalEtendoClick,
 } from '../portalApi.js';
 
 /**
@@ -167,6 +168,8 @@ describe('fetchPortalIdentity', () => {
       hasLogo: true,
       // CP-43: the link's tenant, when the backend names it.
       clientId: null,
+      // ETP-6209 KPIs: the session the backend minted, when it sends one.
+      sessionId: null,
     });
   });
 
@@ -182,6 +185,7 @@ describe('fetchPortalIdentity', () => {
       tenantName: null,
       hasLogo: false,
       clientId: null,
+      sessionId: null,
     });
   });
 
@@ -197,6 +201,7 @@ describe('fetchPortalIdentity', () => {
       tenantName: null,
       hasLogo: false,
       clientId: null,
+      sessionId: null,
     });
   });
 
@@ -733,3 +738,58 @@ describe('fetchPortalDecision / confirmPortalDecision', () => {
     });
   }
 });
+
+// ETP-6209 KPIs — fixed vocabularies in the query string, never anything about the customer.
+describe('KPI wiring', () => {
+  const blobResponse = () => ({ ...jsonResponse({}), blob: async () => new Blob(['%PDF']) });
+
+  it('sends where a document open came from, and nothing for an unknown origin', async () => {
+    const { fetchImpl, calls } = recordingFetch(() => jsonResponse({}));
+    await fetchPortalDocument(fetchImpl, TOKEN, 'INVOICE', 'inv-1', { origin: 'home' });
+    await fetchPortalDocument(fetchImpl, TOKEN, 'INVOICE', 'inv-1', { origin: 'tracking-pixel' });
+    await fetchPortalDocument(fetchImpl, TOKEN, 'INVOICE', 'inv-1');
+
+    assert.deepEqual(calls.map((c) => c.path), [
+      '/sws/portal/documents/invoice/inv-1?origin=home',
+      '/sws/portal/documents/invoice/inv-1',
+      '/sws/portal/documents/invoice/inv-1',
+    ]);
+  });
+
+  it('says why the printable is asked for', async () => {
+    const { fetchImpl, calls } = recordingFetch(() => blobResponse());
+    await fetchPortalDocumentPdf(fetchImpl, TOKEN, 'INVOICE', 'inv-1', { purpose: 'preview' });
+    await fetchPortalDocumentPdf(fetchImpl, TOKEN, 'INVOICE', 'inv-1', { purpose: 'download', origin: 'list' });
+    await fetchPortalDocumentPdf(fetchImpl, TOKEN, 'INVOICE', 'inv-1');
+
+    assert.deepEqual(calls.map((c) => c.path), [
+      '/sws/portal/documents/invoice/inv-1/pdf?purpose=preview',
+      '/sws/portal/documents/invoice/inv-1/pdf?purpose=download&origin=list',
+      '/sws/portal/documents/invoice/inv-1/pdf',
+    ]);
+  });
+
+  it('counts an etendo.ai click with keepalive and the token in its header, swallowing failures', async () => {
+    const { fetchImpl, calls } = recordingFetch(() => { throw new TypeError('Failed to fetch'); });
+
+    assert.doesNotThrow(() => sendPortalEtendoClick(fetchImpl, TOKEN, { reference: 'startFree', location: 'rail' }));
+    await new Promise((resolve) => { setTimeout(resolve, 0); });
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].path, '/sws/portal/events/etendo-click');
+    assert.equal(calls[0].options.method, 'POST');
+    assert.equal(calls[0].options.keepalive, true);
+    assert.equal(calls[0].options.headers['X-Portal-Token'], TOKEN);
+    assert.deepEqual(JSON.parse(calls[0].options.body), { reference: 'startFree', location: 'rail' });
+    assert.ok(!calls[0].path.includes(TOKEN));
+  });
+
+  it('sends nothing for an unknown reference or location, or without a token', () => {
+    const { fetchImpl, calls } = recordingFetch(() => jsonResponse({}));
+    sendPortalEtendoClick(fetchImpl, TOKEN, { reference: 'other', location: 'rail' });
+    sendPortalEtendoClick(fetchImpl, TOKEN, { reference: 'learnMore', location: 'footer' });
+    sendPortalEtendoClick(fetchImpl, '', { reference: 'learnMore', location: 'header' });
+    assert.equal(calls.length, 0);
+  });
+});
+

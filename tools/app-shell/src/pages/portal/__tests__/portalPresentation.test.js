@@ -9,7 +9,6 @@ import {
   canOfferDecision,
   defaultPortalRange,
   documentLabelKey,
-  initialPortalRange,
   invoicePaymentState,
   isAllTimeGroup,
   isPortalGroup,
@@ -142,18 +141,6 @@ describe('defaultPortalRange (rolling last month)', () => {
   it('ends today at midnight, so the time of day never leaks into the range', () => {
     const { to } = defaultPortalRange(new Date(2026, 4, 15, 18, 30));
     assert.deepEqual([to.getHours(), to.getMinutes()], [0, 0]);
-  });
-});
-
-describe('initialPortalRange', () => {
-  const reference = new Date(2026, 4, 15);
-
-  it('opens a plain list on the rolling last month', () => {
-    assert.deepEqual(initialPortalRange(null, reference), defaultPortalRange(reference));
-  });
-
-  it('opens a status-group link on all time, since what it asks for may be older than a month', () => {
-    assert.equal(initialPortalRange('overdue', reference), null);
   });
 });
 

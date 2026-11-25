@@ -11,7 +11,7 @@ import {
 } from './PortalBits.jsx';
 import { PortalMobileCard, PortalMobileFilters, usePortalCardActions } from './PortalListMobile.jsx';
 import {
-  PORTAL_KIND_GROUPS, PORTAL_KIND_META, initialPortalRange, isAllTimeGroup, isPortalSubtype,
+  PORTAL_KIND_GROUPS, PORTAL_KIND_META, defaultPortalRange, isAllTimeGroup, isPortalSubtype,
   toCalendarParam,
 } from './portalPresentation.js';
 
@@ -40,7 +40,10 @@ export default function PortalDocumentListView({
 }) {
   const ui = useUI();
   const tabLabel = usePortalTabLabel();
-  const [range, setRange] = useState(() => initialPortalRange(group));
+  // The range of the period tabs (Todos, Pagado, Aceptado…): the rolling last month by default.
+  const [range, setRange] = useState(() => defaultPortalRange());
+  // A range the customer picked while on a state tab, for that tab only (QA pass 3).
+  const [stateRange, setStateRange] = useState({ group: null, range: null });
   // CP-16: the document type inside the kind (invoice / credit note), from the funnel.
   const [subtype, setSubtype] = useState(null);
   const [searchInput, setSearchInput] = useState('');
@@ -55,10 +58,10 @@ export default function PortalDocumentListView({
     apiFetch, token, tenantName: identity?.tenantName, onInvalid,
   });
 
-  // A new kind starts from the defaults: the rolling last month, or all time when the link named a
-  // status group (`initialPortalRange`).
+  // A new kind starts from the defaults: the rolling last month on the period tabs.
   useEffect(() => {
-    setRange(initialPortalRange(group));
+    setRange(defaultPortalRange());
+    setStateRange({ group: null, range: null });
     setSubtype(null);
     setSearchInput('');
     setSearch('');
@@ -66,12 +69,19 @@ export default function PortalDocumentListView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kind]);
 
-  // CP-18b: a "state" tab (Vencido, Pendiente, Bajo evaluación, En proceso) lists everything in
-  // that state, whatever the range: selecting it switches to all time, as an Inicio tile does, and
-  // the date button then reads «Todo el tiempo». Any other tab keeps the range the customer chose.
-  useEffect(() => {
-    if (isAllTimeGroup(group)) setRange(null);
-  }, [group]);
+  // CP-18b + QA pass 3: a "state" tab (Vencido, Pendiente, Bajo evaluación, En proceso) lists
+  // everything in that state, so it shows all time (the date button reads «Todo el tiempo»), as an
+  // Inicio tile does — unless the customer picks a range on that very tab. It is DERIVED, not set
+  // by an effect: entering the tab sends one request, and going back to a period tab restores the
+  // range the customer had there.
+  const allTimeTab = isAllTimeGroup(group);
+  const effectiveRange = allTimeTab
+    ? (stateRange.group === group ? stateRange.range : null)
+    : range;
+  const changeRange = useCallback((next) => {
+    if (allTimeTab) setStateRange({ group, range: next });
+    else setRange(next);
+  }, [allTimeTab, group]);
 
   useEffect(() => {
     const timer = setTimeout(() => setSearch(searchInput), SEARCH_DEBOUNCE_MS);
@@ -79,7 +89,7 @@ export default function PortalDocumentListView({
   }, [searchInput]);
 
   const query = useMemo(() => {
-    const { from, to } = getDateBounds(range);
+    const { from, to } = getDateBounds(effectiveRange);
     return {
       kind,
       group,
@@ -88,7 +98,7 @@ export default function PortalDocumentListView({
       dateTo: toCalendarParam(to),
       search,
     };
-  }, [kind, group, subtype, range, search]);
+  }, [kind, group, subtype, effectiveRange, search]);
 
   useEffect(() => {
     let active = true;
@@ -133,7 +143,7 @@ export default function PortalDocumentListView({
   // The document keeps this list's tab, so closing it returns here as it was.
   const open = (document) => onNavigate({
     view: 'doc', kind: document.kind || kind, id: document.id, ...(group ? { group } : {}),
-  });
+  }, 'list');
   const selectGroup = (code) => onNavigate(code ? { view: 'list', kind, group: code } : { view: 'list', kind });
 
   const tabs = [{ code: null, labelKey: 'portalStatusAll' }, ...(PORTAL_KIND_GROUPS[kind] ?? [])];
@@ -238,8 +248,8 @@ export default function PortalDocumentListView({
             onGroup={selectGroup}
             subtype={subtype}
             onSubtype={setSubtype}
-            range={range}
-            onRange={setRange}
+            range={effectiveRange}
+            onRange={changeRange}
             data-testid="PortalMobileFilters__c7f7d2" />
         </div>
         {renderTabs(true)}
@@ -264,8 +274,8 @@ export default function PortalDocumentListView({
           tabs={tabs}
           group={group}
           onGroup={selectGroup}
-          range={range}
-          onRange={setRange}
+          range={effectiveRange}
+          onRange={changeRange}
           subtype={subtype}
           onSubtype={setSubtype}
           onRefresh={() => setReload((value) => value + 1)}

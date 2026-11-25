@@ -149,6 +149,37 @@ recipient ever travels in the link. When the tenant is not known, the link is th
 The links still open in a new tab with `rel="noopener noreferrer"`. The transactional emails carry
 no `portal_ref`.
 
+## KPI session id, open origins and Etendo clicks (ETP-6209 KPIs)
+
+The portal's KPIs are counted server-side and only from the portal's own servlet. No third party is
+involved.
+
+- **Session id.** An opaque 32-hex id that the backend mints and rotates.
+  - It travels as the `X-Portal-Session` header, in both directions, on every request that carries
+    `X-Portal-Token` (`usePortalApiFetch`). `/me` also returns it as `sessionId`.
+  - It is kept per tab in `sessionStorage['etgo.portal.session']`.
+  - **It is not a credential:** it grants nothing, and the token still authorizes every request.
+  - **It is never put in a URL.**
+  - A token arriving in the URL (a new email click, or a decision landing's way into the portal)
+    clears it, so that visit starts a new session. A reload keeps it.
+- **Origin of a document open.** It travels in the router's navigation state, never in the page
+  URL, and the detail sends it as `?origin=` on its request to `/sws/portal`. The values are:
+  - `link`: the entry landing;
+  - `home`: Inicio's recent documents;
+  - `search`: the header search;
+  - `list`: a list row or card;
+  - `related`: a related document;
+  - `refresh`: the related-documents refresh;
+  - `action`: the card menu's accept / reject pre-read.
+- **PDF purpose.** The detail's automatic preview asks `?purpose=preview`. The detail's Download
+  button re-requests `?purpose=download&origin=detail`. The card menu asks
+  `?purpose=download&origin=list`.
+- **Clicks on the etendo.ai links.** Only clicks are counted, not where the visitor goes next.
+  - Endpoint: `POST /sws/portal/events/etendo-click`, body `{reference, location}`, with
+    `reference ∈ learnMore|startFree` and `location ∈ header|mobile|rail`.
+  - It is sent through the portal's `apiFetch` with `keepalive`, fire-and-forget
+    (`sendPortalEtendoClick`). It never delays the link, and its errors are swallowed.
+
 ## Closed: HubSpot click tracking captured element text
 
 QA found `track.hubspot.com/__ptc.gif?…_hs_element_text=24/11/2026 PR1000060 … Bajo evaluación

@@ -245,16 +245,6 @@ export function defaultPortalRange(reference = new Date()) {
 }
 
 /**
- * The range a list opens with: the rolling last month (D-2), unless the link that opened it names
- * a status group. A group link — a home tile ("Por responder", "Vencidas", "En curso") or "Ver
- * facturas pendientes" — asks for everything in that state, which may be older than a month, so it
- * opens on all time (`null`). Either way the customer can pick any other range.
- */
-export function initialPortalRange(group, reference = new Date()) {
-  return group ? null : defaultPortalRange(reference);
-}
-
-/**
  * The status tabs that mean "everything in this state now", not "what happened in a period"
  * (QA pass 2, CP-18b): an overdue invoice is by definition older than its due date, so the rolling
  * last month hid every overdue invoice while Inicio said "1 Vencida". Selecting one of these tabs

@@ -8,8 +8,12 @@ import { resolve } from 'node:path';
 import {
   PORTAL_DECISION_STORAGE_KEY,
   PORTAL_LINK_STORAGE_KEY,
+  PORTAL_SESSION_STORAGE_KEY,
+  clearPortalSession,
   isPortalPath,
   parsePortalPath,
+  readPortalSession,
+  rememberPortalSession,
   portalPath,
   readPortalDecision,
   readPortalLink,
@@ -33,6 +37,7 @@ function fakeStorage() {
     data,
     getItem: (key) => (data.has(key) ? data.get(key) : null),
     setItem: (key, value) => { data.set(key, String(value)); },
+    removeItem: (key) => { data.delete(key); },
   };
 }
 
@@ -150,6 +155,20 @@ describe('scrubPortalTokenFromLocation', () => {
       assert.equal(referrerMeta(win), 'same-origin');
     });
   }
+
+  // ETP-6209 KPIs: a token in the URL is a new click on an email link, so a new session.
+  it('clears the stored KPI session when a token arrives in the URL, and keeps it on a reload', () => {
+    const SESSION = '0123456789abcdef0123456789abcdef';
+    const win = fakeWindow(`/portal/${CLIENT}/${TOKEN}`);
+    win.sessionStorage.setItem(PORTAL_SESSION_STORAGE_KEY, SESSION);
+    scrubPortalTokenFromLocation({ win });
+    assert.equal(readPortalSession(win), null);
+
+    const reload = fakeWindow(`/portal/${CLIENT}`);
+    reload.sessionStorage.setItem(PORTAL_SESSION_STORAGE_KEY, SESSION);
+    scrubPortalTokenFromLocation({ win: reload });
+    assert.equal(readPortalSession(reload), SESSION);
+  });
 
   it('keeps a link and a decision in separate entries', () => {
     const win = fakeWindow(`/portal/${CLIENT}/decision/${TOKEN}`);
@@ -296,3 +315,26 @@ describe('main.jsx boot order', () => {
     assert.equal(source.match(/\binitFeatureFlags\(/g)?.length, 1, 'initFeatureFlags is called only behind the portal guard');
   });
 });
+
+describe('portal KPI session id', () => {
+  const SESSION = '0123456789abcdef0123456789abcdef';
+
+  it('stores, reads and clears a well-formed session id only', () => {
+    const win = fakeWindow(`/portal/${CLIENT}`);
+    rememberPortalSession('not-a-session', win);
+    assert.equal(readPortalSession(win), null);
+    rememberPortalSession(SESSION, win);
+    assert.equal(readPortalSession(win), SESSION);
+    clearPortalSession(win);
+    assert.equal(readPortalSession(win), null);
+  });
+
+  it('survives blocked storage for the page load', () => {
+    const win = fakeWindow(`/portal/${CLIENT}`, { blockedStorage: true });
+    rememberPortalSession(SESSION, win);
+    assert.equal(readPortalSession(win), SESSION);
+    clearPortalSession(win);
+    assert.equal(readPortalSession(win), null);
+  });
+});
+

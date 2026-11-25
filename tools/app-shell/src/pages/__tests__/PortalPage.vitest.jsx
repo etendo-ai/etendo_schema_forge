@@ -87,7 +87,7 @@ vi.mock('@/i18n', () => ({
 }));
 
 import { StrictMode } from 'react';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { registerApiSession, resetApiSessionForTests } from '@etendosoftware/app-shell-core/auth';
@@ -1446,10 +1446,14 @@ describe('PortalPage — document detail', () => {
     await user.click(screen.getByTestId('portal-download-pdf'));
 
     // `FV/0001` would be saved as `0001.pdf` if the slash reached the download attribute.
-    expect(saveBlobAsFile).toHaveBeenCalledWith(expect.any(Blob), 'FV-0001.pdf');
+    await waitFor(() => expect(saveBlobAsFile).toHaveBeenCalledWith(expect.any(Blob), 'FV-0001.pdf'));
     expect(saveBlobAsFile.mock.calls[0][0].type).toBe('application/pdf');
-    // The download reuses the fetched printable: no second request.
-    expect(callsTo('/documents/invoice/inv-1/pdf')).toHaveLength(1);
+    // ETP-6209 KPIs: the preview was not a download, so the button re-requests the printable as one.
+    const pdfCalls = callsTo('/documents/invoice/inv-1/pdf').map(([path]) => path);
+    expect(pdfCalls).toEqual([
+      '/sws/portal/documents/invoice/inv-1/pdf?purpose=preview',
+      '/sws/portal/documents/invoice/inv-1/pdf?purpose=download&origin=detail',
+    ]);
   });
 
   it('offers only "Descargar PDF" in the preview toolbar kebab, and it saves the same file', async () => {
@@ -1463,8 +1467,8 @@ describe('PortalPage — document detail', () => {
     expect(screen.getAllByRole('menuitem')).toHaveLength(1);
     await user.click(screen.getByTestId('portal-pdf-more-download'));
 
-    expect(saveBlobAsFile).toHaveBeenCalledWith(expect.any(Blob), 'FV-0001.pdf');
-    expect(callsTo('/documents/invoice/inv-1/pdf')).toHaveLength(1);
+    await waitFor(() => expect(saveBlobAsFile).toHaveBeenCalledWith(expect.any(Blob), 'FV-0001.pdf'));
+    expect(callsTo('/documents/invoice/inv-1/pdf').at(-1)[0]).toContain('purpose=download');
   });
 
   for (const [label, pdfAnswer, note] of [
@@ -2230,3 +2234,147 @@ describe('PortalPage — portal_ref on the etendo.ai links', () => {
   });
 });
 
+
+// ETP-6209 KPIs — the origin of each document open (navigation state → `?origin=`), the PDF's
+// purpose, and the etendo.ai click count. Nothing of it in the page URL.
+describe('PortalPage — KPI origins, PDF purpose and Etendo clicks', () => {
+  // The in-page twin of the boot scrub: a token still in the URL starts a new KPI session.
+  it('drops the tab\'s KPI session when a token arrives in the URL, and keeps it on a token-free reload', async () => {
+    const SESSION = '0123456789abcdef0123456789abcdef';
+    sessionStorage.setItem('etgo.portal.session', SESSION);
+    renderPortal();
+    await shellReady();
+    expect(sessionStorage.getItem('etgo.portal.session')).toBeNull();
+
+    cleanup();
+    sessionStorage.setItem('etgo.portal.session', SESSION);
+    renderPortal(`/portal/${CLIENT}`);
+    await shellReady();
+    expect(sessionStorage.getItem('etgo.portal.session')).toBe(SESSION);
+  });
+
+  const documentCalls = (kind, id) => callsTo(`/documents/${kind}/${id}`).map(([path]) => path);
+  const originOf = (path) => new URL(path, 'http://portal').searchParams.get('origin');
+
+  it('marks the link\'s own document as origin=link', async () => {
+    responses.me = jsonResponse(WITH_ENTRY);
+    renderPortal();
+    await detailReady();
+
+    expect(documentCalls('invoice', 'inv-1').map(originOf)).toEqual(['link']);
+    expect(screen.getByTestId('location-probe').textContent).not.toContain('origin');
+  });
+
+  it('marks an open from Inicio\'s recent documents as origin=home', async () => {
+    const user = userEvent.setup();
+    renderPortal();
+    await shellReady();
+
+    await user.click(screen.getAllByTestId('portal-recent-document')[0]);
+    await detailReady();
+
+    expect(documentCalls('order', 'ord-1').map(originOf)).toEqual(['home']);
+  });
+
+  it('marks an open from the header search as origin=search', async () => {
+    const user = userEvent.setup();
+    renderPortal();
+    await shellReady();
+
+    await user.type(screen.getByTestId('portal-global-search'), 'FV');
+    await user.click(await screen.findByTestId('portal-search-result'));
+    await detailReady();
+
+    expect(documentCalls('invoice', 'inv-2').map(originOf)).toEqual(['search']);
+  });
+
+  it('marks an open from a list row as origin=list', async () => {
+    const user = userEvent.setup();
+    renderPortal(`/portal/${TOKEN}?view=list&kind=INVOICE`);
+    await listReady();
+
+    await user.click(within(screen.getAllByTestId('portal-document-row')[0]).getByTestId('portal-document-open'));
+    await detailReady();
+
+    expect(documentCalls('invoice', 'inv-1').map(originOf)).toEqual(['list']);
+  });
+
+  it('marks an open from a related document as origin=related, and the related refresh as refresh', async () => {
+    const user = userEvent.setup();
+    responses.me = jsonResponse(WITH_ENTRY);
+    renderPortal();
+    await detailReady();
+
+    await user.click(screen.getByTestId('portal-related-refresh'));
+    await waitFor(() => expect(documentCalls('invoice', 'inv-1').map(originOf)).toEqual(['link', 'refresh']));
+
+    await user.click(screen.getAllByRole('button', { name: 'portalKindOrder #PV/0001' })[0]);
+    await waitFor(() => expect(documentCalls('order', 'ord-1').map(originOf)).toEqual(['related']));
+  });
+
+  it('asks the printable as a preview for the detail and as a download from a card\'s menu', async () => {
+    const user = userEvent.setup();
+    responses.documents = () => jsonResponse({
+      documents: [{
+        kind: 'QUOTATION', id: 'q-1', documentNo: 'PR/0001', date: '2026-08-01', validUntil: '2999-01-10',
+        documentStatus: 'UE', currency: 'EUR', taxBase: 100, grandTotal: 121, canDecide: true,
+      }],
+      totalCount: 1,
+    });
+    renderPortal(`/portal/${TOKEN}?view=list&kind=QUOTATION`);
+    await listReady();
+
+    await user.click(within(screen.getByTestId('portal-document-card')).getByTestId('portal-card-menu'));
+    await user.click(await screen.findByTestId('portal-card-menu-pdf'));
+    await waitFor(() => expect(callsTo('/documents/quotation/q-1/pdf').map(([path]) => path))
+      .toEqual(['/sws/portal/documents/quotation/q-1/pdf?purpose=download&origin=list']));
+
+    await user.click(within(screen.getByTestId('portal-document-card')).getByTestId('portal-card-menu'));
+    await user.click(await screen.findByTestId('portal-card-menu-reject'));
+    await waitFor(() => expect(documentCalls('quotation', 'q-1').map(originOf)).toEqual(['action']));
+  });
+
+  it('counts a click on the etendo.ai links, without holding the link back', async () => {
+    const user = userEvent.setup();
+    renderPortal();
+    await shellReady();
+
+    const banner = within(screen.getByTestId('portal-sidebar')).getByTestId('portal-promo-cta');
+    banner.addEventListener('click', (event) => event.preventDefault());
+    await user.click(banner);
+    const pill = within(screen.getByTestId('portal-view-header')).getByTestId('portal-created-with');
+    pill.addEventListener('click', (event) => event.preventDefault());
+    await user.click(pill);
+
+    const clicks = callsTo('/events/etendo-click');
+    expect(clicks.map(([, options]) => JSON.parse(options.body))).toEqual([
+      { reference: 'startFree', location: 'rail' },
+      { reference: 'learnMore', location: 'header' },
+    ]);
+    expect(clicks[0][1]).toMatchObject({ method: 'POST', keepalive: true });
+    expect(clicks[0][1].headers['X-Portal-Token']).toBe(TOKEN);
+  });
+});
+
+// QA pass 3 — a state tab must send ONE request, and leaving it must restore the period range.
+describe('PortalPage — state tabs and the period range', () => {
+  it('sends one request on entering «Vencido» and restores the month on «Todos»', async () => {
+    const user = userEvent.setup();
+    renderPortal(`/portal/${TOKEN}?view=list&kind=INVOICE`);
+    await listReady();
+    const monthFrom = listQueries().at(-1).get('dateFrom');
+    const before = listQueries().length;
+
+    await user.click(screen.getByTestId('portal-status-tab-overdue'));
+    await waitFor(() => expect(listQueries().at(-1).get('group')).toBe('overdue'));
+    const overdueQueries = listQueries().slice(before);
+    expect(overdueQueries).toHaveLength(1);
+    expect(overdueQueries[0].get('dateFrom')).toBeNull();
+    expect(screen.getByTestId('portal-date-range')).toHaveTextContent('dateRangeAllTime');
+
+    await user.click(screen.getByTestId('portal-status-tab-all'));
+    await waitFor(() => expect(listQueries().at(-1).get('group')).toBeNull());
+    expect(listQueries().at(-1).get('dateFrom')).toBe(monthFrom);
+    expect(screen.getByTestId('portal-date-range')).not.toHaveTextContent('dateRangeAllTime');
+  });
+});

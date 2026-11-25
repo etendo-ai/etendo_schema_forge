@@ -245,6 +245,8 @@ export async function fetchPortalIdentity(fetchImpl, token) {
     // ETP-6209 CP-43: the link's tenant (`AD_Client_ID`), so a pre-CP-43 `/portal/{token}` link
     // is normalized to the token-free `/portal/{clientId}`. `null` from an older backend.
     clientId: readableText(data?.clientId),
+    // ETP-6209 KPIs: the session the backend minted for this tab (also in `X-Portal-Session`).
+    sessionId: readableText(data?.sessionId),
   };
 }
 
@@ -411,15 +413,67 @@ export async function fetchPortalDocuments(fetchImpl, token, {
   };
 }
 
+// ─── KPI wiring (ETP-6209): where an open came from, why a PDF was asked for, Etendo clicks ──────
+
+/**
+ * Where a document open came from, sent as `?origin=` so the backend can count a value interaction
+ * (`PortalServlet#handleDocument`): `link` the entry landing, `home` Inicio's recents, `search`
+ * the header search, `list` a list row or card, `related` a related document; `refresh` and
+ * `action` are re-reads that are not a customer's open (the related refresh, the card menu's
+ * accept / reject pre-read). Anything else is not sent. Fixed vocabulary, nothing about the user.
+ */
+export const PORTAL_DOCUMENT_ORIGINS = Object.freeze(['link', 'home', 'search', 'list', 'related', 'refresh', 'action']);
+
+/** Why the printable is requested: the detail's automatic `preview`, or a customer's `download`. */
+export const PORTAL_PDF_PURPOSES = Object.freeze(['preview', 'download']);
+
+/** Where a download was asked from: the detail's button, or a list card's menu. */
+export const PORTAL_PDF_ORIGINS = Object.freeze(['detail', 'list']);
+
+function originQuery(origin) {
+  return PORTAL_DOCUMENT_ORIGINS.includes(origin) ? `?origin=${origin}` : '';
+}
+
+/** The etendo.ai links the portal counts clicks on, and where each one sits. */
+export const PORTAL_ETENDO_CLICK_REFERENCES = Object.freeze(['learnMore', 'startFree']);
+export const PORTAL_ETENDO_CLICK_LOCATIONS = Object.freeze(['header', 'mobile', 'rail']);
+
+/**
+ * Counts a click on an etendo.ai link (Isa: clicks only, no navigation tracking). Fire-and-forget:
+ * `keepalive` lets the request outlive the page if the link replaces it, nothing is awaited before
+ * the navigation, and every failure (400, 401, 429, offline) is swallowed — the link must always
+ * open. It goes to the portal's own servlet only: no third party is involved.
+ *
+ * @param {Function} fetchImpl the portal's `apiFetch`
+ * @param {string} token the portal token
+ * @param {{ reference: string, location: string }} click
+ */
+export function sendPortalEtendoClick(fetchImpl, token, { reference, location }) {
+  if (!token || !PORTAL_ETENDO_CLICK_REFERENCES.includes(reference)
+    || !PORTAL_ETENDO_CLICK_LOCATIONS.includes(location)) return;
+  try {
+    Promise.resolve(fetchImpl(`${PORTAL_API_PREFIX}/events/etendo-click`, {
+      method: 'POST',
+      token,
+      headers: { [PORTAL_TOKEN_HEADER]: token, 'Content-Type': 'application/json' },
+      on401: 'ignore',
+      keepalive: true,
+      body: JSON.stringify({ reference, location }),
+    })).catch(() => {});
+  } catch {
+    // A click count must never get in the way of the link.
+  }
+}
+
 /**
  * One document's read-only detail. A 404 means this one document is not available (hidden,
  * another customer's, or never existed) — not that the link died.
  */
-export async function fetchPortalDocument(fetchImpl, token, kind, id) {
+export async function fetchPortalDocument(fetchImpl, token, kind, id, { origin = null } = {}) {
   const response = await portalGet(
     fetchImpl,
     token,
-    `/documents/${encodeURIComponent(String(kind).toLowerCase())}/${encodeURIComponent(id)}`,
+    `/documents/${encodeURIComponent(String(kind).toLowerCase())}/${encodeURIComponent(id)}${originQuery(origin)}`,
     { invalidOn: INVALID_TOKEN_STATUSES_PDF },
   );
   const data = await response.json().catch(() => ({}));
@@ -475,11 +529,15 @@ export async function fetchPortalDocument(fetchImpl, token, kind, id) {
  * The document's printable as a `Blob` — the same file the email's download link serves.
  * A 404 is one missing printable, not a dead link.
  */
-export async function fetchPortalDocumentPdf(fetchImpl, token, kind, id) {
+export async function fetchPortalDocumentPdf(fetchImpl, token, kind, id, { purpose = null, origin = null } = {}) {
+  const params = new URLSearchParams();
+  if (PORTAL_PDF_PURPOSES.includes(purpose)) params.set('purpose', purpose);
+  if (PORTAL_PDF_ORIGINS.includes(origin)) params.set('origin', origin);
+  const query = params.toString();
   const response = await portalGet(
     fetchImpl,
     token,
-    `/documents/${encodeURIComponent(String(kind).toLowerCase())}/${encodeURIComponent(id)}/pdf`,
+    `/documents/${encodeURIComponent(String(kind).toLowerCase())}/${encodeURIComponent(id)}/pdf${query ? `?${query}` : ''}`,
     { invalidOn: INVALID_TOKEN_STATUSES_PDF, failure: PORTAL_ERROR.downloadFailed },
   );
   return response.blob();

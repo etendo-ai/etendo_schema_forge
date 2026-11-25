@@ -122,3 +122,59 @@ describe('usePortalApiFetch — identity of the returned client', () => {
     expect(typeof result.current).toBe('function');
   });
 });
+
+// ETP-6209 KPIs — the portal session: sent with every token-authenticated request when the tab has
+// one, the answer's (new or rotated) id stored, never in a URL, and nothing on token-less calls.
+describe('usePortalApiFetch — X-Portal-Session', () => {
+  const SESSION = '0123456789abcdef0123456789abcdef';
+  const ROTATED = 'fedcba9876543210fedcba9876543210';
+  const withSession = (id) => new Response('{}', {
+    status: 200, headers: { 'Content-Type': 'application/json', 'X-Portal-Session': id },
+  });
+
+  beforeEach(() => sessionStorage.clear());
+
+  it('sends the stored session with a token request and stores the rotated one it answers', async () => {
+    sessionStorage.setItem('etgo.portal.session', SESSION);
+    globalThis.fetch = vi.fn(async () => withSession(ROTATED));
+    const { result } = renderHook(() => usePortalApiFetch('/sws'));
+
+    await result.current('/portal/me', { headers: { 'X-Portal-Token': 'portal-token' } });
+
+    expect(sentHeader('X-Portal-Session')).toBe(SESSION);
+    expect(globalThis.fetch.mock.calls[0][0]).not.toContain(SESSION);
+    expect(sessionStorage.getItem('etgo.portal.session')).toBe(ROTATED);
+  });
+
+  it('sends no session before the backend minted one, and stores the first it answers', async () => {
+    globalThis.fetch = vi.fn(async () => withSession(SESSION));
+    const { result } = renderHook(() => usePortalApiFetch('/sws'));
+
+    await result.current('/portal/me', { headers: { 'X-Portal-Token': 'portal-token' } });
+
+    expect(sentHeader('X-Portal-Session')).toBeNull();
+    expect(sessionStorage.getItem('etgo.portal.session')).toBe(SESSION);
+  });
+
+  it('leaves the session out of a request without the portal token (the decision landing)', async () => {
+    sessionStorage.setItem('etgo.portal.session', SESSION);
+    globalThis.fetch = vi.fn(async () => withSession(ROTATED));
+    const { result } = renderHook(() => usePortalApiFetch('/sws'));
+
+    await result.current('/portal/decisions/confirm', {
+      method: 'POST', headers: { 'X-Portal-Decision-Token': 'dec-token' }, on401: 'ignore',
+    });
+
+    expect(sentHeader('X-Portal-Session')).toBeNull();
+    expect(sessionStorage.getItem('etgo.portal.session')).toBe(SESSION);
+  });
+
+  it('ignores an answer header that is not a session id', async () => {
+    globalThis.fetch = vi.fn(async () => withSession('not-a-session'));
+    const { result } = renderHook(() => usePortalApiFetch('/sws'));
+
+    await result.current('/portal/me', { headers: { 'X-Portal-Token': 'portal-token' } });
+
+    expect(sessionStorage.getItem('etgo.portal.session')).toBeNull();
+  });
+});

@@ -23,6 +23,17 @@ export function usePortalClientId() {
 }
 
 /**
+ * Counts a click on an etendo.ai link (ETP-6209 KPIs): `(reference, location) => void`, provided
+ * by `PortalPage` (`sendPortalEtendoClick`, fire-and-forget). A no-op outside the portal.
+ */
+export const PortalEtendoClickContext = createContext(() => {});
+
+/** The click counter of the etendo.ai links. */
+export function usePortalEtendoClick() {
+  return useContext(PortalEtendoClickContext);
+}
+
+/**
  * Where the "Creado con etendo.ai" pill (desktop) and the compact Etendo tile (mobile) send the
  * visitor: marketing's `learnMore` link with the portal's `portal_ref` (`etendoLinkFor`). Each opens
  * with `rel="noopener noreferrer"`, and portal pages carry `<meta name="referrer"
@@ -73,9 +84,12 @@ function EtendoWordmark() {
 export function PortalCreatedWithPill({ className }) {
   const ui = useUI();
   const href = useEtendoLearnMoreLink();
+  const countClick = usePortalEtendoClick();
   return (
     <a
       href={href}
+      // Counted, never delayed: the beacon is fire-and-forget and the link opens as usual.
+      onClick={() => countClick('learnMore', 'header')}
       target="_blank"
       rel="noopener noreferrer"
       aria-label={ui('portalCreatedWithLinkLabel')}
@@ -103,13 +117,15 @@ export function PortalCreatedWithPill({ className }) {
  * desktop headers. PROVISIONAL placement (user decision, 2026-11-20) until the designer sends the
  * mobile design.
  */
-export function PortalCreatedWithTile({ testId = 'portal-created-with-mobile' }) {
+export function PortalCreatedWithTile({ testId = 'portal-created-with-mobile', clickLocation = 'mobile' }) {
   const ui = useUI();
   const label = ui('portalCreatedWithLinkLabel');
   const href = useEtendoLearnMoreLink();
+  const countClick = usePortalEtendoClick();
   return (
     <a
       href={href}
+      onClick={() => countClick('learnMore', clickLocation)}
       target="_blank"
       rel="noopener noreferrer"
       aria-label={label}
@@ -132,7 +148,7 @@ export function PortalCreatedWithHeaderLink() {
   return (
     <>
       <span className="flex shrink-0 pr-2 lg:hidden">
-        <PortalCreatedWithTile testId="portal-created-with-compact" data-testid="PortalCreatedWithTile__7a317e" />
+        <PortalCreatedWithTile testId="portal-created-with-compact" clickLocation="header" data-testid="PortalCreatedWithTile__7a317e" />
       </span>
       <div className="hidden h-11 min-w-0 max-w-full items-center pr-2 lg:flex">
         <PortalCreatedWithPill data-testid="PortalCreatedWithPill__7a317e" />

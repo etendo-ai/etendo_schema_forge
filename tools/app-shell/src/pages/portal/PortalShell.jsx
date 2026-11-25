@@ -24,7 +24,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { LanguageMenuSection } from '@/components/LanguageMenuSection.jsx';
-import { PortalTag, usePortalClientId } from './PortalBits.jsx';
+import { PortalTag, usePortalClientId, usePortalEtendoClick } from './PortalBits.jsx';
 import { etendoLinkFor } from './portalMarketingLinks.js';
 import { PORTAL_HIGHLIGHTS, PORTAL_KIND_META } from './portalPresentation.js';
 
@@ -502,6 +502,7 @@ function PortalRailFooter({ identity, collapsed }) {
 function PortalPromo() {
   const ui = useUI();
   const href = etendoLinkFor('startFree', usePortalClientId());
+  const countClick = usePortalEtendoClick();
   return (
     <aside className="flex w-full flex-col gap-3 rounded-lg border border-[#E3E7EC] bg-white p-3" data-testid="portal-promo">
       <div className="flex flex-col gap-1">
@@ -513,6 +514,7 @@ function PortalPromo() {
       </div>
       <a
         href={href}
+        onClick={() => countClick('startFree', 'rail')}
         target="_blank"
         rel="noopener noreferrer"
         className="flex h-8 w-full items-center justify-center rounded-lg bg-[#325CFF] px-2 py-1 text-sm font-medium leading-6 text-white hover:bg-[#2849CC]"

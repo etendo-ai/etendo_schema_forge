@@ -15,7 +15,7 @@ import { useUI } from '@/i18n';
 import { cn } from '@/lib/utils';
 import { usePortalApiFetch } from '@/lib/portal/usePortalApiFetch.js';
 import {
-  isPortalClientId, readPortalDecision, rememberPortalDecision, rememberPortalLink,
+  clearPortalSession, isPortalClientId, readPortalDecision, rememberPortalDecision, rememberPortalLink,
 } from '@/lib/portal/portalLinkSession.js';
 import { usePortalFavicon } from './portal/usePortalFavicon.js';
 import {
@@ -251,7 +251,9 @@ function DecisionResult({ decision, clientId }) {
   const enter = entry
     ? () => {
       rememberPortalLink(entry.link);
-      navigate(entry.path, { replace: true });
+      // A fresh portal token: a new KPI session, landing on the link's own document (ETP-6209).
+      clearPortalSession();
+      navigate(entry.path, { replace: true, state: { portalOrigin: 'link' } });
     }
     : null;
   const confirmed = decision.state === PORTAL_DECISION_STATE.confirmed;
