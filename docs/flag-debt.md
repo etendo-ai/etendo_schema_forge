@@ -269,7 +269,7 @@ The rollup reports, and never hides:
 | **orphan contribution** | A contribution whose id has no header in any registry. Reported, not scored. |
 | **duplicate header** | The same id declared as a header twice. The first is used. |
 | **flag key mismatch** | A contribution names a different `flagKey` than its header. |
-| **unverifiable** | A registry path that does not exist — an absent checkout. Its contributions are not in the score, and the specs of a merged feature that sit in an absent checkout are listed as *unverifiable* and add **0 points**. Specs in checkouts that are present are still charged, so two machines get the same score only when the same checkouts are present — the unverifiable list says exactly what is missing. |
+| **unverifiable** | A registry path that does not exist — an absent checkout. The absent checkout is reported once and its contributions (paths, specs, symbols, deferred items) are not in the score. Everything in checkouts that are present is still scored, so two machines get the same score only when the same checkouts are present — the unverifiable list says exactly what is missing. |
 
 ### Key-sync tests
 

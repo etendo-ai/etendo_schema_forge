@@ -315,9 +315,7 @@
         "ttlNote": "PLACEHOLDER, not a commitment: removal target once the read-only MVP is validated with a first real tenant. Revisit the date when that tenant goes live rather than letting it drift.",
         "symbols": [
           "bp-portal-link",
-          "BP_PORTAL_LINK",
-          "ETGO_FLAG_BP_PORTAL_LINK",
-          "etendo.go.flags.bp-portal-link"
+          "BP_PORTAL_LINK"
         ],
         "$symbolsComment": "Backend-only flag: no frontend symbol exists because nothing in the browser evaluates it and no key is declared in flag-keys.js. Deliberate -- see $gatingComment. The property and env-var spellings are listed because a grep for the bare key misses Openbravo.properties and the ECS task definition. Per-account enablement leaves NO grep trail in this repo at all: it is a targeting rule in the backend's hosted control plane -- Datadog Feature Flags when DD_FEATURE_FLAGS_ENABLED (dd.feature.flags.enabled) is set and dd-java-agent is loaded, else the ConfigCat dashboard when an SDK key is set (ETP-5751) -- so the registry is the only place that records where to look."
       },
@@ -511,15 +509,6 @@
         "ttlNote": "PLACEHOLDER, not a commitment: revisit the removal target after the transfer has run against a real demo with prices, costs and client-scoped UOMs. Revisit the date when the flag is first switched on anywhere.",
         "symbols": [
           "demo-data-transfer",
-          "FLAG_DEMO_DATA_TRANSFER",
-          "ETGO_FLAG_DEMO_DATA_TRANSFER",
-          "etendo.go.flags.demo-data-transfer",
-          "DemoDataTransferFlag",
-          "DemoDataTransferService",
-          "demoDataTransferService",
-          "recordDemoDataTransferSelection",
-          "startDemoDataTransferBestEffort",
-          "handleDemoDataTransfer",
           "useDemoDataTransfer",
           "demoDataTransferStep",
           "demoDataTransfer",
@@ -586,13 +575,7 @@
         "ttl": "2027-03-31",
         "ttlNote": "PLACEHOLDER, not a commitment: an incident switch for a check that went live without one. Revisit once enforcement has run a full billing cycle in production without an incident; at that point decide with the team between retiring it (the guard stays, the switch goes) and keeping it as a standing operational toggle, which would then need its own justification here.",
         "symbols": [
-          "environment-access-enforcement-off",
-          "FLAG_ENVIRONMENT_ACCESS_ENFORCEMENT_OFF",
-          "ETGO_FLAG_ENVIRONMENT_ACCESS_ENFORCEMENT_OFF",
-          "etendo.go.flags.environment-access-enforcement-off",
-          "EnvironmentAccessEnforcementFlag",
-          "isEnforcementSwitchedOff",
-          "enforcementSwitchedOff"
+          "environment-access-enforcement-off"
         ],
         "$symbolsComment": "Backend-only flag with an inverted polarity on purpose: GoFeatureFlags resolves every failure to false, and false here means enforcing. No key exists in flag-keys.js and none must be added: the SPA follows the 402. EnvironmentAccessGuard is the only caller of EnvironmentAccessEnforcementFlag; it holds the switch as the Predicate field enforcementSwitchedOff, which is how a test substitutes it. Per-tenant switching is a ConfigCat rule on the clientId attribute and leaves no grep trail here."
       },
@@ -702,10 +685,7 @@
         "ttl": "2027-01-31",
         "ttlNote": "Agreed date, confirmed by the owner on 2026-10-09. Retirement condition: the modern era is stable in production. Retiring it ships the modern path unconditionally: delete the flag check in McpRequestEra.modernEnabled() and the GoFeatureFlags constant, keep every modern-era class.",
         "symbols": [
-          "mcp-modern-era-disabled",
-          "FLAG_MCP_MODERN_ERA_DISABLED",
-          "ETGO_FLAG_MCP_MODERN_ERA_DISABLED",
-          "etendo.go.flags.mcp-modern-era-disabled"
+          "mcp-modern-era-disabled"
         ],
         "$symbolsComment": "Backend-only flag: no frontend symbol exists because nothing in the browser evaluates it, and it must never be declared in flag-keys.js (same rule as bp-portal-link). The property and env-var spellings are listed because a grep for the bare key misses Openbravo.properties and the ECS task definition. Evaluated with an empty context, so a ConfigCat rule for it must be environment-level only: one origin (/sws/mcp) serves every tenant and clients cache the era per origin, so a per-account answer would hand one cached decision to clients the flag treats differently."
       },
@@ -730,11 +710,7 @@
         "ttl": "2027-01-31",
         "ttlNote": "Agreed date, confirmed by the owner (Valentin Vivaldi) on 2026-10-14. Retirement condition: the skip has run on real tenant imports without a wrong default being reported. Retiring it ships the skip: delete the flag check in NeoBatchScope.calloutSkipKillSwitchOn() and the GoFeatureFlags constant, keep NeoCalloutDiscardMemory and the _skipRedundantCallouts option.",
         "symbols": [
-          "batch-callout-skip-disabled",
-          "FLAG_BATCH_CALLOUT_SKIP_DISABLED",
-          "ETGO_FLAG_BATCH_CALLOUT_SKIP_DISABLED",
-          "etendo.go.flags.batch-callout-skip-disabled",
-          "calloutSkipKillSwitchOn"
+          "batch-callout-skip-disabled"
         ],
         "$symbolsComment": "Backend-only flag: nothing in the browser evaluates it, so it must never be declared in flag-keys.js (same rule as mcp-modern-era-disabled). The property and env-var spellings are listed because a grep for the bare key misses Openbravo.properties and the ECS task definition. Evaluated with an empty context, once per batch, when NeoBatchScope opens."
       },
@@ -831,11 +807,7 @@
         "defaultValue": false,
         "ttlNote": "Permanent operational switch — decided by Martin Taal 2026-10-24; no retirement planned. An operator turns the schedule on per environment (together with that environment's Process Request), so `ttl` is deliberately absent: the scorer reports 'no TTL declared' and scores lifecycle 0. The registry has no dedicated field for a permanent flag; this note is the record. If the decision is ever revisited, retiring means shipping the schedule: the startup plants the request unconditionally and the scheduled-run gate in the process goes.",
         "symbols": [
-          "billing-reconciliation-schedule",
-          "FLAG_BILLING_RECONCILIATION_SCHEDULE",
-          "ETGO_FLAG_BILLING_RECONCILIATION_SCHEDULE",
-          "etendo.go.flags.billing-reconciliation-schedule",
-          "BillingReconciliationScheduleStartup"
+          "billing-reconciliation-schedule"
         ],
         "$symbolsComment": "Backend-only flag: never declare it in flag-keys.js. Property and env-var spellings listed for Openbravo.properties and the ECS task definition. The gate method `scheduleEnabled` is deliberately NOT a symbol: the usage-aggregation-schedule gates use the same name, so it would count their files as touch points here; each gate already names FLAG_BILLING_RECONCILIATION_SCHEDULE. Evaluated with an empty (environment) context."
       },
@@ -859,11 +831,7 @@
         "ttlNote": "Permanent operational switch — decided by Martin Taal 2026-10-24; no retirement planned. An operator turns the schedule on per environment (together with that environment's Process Request), so `ttl` is deliberately absent: the scorer reports 'no TTL declared' and scores lifecycle 0. The registry has no dedicated field for a permanent flag; this note is the record. If the decision is ever revisited, retiring means shipping the schedule: the startup plants the request unconditionally and the scheduled-run gate in the process goes.",
         "symbols": [
           "usage-aggregation-schedule",
-          "FLAG_USAGE_AGGREGATION_SCHEDULE",
-          "ETGO_FLAG_USAGE_AGGREGATION_SCHEDULE",
-          "etendo.go.flags.usage-aggregation-schedule",
-          "UsageAggregationScheduleStartup",
-          "TITLE_SCHEDULE_OFF"
+          "UsageAggregationScheduleStartup"
         ],
         "$symbolsComment": "Backend-only flag: nothing in the browser evaluates it, so it must never be declared in flag-keys.js. The property and env-var spellings are listed because a grep for the bare key misses Openbravo.properties and the ECS task definition. The gate method `scheduleEnabled` is deliberately NOT a symbol: BillingReconciliationScheduleStartup/BillingReconciliationProcess use the same name for their own flag, so it would count the other flag's files as touch points here; each gate already names FLAG_USAGE_AGGREGATION_SCHEDULE. Evaluated with an empty (environment) context."
       },
@@ -888,7 +856,6 @@
         "symbols": [
           "contact-category-type",
           "CONTACT_CATEGORY_TYPE",
-          "FLAG_CONTACT_CATEGORY_TYPE",
           "contactCategoryTypeEnabled",
           "useContactCreateTypeGate",
           "useContactCategoryTypeSync",
@@ -1005,12 +972,8 @@
         "ttlNote": "Hard PM deadline, not a placeholder: SEPA 2025 rulebooks ban unstructured addresses in SEPA remittance files from this date (etendosoftware/etendo-ai#24, which also gave the flag its name). By 2026-11-15 the feature must be live in production, so the flag either retires (always-on) or is reclassified as a permanent per-tenant/plan toggle -- revisit on that date, don't let it slide.",
         "symbols": [
           "structured-address-for-sepa",
-          "FLAG_STRUCTURED_ADDRESS_FOR_SEPA",
-          "ETGO_FLAG_STRUCTURED_ADDRESS_FOR_SEPA",
-          "etendo.go.flags.structured-address-for-sepa",
           "structuredAddressForSepa",
           "capabilities.structuredAddressForSepa",
-          "StructuredAddressComposer.isEnabled",
           "streetName",
           "buildingNumber",
           "buildingName",
@@ -1066,8 +1029,6 @@
         "ttlNote": "Set by the user for ETP-5716: by 2027-01-01 the 390 is released to every tenant and the flag retires on the ship branch (unwrap the two toggle points in NeoFiscalModelsCatalogService and the two in useFiscalModelsCatalog.js/FmCatalogPage.jsx, delete FiscalModel390Flag.java and catalogAvailability.js, remove the `catalogAvailability.js` line from the model-id guardrail ALLOWLIST in fiscal-models/__tests__/modelRegistry.vitest.js, delete the flag object, keep this entry).",
         "symbols": [
           "fiscal-model-390",
-          "FLAG_FISCAL_MODEL_390",
-          "ETGO_FLAG_FISCAL_MODEL_390",
           "FiscalModel390Flag",
           "catalogAvailability",
           "splitCatalogAnswer",
@@ -1316,8 +1277,6 @@
         "ttlNote": "PROVISIONAL, pending confirmation with product (epic ETP-6046). Retirement means the inbox ships to everyone: unwrap the upload endpoint toggle point(s) that call InvoiceInboxFlag and remove the flag gate from InvoiceInboxHeaderHandler (the handler STAYS: it serves the discard action), delete InvoiceInboxFlag.java and its test, delete FLAG_INVOICE_INBOX from GoFeatureFlags, remove the com.etendoerp.go docs section and configuration-table row, delete the hosted Datadog setting, remove the invoiceInbox capability from SFWindowAccessMap (INVOICE_INBOX constant and its put) together with InvoiceInboxFlag.isEnabledFor, and in the SPA drop the capability key from the menu.json item, the capability check in windows/custom/invoice-inbox/index.jsx and INVOICE_INBOX_CAPABILITY from lib/capabilityVisibility.js (the window access check stays); delete the flag object, keep this entry. Retirement does NOT remove the background worker (InvoiceInboxProcessor, InvoiceInboxWorkStore), the stalled-row sweeper (InvoiceInboxSweeperStartup), the validator and status policy, the matchers, or the shared OCR changes (total_amount in ocr-config.json, retryable OcrUnavailableException, TaxIdNormalizer, vendor tax id lookups): they ship permanently.",
         "symbols": [
           "invoice-inbox",
-          "FLAG_INVOICE_INBOX",
-          "InvoiceInboxFlag",
           "invoiceInbox",
           "INVOICE_INBOX_CAPABILITY",
           "invoice_inbox_opened",
@@ -1541,9 +1500,6 @@
         "ttlNote": "PLACEHOLDER, not agreed with product: roughly one quarter after the first account gets the tab. Replace with the real date once the rollout plan exists.",
         "symbols": [
           "product-movements-tab",
-          "FLAG_PRODUCT_MOVEMENTS_TAB",
-          "ETGO_FLAG_PRODUCT_MOVEMENTS_TAB",
-          "etendo.go.flags.product-movements-tab",
           "productMovements",
           "PRODUCT_MOVEMENTS_CAPABILITY",
           "ProductMovementsPolicy",
@@ -1740,15 +1696,9 @@
         "symbols": [
           "bank-bounce-suggestions",
           "BANK_BOUNCE_SUGGESTIONS",
-          "FLAG_BANK_BOUNCE_SUGGESTIONS",
-          "ETGO_FLAG_BANK_BOUNCE_SUGGESTIONS",
-          "etendo.go.flags.bank-bounce-suggestions",
-          "BankBounceSuggestionsFlag",
           "bouncePair",
           "bouncePairs",
-          "StatementLineFilter",
           "discardedCount",
-          "BankBounceKpiTelemetry",
           "dismissPair",
           "bounceDecisions"
         ],
@@ -1846,9 +1796,6 @@
         "symbols": [
           "psd2-statement-import-settings",
           "PSD2_STATEMENT_IMPORT_SETTINGS",
-          "FLAG_PSD2_STATEMENT_IMPORT_SETTINGS",
-          "ETGO_FLAG_PSD2_STATEMENT_IMPORT_SETTINGS",
-          "etendo.go.flags.psd2-statement-import-settings",
           "usePsd2ImportSettingsFlag",
           "statementsTabBadge",
           "BankImportSettingsFields",
@@ -1861,9 +1808,7 @@
           "BankStatementDeletion",
           "MSG_STATEMENT_BANK_CONNECTED",
           "MSG_STATEMENT_POSTED_NOT_DELETABLE",
-          "parseImportSettingsDate",
-          "fetchProviderDisplay",
-          "maxFetchIntervalOfProvider"
+          "fetchProviderDisplay"
         ],
         "$symbolsComment": "The backend evaluates the flag in ONE class, Psd2ImportSettingsFlag (com.etendoerp.go), per request and per account: FeatureFlagContext.forAccount(<ETGO_ACCOUNT email>), never cached. Toggle points (each action evaluates it once): FinancialAccountBankConnectionHandler link, createAndLink, import-settings and accounts; FinancialAccountHandler.validateAndEnrichUpdate; BankStatementsHandler.handleDelete through BankStatementDeletion.prepare. The SPA evaluates the SAME key with the account email as targeting key; the SPA symbols are the usePsd2ImportSettingsFlag hook and its toggle points (BankConnectionFlowUI, EditAccountModal, ImportedStatementsTab, StatementsTable, StatementRowKebab, useBankConnectionFlow, useBankConnectionActions)."
       },
@@ -1952,9 +1897,6 @@
         "ttlNote": "PROVISIONAL, set on day one before any toggle point exists; to confirm with product (epic ETP-3504). Retirement means remittances ship to everyone: unwrap every call to SepaRemittancesFlag (the Bank-account remittance provisioning on create, mandate defaults, remittance header/line handlers), delete SepaRemittancesFlag.java and its test, delete FLAG_SEPA_REMITTANCES from GoFeatureFlags, remove the sepaRemittances capability from SFWindowAccessMap (SEPA_REMITTANCES constant and its put), the com.etendoerp.go docs section and configuration-table row, delete the hosted Datadog setting, and in the SPA drop the capability key from the menu.json item, the capability check of the remittance page guard and the contact section, SEPA_REMITTANCES_CAPABILITY from lib/capabilityVisibility.js and the visibleWhenCapability of the decisions.json fields; delete the flag object, keep this entry. Retirement does NOT remove the columns, the observers, the provisioning, SepaCreditorId or the remittance window.",
         "symbols": [
           "sepa-remittances",
-          "FLAG_SEPA_REMITTANCES",
-          "ETGO_FLAG_SEPA_REMITTANCES",
-          "etendo.go.flags.sepa-remittances",
           "SepaRemittancesFlag",
           "sepaRemittances",
           "SEPA_REMITTANCES_CAPABILITY",
@@ -2190,12 +2132,7 @@
         "ttlNote": "PLACEHOLDER, not a commitment: end of Q1 2027. Revisit once the first accounts are targeted and the KR2.1 child KPI (agent_kr21_routines_win_rate) has an official run.",
         "symbols": [
           "mcp-routines",
-          "MCP_ROUTINES",
-          "FLAG_MCP_ROUTINES",
-          "ETGO_FLAG_MCP_ROUTINES",
-          "etendo.go.flags.mcp-routines",
-          "McpRoutinesFlag",
-          "routinesDisabled"
+          "MCP_ROUTINES"
         ],
         "$symbolsComment": "Backend-only flag: nothing in the browser evaluates it and no key is declared in flag-keys.js. The constant is GoFeatureFlags.FLAG_MCP_ROUTINES and its one evaluator McpRoutinesFlag (com.etendoerp.go); retiring the flag is a grep for that class."
       },
@@ -2281,11 +2218,7 @@
         "ttlNote": "PLACEHOLDER, not a commitment: end of Q1 2027. Revisit once the feature is validated on a real import client. Retirement means imports with DUA ship to everyone: unwrap the SiiImportDuaFlag checks in PurchaseInvoiceTaxExtension.handle and PurchaseInvoiceSiiDeferredVat.handleIfDeferredVat, delete SiiImportDuaFlag.java (and its test), FLAG_SII_IMPORT_DUA from GoFeatureFlags, the ETGO_SiiImportDuaDisabled texts, the siiImportDua capability of SFWindowAccessMap (SII_IMPORT_DUA constant and its put) and the com.etendoerp.go docs section; in the SPA delete useSiiImportDuaEnabled and its three callers' conditions (SiiImportDuaSection, SiiImportTaxesSection, SifTab useSiiDeferredVat gate, purchase-invoice index.jsx allowEmptyWhen) and SII_IMPORT_DUA_CAPABILITY; drop the feature_disabled sentence from the header and tax agentPrompts (decisions.json and ETGO_SF_ENTITY.xml); delete the hosted Datadog setting; delete the flag object, keep this entry.",
         "symbols": [
           "sii-import-dua",
-          "FLAG_SII_IMPORT_DUA",
-          "ETGO_FLAG_SII_IMPORT_DUA",
-          "etendo.go.flags.sii-import-dua",
           "SiiImportDuaFlag",
-          "ETGO_SiiImportDuaDisabled",
           "siiImportDua",
           "SII_IMPORT_DUA_CAPABILITY",
           "SII_IMPORT_DUA",
