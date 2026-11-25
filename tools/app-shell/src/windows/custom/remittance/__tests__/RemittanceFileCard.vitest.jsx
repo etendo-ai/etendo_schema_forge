@@ -1,7 +1,7 @@
 // @covers artifacts/remittance/custom/RemittanceFileCard.jsx
 //
 // The SEPA file block of a remittance: «Antes de confirmar» while pending (fileReadiness and its
-// problems, each group linked to where it is fixed) (a processed remittance only shows the returned-receipts notice). Rendered with the real remittanceFileApi, RecordLink,
+// problems, each group linked to where it is fixed) (a processed remittance shows nothing here). Rendered with the real remittanceFileApi, RecordLink,
 // ConfirmDialog and backendErrors.js; only the two `useApiFetch` instances (by base), the API base,
 // `useNavigate`, the browser download and the toasts are mocked.
 const mockApiFetch = vi.fn();
@@ -201,33 +201,13 @@ describe('RemittanceFileCard — creditor identifier problem', () => {
   });
 });
 
-describe('RemittanceFileCard — processed («Fichero SEPA»)', () => {
-  // The file is not stored on the remittance (generated on the fly at every download), so there is no file to show:
-  // only a non-blocking notice when that file still carries returned receipts.
-  it('shows nothing when the file carries no returned receipt, and never lists attachments', async () => {
-    mockApiFetch.mockResolvedValue(readiness({ ready: true, returnedCount: 0 }));
+describe('RemittanceFileCard — processed', () => {
+  // The file is not stored on the remittance (generated on the fly by «Descargar fichero»), and the returned
+  // lines are already told by the status banner, the lines' «Estado del recibo» and the download toast.
+  it('shows nothing and reads nothing, whatever the file carries', () => {
     const { container } = renderCard(PROCESSED);
-    await act(async () => {});
-    expect(mockApiFetch.mock.calls[0][0]).toBe('/remittance/rem-1/action/fileReadiness');
     expect(container).toBeEmptyDOMElement();
+    expect(mockApiFetch).not.toHaveBeenCalled();
     expect(mockRootFetch).not.toHaveBeenCalled();
-  });
-
-  it('warns, without blocking, that the file includes the returned receipts (plural and singular)', async () => {
-    mockApiFetch.mockResolvedValue(readiness({ ready: true, returnedCount: 3 }));
-    const { unmount } = renderCard(PROCESSED);
-    expect(await screen.findByTestId('remittance-file-returned-notice')).toHaveTextContent('remittanceFileIncludesReturned:{"count":3}');
-    unmount();
-    mockApiFetch.mockResolvedValue(readiness({ ready: true, returnedCount: 1 }));
-    renderCard(PROCESSED);
-    expect(await screen.findByTestId('remittance-file-returned-notice')).toHaveTextContent('remittanceFileIncludesReturnedOne:{"count":1}');
-    expect(screen.queryByTestId('remittance-file-readiness')).toBeNull();
-  });
-
-  it('shows nothing when the read fails', async () => {
-    mockApiFetch.mockResolvedValue(jsonResponse({}, { ok: false, status: 500 }));
-    const { container } = renderCard(PROCESSED);
-    await act(async () => {});
-    expect(container).toBeEmptyDOMElement();
   });
 });

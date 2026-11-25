@@ -4,10 +4,8 @@ import { useUI } from '@/i18n';
 import { useApiFetch } from '@/auth/useApiFetch.js';
 import { Button } from '@/components/ui/button';
 import { RecordLink } from '@/components/contract-ui/RecordLink.jsx';
-import { InfoBanner } from '@/components/InfoBanner';
 import {
   fetchFileReadiness,
-  returnedReceiptsNotice,
   groupReadinessProblems,
   isCreditorIdProblem,
   readinessProblemText,
@@ -212,42 +210,13 @@ function ReadinessCard({ data, apiBaseUrl, creditorValid = false }) {
 }
 
 /**
- * ETP-6247 — «Fichero SEPA» on a processed remittance. The file is not stored on the remittance: it is
- * generated on the fly at every download («Descargar fichero» in the top bar and the row menu), like Classic.
- * This only adds a non-blocking notice when that file still carries returned receipts
- * (`fileReadiness.returnedCount`): it is the file that was sent to the bank, returns included. Nothing
- * otherwise, and nothing when the read fails.
- */
-function ProcessedFileNotice({ data, apiBaseUrl }) {
-  const ui = useUI();
-  const apiFetch = useApiFetch(apiBaseUrl);
-  const remittanceId = data.id;
-  const [returnedCount, setReturnedCount] = useState(0);
-  useEffect(() => {
-    let cancelled = false;
-    fetchFileReadiness(apiFetch, remittanceId)
-      .then((readiness) => { if (!cancelled) setReturnedCount(readiness.returnedCount); })
-      .catch(() => { if (!cancelled) setReturnedCount(0); });
-    return () => { cancelled = true; };
-  }, [apiFetch, remittanceId, data.updated, data.remittanceStatus]);
-  if (returnedCount <= 0) return null;
-  return (
-    <section className="col-span-full" data-testid="remittance-file-processed">
-      <InfoBanner tone="info" dismissible={false} data-testid="remittance-file-returned-notice">
-        {returnedReceiptsNotice(returnedCount, ui)}
-      </InfoBanner>
-    </section>
-  );
-}
-
-/**
  * ETP-6247 — the SEPA file block under «Datos para el fichero SEPA»: «Antes de confirmar» while the
- * remittance is pending, «Fichero SEPA» (only the returned-receipts notice) once it is processed. Nothing
- * for an unsaved remittance (the actions need a record). Rendered by RemittanceSepaFileData, the window's
+ * remittance is pending. Nothing once it is processed (the file is generated on the fly by «Descargar
+ * fichero», in the top bar and the row menu, whose toast mentions any returned lines) and nothing for an
+ * unsaved remittance (the actions need a record). Rendered by RemittanceSepaFileData, the window's
  * `headerExtra.customForm`.
  */
 export default function RemittanceFileCard({ data, apiBaseUrl, creditorValid = false }) {
-  if (!data?.id) return null;
-  if (isProcessedRemittance(data)) return <ProcessedFileNotice data={data} apiBaseUrl={apiBaseUrl} data-testid="ProcessedFileNotice__remittance" />;
+  if (!data?.id || isProcessedRemittance(data)) return null;
   return <ReadinessCard data={data} apiBaseUrl={apiBaseUrl} creditorValid={creditorValid} data-testid="ReadinessCard__remittance" />;
 }

@@ -114,7 +114,7 @@ Below it, **«Descargar fichero»** (download icon) is offered on a confirmed ro
 `CP`, `PP`; not `PE`, which has no file yet, nor `AN`). It reuses the detail button's download,
 `downloadRemittanceFileNotifying` in `remittanceFileApi.js`: the read-only `downloadFile` action generates the
 file on the fly (nothing is attached to the remittance, like Classic). It only downloads: nothing opens. A file
-that still carries returned receipts adds an informative toast (`remittanceFileIncludesReturned*`), and a
+that still carries returned receipts adds an informative toast (`remittanceFileIncludesReturnedLines`), and a
 refusal toasts the translated `remittanceFileDownloadError`.
 
 The shared `RowQuickActions` kebab gained generic, backwards-compatible **submenu** support: a `menuActions`
@@ -401,7 +401,7 @@ are out of scope. The SPA pieces live in `artifacts/remittance/custom/`. The con
 
 | Action | Body | Response |
 |---|---|---|
-| `POST <spec>/remittance/{id}/action/fileReadiness` | `{}` | `{ ready, scheme, problems: [{ scope: org\|account\|line, code, message, params, organizationId?, accountId?, lineId?, lineIds?, businessPartnerId?, businessPartnerName?, invoiceId?, documentNo? }], summary: { invoiceCount, lineCount, totalAmount, currency, dueDate }, returnedCount }` (`returnedCount`: the returned receipts the file still carries). `message` is already localized by the backend, params substituted; the SPA shows it and uses `code` + positional `params` only as a fallback |
+| `POST <spec>/remittance/{id}/action/fileReadiness` | `{}` | `{ ready, scheme, problems: [{ scope: org\|account\|line, code, message, params, organizationId?, accountId?, lineId?, lineIds?, businessPartnerId?, businessPartnerName?, invoiceId?, documentNo? }], summary: { invoiceCount, lineCount, totalAmount, currency, dueDate }, returnedCount }` (`returnedCount`: the returned receipts the file still carries; the SPA does not read it here). `message` is already localized by the backend, params substituted; the SPA shows it and uses `code` + positional `params` only as a fallback |
 | `POST …/action/confirm` | `{ fieldValues: { grouping } }` | `{ status, fileName }` (nothing attached). A refusal is a 422 with `error.message` (localized) and `messageKeys`; `ETGO_RemittanceFileNotReady` also carries `error.problems` |
 | `POST …/action/downloadFile` (or GET) | `{}` | read-only, processed remittances: `{ fileName, contentType: "application/xml", content, returnedCount }`, the XML (UTF-8 text) generated on the fly, saved as `Blob(content, { type: contentType })` with `downloadBlobAsFile` under `fileName` (e.g. `1000016_Cobros_nandu_enero.xml`). Never refused because of returns. 422 refusals: `ETGO_RemittanceFileNotProcessed` («…todavía no se puede descargar su fichero SEPA.»), `ETGO_RemittanceFileNotReady` (with `error.problems`), and the generator / XSD / EPC ones (`ETGO_RemittanceFileGenerationFailed`, `…Invalid`, `…SchemaMissing`), shown as the backend's localized sentence |
 
@@ -485,11 +485,12 @@ pending «Antes de confirmar» card stay.
   `downloadRemittanceFileNotifying` (`downloadFile`, the XML saved with `downloadBlobAsFile`). A spinner shows
   while it runs; a refusal toasts the translated `remittanceFileDownloadError`.
 - **Returned receipts.** The file is the one sent to the bank, so it still includes receipts returned since.
-  When `returnedCount > 0`: the download adds an informative, non-blocking toast, and on a processed remittance
-  `RemittanceFileCard` shows an info notice (`remittance-file-returned-notice`, read from
-  `fileReadiness.returnedCount`): «Este fichero incluye {count} recibos devueltos; es el que se envió al banco.»
-  (`remittanceFileIncludesReturned`, singular `remittanceFileIncludesReturnedOne`). Nothing when there is none
-  or the read fails.
+  When the download's `returnedCount > 0` it adds an informative, non-blocking toast with no number:
+  «El fichero incluye también las líneas devueltas, tal como se envió al banco.»
+  (`remittanceFileIncludesReturnedLines`). It carries no count on purpose: `returnedCount` counts payments,
+  so with «Agrupar por cliente» two returned invoices of one customer would read «1 recibo». A processed
+  remittance shows no notice in the detail (`RemittanceFileCard` renders nothing once processed): the
+  «Cobrada parcialmente…» banner and the lines' «Estado del recibo = Devuelto» already say it.
 - The Cobrada/Pagada banners (`remittanceBannerCollectedFile` / `PaidFile`) and the Pendiente de envío one say
   the file is downloaded with «Descargar fichero», without implying it is stored.
 
@@ -941,7 +942,7 @@ These need a new column, which the scope rules out, or a later task. None was in
 | Status banner | `remittance-status-banner` (`data-status` = the code) |
 | «Antes de confirmar» | `remittance-file-readiness`, `-loading`, `-ready`, `-problems`, `-error`, `-recheck`; problem list `remittance-file-problems` with groups `remittance-file-problems-org` / `-account` / `-partner-{bpId}` (their links add `-link`) and each sentence `remittance-file-problem` (`data-code`) |
 | «Confirmar» dialog | `remittance-confirm-dialog`, `remittance-confirm-count`, `-total`, `-due-date` (the summary values), `remittance-confirm-grouping-P` / `-GGP` / `-GGPD` (the cards), `remittance-confirm-info`, `remittance-confirm-problems-banner`, `remittance-confirmed-dialog` (the success step: `-subtitle`, `-summary`, `-name`, `-status`, `-count`, `-total`, `-type`, `-due-date`, `-account`), `remittance-confirm-irreversible`, `remittance-confirm-checking`, `-check-failed`, `-problems`; the buttons are ActionChoiceModal's: `action-confirm-modal` (primary) and Cancelar (by text) |
-| File actions | `remittance-file-download` (the top-bar button), `remittance-file-returned-notice` (the returned-receipts notice) |
+| File actions | `remittance-file-download` (the top-bar button) |
 | «Confirmar» / «Reactivar» | the generic process buttons; the reactivate confirmation is the shared `ConfirmDialog` (`components/OAuth2ClientDialog.jsx`), which takes no `data-testid` of its own: target its `DialogContent__4aea7f` / `Button__4aea7f`, or the dialog role and its title |
 | Due-item picker | `document-picker-modal`, `-search`, `-select-all`, `-list`, `-row-{id}` (`aria-selected`), `-check-{id}`, `-amount-{id}` (`-input`, `-reset`), `-amount-error-{id}`, `-status`, `-confirm`, `-cancel`; the document link `remittance-due-item-link-{id}`, the due status `remittance-due-status-{id}` |
 | «A remesar» in the grid | `line-in-place-amount-{lineId}` (`-input`, `-reset`) |

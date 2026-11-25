@@ -1335,6 +1335,61 @@ describe('InvoicePaymentHistoryModal', () => {
       expect(screen.queryByTestId('InvoicePaymentHistoryModal__remitted')).toBeNull();
       expect(screen.getByTestId('InvoicePaymentHistoryModal__add-btn')).not.toBeDisabled();
     });
+
+    // A remittance RETURN voids the collected payment (RPVOID): the invoice is pending again, so the
+    // payment must not read "Cobro depositado" nor count as registered. It was one payment for two
+    // invoices (grouped by customer): the row shows THIS invoice's share, not the 55,66 total.
+    const VOIDED_GROUPED_PAYMENT = {
+      id: 'v1', documentNo: '1000109', paymentDate: '2026-01-01', amount: '55.66', appliedToInvoice: '27.83',
+      status: 'RPVOID', processed: true, remittanceId: 'rem-1', remittanceDocumentNo: '1000123',
+    };
+
+    it('shows a returned (RPVOID) payment as voided, never deposited, and does not count it', async () => {
+      useApiFetch.mockReturnValue(makeApiFetchWithPlan(
+        [{ id: 'i1', outstandingAmount: '27.83' }],
+        [VOIDED_GROUPED_PAYMENT],
+      ));
+      renderModal();
+
+      const row = await screen.findByTestId('InvoicePaymentHistoryModal__row');
+      expect(screen.getByTestId('PaymentStateTag__voided')).toHaveTextContent('statusVoid');
+      expect(screen.queryByTestId('PaymentStateTag__deposited')).toBeNull();
+      expect(screen.queryByTestId('InvoicePaymentHistoryModal__delete-btn')).toBeNull();
+      expect(screen.getByText((_, el) => el.tagName === 'SPAN' && /^\s*0\s*cobrosRegistrados/.test(el.textContent))).toBeInTheDocument();
+      // This invoice's share, unsigned: the void settles nothing.
+      expect(row).toHaveTextContent('27,83');
+      expect(row).not.toHaveTextContent('55,66');
+      expect(row).not.toHaveTextContent('+');
+      // Not a draft: opens read-only on the payment window.
+      fireEvent.click(row);
+      expect(screen.queryByTestId('new-payment-entry-modal')).toBeNull();
+      expect(mockNavigate).toHaveBeenCalledWith('/payment-in/v1');
+    });
+
+    it('counts only the non-voided payments in the footer', async () => {
+      useApiFetch.mockReturnValue(makeApiFetchWithPlan(
+        [{ id: 'i1', outstandingAmount: '0' }],
+        [VOIDED_GROUPED_PAYMENT, { id: 'p2', documentNo: '1000110', amount: '27.83', status: 'RPR', processed: true }],
+      ));
+      renderModal();
+
+      await waitFor(() => expect(screen.getAllByTestId('InvoicePaymentHistoryModal__row')).toHaveLength(2));
+      expect(screen.getByTestId('PaymentStateTag__voided')).toBeInTheDocument();
+      expect(screen.getByTestId('PaymentStateTag__deposited')).toBeInTheDocument();
+      expect(screen.getByText((_, el) => el.tagName === 'SPAN' && /^\s*1\s*cobroRegistrado$/.test(el.textContent.trim()))).toBeInTheDocument();
+    });
+
+    it("shows a grouped payment's share of this invoice, not the payment's total", async () => {
+      useApiFetch.mockReturnValue(makeApiFetchWithPlan(
+        [{ id: 'i1', outstandingAmount: '0' }],
+        [{ id: 'g1', documentNo: '1000111', amount: '55.66', appliedToInvoice: '27.83', status: 'RPR', processed: true }],
+      ));
+      renderModal();
+
+      const row = await screen.findByTestId('InvoicePaymentHistoryModal__row');
+      expect(row).toHaveTextContent('27,83');
+      expect(row).not.toHaveTextContent('55,66');
+    });
   });
 
   describe('body minHeight floor (ETP-5253)', () => {

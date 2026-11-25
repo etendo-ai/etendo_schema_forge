@@ -217,6 +217,15 @@ describe.each([
     expect(screen.getByText('processReactivate')).toBeInTheDocument();
   });
 
+  // ETP-6247 — a voided payment (e.g. undone by a remittance return) offers no action at all, as in
+  // Classic. Guards the generated displayLogicRaw coming from decisions.json, on the real page.
+  it('renders no Reactivar button for a voided (RPVOID) payment', async () => {
+    mockHook.selected = { id: '123', documentNo: 'PAY-001', status: 'RPVOID' };
+    mockHook.editing = { id: '123', documentNo: 'PAY-001', status: 'RPVOID' };
+    await renderDetail(Page, windowName);
+    expect(screen.queryByText('processReactivate')).toBeNull();
+  });
+
   it('shows the confirmation modal on click WITHOUT calling handleProcess yet (regression guard)', async () => {
     const user = userEvent.setup();
     await renderDetail(Page, windowName);

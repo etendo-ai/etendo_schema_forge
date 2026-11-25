@@ -243,7 +243,7 @@ describe('Remittance i18n keys', () => {
 
   it('finds the keys it is supposed to check (guards against a regex that matches nothing)', () => {
     expect(keys.length).toBeGreaterThan(60);
-    expect(keys).toEqual(expect.arrayContaining(['remittanceReturnTitle', 'remittanceFileDownload', 'remittanceFileIncludesReturned', 'remittanceFileIncludesReturnedOne']));
+    expect(keys).toEqual(expect.arrayContaining(['remittanceReturnTitle', 'remittanceFileDownload', 'remittanceFileIncludesReturnedLines']));
   });
 
   it.each([['en_US', enUS], ['es_ES', esES]])('every key the custom files use exists in %s', (_loc, json) => {
@@ -260,8 +260,8 @@ describe('Remittance i18n keys', () => {
     for (const json of [enUS, esES, esAR]) {
       expect(json.genericLabels.remittanceReturnSuccess).toContain('{count}');
       expect(json.genericLabels.remittanceReturnReturnedOn).toContain('{date}');
-      expect(json.genericLabels.remittanceFileIncludesReturned).toContain('{count}');
-      expect(json.genericLabels.remittanceFileIncludesReturnedOne).toContain('{count}');
+      // No count on purpose: returnedCount counts payments, not the invoices the lines show.
+      expect(json.genericLabels.remittanceFileIncludesReturnedLines).not.toContain('{count}');
     }
   });
 });
@@ -380,7 +380,7 @@ describe('Row menu (grid ⋮) «Descargar fichero»', () => {
   it('adds an informative toast when the file carries returned receipts', async () => {
     mockApiFetch.mockResolvedValue(fileAnswer({ returnedCount: 1 }));
     await act(async () => { await downloadEntry('CP').onClick({ row: { id: 'rem-7' } }); });
-    expect(toast.info).toHaveBeenCalledWith('remittanceFileIncludesReturnedOne');
+    expect(toast.info).toHaveBeenCalledWith('remittanceFileIncludesReturnedLines');
   });
 
   it('toasts a failed download with the translated fallback', async () => {

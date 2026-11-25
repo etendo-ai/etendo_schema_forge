@@ -58,12 +58,12 @@ describe('RemittanceDownloadButton', () => {
     expect(screen.getByTestId('remittance-file-download')).toBeEnabled();
   });
 
-  it('adds an informative, non-blocking toast when the file carries returned receipts', async () => {
+  it('adds an informative, non-blocking toast, with no count, when the file carries returned receipts', async () => {
     mockApiFetch.mockResolvedValue(fileAnswer({ returnedCount: 2 }));
     renderButton('CP');
     await click();
     expect(mockDownloadBlobAsFile).toHaveBeenCalledWith(expect.any(Blob), 'remesa.xml');
-    expect(toast.info).toHaveBeenCalledWith('remittanceFileIncludesReturned:{"count":2}');
+    expect(toast.info).toHaveBeenCalledWith('remittanceFileIncludesReturnedLines');
   });
 
   it('toasts a refused download with the translated fallback and leaves the button usable', async () => {

@@ -8,7 +8,7 @@ import { MoneyAmount } from '@/components/ui/money-amount';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatCurrency } from '@/lib/formatCurrency.js';
 import { openCenteredPopup } from '@/lib/popupWindow.js';
-import { isPaymentProcessed, paymentDisplayState } from './paymentStatuses';
+import { isPaymentProcessed, isPaymentVoided, paymentAmountOnInvoice, paymentDisplayState } from './paymentStatuses';
 import NewPaymentEntryModal from './NewPaymentEntryModal.jsx';
 import RemittanceInfoBanner, { remittancesOf } from './RemittanceInfoBanner.jsx';
 import { ArrowsLeftRightIcon } from '@phosphor-icons/react';
@@ -73,6 +73,21 @@ function PaymentStateTag({ status, processed, isSales, ui, payment }) {
         dot="var(--status-destructive-fg)"
         data-testid="StatePill__b82d4f">
         {ui('cpPaymentStateError')}
+      </StatePill>
+    );
+  }
+  // Voided — a remittance return undid it (ETP-6247). Processed, so without this it read "Cobro
+  // depositado" in green while the invoice was pending again. Same "Anulado" and destructive tone as
+  // the payment window's own RPVOID badge (lib/statusBadge.js `rpvoid`).
+  if (state === 'voided') {
+    return (
+      <StatePill
+        testid="PaymentStateTag__voided"
+        bg="var(--status-destructive-bg)"
+        fg="var(--status-destructive-fg)"
+        dot="var(--status-destructive-fg)"
+        data-testid="StatePill__b82d4f">
+        {ui('statusVoid')}
       </StatePill>
     );
   }
@@ -237,6 +252,14 @@ function DeleteDraftConfirm({ payment, isSales, currency, deleting, error, onCan
   );
 }
 
+/**
+ * How many payments the footer reports as registered. A voided payment stays in the list so the
+ * user can see what happened, but it no longer settles anything (ETP-6247).
+ */
+function countRegisteredPayments(payments) {
+  return (payments || []).filter((p) => !isPaymentVoided(p)).length;
+}
+
 function getCountLabel(isSales, count, ui) {
   if (isSales) {
     return count === 1 ? ui('cobroRegistrado') : ui('cobrosRegistrados');
@@ -269,11 +292,24 @@ function getOutstandingAmount({ isCreditInstrument, installments, fallbackOutsta
 }
 
 function getRowAmountMeta({ isCreditInstrument, payment, isSales }) {
+  // ETP-6247 — this invoice's share of the payment, not the payment's total: a remittance grouped
+  // by customer pays several invoices with ONE payment.
+  const rowValue = paymentAmountOnInvoice(payment);
+  const state = paymentDisplayState(payment);
+  // ETP-6247 — a voided payment no longer settles anything: neutral and struck through, no sign.
+  if (state === 'voided') {
+    return {
+      rowValue,
+      amountSign: '',
+      amountColor: 'hsl(var(--muted-foreground))',
+      amountClassName: 'text-muted-foreground line-through',
+    };
+  }
   // ETP-6247 — a remitted payment has not moved any money yet (the bank collects or pays the
   // remittance later), so it reads neutral: no green "+", no red "−".
-  if (paymentDisplayState(payment) === 'remitted') {
+  if (state === 'remitted') {
     return {
-      rowValue: payment.amount,
+      rowValue,
       amountSign: '',
       amountColor: 'hsl(var(--muted-foreground))',
       amountClassName: 'text-muted-foreground',
@@ -282,7 +318,7 @@ function getRowAmountMeta({ isCreditInstrument, payment, isSales }) {
   const isConsumption = isCreditInstrument && payment.appliedToInvoice != null;
   if (isConsumption) {
     return {
-      rowValue: Math.abs(Number(payment.appliedToInvoice)),
+      rowValue,
       amountSign: '− ',
       amountColor: 'hsl(var(--destructive))',
       amountClassName: 'text-[hsl(var(--destructive))]',
@@ -291,7 +327,7 @@ function getRowAmountMeta({ isCreditInstrument, payment, isSales }) {
 
   if (isSales) {
     return {
-      rowValue: payment.amount,
+      rowValue,
       amountSign: '+ ',
       amountColor: 'var(--status-success-fg)',
       amountClassName: 'text-[var(--status-success-fg)]',
@@ -299,7 +335,7 @@ function getRowAmountMeta({ isCreditInstrument, payment, isSales }) {
   }
 
   return {
-    rowValue: payment.amount,
+    rowValue,
     amountSign: '− ',
     amountColor: 'hsl(var(--destructive))',
     amountClassName: 'text-[hsl(var(--destructive))]',
@@ -658,6 +694,7 @@ export default function InvoicePaymentHistoryModal({
   }, [onClose, onPaymentAdded, paymentWasAdded]);
 
   const title = isSales ? ui('invoiceReceipts') : ui('invoicePaymentsTitle');
+  const registeredCount = countRegisteredPayments(payments);
   const partyLabel = isSales ? ui('customer') : ui('vendor');
   /**
    * What is left to allocate once the drafts already sitting on this invoice are taken into account.
@@ -853,7 +890,7 @@ export default function InvoicePaymentHistoryModal({
         <div style={{ padding: '12px 20px', borderTop: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 14, lineHeight: '20px', fontWeight: 600, color: 'hsl(var(--muted-foreground))' }}>
             <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="hsl(var(--text-disabled))" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M18 9v6"/></svg>
-            {payments.length} {getCountLabel(isSales, payments.length, ui)}
+            {registeredCount} {getCountLabel(isSales, registeredCount, ui)}
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <button

@@ -257,6 +257,37 @@ describe('PaymentsCard', () => {
     });
   });
 
+  // ETP-6247 — a remittance RETURN voids the collected payment (RPVOID); the invoice is pending again.
+  describe('returned (voided) payment', () => {
+    const VOIDED = {
+      id: 'pay-v', amount: '55.66', appliedToInvoice: '27.83', paymentDate: '2026-01-01', documentNo: '1000109',
+      status: 'RPVOID', processed: true,
+    };
+
+    it('shows an RPVOID payment as voided, never as deposited', () => {
+      render(<PaymentsCard payments={[VOIDED]} currencyCode="EUR" specName="sales-invoice" />);
+      expect(screen.getByTestId('payments-card-state-voided')).toHaveTextContent('statusVoid');
+      expect(screen.queryByTestId('payments-card-state-deposited')).toBeNull();
+    });
+
+    it("shows this invoice's share, unsigned and struck through", () => {
+      render(<PaymentsCard payments={[VOIDED]} currencyCode="EUR" specName="sales-invoice" />);
+      const amount = screen.getByTestId('PaymentsCard__amount-0');
+      expect(amount).toHaveTextContent('27,83 €');
+      expect(amount).not.toHaveTextContent('55,66');
+      expect(amount).not.toHaveTextContent('+');
+      expect(amount.style.textDecoration).toBe('line-through');
+    });
+  });
+
+  it("shows a grouped payment's share of this invoice, not the payment's total (ETP-6247)", () => {
+    const payments = [{ id: 'g1', amount: '55.66', appliedToInvoice: '27.83', paymentDate: '2026-01-01', documentNo: 'G-1', status: 'RPR', processed: true }];
+    render(<PaymentsCard payments={payments} currencyCode="EUR" specName="sales-invoice" />);
+    const amount = screen.getByTestId('PaymentsCard__amount-0');
+    expect(amount).toHaveTextContent('+ 27,83 €');
+    expect(amount.style.textDecoration).toBe('');
+  });
+
   describe('confirmed remittance', () => {
     const REMITTED = {
       id: 'pay-r', amount: 60, paymentDate: '2026-01-01', documentNo: 'PAY-R', status: 'REM_SENT', processed: true,

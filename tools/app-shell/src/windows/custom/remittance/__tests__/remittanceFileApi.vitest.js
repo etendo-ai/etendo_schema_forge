@@ -24,7 +24,6 @@ import {
   normalizeFileResult,
   problemsFromError,
   readinessProblemText,
-  returnedReceiptsNotice,
   returnProblemsFromError,
   returnRemittanceLines,
 } from '@generated/remittance/custom/remittanceFileApi.js';
@@ -190,23 +189,18 @@ describe('downloadRemittanceFile', () => {
   });
 });
 
-describe('downloadRemittanceFileNotifying / returnedReceiptsNotice', () => {
+describe('downloadRemittanceFileNotifying', () => {
   const ui = (key, params) => (params ? `${key}:${JSON.stringify(params)}` : key);
   const notify = () => ({ info: vi.fn(), error: vi.fn() });
 
-  it('words the notice in the singular for one returned receipt and the plural otherwise', () => {
-    expect(returnedReceiptsNotice(1, ui)).toBe('remittanceFileIncludesReturnedOne:{"count":1}');
-    expect(returnedReceiptsNotice(3, ui)).toBe('remittanceFileIncludesReturned:{"count":3}');
-  });
-
-  it('downloads, and adds an informative toast only when the file carries returned receipts', async () => {
+  it('downloads, and adds an informative toast (no count) only when the file carries returned receipts', async () => {
     const quiet = notify();
     await downloadRemittanceFileNotifying(vi.fn().mockResolvedValue(jsonResponse({ fileName: 'r.xml', content: '<a/>', returnedCount: 0 })), 'r', ui, quiet);
     expect(quiet.info).not.toHaveBeenCalled();
     const loud = notify();
     expect(await downloadRemittanceFileNotifying(vi.fn().mockResolvedValue(jsonResponse({ fileName: 'r.xml', content: '<a/>', returnedCount: 2 })), 'r', ui, loud))
       .toEqual({ fileName: 'r.xml', returnedCount: 2 });
-    expect(loud.info).toHaveBeenCalledWith('remittanceFileIncludesReturned:{"count":2}');
+    expect(loud.info).toHaveBeenCalledWith('remittanceFileIncludesReturnedLines');
     expect(loud.error).not.toHaveBeenCalled();
     expect(mockDownloadBlobAsFile).toHaveBeenCalledTimes(2);
   });

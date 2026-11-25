@@ -305,15 +305,11 @@ export async function downloadRemittanceFile(apiFetch, remittanceId) {
   return { fileName, returnedCount: file.returnedCount };
 }
 
-/** «Este fichero incluye {count} recibo(s) devuelto(s); es el que se envió al banco.» — singular for one. */
-export function returnedReceiptsNotice(returnedCount, ui) {
-  return ui(returnedCount === 1 ? 'remittanceFileIncludesReturnedOne' : 'remittanceFileIncludesReturned', { count: returnedCount });
-}
-
 /**
  * The download every entry point offers (detail button, row menu, the confirm dialog's success step):
- * saves the file, then an informative, non-blocking toast when it still carries returned receipts; a
- * refusal toasts its translated message. Never throws.
+ * saves the file, then an informative, non-blocking toast when it still carries returned receipts
+ * («El fichero incluye también las líneas devueltas, tal como se envió al banco.», no count: `returnedCount`
+ * counts payments, not the invoices the lines show); a refusal toasts its translated message. Never throws.
  *
  * @param {Function} apiFetch - `useApiFetch(apiBaseUrl)` of the remittance spec
  * @param {string} remittanceId
@@ -324,7 +320,7 @@ export function returnedReceiptsNotice(returnedCount, ui) {
 export async function downloadRemittanceFileNotifying(apiFetch, remittanceId, ui, notify) {
   try {
     const result = await downloadRemittanceFile(apiFetch, remittanceId);
-    if (result.returnedCount > 0) notify.info(returnedReceiptsNotice(result.returnedCount, ui));
+    if (result.returnedCount > 0) notify.info(ui('remittanceFileIncludesReturnedLines'));
     return result;
   } catch (err) {
     notify.error(fileActionErrorMessage(err, ui, 'remittanceFileDownloadError'));

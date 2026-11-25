@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { useUI } from '@/i18n';
 import { formatCalendarDate } from '@/lib/dateOnly';
 import { formatCurrency } from '@/lib/formatCurrency.js';
-import { paymentDisplayState } from '../paymentStatuses';
+import { paymentAmountOnInvoice, paymentDisplayState } from '../paymentStatuses';
 import { REMITTANCE_EPSILON } from '../invoiceRemittance.js';
 import { ArrowsLeftRightIcon } from '@phosphor-icons/react';
 import RemittanceInfoBanner, { remittancesOf } from '../RemittanceInfoBanner.jsx';
@@ -58,6 +58,9 @@ function resolveMethodKey(name) {
 // Tone + copy per display state; the pill shape itself never changes.
 const STATE_TAGS = {
   error: { testid: 'payments-card-state-error', bg: 'var(--status-destructive-bg)', fg: 'var(--status-destructive-fg)', labelKey: 'cpPaymentStateError' },
+  // ETP-6247 — undone by a remittance return. Same "Anulado" and destructive tone as the payment
+  // window's own RPVOID badge; never "Depositado", it no longer settles anything.
+  voided: { testid: 'payments-card-state-voided', bg: 'var(--status-destructive-bg)', fg: 'var(--status-destructive-fg)', labelKey: 'statusVoid' },
   // ETP-6247 — in a confirmed remittance, not collected yet. Amber like the remittance window's own
   // REM_SENT badge; never "Depositado", the money has not moved.
   remitted: { testid: 'payments-card-state-remitted', bg: 'var(--status-warning-bg)', fg: 'var(--status-warning-fg)', labelKey: 'statusRemSent' },
@@ -156,11 +159,13 @@ function PaymentsEmptyState({ emptyLabel }) {
 function PaymentRow({ payment: p, idx, isLast, isIn, currencyCode, paymentWindow, ui, navigate }) {
   const methodRaw = p['paymentMethod$_identifier'] || p.paymentMethod || '';
   const methodKey = resolveMethodKey(methodRaw);
-  // ETP-6247 — a remitted payment has not moved money yet: neutral, no sign.
-  const remitted = paymentDisplayState(p) === 'remitted';
+  // ETP-6247 — a remitted payment has not moved money yet, and a voided one no longer settles
+  // anything: both neutral, no sign; the voided one is also struck through.
+  const state = paymentDisplayState(p);
+  const neutral = state === 'remitted' || state === 'voided';
   let amtColor = isIn ? 'var(--status-success-fg)' : 'hsl(var(--foreground))';
   let amtSign = isIn ? '+ ' : '− ';
-  if (remitted) {
+  if (neutral) {
     amtColor = 'hsl(var(--muted-foreground))';
     amtSign = '';
   }
@@ -205,8 +210,13 @@ function PaymentRow({ payment: p, idx, isLast, isIn, currencyCode, paymentWindow
         </div>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, flexShrink: 0 }}>
-        <span className="tabular-nums" style={{ font: '600 13px/17px Inter', color: amtColor, whiteSpace: 'nowrap' }}>
-          {amtSign}{formatCurrency(currency, p.amount)}
+        <span
+          className="tabular-nums"
+          data-testid={`PaymentsCard__amount-${idx}`}
+          style={{ font: '600 13px/17px Inter', color: amtColor, whiteSpace: 'nowrap', textDecoration: state === 'voided' ? 'line-through' : undefined }}
+        >
+          {/* ETP-6247 — this invoice's share: one grouped remittance payment can pay several. */}
+          {amtSign}{formatCurrency(currency, paymentAmountOnInvoice(p))}
         </span>
         <StateTag payment={p} ui={ui} data-testid="StateTag__c6fe34" />
       </div>
@@ -287,7 +297,7 @@ function resolvePaymentsContent({ loading, payments, isCreditNote, isIn, currenc
  * PaymentsCard — payment history in invoice preview panel.
  *
  * Props:
- *   payments        array   — from invoicePayments action: { id, documentNo, paymentDate, paymentMethod$_identifier, amount, status }
+ *   payments        array   — from invoicePayments action: { id, documentNo, paymentDate, paymentMethod$_identifier, amount, appliedToInvoice, status }
  *   currencyCode    string
  *   totalOutstanding number
  *   canAddPayment   boolean

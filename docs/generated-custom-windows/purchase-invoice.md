@@ -1159,6 +1159,11 @@ transaction. Elsewhere the `PPM` status answers the same question on its own.
 `REM_CANCEL` stays deposited. The Payment Out sidebar labels it «Pago confirmado · en remesa». See
 *Invoices in a confirmed remittance — ETP-6247* below (ETP-6247).
 
+`RPVOID` (a voided payment) reads **«Anulado»** (destructive) on the
+same surfaces, also evaluated ahead of the processed check, and is not counted as a registered
+payment in the invoice modal's footer. The Payment Out sidebar labels it «Pago confirmado · anulado»
+(ETP-6247).
+
 ### Where the code lives
 
 - Frontend: `NewPaymentEntryModal.jsx` (PIS block, polling, form lock), `PisCallbackPage.jsx`
@@ -3255,6 +3260,20 @@ outstanding drops to 0 and the invoice reads «Pagada» as usual.
 - The payment is shown as **«Remesado»** (amber) — never «Pago depositado» — in the payments modal, the
   preview card and the payment sidebar («Pago confirmado · en remesa»). `paymentDisplayState` returns `remitted` for `REM_SENT`
   ahead of the processed check; `REM_CANCEL` keeps reading as deposited.
+- **Voided payment (`RPVOID`).** A voided payment gives the invoice its outstanding back (the
+  remittance return itself is collection-only, so on this side it comes from any other void). Core keeps that payment's (cancelled) schedule details, so it stays in
+  the invoice's payment list. `paymentDisplayState` returns `voided` for `RPVOID`, ahead of the
+  processed check (like `remitted`), so it reads **«Anulado»** (`statusVoid`, destructive tone, the
+  same label and tone as the payment window's own badge) — never «Pago depositado» — in the payments
+  modal (`PaymentStateTag__voided`), the preview card (`payments-card-state-voided`) and the payment
+  sidebar («Pago confirmado · anulado», red dot). Its amount is grey, unsigned and struck through.
+  `isPaymentProcessed` counts it (never an editable draft, never reserved against the outstanding),
+  and the modal footer's «N pagos registrados» leaves it out (`countRegisteredPayments`).
+- **This invoice's share.** A remittance grouped by customer pays several invoices with ONE payment,
+  so the payment's `amount` is the whole payment. The modal and the preview card show
+  `paymentAmountOnInvoice(p)`: the row's `appliedToInvoice` (the payment's schedule details on THIS
+  invoice, sent by `paymentListItem`; it survives a void), unsigned, falling back to `amount` when the
+  backend does not send it. A payment of 55,66 € for two invoices reads 27,83 € on each.
 - Every topbar payment badge (paid, «En remesa», pending) ends with the same «Ver →» affordance as
   the sales topbar (`payment-status-badge-view`); the badge opens the payments modal.
 - **Payments modal** («Cobros/Pagos de la factura», `InvoicePaymentHistoryModal`) when something is
@@ -3303,5 +3322,5 @@ outstanding drops to 0 and the invoice reads «Pagada» as usual.
 confirmed. See the flag entry in `flags-registry.json`.
 
 **Code.** `shared/invoiceRemittance.js` (amount rules), `shared/invoicePaymentBadge.js` (`remitted` /
-`partially-remitted` kinds), `shared/paymentStatuses.js` (`STATUS_REMITTED`), `shared/RemittanceInfoBanner.jsx`,
+`partially-remitted` kinds), `shared/paymentStatuses.js` (`STATUS_REMITTED`, `STATUS_VOIDED`, `paymentAmountOnInvoice`), `shared/RemittanceInfoBanner.jsx`,
 `windows/custom/purchase-invoice/PurchaseInvoiceHeaderTable.jsx` (grid), `windows/custom/purchase-invoice/PurchaseInvoiceTopbar.jsx` (topbar), `shared/InvoicePaymentHistoryModal.jsx`, `shared/useInvoicePreview.js`, `shared/InvoicePreview.jsx`, `shared/preview-cards/PaymentsCard.jsx`, `shared/PaymentDetailSidebarBase.jsx`, `shared/NewPaymentEntryModal.jsx`.

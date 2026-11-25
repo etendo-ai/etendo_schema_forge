@@ -51,10 +51,52 @@ export const PAYMENT_STATUS_ERROR = 'ETGOERR';
  */
 export const STATUS_REMITTED = 'REM_SENT';
 
-/** True when the payment is confirmed rather than an editable draft. */
+/**
+ * "Void" — the status Core gives a payment that was undone after it was confirmed. The case that
+ * reaches an invoice is a remittance RETURN (ETP-6247): the collected payment is voided, the
+ * invoice gets its outstanding back, and the payment keeps its (cancelled) schedule details, so the
+ * invoice's payment list still shows it. It moved no money that still counts: it is neither
+ * deposited nor a draft, and must not be counted as a registered payment.
+ *
+ * Shown with the same "Anulado" label (`statusVoid`) and destructive tone as the payment window's
+ * own status badge (lib/statusBadge.js `rpvoid`).
+ */
+export const STATUS_VOIDED = 'RPVOID';
+
+/**
+ * True when the payment is confirmed rather than an editable draft. A voided payment is not
+ * editable either, so it counts here — whatever its `processed` flag says.
+ */
 export function isPaymentProcessed(payment) {
   const status = payment?.status || '';
-  return payment?.processed === true || DEPOSITED_STATUSES.has(status) || status === STATUS_REMITTED;
+  return payment?.processed === true || DEPOSITED_STATUSES.has(status)
+    || status === STATUS_REMITTED || status === STATUS_VOIDED;
+}
+
+/** True for a voided payment: shown in the list, but no longer counted as a registered payment. */
+export function isPaymentVoided(payment) {
+  return paymentDisplayState(payment) === 'voided';
+}
+
+/**
+ * The amount a payment means on ONE invoice's surfaces (its payment modal and preview card).
+ *
+ * A payment can settle several invoices at once — a remittance grouped by customer creates one
+ * payment for all of that customer's invoices (ETP-6247) — so its header `amount` is the whole
+ * payment, not this invoice's share. The invoice payment-list action sends `appliedToInvoice`, the
+ * sum of the payment's schedule details on THIS invoice (negative when it consumes a credit note),
+ * which survives a void because Core cancels those details instead of deleting them. Falls back to
+ * `amount` when the backend did not send it. Always non-negative; the caller owns the sign.
+ *
+ * @param payment a row of the invoice payment-list action
+ * @returns {number} this invoice's share of the payment
+ */
+export function paymentAmountOnInvoice(payment) {
+  const applied = payment?.appliedToInvoice;
+  const raw = applied != null && applied !== '' && Number.isFinite(Number(applied))
+    ? applied
+    : payment?.amount;
+  return Math.abs(Number(raw) || 0);
 }
 
 /**
@@ -66,11 +108,15 @@ export function isPaymentProcessed(payment) {
  * progreso" in the modal and "Pago depositado" in the payment window at the same time (ETP-4895).
  *
  * @param payment a payment row; `pisPending` is optional (see below)
- * @returns one of `'error' | 'remitted' | 'inProgress' | 'deposited' | 'draft'`
+ * @returns one of `'error' | 'voided' | 'remitted' | 'inProgress' | 'deposited' | 'draft'`
  */
 export function paymentDisplayState(payment) {
   const status = payment?.status || '';
   if (status === PAYMENT_STATUS_ERROR) return 'error';
+  // Ahead of the processed check for the same reason as 'remitted' below: a voided payment keeps
+  // `processed`, and without this a remittance return read "Cobro depositado" in green on the
+  // invoice whose outstanding it had just given back (ETP-6247).
+  if (status === STATUS_VOIDED) return 'voided';
   // Ahead of the processed check on purpose: a remitted payment is processed, and without this it
   // read "Cobro depositado" in green while the bank had not collected anything (ETP-6247).
   if (status === STATUS_REMITTED) return 'remitted';

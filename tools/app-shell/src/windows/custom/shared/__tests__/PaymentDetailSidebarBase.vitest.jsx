@@ -199,6 +199,27 @@ describe('PaymentDetailSidebarBase — activity history', () => {
     expect(screen.queryByText('pagoConfirmadoEnProgreso')).toBeNull();
   });
 
+  it('says "confirmado · anulado" for a collection a remittance return voided (ETP-6247)', async () => {
+    // RPVOID keeps `processed`: before the voided state it read "Cobro confirmado · depositado".
+    const data = baseData({ status: 'RPVOID', processed: true });
+    render(<PaymentDetailSidebarBase dir="in" specName="payment-in" data={data} token="t" apiBaseUrl="http://x" />);
+
+    dispatchProcessSuccess({ recordId: 'pay-1', columnName: 'aPRMProcessPayment' });
+
+    await screen.findAllByText('cobroConfirmadoAnulado');
+    expect(screen.queryByText('cobroConfirmado')).toBeNull();
+  });
+
+  it('says "confirmado · anulado" for a voided payment out', async () => {
+    const data = baseData({ status: 'RPVOID', processed: true });
+    render(<PaymentDetailSidebarBase dir="out" specName="payment-out" data={data} token="t" apiBaseUrl="http://x" />);
+
+    dispatchProcessSuccess({ recordId: 'pay-1', columnName: 'aPRMProcessPayment' });
+
+    await screen.findAllByText('pagoConfirmadoAnulado');
+    expect(screen.queryByText('pagoConfirmado')).toBeNull();
+  });
+
   it('says plain "confirmado · depositado" once the withdrawal is recorded', async () => {
     const data = baseData({ status: 'PWNC', processed: true });
     render(<PaymentDetailSidebarBase dir="out" specName="payment-out" data={data} token="t" apiBaseUrl="http://x" />);

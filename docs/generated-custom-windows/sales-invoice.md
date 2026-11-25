@@ -2911,6 +2911,20 @@ outstanding drops to 0 and the invoice reads «Cobrada» as usual.
 - The payment is shown as **«Remesado»** (amber) — never «Cobro depositado» — in the payments modal, the
   preview card and the payment sidebar («Cobro confirmado · en remesa»). `paymentDisplayState` returns `remitted` for `REM_SENT`
   ahead of the processed check; `REM_CANCEL` keeps reading as deposited.
+- **Returned payment (`RPVOID`).** A remittance return voids the collected payment and the invoice
+  gets its outstanding back. Core keeps that payment's (cancelled) schedule details, so it stays in
+  the invoice's payment list. `paymentDisplayState` returns `voided` for `RPVOID`, ahead of the
+  processed check (like `remitted`), so it reads **«Anulado»** (`statusVoid`, destructive tone, the
+  same label and tone as the payment window's own badge) — never «Cobro depositado» — in the payments
+  modal (`PaymentStateTag__voided`), the preview card (`payments-card-state-voided`) and the payment
+  sidebar («Cobro confirmado · anulado», red dot). Its amount is grey, unsigned and struck through.
+  `isPaymentProcessed` counts it (never an editable draft, never reserved against the outstanding),
+  and the modal footer's «N cobros registrados» leaves it out (`countRegisteredPayments`).
+- **This invoice's share.** A remittance grouped by customer pays several invoices with ONE payment,
+  so the payment's `amount` is the whole payment. The modal and the preview card show
+  `paymentAmountOnInvoice(p)`: the row's `appliedToInvoice` (the payment's schedule details on THIS
+  invoice, sent by `paymentListItem`; it survives a void), unsigned, falling back to `amount` when the
+  backend does not send it. A payment of 55,66 € for two invoices reads 27,83 € on each.
 - **Payments modal** («Cobros/Pagos de la factura», `InvoicePaymentHistoryModal`) when something is
   remitted:
   - an info banner on top (`RemittanceInfoBanner.jsx`, `InvoicePaymentHistoryModal__remittance-banner`):
@@ -2957,5 +2971,5 @@ outstanding drops to 0 and the invoice reads «Cobrada» as usual.
 confirmed. See the flag entry in `flags-registry.json`.
 
 **Code.** `shared/invoiceRemittance.js` (amount rules), `shared/invoicePaymentBadge.js` (`remitted` /
-`partially-remitted` kinds), `shared/paymentStatuses.js` (`STATUS_REMITTED`), `shared/RemittanceInfoBanner.jsx`,
+`partially-remitted` kinds), `shared/paymentStatuses.js` (`STATUS_REMITTED`, `STATUS_VOIDED`, `paymentAmountOnInvoice`), `shared/RemittanceInfoBanner.jsx`,
 `artifacts/sales-invoice/custom/InvoiceHeaderTable.jsx` (grid), `artifacts/sales-invoice/custom/InvoiceTopbarExtra.jsx` (topbar), `shared/InvoicePaymentHistoryModal.jsx`, `shared/useInvoicePreview.js`, `shared/InvoicePreview.jsx`, `shared/preview-cards/PaymentsCard.jsx`, `shared/PaymentDetailSidebarBase.jsx`, `shared/NewPaymentEntryModal.jsx`.

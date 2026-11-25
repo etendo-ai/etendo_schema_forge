@@ -41,6 +41,8 @@ function confirmedLabelKey(isIn, state) {
   if (state === 'inProgress') return isIn ? 'cobroConfirmadoEnProgreso' : 'pagoConfirmadoEnProgreso';
   // ETP-6247 — in a confirmed remittance the bank has not collected yet: nothing was deposited.
   if (state === 'remitted') return isIn ? 'cobroConfirmadoEnRemesa' : 'pagoConfirmadoEnRemesa';
+  // ETP-6247 — undone by a remittance return: the money it deposited no longer counts.
+  if (state === 'voided') return isIn ? 'cobroConfirmadoAnulado' : 'pagoConfirmadoAnulado';
   return isIn ? 'cobroConfirmado' : 'pagoConfirmado';
 }
 
@@ -241,7 +243,8 @@ export default function PaymentDetailSidebarBase({ dir, specName, data, token, a
   const isDraft = paymentState === 'draft' || (isIn && data?.status === 'RPAE');
   // A remitted payment (ETP-6247) waits on the bank like one in progress, so it takes the same tone.
   const isInProgress = paymentState === 'inProgress' || paymentState === 'remitted';
-  const isError = paymentState === 'error';
+  // A voided payment (ETP-6247) takes the destructive tone, like its "Anulado" header badge.
+  const isError = paymentState === 'error' || paymentState === 'voided';
   const totalAmount = parseFloat(data?.amount ?? 0);
   const currency = data?.['currency$_identifier'];
   // Multi-currency readout (ETP-4841). When the money moved through a financial account whose
