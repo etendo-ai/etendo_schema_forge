@@ -178,7 +178,6 @@ export default function SiiImportDuaSection({
   return (
     <SiiPanelCard
       title={ui('sifDataTabs.option.importDua')}
-      subtitle={ui('sifDataTabs.dua.subtitle')}
       action={modeControl}
       testId="SiiImportDuaSection__card"
       data-testid="SiiPanelCard__siiImportDua">

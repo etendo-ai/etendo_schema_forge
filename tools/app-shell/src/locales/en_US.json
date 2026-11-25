@@ -22437,7 +22437,6 @@
     "sifDataTabs.importTaxes.noImportTaxToCompensate": "There is no import tax to compensate.",
     "sifDataTabs.importTaxes.alreadyCompensated": "Already compensated.",
     "sifDataTabs.importTaxes.compensatoryAdded": "Compensatory lines added",
-    "sifDataTabs.dua.subtitle": "Import VAT is declared with the data of the DUA issued by customs.",
     "sifDataTabs.dua.dateHelper": "On or before the accounting register date.",
     "sifDataTabs.dua.lengthHint": "The DUA has 18 characters: year (2) + country (2) + customs office (6) + number (7) + check digit (1).",
     "sifDataTabs.dua.dateAfterAccountingDate": "The DUA date is later than the Accounting register date. Check the dates.",

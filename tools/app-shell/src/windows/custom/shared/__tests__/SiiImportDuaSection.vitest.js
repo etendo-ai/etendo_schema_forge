@@ -139,6 +139,13 @@ describe('SiiImportDuaSection — one block, DUA required only for SII', () => {
     expect(screen.queryByTestId('SiiImportDuaSection__card__step')).toBeNull();
   });
 
+  it('shows no card subtitle, but keeps the Fecha DUA helper', () => {
+    render(h(SiiImportDuaSection, base));
+    expect(screen.queryByTestId('SiiImportDuaSection__card__subtitle')).toBeNull();
+    expect(screen.queryByText('sifDataTabs.dua.subtitle')).toBeNull();
+    expect(screen.getByTestId('DuaField__sif-duaDate_helper')).toHaveTextContent('sifDataTabs.dua.dateHelper');
+  });
+
   it('marks DUA and Fecha DUA required (asterisk + outline) only when SII requires them', () => {
     const { unmount } = render(h(SiiImportDuaSection, { ...base, duaRequired: true }));
     expect(screen.getByTestId('RequiredMark__sif_sif-dua')).toBeInTheDocument();

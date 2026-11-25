@@ -22673,7 +22673,6 @@
     "sifDataTabs.importTaxes.noImportTaxToCompensate": "No hay impuestos de importación que compensar.",
     "sifDataTabs.importTaxes.alreadyCompensated": "Ya compensado.",
     "sifDataTabs.importTaxes.compensatoryAdded": "Líneas compensatorias añadidas",
-    "sifDataTabs.dua.subtitle": "El IVA de importación se declara con los datos del DUA emitido por la aduana.",
     "sifDataTabs.dua.dateHelper": "Igual o anterior a la fecha de registro contable.",
     "sifDataTabs.dua.lengthHint": "El DUA tiene 18 caracteres: año (2) + país (2) + recinto (6) + número (7) + dígito de control (1).",
     "sifDataTabs.dua.dateAfterAccountingDate": "La Fecha DUA es posterior a la Fecha registro contable. Revisa las fechas.",
