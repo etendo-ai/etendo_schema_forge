@@ -2330,3 +2330,102 @@ describe('LocationEditorModal — dynamic modal width (ETP-5806 follow-up round 
       expect(measureTextMock).not.toHaveBeenCalled();
     });
 });
+
+/**
+ * ETP-5806 CP-6 (QA finding) — the Street field used to enforce its 60-character cap ONLY through
+ * the input's own `maxLength`, which drops the extra characters with no feedback whatsoever: the
+ * user typed "...mil novecientos setenta" and watched it stop mid-word. The limit is now stated
+ * continuously (a counter next to the label) and called out explicitly when it is reached.
+ *
+ * The over-limit case is the second half of the same finding: QA found real addresses created on
+ * 2026-11-20 with a 69-70 character Street (the column is still VARCHAR(70); only the composer's
+ * cap is 60). Opening one of those for editing must NOT silently truncate it and must NOT let the
+ * save fail with the backend's opaque 400 — the field says the street has to be shortened and Save
+ * stays blocked until it is.
+ */
+describe('LocationEditorModal — Street length is communicated, never silently cut (ETP-5806 CP-6)', () => {
+  const STREET_MAX = 60;
+  const counter = () => screen.getByTestId('location-field-streetName-counter');
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('shows a character counter that tracks what has been typed', () => {
+    renderModal();
+    expect(counter()).toBeInTheDocument();
+
+    fireEvent.change(screen.getByTestId('location-field-streetName'), {
+      target: { value: 'Gran Via' },
+    });
+    expect(counter()).toBeInTheDocument();
+    expect(screen.getByTestId('location-field-streetName')).toHaveValue('Gran Via');
+  });
+
+  it('caps the input at the enforced maximum rather than relying on the backend', () => {
+    renderModal();
+    expect(screen.getByTestId('location-field-streetName')).toHaveAttribute(
+      'maxlength',
+      String(STREET_MAX),
+    );
+  });
+
+  it('says nothing while the street is below the limit', () => {
+    renderModal();
+    fireEvent.change(screen.getByTestId('location-field-streetName'), {
+      target: { value: 'A'.repeat(STREET_MAX - 1) },
+    });
+    expect(screen.queryByTestId('location-field-streetName-at-limit')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('location-field-streetName-over-limit')).not.toBeInTheDocument();
+  });
+
+  it('announces the limit once the street reaches it', () => {
+    renderModal();
+    fireEvent.change(screen.getByTestId('location-field-streetName'), {
+      target: { value: 'A'.repeat(STREET_MAX) },
+    });
+    expect(screen.getByTestId('location-field-streetName-at-limit')).toBeInTheDocument();
+    expect(screen.queryByTestId('location-field-streetName-over-limit')).not.toBeInTheDocument();
+  });
+
+  it('explains and blocks Save for a pre-existing street longer than the limit', async () => {
+    // jsdom does not enforce `maxLength` on a programmatic value, which is exactly the real
+    // situation: a 69-character street can only ever arrive from the server, never from typing.
+    const longStreet = 'C'.repeat(69);
+    global.fetch = vi.fn((url, opts) => {
+      if (String(url).includes('/locationAddress/loc-long') && !opts?.method) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            response: {
+              data: [{
+                id: 'loc-long',
+                streetName: longStreet,
+                buildingNumber: '1',
+                cityName: 'Madrid',
+                country: 'ES',
+                'country$_identifier': 'España',
+              }],
+            },
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ items: [], hasMore: false }) });
+    });
+
+    renderModal({ rowId: 'loc-long' });
+
+    await vi.waitFor(() =>
+      expect(screen.getByTestId('location-field-streetName')).toHaveValue(longStreet),
+    );
+    expect(screen.getByTestId('location-field-streetName-over-limit')).toBeInTheDocument();
+    expect(saveButton()).toHaveAttribute('aria-disabled', 'true');
+
+    // Shortening it to the cap clears the message and releases Save.
+    fireEvent.change(screen.getByTestId('location-field-streetName'), {
+      target: { value: 'C'.repeat(STREET_MAX) },
+    });
+    expect(screen.queryByTestId('location-field-streetName-over-limit')).not.toBeInTheDocument();
+    expect(saveButton()).toHaveAttribute('aria-disabled', 'false');
+  });
+});

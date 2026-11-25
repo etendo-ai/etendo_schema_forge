@@ -41,9 +41,9 @@ const LIMITS = {
   // (`onboarding/fieldLimits.js`), which is deliberately 60 — the width of
   // `C_LOCATION.ADDRESS1`, the column the composed address line lands in — and NOT the 70 of
   // `EM_OBSEPA_StrtNm`. Like clientName, the input itself caps at a looser
-  // `STREET_NAME_INPUT_MAX_LENGTH` (70) so an overflow is kept and flagged instead of silently
-  // dropped. e2e specs never import app code, so the values are mirrored here: when the
-  // constants move, these literals move with them.
+  // `STREET_NAME_INPUT_MAX_LENGTH` (70, ETP-5806 CP-13) so an overflow is kept and flagged
+  // instead of silently dropped. e2e specs never import app code, so the values are mirrored
+  // here: when the constants move, these literals move with them.
   streetName: 60,
   streetNameInput: 70,
 };
@@ -281,15 +281,28 @@ test.describe('ETP-4665 — Step 3 length limits', () => {
     const start = page.getByRole('button', { name: /empezar|start/i });
 
     await clientName.fill('E'.repeat(100));
-    await page.locator('#streetName').fill('D'.repeat(200));
+    const streetName = page.locator('#streetName');
+    await streetName.fill('D'.repeat(200));
 
     // Over the AD limit but inside the input cap: kept, flagged inline, and not submittable.
     await expect(clientName).toHaveValue('E'.repeat(LIMITS.clientNameInput));
     await expect(clientName).toHaveAttribute('aria-invalid', 'true');
     await expect(page.getByText(new RegExp(`${LIMITS.clientName} (caracteres|characters)`))).toBeVisible();
     await expect(start).toBeDisabled();
-    await expect(page.locator('#streetName')).toHaveValue('D'.repeat(LIMITS.streetNameInput));
+    // ETP-5806 CP-13 — streetName behaves the same way, and deliberately NOT the way it used to.
+    // Its maxLength was the enforced cap itself, so a pasted 200-character street was truncated to
+    // 60 mid-word by the browser with no signal of any kind; this spec asserted that truncation as
+    // if it were the contract. The input now accepts up to the real column width, keeps the
+    // over-long value, flags it inline and blocks Start — the same deal clientName has had since
+    // ETP-5638.
+    await expect(streetName).toHaveValue('D'.repeat(LIMITS.streetNameInput));
+    await expect(streetName).toHaveAttribute('aria-invalid', 'true');
     await expect(page.getByText(new RegExp(`${LIMITS.streetName} (caracteres|characters)`))).toBeVisible();
+    await expect(start).toBeDisabled();
+
+    // Back inside the enforced cap: the flag clears and the street stops blocking Start.
+    await streetName.fill('D'.repeat(LIMITS.streetName));
+    await expect(streetName).not.toHaveAttribute('aria-invalid', 'true');
 
     await clientName.fill('E'.repeat(LIMITS.clientName));
     await page.locator('#streetName').fill('D'.repeat(LIMITS.streetName));

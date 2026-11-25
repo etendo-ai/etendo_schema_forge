@@ -2,8 +2,7 @@
 
 The BFF keeps the OpenCode Go credential server-side and forwards only the
 current browser session credential to Etendo Go's MCP endpoint. The existing
-Copilot popup calls this BFF when the `webmcp-agent-chat` feature flag is on;
-when it is off, the legacy Copilot API remains unchanged.
+Copilot popup always calls this BFF; there is no feature flag or override.
 
 ## The forwarded credential: two schemes, three headers
 
@@ -60,7 +59,7 @@ code. In production, expose the same `/api/ai/chat` contract through the
 server-side Cloud Function/BFF and keep the browser session token as the only
 credential forwarded to the Etendo MCP endpoint.
 
-When the feature flag is enabled, the BFF also advertises the browser-side
+The BFF also advertises the browser-side
 `inspect_page_dom` and `interact_with_page` tools. The browser returns visible
 interactive elements as temporary IDs, and subsequent interactions must use an
 ID from the latest inspection. The interaction surface is limited to click,
@@ -79,7 +78,7 @@ visible match, never a hidden twin. One element is
 highlighted at a time: a second call replaces the first, which is how a
 sequence of atomic calls reads as a guided tour.
 
-The app-shell also provides a throttled floating page-help action that asks the
+The app-shell also provides a throttled floating page-help action (behind the `page-help-suggestions` flag) that asks the
 model to inspect the current page after navigation or meaningful UI interaction
 and present a contextual suggestion in a floating callout. Clicking that callout
 opens the existing Copilot conversation with the help context. It is advisory:
