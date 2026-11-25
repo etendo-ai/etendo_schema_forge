@@ -47,6 +47,34 @@ const SILENT_BLOCKED_REASONS = Object.freeze([
   PORTAL_DECISION_ERROR.notRecipient,
 ]);
 
+/**
+ * How a headless flow (the list card's menu) starts: the popup to open, or — when the quotation
+ * cannot be answered, or Aceptar is not available — no popup and the message to end with. Pure, so
+ * the component keeps a flat body.
+ */
+function headlessStartOf({ offered, blockedReason, initialStep, acceptAvailable }) {
+  if (!offered) {
+    const silent = SILENT_BLOCKED_REASONS.includes(blockedReason)
+      && blockedReason !== PORTAL_DECISION_ERROR.notRecipient;
+    return { step: null, error: silent ? null : (ERROR_KEYS[blockedReason] ?? null) };
+  }
+  if (initialStep === 'reject') return { step: STEP.rejectReasons, error: null };
+  if (!acceptAvailable) return { step: null, error: ERROR_KEYS[PORTAL_DECISION_ERROR.acceptUnavailable] };
+  return { step: STEP.acceptConfirm, error: null };
+}
+
+/** Where the confirmation goes: every To recipient of the original send (never the CC), in full. */
+function confirmationRecipientsOf(decision) {
+  return decision.confirmationRecipients?.length
+    ? decision.confirmationRecipients : [decision.email].filter(Boolean);
+}
+
+/** What a headless flow ends with: the refusal's message key, or null. */
+function headlessDoneMessage(error, notRecipient) {
+  if (error) return error;
+  return notRecipient ? 'portalDecisionBlockedNotRecipient' : null;
+}
+
 /** The popup open at each step of a decision (Figma "Confirmar Presupuesto" … "Validacion"). */
 const STEP = Object.freeze({
   acceptConfirm: 'acceptConfirm',
@@ -109,23 +137,16 @@ export default function PortalDecisionActions({
   useEffect(() => {
     if (!headless || started) return;
     setStarted(true);
-    if (!offered) {
-      const blocked = decision?.blockedReason;
-      setError(SILENT_BLOCKED_REASONS.includes(blocked) && blocked !== PORTAL_DECISION_ERROR.notRecipient
-        ? null
-        : (ERROR_KEYS[blocked] ?? null));
-      return;
-    }
-    if (initialStep !== 'reject' && !acceptAvailable) {
-      setError(ERROR_KEYS[PORTAL_DECISION_ERROR.acceptUnavailable]);
-      return;
-    }
-    setStep(initialStep === 'reject' ? STEP.rejectReasons : STEP.acceptConfirm);
+    const start = headlessStartOf({
+      offered, blockedReason: decision?.blockedReason, initialStep, acceptAvailable,
+    });
+    setError(start.error);
+    setStep(start.step);
   }, [headless, started, offered, decision?.blockedReason, initialStep, acceptAvailable]);
   // Headless: the flow is over once no popup is open (closed, sent and acknowledged, or refused).
   useEffect(() => {
     if (!headless || !started || step !== null) return;
-    onDone?.(error ?? (notRecipient ? 'portalDecisionBlockedNotRecipient' : null));
+    onDone?.(headlessDoneMessage(error, notRecipient));
   }, [headless, started, step, error, notRecipient, onDone]);
 
   if (!decision) return null;
@@ -136,9 +157,7 @@ export default function PortalDecisionActions({
   // As items of the caller's wrapping row, a notice takes a whole line after the buttons.
   const noticeClass = inline ? 'order-last basis-full' : '';
   const close = () => setStep(null);
-  // Where the confirmation goes: every To recipient of the original send (never the CC), in full.
-  const recipients = decision.confirmationRecipients?.length
-    ? decision.confirmationRecipients : [decision.email].filter(Boolean);
+  const recipients = confirmationRecipientsOf(decision);
 
   // QA 24/11 (e): every press either sends or says why not. A press while a request is already
   // out is ignored (the button is disabled too), never swallowed in silence otherwise.

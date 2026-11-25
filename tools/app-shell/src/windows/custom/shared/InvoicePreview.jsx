@@ -242,6 +242,15 @@ function InvoiceGeneralTab({ invoice, relatedDocs, partnerName, badgeProps, stat
   );
 }
 
+/**
+ * The document type a send from the preview names: a sales credit note is «Factura rectificativa»
+ * (ETP-6209, `salesInvoiceSendDocumentType`); a purchase invoice keeps the window's label.
+ */
+function invoiceSendDocumentType(specName, invoice, { tMenu, ui }) {
+  if (specName === 'purchase-invoice') return tMenu('Purchase Invoice');
+  return salesInvoiceSendDocumentType(invoice, { tMenu, ui });
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 /**
@@ -498,11 +507,7 @@ export default function InvoicePreview({ invoice, token, apiBaseUrl, windowName,
       )}
       {p.showSendModal && (
         <SendDocumentModal
-          // A sales credit note is sent as «Factura rectificativa» (ETP-6209); purchase invoices
-          // keep the window's label.
-          documentType={specName === 'purchase-invoice'
-            ? windowLabel
-            : salesInvoiceSendDocumentType(p.displayInvoice, { tMenu, ui })}
+          documentType={invoiceSendDocumentType(specName, p.displayInvoice, { tMenu, ui })}
           documentNo={p.displayInvoice?.documentNo}
           bpName={p.partnerName}
           bPartnerId={p.displayInvoice?.businessPartner}

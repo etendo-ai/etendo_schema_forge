@@ -279,9 +279,16 @@ function applyReferrerPolicy(doc) {
   meta.setAttribute('content', 'same-origin');
 }
 
+/** `value` without its trailing slashes; a plain scan (linear, no regex). */
+function withoutTrailingSlashes(value) {
+  let end = value.length;
+  while (end > 0 && value[end - 1] === '/') end -= 1;
+  return value.slice(0, end);
+}
+
 /** The pathname below the router base, or `null` when it is outside the base. */
 function belowRouterBase(pathname, routerBase) {
-  const base = routerBase && routerBase !== '/' ? routerBase.replace(/\/+$/, '') : '';
+  const base = routerBase && routerBase !== '/' ? withoutTrailingSlashes(String(routerBase)) : '';
   if (base && !String(pathname ?? '').startsWith(`${base}/`)) return null;
   return { base, path: String(pathname ?? '').slice(base.length) };
 }

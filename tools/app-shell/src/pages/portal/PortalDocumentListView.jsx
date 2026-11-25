@@ -74,14 +74,13 @@ export default function PortalDocumentListView({
   }
 
   // CP-18b + QA pass 3: a "state" tab (Vencido, Pendiente, Bajo evaluación, En proceso) lists
-  // everything in that state, so it shows all time (the date button reads «Todo el tiempo»), as an
+  // everything in that state, so it shows all time (the date button shows the all-time label), as an
   // Inicio tile does — unless the customer picks a range on that very tab. It is DERIVED, not set
   // by an effect: entering the tab sends one request, and going back to a period tab restores the
   // range the customer had there.
   const allTimeTab = isAllTimeGroup(group);
-  const effectiveRange = allTimeTab
-    ? (stateRange.group === group ? stateRange.range : null)
-    : range;
+  const stateTabRange = stateRange.group === group ? stateRange.range : null;
+  const effectiveRange = allTimeTab ? stateTabRange : range;
   const changeRange = useCallback((next) => {
     if (allTimeTab) setStateRange({ group, range: next });
     else setRange(next);

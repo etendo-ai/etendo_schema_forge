@@ -327,6 +327,13 @@ function Greeting({ identity, months, onMonthsChange }) {
   );
 }
 
+/** «Tienes N facturas pendientes de pago.», or that nothing is pending. */
+function pendingSentence(ui, pendingCount) {
+  if (pendingCount <= 0) return ui('portalNothingPending');
+  const key = pendingCount === 1 ? 'portalPendingInvoicesSentence_one' : 'portalPendingInvoicesSentence_plural';
+  return ui(key, { count: pendingCount });
+}
+
 /**
  * Mobile only (designer's redesign, 2026-11-25): the dark summary at the top of Inicio.
  * - The header: the company's round logo, its name and "Portal del cliente", and the search button.
@@ -402,9 +409,7 @@ function MobileHomeSummary({
           <span className="truncate text-xs leading-4 text-white/50" data-testid="portal-greeting-mobile">{ui('portalGreeting', { name })}</span>
         ) : null}
         <span className="text-base font-medium leading-6">
-          {pendingCount > 0
-            ? ui(pendingCount === 1 ? 'portalPendingInvoicesSentence_one' : 'portalPendingInvoicesSentence_plural', { count: pendingCount })
-            : ui('portalNothingPending')}
+          {pendingSentence(ui, pendingCount)}
         </span>
       </div>
 

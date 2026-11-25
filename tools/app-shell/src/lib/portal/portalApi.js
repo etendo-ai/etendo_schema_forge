@@ -534,10 +534,11 @@ export async function fetchPortalDocumentPdf(fetchImpl, token, kind, id, { purpo
   if (PORTAL_PDF_PURPOSES.includes(purpose)) params.set('purpose', purpose);
   if (PORTAL_PDF_ORIGINS.includes(origin)) params.set('origin', origin);
   const query = params.toString();
+  const search = query ? `?${query}` : '';
   const response = await portalGet(
     fetchImpl,
     token,
-    `/documents/${encodeURIComponent(String(kind).toLowerCase())}/${encodeURIComponent(id)}/pdf${query ? `?${query}` : ''}`,
+    `/documents/${encodeURIComponent(String(kind).toLowerCase())}/${encodeURIComponent(id)}/pdf${search}`,
     { invalidOn: INVALID_TOKEN_STATUSES_PDF, failure: PORTAL_ERROR.downloadFailed },
   );
   return response.blob();
