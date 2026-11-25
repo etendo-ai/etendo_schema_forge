@@ -1,6 +1,9 @@
+// gridQuery.js lives in @etendo-ai/app-shell-core (the functional copy was removed). This
+// suite still runs here because it holds cases the core suites do not have yet; move them
+// to packages/app-shell-core/src/lib/__tests__/ in schema_forge_core, then delete this file.
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { getFilteredKey } from '../gridQuery.js';
+import { getFilteredKey } from '@etendo-ai/app-shell-core/lib/gridQuery.js';
 
 describe('getFilteredKey', () => {
   describe('backendFilterKey precedence', () => {

@@ -3737,7 +3737,7 @@ set in between. Build the next params from a ref updated on every render instead
 **What it does:** opts one column's advanced-filter condition OUT of the generic `criteria=` JSON
 mechanism entirely, translating it instead into a raw `key=value[&key=value]` query-string segment
 appended to the list request. Declared as a `toQueryParams` function on the column metadata object
-(see the column-metadata shape documented at the top of `tools/app-shell/src/lib/gridQuery.js`).
+(see the column-metadata shape documented at the top of `@etendo-ai/app-shell-core/lib/gridQuery.js`).
 
 **When to use it instead of `col.buildCriteria`:** `buildCriteria` still produces SmartClient
 criteria JSON — an alternate shape within the same `criteria=` mechanism. `toQueryParams` is for a

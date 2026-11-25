@@ -209,7 +209,7 @@ async function getAuthHeaders(page) {
  * one row comes back the FIRST one is always the same one across runs. When
  * `useCriteria` is true this is the same exact-match AdvancedCriteria filter
  * the ListView's own filter bar sends (see `buildBackendFilter()` in
- * tools/app-shell/src/lib/gridQuery.js and `mergeFilterCriteria()` in
+ * @etendo-ai/app-shell-core/lib/gridQuery.js and `mergeFilterCriteria()` in
  * tools/app-shell/src/hooks/useEntity.js); when false it fetches an unfiltered
  * (bounded) page and matches by name client-side — see findVendorFixture()'s
  * doc comment for why that second mode exists.

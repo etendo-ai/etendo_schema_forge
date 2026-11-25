@@ -175,7 +175,7 @@ Two columns of this window were resolving to the wrong advanced-filter mode:
 | `etgoQtydiff` (`EM_Etgo_Qtydiff`) | generated `InventoryLineTable.jsx`, emitted as `type: 'signedDelta'` from `"columnType": "signedDelta"` in `decisions.json` | numeric | `text` | `numeric` |
 
 Neither needed a per-column annotation — both were fixed generically in
-`resolveFilterMode` / `inferFilterMode` (`tools/app-shell/src/lib/gridQuery.js`):
+`resolveFilterMode` / `inferFilterMode` (`@etendo-ai/app-shell-core/lib/gridQuery.js`):
 
 - `signedDelta` is now mapped to `numeric` by `inferFilterMode`, so the difference
   column offers `=, ≠, >, ≥, <, ≤, Entre` and a numeric input.

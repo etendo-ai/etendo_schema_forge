@@ -1,4 +1,4 @@
-import { resolveBackendSort } from '@/lib/gridQuery.js';
+import { resolveBackendSort } from '@etendo-ai/app-shell-core/lib/gridQuery.js';
 import { getDateBounds, toDateParam } from '@/lib/dateRangeBounds.js';
 
 // ETP-5889 — pure helpers behind the Product "Movements" tab: how a view (direction, period, warehouse,

@@ -1,3 +1,4 @@
+// @covers tools/app-shell/src/windows/custom/purchase-invoice/PurchaseInvoiceHeaderTable.jsx
 // Mocks must be hoisted before imports (Vitest hoisting)
 // Mutable holders so individual tests can swap the locale dictionary / selected
 // org without re-declaring the module mocks. `defaultDictionary` is the shape
@@ -271,7 +272,7 @@ import { render, screen, fireEvent, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { getInvoiceFiscalTargets } from '@/windows/custom/shared/fiscalTargets.js';
 import { useFiscalConfig } from '@/windows/custom/fiscal-config/useFiscalConfig.js';
-import { resolveFilterMode } from '@/lib/gridQuery';
+import { resolveFilterMode } from '@etendo-ai/app-shell-core/lib/gridQuery.js';
 import PurchaseInvoiceHeaderTable from '../PurchaseInvoiceHeaderTable.jsx';
 
 // ETP-5087: the fiscal-column tests at the bottom of this file assert the REAL

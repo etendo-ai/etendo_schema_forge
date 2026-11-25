@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { resolveBackendSort, buildBackendFilter } from '@/lib/gridQuery.js';
+import { resolveBackendSort, buildBackendFilter } from '@etendo-ai/app-shell-core/lib/gridQuery.js';
 import { translateBackendError, translateMappedImportRefusal, extractBackendMessageKeys, extractBackendMessageParams, extractBackendErrorCode } from '@/lib/backendErrors.js';
 import { extractQuotaExceeded, isQuotaCheckFailed } from '@/lib/planQuotas.js';
 import { toast } from 'sonner';
