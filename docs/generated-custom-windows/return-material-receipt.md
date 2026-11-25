@@ -814,6 +814,11 @@ reads as a bare "Error (400)" any more. Backend side: `modules/com.etendoerp.go/
 → ETP-6179, *`createReturnInvoice` dry run*. Over MCP, `sifFields` is accepted as an object (or a
 JSON string), CP-16.
 
+Scope: only the form's Confirmar (`ConfirmWithCreditButton`) sends the dry run. The list's
+row-hover Confirmar (`ReturnMaterialReceiptRowConfirmModal`, built by `buildReturnRowConfirmModal`)
+does not pass `validateInvoiceFirst`, so it keeps the two-step behaviour. Known gap: `docs/feedback.md`
+→ *ETP-6179 — Confirm + create invoice is still two steps outside the customer-return form*.
+
 Manual check: a customer without payment method or terms, a return of one of its shipments,
 Confirmar with *Crear factura rectificativa* on, step *Datos fiscales* → *Confirmar y crear
 factura*: the modal shows the Spanish sentence and the return is still *Borrador*. Fill in the
