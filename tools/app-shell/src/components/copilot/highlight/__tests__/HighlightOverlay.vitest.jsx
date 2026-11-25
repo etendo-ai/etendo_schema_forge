@@ -273,4 +273,31 @@ describe('HighlightOverlay script navigation', () => {
     await user.keyboard('{Escape}');
     expect(screen.queryByTestId('copilot-highlight-overlay')).not.toBeInTheDocument();
   });
+
+  it('ignores arrow keys while focus is in an editable element', async () => {
+    const user = userEvent.setup();
+    const view = renderOverlay();
+    await start(view);
+    const typing = document.createElement('textarea');
+    document.body.appendChild(typing);
+    typing.focus();
+    await user.keyboard('{ArrowRight}');
+    expect(screen.getByTestId('copilot-highlight-note')).toHaveTextContent('first');
+    expect(document.activeElement).toBe(typing);
+    typing.blur();
+    typing.remove();
+  });
+
+  it('never takes focus, on start or on Next/Back', async () => {
+    const user = userEvent.setup();
+    const view = renderOverlay();
+    a.focus();
+    await start(view);
+    expect(document.activeElement).toBe(a);
+    await act(() => view.api.next());
+    expect(document.activeElement).toBe(a);
+    await act(() => view.api.previous());
+    expect(document.activeElement).toBe(a);
+    expect(user).toBeTruthy();
+  });
 });

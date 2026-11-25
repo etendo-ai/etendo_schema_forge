@@ -51,7 +51,7 @@ vi.mock('../highlight/HighlightContext.jsx', () => ({
   useHighlight: () => ({ element: null, note: '', highlight, clearHighlight: vi.fn() }),
 }));
 
-import { useAiCopilotChat } from '../useAiCopilotChat.js';
+import { runHighlightTool, useAiCopilotChat } from '../useAiCopilotChat.js';
 
 const MENU_GROUPS = [
   { group: 'Sales', items: [{ name: 'sales-order', label: 'Order', favname: 'Sales Order' }] },
@@ -202,5 +202,73 @@ describe('highlight_element tool call', () => {
     expect(highlight).toHaveBeenCalledTimes(1);
     expect(chatInstances[1].addToolOutput).toHaveBeenCalled();
     expect(mainChat().addToolOutput).not.toHaveBeenCalled();
+  });
+});
+
+describe('runHighlightTool steps', () => {
+  let root;
+  let registry;
+  let showScript;
+
+  beforeEach(() => {
+    document.body.innerHTML = `
+      <label for="a">Alpha</label><input id="a" data-testid="field-alpha" />
+      <label for="b">Beta</label><input id="b" data-testid="field-beta" />
+    `;
+    for (const element of document.querySelectorAll('*')) {
+      element.getBoundingClientRect = () => ({ width: 120, height: 24, top: 40, left: 10 });
+    }
+    root = document;
+    registry = new Map();
+    // Mimics the context: resolves the first resolvable step like the real one.
+    showScript = vi.fn(({ steps }) => {
+      const skipped = [];
+      for (let i = 0; i < steps.length; i += 1) {
+        try {
+          const element = steps[i].resolve();
+          return { total: steps.length, currentStep: i + 1, element, skipped };
+        } catch (error) {
+          skipped.push({ step: i + 1, reason: error.message });
+        }
+      }
+      return { total: steps.length, currentStep: 0, element: null, skipped };
+    });
+  });
+
+  const run = args => runHighlightTool(args, { registry, root, highlight: vi.fn(), highlightScript: showScript });
+
+  it('throws "No usable step" when every step is malformed', () => {
+    expect(() => run({ steps: [null, {}] })).toThrow(/No usable step in steps: step 1 .*step 2/);
+    expect(showScript).not.toHaveBeenCalled();
+  });
+
+  it('throws when no step of the tutorial is on the page', () => {
+    expect(() => run({ steps: [{ fieldKey: 'missing' }] })).toThrow(/No step of this tutorial is on the page/);
+  });
+
+  it('returns the script shape with skipped, rejected and dropped counts', () => {
+    const steps = [
+      { fieldKey: 'missing', note: 'x' },
+      { fieldKey: 'beta', note: 'y' },
+      {},
+      ...Array.from({ length: 10 }, () => ({ fieldKey: 'alpha' })),
+    ];
+    const out = run({ steps });
+    expect(out).toMatchObject({
+      ok: true,
+      steps: 10,
+      currentStep: 2,
+      fieldKey: 'beta',
+      label: 'Beta',
+      droppedSteps: 2,
+    });
+    expect(out.skipped).toHaveLength(1);
+    expect(out.rejected).toEqual([{ step: 3, reason: expect.any(String) }]);
+  });
+
+  it('steps wins over a top-level fieldKey', () => {
+    const out = run({ fieldKey: 'alpha', steps: [{ fieldKey: 'beta' }] });
+    expect(out.fieldKey).toBe('beta');
+    expect(showScript).toHaveBeenCalledTimes(1);
   });
 });

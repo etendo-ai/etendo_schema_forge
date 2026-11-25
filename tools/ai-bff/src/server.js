@@ -225,7 +225,7 @@ export function browserTools() {
         'This tool only draws a highlight and shows your note next to the element: it never clicks, focuses, types or changes any value.',
         'Prefer fieldKey (a stable form field key reported by inspect_page_dom) over elementId, because a fieldKey survives a re-render.',
         'Use elementId from inspect_page_dom for anything that is not a form field, such as a button or a tab.',
-        'Highlight one element per call, or pass steps (an ordered list of fieldKey/elementId plus note, at most 10) to walk the user through several elements with Next/Back; each call replaces the previous highlight.',
+        'Highlight one element per call, or pass steps (an ordered list of fieldKey/elementId plus note, at most 10) to walk the user through several elements with Next/Back; each call replaces the previous highlight, and durationMs is ignored when there are several steps.',
         'Put the explanation in note, written for the user in the language of the conversation. Password fields cannot be highlighted.',
       ].join(' '),
       inputSchema: z.object({

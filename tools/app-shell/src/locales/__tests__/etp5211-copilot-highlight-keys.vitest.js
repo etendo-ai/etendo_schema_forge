@@ -16,6 +16,8 @@ import esES from '../es_ES.json';
  */
 
 const KEYS = ['copilotHighlightNoteLabel', 'copilotHighlightDismiss'];
+// Script chrome the overlay reuses from the walkthrough dictionary.
+const SCRIPT_KEYS = ['walkthroughStepCounter', 'walkthroughPrevious', 'walkthroughNext', 'walkthroughFinish'];
 const DICTIONARIES = { en_US: enUS, es_ES: esES, es_AR: esAR };
 
 describe('ETP-5211 — copilot highlight overlay labels', () => {
@@ -37,4 +39,20 @@ describe('ETP-5211 — copilot highlight overlay labels', () => {
       expect(esAR.genericLabels[key]).toBe(esES.genericLabels[key]);
     }
   });
+});
+
+describe('ETP-5211 — copilot highlight script chrome', () => {
+  for (const [name, dictionary] of Object.entries(DICTIONARIES)) {
+    it.each(SCRIPT_KEYS)(`${name} declares genericLabels.%s with a non-empty value`, key => {
+      const value = dictionary.genericLabels?.[key];
+      expect(typeof value, `${name}.genericLabels.${key} must be a string`).toBe('string');
+      expect(value.trim()).not.toBe('');
+    });
+
+    it(`${name} walkthroughStepCounter takes {current} and {total}`, () => {
+      const value = dictionary.genericLabels.walkthroughStepCounter;
+      expect(value).toContain('{current}');
+      expect(value).toContain('{total}');
+    });
+  }
 });
