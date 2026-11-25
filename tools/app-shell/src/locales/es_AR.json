@@ -21113,7 +21113,7 @@
     "fiscal.cert.expiry.critical.title_one": "El certificado vence en {days} día",
     "fiscal.cert.expiry.today.title": "El certificado digital vence hoy",
     "fiscal.cert.expiry.expired.title": "El certificado digital ha caducado",
-    "fiscal.cert.expiry.expired.body": "Los envíos fiscales firmados fallarán hasta que lo reemplaces. Sube un certificado vigente desde Configuración fiscal.",
+    "fiscal.cert.expiry.expired.body": "Los envíos fiscales firmados fallarán hasta que lo reemplaces. Sube un certificado vigente desde Configuración Fiscal.",
     "fiscal.cancel": "Cancelar",
     "fiscal.tab.sii": "SII",
     "fiscal.tab.navarra": "Hacienda Foral de Navarra",
@@ -21175,7 +21175,7 @@
     "fiscal.onboarding.goHome": "Ir al inicio",
     "fiscal.onboarding.back.wizard": "← Volver al asistente",
     "fiscal.onboarding.skipped.title": "Configuración omitida",
-    "fiscal.onboarding.skipped.hint": "Puedes volver a esta pantalla en cualquier momento desde Impuestos → Configuración fiscal.",
+    "fiscal.onboarding.skipped.hint": "Puedes volver a esta pantalla en cualquier momento desde Impuestos → Configuración Fiscal.",
     "fiscal.onboarding.applied.row.territory": "Territorio fiscal",
     "fiscal.onboarding.applied.row.tax": "Hacienda",
     "fiscal.onboarding.applied.row.national": "Operativa nacional (SII)",
@@ -21196,15 +21196,15 @@
     "fiscal.onboarding.detail.verifactu.desc": "Configura el sistema antifraude del Reglamento de facturación (RD 1007/2023).",
     "fiscal.onboarding.detail.sii.header": "Configuración SII (operativa nacional)",
     "fiscal.onboarding.detail.tbai.header": "Configuración TicketBAI (operativa foral)",
-    "fiscal.onboarding.breadcrumb.fiscal": "Configuración fiscal",
+    "fiscal.onboarding.breadcrumb.fiscal": "Configuración Fiscal",
     "fiscal.onboarding.breadcrumb.territory": "Territorio",
     "fiscal.onboarding.breadcrumb.confirm": "Confirmación",
     "fiscal.onboarding.breadcrumb.details": "Detalles",
     "fiscal.onboarding.breadcrumb.manual": "Configuración manual",
     "fiscal.onboarding.confirm.title": "Confirma la configuración",
-    "fiscal.onboarding.confirm.subtitle": "Revisa los datos antes de continuar. Podrás editar cualquier campo después en Impuestos → Configuración fiscal.",
+    "fiscal.onboarding.confirm.subtitle": "Revisa los datos antes de continuar. Podrás editar cualquier campo después en Impuestos → Configuración Fiscal.",
     "fiscal.onboarding.confirm.subtitle.pre": "Revisa los datos antes de continuar. Podrás editar cualquier campo después en ",
-    "fiscal.onboarding.confirm.subtitle.bold": "Impuestos → Configuración fiscal",
+    "fiscal.onboarding.confirm.subtitle.bold": "Impuestos → Configuración Fiscal",
     "fiscal.onboarding.confirm.row.territory": "Territorio",
     "fiscal.onboarding.confirm.row.hacienda": "Hacienda",
     "fiscal.onboarding.confirm.row.national.yes": "Sí · también declara SII",
@@ -21701,7 +21701,7 @@
     "firstStepsConnectBank": "Conecta tu banco",
     "firstStepsSetupPayments": "Configura métodos de pago",
     "firstStepsInviteTeam": "Invita a tu equipo",
-    "firstStepsFiscalConfig": "Configuración fiscal",
+    "firstStepsFiscalConfig": "Configuración Fiscal",
     "firstStepsFiscalConfigQuestion": "¿Tenés que informar las facturas a algún Sistema de Información Fiscal (SIF) como SII, TicketBai o Verifactu?",
     "firstStepsDemoDataTransfer": "Transferir datos de tu demo",
     "firstStepsDemoDataTransferDesc": "Transferimos los datos que seleccionaste cuando tu entorno productivo esté listo. Podés salir de esta página mientras se realiza.",
@@ -23220,7 +23220,7 @@
     "fm.aeat.result.validation_rejected.title": "Declaración no presentada: la AEAT ha detectado errores al validarla",
     "fm.aeat.error.validationUnavailable": "La declaración no se ha presentado: el servicio de validación de la AEAT no ha respondido. Inténtalo de nuevo.",
     "fm.aeat.action.download_pdf": "Descargar justificante (PDF)",
-    "fm.aeat.action.go_to_cert_config": "Ir a Configuración fiscal",
+    "fm.aeat.action.go_to_cert_config": "Ir a Configuración Fiscal",
     "fm.aeat.result.success.title": "Declaración presentada correctamente",
     "fm.aeat.result.success.csv": "CSV (Código Seguro de Verificación)",
     "fm.aeat.result.success.date": "Fecha de presentación",
@@ -23358,7 +23358,7 @@
       "label": "Modelos Fiscales"
     },
     "Fiscal Configuration": {
-      "label": "Configuración fiscal"
+      "label": "Configuración Fiscal"
     },
     "Connect AI agent": {
       "label": "Conectar agente de IA"
