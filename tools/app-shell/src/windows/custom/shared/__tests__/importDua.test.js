@@ -6,7 +6,59 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   isImportDuaChecked, shouldShowImportDuaCards, importDuaInvoiceTypeToSet, needsUncheckConfirmation,
+  isImportDuaLockedOn, importDuaUncheckPatch,
 } from '../importDua.js';
+
+describe('isImportDuaLockedOn — only a legacy F5 / LC locks the switch', () => {
+  it('locks F5 / LC while the stored check is off (false, N or null)', () => {
+    assert.equal(isImportDuaLockedOn({ etgoImportDua: false, aeatsiiClaveTipoFc: 'F5' }), true);
+    assert.equal(isImportDuaLockedOn({ etgoImportDua: 'N', aeatsiiClaveTipoFc: 'LC' }), true);
+    assert.equal(isImportDuaLockedOn({ etgoImportDua: null, aeatsiiClaveTipoFc: 'F5' }), true);
+  });
+
+  it('keeps it toggleable when the user checked it, even after the SIF tab set F5', () => {
+    assert.equal(isImportDuaLockedOn({ etgoImportDua: true, aeatsiiClaveTipoFc: 'F5' }), false);
+    assert.equal(isImportDuaLockedOn({ etgoImportDua: 'Y', aeatsiiClaveTipoFc: 'LC' }), false);
+  });
+
+  it('does not lock any other type', () => {
+    assert.equal(isImportDuaLockedOn({ etgoImportDua: false, aeatsiiClaveTipoFc: 'F1' }), false);
+    assert.equal(isImportDuaLockedOn(null), false);
+  });
+});
+
+describe('importDuaUncheckPatch — what one header save writes on uncheck', () => {
+  const base = {
+    record: { etgoImportDua: true, aeatsiiClaveTipoFc: 'F5' }, isDraft: true, siiLocked: false, showSii: true,
+  };
+
+  it('writes the check off and moves F5 / LC back to F1, check first', () => {
+    assert.deepEqual(importDuaUncheckPatch(base), [['etgoImportDua', false], ['aeatsiiClaveTipoFc', 'F1']]);
+    assert.deepEqual(importDuaUncheckPatch({ ...base, record: { etgoImportDua: 'Y', aeatsiiClaveTipoFc: 'LC' } }),
+      [['etgoImportDua', false], ['aeatsiiClaveTipoFc', 'F1']]);
+  });
+
+  it('leaves the effective check off, so the SIF tab does not set F5 again', () => {
+    const next = { ...base.record, ...Object.fromEntries(importDuaUncheckPatch(base)) };
+    assert.equal(isImportDuaChecked(next), false);
+    assert.equal(importDuaInvoiceTypeToSet({
+      enabled: true, isPurchaseInvoice: true, showSii: true, isDraft: true, locked: false,
+      recordId: 'inv-1', record: next, typeField: 'aeatsiiClaveTipoFc',
+    }), null);
+  });
+
+  it('writes only the check when the type is not F5 / LC, or on a non-draft, locked or non-SII invoice', () => {
+    for (const patch of [
+      { record: { etgoImportDua: true, aeatsiiClaveTipoFc: 'F1' } },
+      { record: { etgoImportDua: true } },
+      { isDraft: false },
+      { siiLocked: true },
+      { showSii: false },
+    ]) {
+      assert.deepEqual(importDuaUncheckPatch({ ...base, ...patch }), [['etgoImportDua', false]], JSON.stringify(patch));
+    }
+  });
+});
 
 describe('isImportDuaChecked', () => {
   it('reads a boolean or the Y/N serialization', () => {

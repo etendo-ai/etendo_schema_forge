@@ -6,12 +6,17 @@ import {
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { useUI } from '@/i18n';
+import { useAuth } from '@/auth/AuthContext.jsx';
 import { isDraftStatus } from '@/lib/docStatus.js';
+import { useFiscalConfig } from '@/windows/custom/fiscal-config/useFiscalConfig.js';
 import { normalizeDateInputValue } from '@/windows/custom/fiscal-config/fiscalConfig.utils.js';
 import SiiImportDuaSection, { useSiiImportDuaEnabled } from '@/windows/custom/shared/SiiImportDuaSection.jsx';
 import SiiImportTaxesSection, { useSiiDeferredVat } from '@/windows/custom/shared/SiiImportTaxesSection.jsx';
+import { getInvoiceFiscalTargets } from '@/windows/custom/shared/fiscalTargets.js';
+import { resolveInvoiceOrgId } from '@/windows/custom/shared/resolveInvoiceOrgId.js';
 import {
-  isImportDuaChecked, isImportDuaTypeKey, needsUncheckConfirmation, shouldShowImportDuaCards,
+  importDuaUncheckPatch, isImportDuaChecked, isImportDuaLockedOn, isImportDuaTypeKey,
+  needsUncheckConfirmation, shouldShowImportDuaCards,
 } from '@/windows/custom/shared/importDua.js';
 
 /* eslint-disable react/prop-types */
@@ -20,6 +25,15 @@ const FIELD = 'etgoImportDua';
 
 function isYes(value) {
   return value === true || value === 'Y';
+}
+
+/** Whether the organization of the invoice files SII; only asked while the type is F5 / LC. */
+function useOrgFilesSii(data, apiBaseUrl, active) {
+  const { selectedOrg } = useAuth();
+  const orgId = active ? resolveInvoiceOrgId(data, selectedOrg?.id) : null;
+  const { profile, tbaiRecord } = useFiscalConfig(orgId, apiBaseUrl);
+  const territory = tbaiRecord?.etsgSifTerritory ?? null;
+  return active && getInvoiceFiscalTargets('purchase-invoice', profile, territory).showSii;
 }
 
 /**
@@ -39,10 +53,14 @@ function isYes(value) {
  * Read-only on a document the user cannot edit (completed, read-only role) or already sent to SII.
  *
  * Effective value: an SII invoice type F5 / LC counts as checked (a legacy or Classic import), so the
- * switch shows on — locked, since only changing Tipo factura in the SIF tab can turn it off.
- * Unchecking an invoice that already has manual import tax lines asks for confirmation first (the
- * rows stay on the invoice; only the cards are hidden), built on the system Dialog primitives like
- * `LocaleChangeConfirmDialog` — the codebase has no generic confirm component.
+ * switch shows on. It is locked only for such a legacy import — F5 / LC with the stored check off
+ * (`isImportDuaLockedOn`): only changing Tipo factura in the SIF tab turns it off. When the user
+ * checked it, the F5 the SIF tab then set does not lock it; unchecking writes, in the same header
+ * save, the check off plus Tipo factura F1 when the SIF tab could have set it (`importDuaUncheckPatch`),
+ * so the SIF tab does not set F5 again. Unchecking an invoice that already has manual import tax
+ * lines asks for confirmation first (the rows stay on the invoice; only the cards are hidden), built
+ * on the system Dialog primitives like `LocaleChangeConfirmDialog` — the codebase has no generic
+ * confirm component.
  */
 function UncheckConfirmDialog({ ui, open, onConfirm, onCancel }) {
   return (
@@ -73,6 +91,7 @@ export default function ImportDuaLinesSection({
   const checked = isImportDuaChecked(data);
   const savedId = data?.id || recordId || null;
   const showCards = shouldShowImportDuaCards({ enabled, record: data });
+  const orgFilesSii = useOrgFilesSii(data, apiBaseUrl, enabled && isImportDuaTypeKey(data));
   const deferredVat = useSiiDeferredVat({
     apiBaseUrl,
     recordId: savedId,
@@ -83,13 +102,24 @@ export default function ImportDuaLinesSection({
 
   const readOnly = isDocumentReadOnly || windowReadOnly || isYes(data?.aeatsiiIssent)
     || data?.processed === true;
-  const lockedOn = isImportDuaTypeKey(data);
+  const lockedOn = isImportDuaLockedOn(data);
+  const uncheck = () => {
+    const patch = importDuaUncheckPatch({
+      record: data,
+      isDraft: isDraftStatus(data?.documentStatus),
+      siiLocked: readOnly,
+      showSii: orgFilesSii,
+    });
+    patch.forEach(([field, value]) => onFieldChange?.(field, value));
+  };
   const handleToggle = (val) => {
-    if (!val && needsUncheckConfirmation(data)) {
+    if (val) {
+      onFieldChange?.(FIELD, true);
+    } else if (needsUncheckConfirmation(data)) {
       setConfirmUncheck(true);
-      return;
+    } else {
+      uncheck();
     }
-    onFieldChange?.(FIELD, val);
   };
   const getVal = key => data?.[key] ?? '';
   const getDateVal = key => normalizeDateInputValue(data?.[key] ?? '');
@@ -116,7 +146,7 @@ export default function ImportDuaLinesSection({
         ui={ui}
         open={confirmUncheck}
         onCancel={() => setConfirmUncheck(false)}
-        onConfirm={() => { setConfirmUncheck(false); onFieldChange?.(FIELD, false); }}
+        onConfirm={() => { setConfirmUncheck(false); uncheck(); }}
         data-testid="UncheckConfirmDialog__importDua" />
       {showCards && (
         <>

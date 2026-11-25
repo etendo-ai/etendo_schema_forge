@@ -254,6 +254,9 @@ export function useSifFieldPatcher({ data, recordId, apiBaseUrl, onChange, locke
   // F5 / LC, it writes F5 as a pending edit — saved by the next header save like a user change; the
   // user can still pick LC. Same loop-free shape as the rectificative 'R' effect above (no-op once
   // F5 / LC). The DUA fields it implies live in the Lines tab.
+  // Unchecking in the Lines tab writes the check off AND Tipo factura F1 in one batch
+  // (`importDuaUncheckPatch`, check first), so the effective check (`isImportDuaChecked`) reads off
+  // and this effect stays idle; the saved record then carries both values, so no re-read sets F5 back.
   const importDuaEnabled = isCapabilityVisible(useCapabilitiesSafe(), SII_IMPORT_DUA_CAPABILITY);
   const importDuaType = importDuaInvoiceTypeToSet({
     enabled: importDuaEnabled, isPurchaseInvoice, showSii, isDraft, locked: siiFieldReadOnly,

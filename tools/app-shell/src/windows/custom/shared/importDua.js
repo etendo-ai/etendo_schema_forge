@@ -27,8 +27,49 @@ export function isImportDuaTypeKey(record) {
  * the check counts as checked, as in com.etendoerp.go `PurchaseInvoiceImportDua.isImportDua`).
  */
 export function isImportDuaChecked(record) {
+  return isImportDuaStoredOn(record) || isImportDuaTypeKey(record);
+}
+
+/** The stored check alone (boolean or 'Y'), ignoring the SII invoice type. */
+export function isImportDuaStoredOn(record) {
   const value = record?.etgoImportDua;
-  return value === true || value === 'Y' || isImportDuaTypeKey(record);
+  return value === true || value === 'Y';
+}
+
+/**
+ * Whether the switch is locked on: a legacy or Classic import — SII type F5 / LC while the stored
+ * check is off (false, 'N' or null). Only changing Tipo factura in the SIF tab turns it off. When
+ * the user checked it (stored on), the F5 the SIF tab then set must NOT lock it: the switch stays
+ * toggleable and unchecking moves the type back (`importDuaUncheckPatch`).
+ */
+export function isImportDuaLockedOn(record) {
+  return isImportDuaTypeKey(record) && !isImportDuaStoredOn(record);
+}
+
+/** The SII invoice type an unchecked import goes back to. */
+export const IMPORT_DUA_UNCHECK_TYPE = 'F1';
+
+/**
+ * The fields to write, all in the same header save, when the user unchecks the switch: always
+ * `etgoImportDua: false`, plus `aeatsiiClaveTipoFc: 'F1'` when the current type is F5 / LC and the
+ * SIF tab could have set it — a draft, SII fields neither locked nor sent, of an organization that
+ * files SII. Writing both keeps the EFFECTIVE check off (`isImportDuaChecked`), so the SIF tab does
+ * not set F5 again, and com.etendoerp.go no longer asks for the DUA. Entries are ordered: the check
+ * first, so no intermediate state ever reads "checked with a non-import type".
+ *
+ * @param {object} args
+ * @param {object} args.record the live header record
+ * @param {boolean} args.isDraft
+ * @param {boolean} args.siiLocked the SII fields are read-only (completed, sent, read-only role)
+ * @param {boolean} args.showSii the organization files SII
+ * @returns {Array<[string, *]>} the [field, value] pairs, in write order
+ */
+export function importDuaUncheckPatch({ record, isDraft, siiLocked, showSii }) {
+  const patch = [['etgoImportDua', false]];
+  if (isImportDuaTypeKey(record) && isDraft && !siiLocked && showSii) {
+    patch.push(['aeatsiiClaveTipoFc', IMPORT_DUA_UNCHECK_TYPE]);
+  }
+  return patch;
 }
 
 /**
