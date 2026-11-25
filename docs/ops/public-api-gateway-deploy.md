@@ -5,7 +5,7 @@ ETP-5862, ETP-6024. Deployment of the public API gateway (`gateway/`, the ETP-53
 ## 0. Published gateway dependency (ETP-6150)
 
 The gateway, deployment workflow and Public API E2E installer consume the exact
-`@etendosoftware/api-gateway-core` version in `gateway/package.json` from GitHub Packages.
+`@etendo-ai/api-gateway-core` version in `gateway/package.json` from GitHub Packages.
 No Schema Forge Core checkout or tarball build is needed. Installation must leave
 `gateway/package.json` unchanged; the workflow retains its `git diff --quiet` guardrail.
 
@@ -30,7 +30,7 @@ GitHub Actions uses `ETENDOBOT_TOKEN` with `read:packages` and access to the pri
 package. Jenkins/local npm needs the same registry authorization in the user's npmrc:
 
 ```ini
-@etendosoftware:registry=https://npm.pkg.github.com
+@etendo-ai:registry=https://npm.pkg.github.com
 //npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}
 ```
 
@@ -40,7 +40,7 @@ file after the build. The workflow creates and removes this temporary secret its
 
 ```bash
 node scripts/lib/pack-gateway-core.mjs gateway --build
-PACKAGE_VERSION=$(node -p 'require("./gateway/package.json").dependencies["@etendosoftware/api-gateway-core"]')
+PACKAGE_VERSION=$(node -p 'require("./gateway/package.json").dependencies["@etendo-ai/api-gateway-core"]')
 PACKAGE_ID=$(printf '%s' "$PACKAGE_VERSION" | sha256sum | cut -c1-7)
 TAG="sf-$(git rev-parse --short=7 HEAD)-core-$PACKAGE_ID"
 ECR="<aws-account-id>.dkr.ecr.<aws-region>.amazonaws.com/etendo/public-api-gateway"

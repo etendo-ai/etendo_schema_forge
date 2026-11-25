@@ -73,7 +73,7 @@ vi.mock('../PaymentLifecycleConfirmModal', () => ({
 // and stubbing it would swallow the component's OWN requests (it went through the raw `fetch`
 // before, it goes through this hook now), so the stub is gone. What the component needs is a
 // session to read the token from, which is what this mock supplies.
-vi.mock('@etendosoftware/app-shell-core/auth', async (importOriginal) => ({
+vi.mock('@etendo-ai/app-shell-core/auth', async (importOriginal) => ({
   ...(await importOriginal()),
   useAuthOptional: () => ({ token: 'tok-1' }),
 }));
@@ -90,7 +90,7 @@ vi.mock('../ConfirmPaymentModal', () => ({
 // --- Imports ---
 
 import { render, screen, waitFor, within } from '@testing-library/react';
-import { setSessionCredentials, CREDENTIAL_MODES } from '@etendosoftware/app-shell-core/auth/sessionCredentials.js';
+import { setSessionCredentials, CREDENTIAL_MODES } from '@etendo-ai/app-shell-core/auth/sessionCredentials.js';
 import userEvent from '@testing-library/user-event';
 import { toast } from 'sonner';
 import { formatCurrency } from '@/lib/formatCurrency.js';

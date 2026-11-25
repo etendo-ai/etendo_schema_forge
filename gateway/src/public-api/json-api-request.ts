@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
-import type { PublicApiEntity, PublicApiField } from '@etendosoftware/api-gateway-core';
+import type { PublicApiEntity, PublicApiField } from '@etendo-ai/api-gateway-core';
 import { isRecord } from './json-api-http.ts';
 
 // Reads a write body (JSON:API or flat) into NeoServlet's internal field

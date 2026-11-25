@@ -1,6 +1,6 @@
 # Capacidades y flujos
 
-Nota de arquitectura previa a todo lo demás: la UI de onboarding (`OnboardingPage.jsx`) es solo un wrapper de configuración; el motor real (pasos, máquina de estados, llamadas a API) vive en el paquete vendorizado `@etendosoftware/etendo-go-core` (`node_modules/@etendosoftware/etendo-go-core/src/onboarding/*`). Todo el backend de estas 4 áreas vive en `etendo_core/modules/com.etendoerp.go`, que es su propio repo Git anidado (puede estar en una rama distinta a la de `schema-forge`).
+Nota de arquitectura previa a todo lo demás: la UI de onboarding (`OnboardingPage.jsx`) es solo un wrapper de configuración; el motor real (pasos, máquina de estados, llamadas a API) vive en el paquete vendorizado `@etendo-ai/etendo-go-core` (`node_modules/@etendo-ai/etendo-go-core/src/onboarding/*`). Todo el backend de estas 4 áreas vive en `etendo_core/modules/com.etendoerp.go`, que es su propio repo Git anidado (puede estar en una rama distinta a la de `schema-forge`).
 
 ---
 
@@ -9,7 +9,7 @@ Nota de arquitectura previa a todo lo demás: la UI de onboarding (`OnboardingPa
 ## CAP-ONB-01 — Registro de nueva cuenta (email + password)
 
 - **Actor:** Visitante anónimo.
-- **Superficie:** `/onboarding` → `RegisterStep` (`node_modules/@etendosoftware/etendo-go-core/src/onboarding/steps/RegisterStep.jsx`).
+- **Superficie:** `/onboarding` → `RegisterStep` (`node_modules/@etendo-ai/etendo-go-core/src/onboarding/steps/RegisterStep.jsx`).
 - **Objetivo:** Crear una cuenta de plataforma (`ETGO_ACCOUNT`), todavía sin tenant.
 - **Precondiciones:** Sin `sf_platform_token` en localStorage. La vista por defecto de `/onboarding` es login; hay que hacer click en "¿No tienes cuenta? / Crear cuenta" (`OnboardingFlow.jsx:213-218`).
 - **Trigger:** Submit del formulario de registro (`action-register-submit`).

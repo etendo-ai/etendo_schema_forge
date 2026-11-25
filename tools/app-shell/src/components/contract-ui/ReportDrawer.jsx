@@ -17,7 +17,7 @@ import { getCurrencyFormatConfig } from '@/lib/currencyFormatConfig.js';
 import { useApiFetch } from '@/auth/useApiFetch.js';
 import { loadCompanyLogo, loadDocTemplateConfig } from '@/windows/custom/shared/docTemplateConfig.js';
 import { resolveListingCss } from '@/windows/custom/shared/printableStyle.js';
-import { NetworkError } from '@etendosoftware/app-shell-core/auth';
+import { NetworkError } from '@etendo-ai/app-shell-core/auth';
 
 // ---------------------------------------------------------------------------
 // jsreport recipe ↔ format mapping

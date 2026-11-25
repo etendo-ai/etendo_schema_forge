@@ -1,7 +1,7 @@
 import { formatCurrency } from '@/lib/formatCurrency.js';
 import { buildUrlWithParams } from '@/lib/buildUrlWithParams.js';
 
-import { apiFetch } from '@etendosoftware/app-shell-core/auth/api';
+import { apiFetch } from '@etendo-ai/app-shell-core/auth/api';
 export function formatAmount(val, currency) {
   if (val == null) return '';
   const num = typeof val === 'string' ? parseFloat(val) : val;

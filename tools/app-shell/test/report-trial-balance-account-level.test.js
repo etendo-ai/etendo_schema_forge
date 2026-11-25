@@ -8,8 +8,8 @@ import { readFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import Handlebars from 'handlebars';
 import { registerReportHelpers } from '../../../templates/reports/helpers/report-html-helpers.js';
-import { pickLabel } from '@etendosoftware/schema-forge-cli/src/report-i18n.js';
-import { filterAndTransformParams } from '@etendosoftware/schema-forge-cli/src/report-filters.js';
+import { pickLabel } from '@etendo-ai/schema-forge-cli/src/report-i18n.js';
+import { filterAndTransformParams } from '@etendo-ai/schema-forge-cli/src/report-filters.js';
 import { loadReportCli } from '../vite-plugins/report-cli.js';
 import { expansionForLevel, levelHiddenIds, visibleRows } from '../src/components/reports/dynamic/reportTree.js';
 
@@ -414,7 +414,7 @@ describe('report-trial-balance — template drill-down link vs accountLevel (ETP
 //
 // `activeFilters` used to be built inline inside the request handler (and text-
 // scraped out of this file's source for testing). It now lives in the shared
-// @etendosoftware/schema-forge-cli module (so the production report-server
+// @etendo-ai/schema-forge-cli module (so the production report-server
 // gets it as well), so it is imported directly — the test exercises the real
 // shipped function, not a regex-scraped duplicate of it.
 

@@ -53,7 +53,7 @@ const DATA = [
 
 function isRowChecked(rowId) {
   // The Checkbox primitive renders `role="checkbox"` on an outer <button> (see
-  // @etendosoftware/app-shell-core/components/ui/checkbox.jsx) — the native
+  // @etendo-ai/app-shell-core/components/ui/checkbox.jsx) — the native
   // `<input type="checkbox">` is aria-hidden inside it, so `.checked` (a DOM
   // input property) is never present on the queried element. Read the
   // `aria-checked` attribute the button actually sets instead.

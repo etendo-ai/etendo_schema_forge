@@ -142,7 +142,7 @@ function mcpWellKnownPlugin() {
   };
 }
 
-// Every `@radix-ui/*` package that @etendosoftware/app-shell-core depends on. Used for both
+// Every `@radix-ui/*` package that @etendo-ai/app-shell-core depends on. Used for both
 // `resolve.dedupe` and `optimizeDeps.include`, so they cannot drift apart.
 const CORE_RADIX_DEPS = [
   '@radix-ui/react-collapsible', '@radix-ui/react-dialog',
@@ -178,7 +178,7 @@ export default defineConfig(({ mode }) => {
   const ETENDO_ORIGIN = new URL(ETENDO_URL).origin;
 
   // LOCAL_CORE dev mode: when set (via `make dev-local-core`), resolve
-  // @etendosoftware/app-shell-core from the sibling ../schema_forge_core source
+  // @etendo-ai/app-shell-core from the sibling ../schema_forge_core source
   // instead of the published node_modules package, for live hot-reload while
   // developing the shared React runtime. Strictly opt-in and env-gated — when
   // LOCAL_CORE is unset (servers, CI, normal `make dev`) this adds nothing and
@@ -306,17 +306,17 @@ export default defineConfig(({ mode }) => {
       { find: '@', replacement: resolve(__dirname, './src') },
       // LOCAL_CORE dev mode only — point the shared runtime at local core source.
       ...(LOCAL_CORE ? [
-        { find: /^@etendosoftware\/app-shell-core$/, replacement: resolve(CORE_APP_SHELL_SRC, 'index.js') },
-        { find: /^@etendosoftware\/app-shell-core\/(.*)$/, replacement: resolve(CORE_APP_SHELL_SRC, '$1') },
+        { find: /^@etendo-ai\/app-shell-core$/, replacement: resolve(CORE_APP_SHELL_SRC, 'index.js') },
+        { find: /^@etendo-ai\/app-shell-core\/(.*)$/, replacement: resolve(CORE_APP_SHELL_SRC, '$1') },
         // etendo-go-core (onboarding / auth screens) from local source — mirrors app-shell-core.
         // Its exports map two kebab-case subpaths to camelCase files, so those need explicit
         // aliases before the generic catch-all (which handles onboarding/api|sso|state as-is).
-        { find: /^@etendosoftware\/etendo-go-core$/, replacement: resolve(CORE_ETENDO_GO_SRC, 'index.js') },
-        { find: /^@etendosoftware\/etendo-go-core\/onboarding\/password-policy$/, replacement: resolve(CORE_ETENDO_GO_SRC, 'onboarding/passwordPolicy.js') },
-        { find: /^@etendosoftware\/etendo-go-core\/onboarding\/password-strength-checklist$/, replacement: resolve(CORE_ETENDO_GO_SRC, 'onboarding/components/PasswordStrengthChecklist.jsx') },
-        { find: /^@etendosoftware\/etendo-go-core\/onboarding\/oauth-return-to$/, replacement: resolve(CORE_ETENDO_GO_SRC, 'onboarding/oauthReturnTo.js') },
-        { find: /^@etendosoftware\/etendo-go-core\/onboarding$/, replacement: resolve(CORE_ETENDO_GO_SRC, 'onboarding/index.js') },
-        { find: /^@etendosoftware\/etendo-go-core\/(.*)$/, replacement: resolve(CORE_ETENDO_GO_SRC, '$1') },
+        { find: /^@etendo-ai\/etendo-go-core$/, replacement: resolve(CORE_ETENDO_GO_SRC, 'index.js') },
+        { find: /^@etendo-ai\/etendo-go-core\/onboarding\/password-policy$/, replacement: resolve(CORE_ETENDO_GO_SRC, 'onboarding/passwordPolicy.js') },
+        { find: /^@etendo-ai\/etendo-go-core\/onboarding\/password-strength-checklist$/, replacement: resolve(CORE_ETENDO_GO_SRC, 'onboarding/components/PasswordStrengthChecklist.jsx') },
+        { find: /^@etendo-ai\/etendo-go-core\/onboarding\/oauth-return-to$/, replacement: resolve(CORE_ETENDO_GO_SRC, 'onboarding/oauthReturnTo.js') },
+        { find: /^@etendo-ai\/etendo-go-core\/onboarding$/, replacement: resolve(CORE_ETENDO_GO_SRC, 'onboarding/index.js') },
+        { find: /^@etendo-ai\/etendo-go-core\/(.*)$/, replacement: resolve(CORE_ETENDO_GO_SRC, '$1') },
         // Force a single React instance: the linked source would otherwise resolve
         // react/react-dom from schema_forge_core's own node_modules (a separate
         // install tree) → two React copies → "Invalid hook call". Pin both to this
@@ -327,7 +327,7 @@ export default defineConfig(({ mode }) => {
       ] : []),
     ],
     // Single-instance guarantee. The first five are always relevant; the rest are
-    // the shared runtime deps that @etendosoftware/app-shell-core imports. In
+    // the shared runtime deps that @etendo-ai/app-shell-core imports. In
     // LOCAL_CORE dev mode the linked core source is served from the sibling
     // ../schema_forge_core tree, which has no node_modules of its own — listing
     // these in dedupe forces Vite to resolve them from THIS repo's root
@@ -343,7 +343,7 @@ export default defineConfig(({ mode }) => {
     modules: [resolve(__dirname, 'node_modules'), 'node_modules'],
   },
   optimizeDeps: {
-    // `@etendosoftware/app-shell-core` gets pre-bundled for its `/runtime` and `.`
+    // `@etendo-ai/app-shell-core` gets pre-bundled for its `/runtime` and `.`
     // entry points (discovered via static imports), but this repo's local shims
     // (src/hooks/useCurrency.jsx, src/hooks/use-mobile.jsx) reach the package via
     // deep subpath imports esbuild's `include` cannot pre-bundle on their own
@@ -361,8 +361,8 @@ export default defineConfig(({ mode }) => {
     // the currency double-instantiation in the DEFAULT published-package path,
     // and also gives LOCAL_CORE the exclude it needs for live HMR.
     exclude: LOCAL_CORE
-      ? ['@etendosoftware/app-shell-core', '@etendosoftware/etendo-go-core']
-      : ['@etendosoftware/app-shell-core'],
+      ? ['@etendo-ai/app-shell-core', '@etendo-ai/etendo-go-core']
+      : ['@etendo-ai/app-shell-core'],
     // react-day-picker (used by app-shell-core's Calendar) ships ~87 translated
     // per-locale wrapper files, each importing the date-fns/locale barrel. Since
     // it's only reachable through the excluded app-shell-core, Vite never

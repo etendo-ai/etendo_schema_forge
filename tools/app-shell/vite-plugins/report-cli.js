@@ -1,11 +1,11 @@
 /**
- * report-cli.js — gated loader for the shared @etendosoftware/schema-forge-cli
+ * report-cli.js — gated loader for the shared @etendo-ai/schema-forge-cli
  * report modules (report-auth.js, report-sql.js, report-branding.js, ...)
  * consumed by report-api.js (ETP-5460).
  *
  * Local verification of report-api.js against the core work landed in this
  * change (report-auth.js) needs a way to import schema_forge_core's SOURCE
- * directly, before it is published as a `@etendosoftware/schema-forge-cli`
+ * directly, before it is published as a `@etendo-ai/schema-forge-cli`
  * preview version. A node_modules symlink was rejected in design id 455
  * ("Local verification of the plugin"): `npm install` silently undoes it,
  * and it is easy to leave a stale symlink behind unnoticed. This loader is
@@ -36,7 +36,7 @@ const DEFAULT_CORE_REPO = resolve(import.meta.dirname, '../../../../schema_forge
  * With `LOCAL_CORE` set, imports `${SCHEMA_FORGE_CORE || <sibling>}/cli/src/<name>.js`
  * directly via `pathToFileURL` and throws an explicit, actionable error if
  * that file does not exist (never a bare `ERR_MODULE_NOT_FOUND`). Without
- * `LOCAL_CORE`, imports `@etendosoftware/schema-forge-cli/src/<name>.js` —
+ * `LOCAL_CORE`, imports `@etendo-ai/schema-forge-cli/src/<name>.js` —
  * the published package, exactly as report-api.js always has.
  *
  * `SCHEMA_FORGE_CORE` overrides the default sibling path — same override
@@ -56,5 +56,5 @@ export async function loadReportCli(name) {
     }
     return import(pathToFileURL(modulePath).href);
   }
-  return import(/* @vite-ignore */ `@etendosoftware/schema-forge-cli/src/${name}.js`);
+  return import(/* @vite-ignore */ `@etendo-ai/schema-forge-cli/src/${name}.js`);
 }

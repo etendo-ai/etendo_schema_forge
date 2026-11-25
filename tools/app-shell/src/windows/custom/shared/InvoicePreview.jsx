@@ -31,7 +31,7 @@ import EmailsCard from './preview-cards/EmailsCard.jsx';
 import RelatedDocumentsCard from './preview-cards/RelatedDocumentsCard.jsx';
 import { useDocumentCurrency, resolveDualCurrencyDisplay } from './useDocumentCurrency.js';
 import { useCurrencyPrecision } from '@/hooks/useCurrencyPrecision.js';
-import { getArSubtype } from '@generated/sales-invoice/custom/invoiceSubtype.js';
+import { getArSubtype, salesInvoiceSendDocumentType } from '@generated/sales-invoice/custom/invoiceSubtype.js';
 import { isCompletedStatus, isDraftStatus } from '../../../lib/docStatus.js';
 
 // ETP-4841: a credit instrument is identified by the SIGN of its total, not by its
@@ -250,6 +250,15 @@ function InvoiceGeneralTab({ invoice, relatedDocs, partnerName, badgeProps, stat
       )}
     </div>
   );
+}
+
+/**
+ * The document type a send from the preview names: a sales credit note is «Factura rectificativa»
+ * (ETP-6209, `salesInvoiceSendDocumentType`); a purchase invoice keeps the window's label.
+ */
+function invoiceSendDocumentType(specName, invoice, { tMenu, ui }) {
+  if (specName === 'purchase-invoice') return tMenu('Purchase Invoice');
+  return salesInvoiceSendDocumentType(invoice, { tMenu, ui });
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -512,7 +521,7 @@ export default function InvoicePreview({ invoice, token, apiBaseUrl, windowName,
       )}
       {p.showSendModal && (
         <SendDocumentModal
-          documentType={windowLabel}
+          documentType={invoiceSendDocumentType(specName, p.displayInvoice, { tMenu, ui })}
           documentNo={p.displayInvoice?.documentNo}
           bpName={p.partnerName}
           bPartnerId={p.displayInvoice?.businessPartner}

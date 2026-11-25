@@ -12,7 +12,7 @@ import { NEO_BASE, fetchNeoWebhookJson } from './neoWebhookClient.js';
  * gets `{ error: true, message: 'Not authorized' }` back on an HTTP 200 rather than a 403, so
  * callers must branch on `payload.error` and render the no-access state — not treat it as a fetch
  * failure. The backend (`NeoAccessHelper.isAdminOrClientAdmin`) is the real authorization
- * boundary; the frontend feature flag only decides whether the menu entry is offered.
+ * boundary; the menu entry is offered to roles with the `isAdminOrClientAdmin` capability.
  */
 
 // This endpoint always answers with an object (status payload or the denial shape), so there is no

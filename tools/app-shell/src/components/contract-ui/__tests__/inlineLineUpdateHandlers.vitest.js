@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const mockApiFetch = vi.fn();
 // Every backend call goes through the shared helper (docs/request-policy.md) — mock it, not fetch.
-vi.mock('@etendosoftware/app-shell-core/auth/api', async (importOriginal) => ({
+vi.mock('@etendo-ai/app-shell-core/auth/api', async (importOriginal) => ({
   ...(await importOriginal()),
   apiFetch: (...args) => mockApiFetch(...args),
 }));
@@ -298,7 +298,7 @@ describe('buildCompletedLineFieldUpdateHandler — request sent through the real
   let realApiFetch;
 
   beforeEach(async () => {
-    ({ apiFetch: realApiFetch } = await vi.importActual('@etendosoftware/app-shell-core/auth/api'));
+    ({ apiFetch: realApiFetch } = await vi.importActual('@etendo-ai/app-shell-core/auth/api'));
     mockApiFetch.mockImplementation((...args) => realApiFetch(...args));
   });
 

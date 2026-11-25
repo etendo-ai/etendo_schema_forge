@@ -59,7 +59,6 @@ vi.mock('@/components/layout/FavoritesContext', () => ({
 vi.mock('@/lib/flags', () => ({
   useFeatureFlag: (...args) => mockUseFeatureFlag(...args),
   PROOF_OF_CONCEPT_MENU: 'proof-of-concept-menu',
-  ACCT_PROCESS_MONITOR: 'acct-process-monitor',
   PUBLIC_API_KEYS: 'public-api-keys',
   DOC_TEMPLATE_SELECTION: 'doc-template-selection',
   UNIFIED_CALENDAR_POC: 'unified-calendar-poc',
@@ -908,42 +907,32 @@ describe('SideMenu', () => {
       expect(screen.queryByText('Proof of Concept')).not.toBeInTheDocument();
     });
 
-    it('hides the accounting-process item when its declared feature flag is off', () => {
+    it('keeps a saved accounting-process favorite visible with every feature flag off', async () => {
+      const user = userEvent.setup();
       mockUseFeatureFlag.mockReturnValue(false);
+      mockUseFavorites.mockReturnValue({
+        favorites: [{ name: 'acct-process-monitor', label: 'Accounting Process' }],
+      });
       render(<SideMenu
         {...defaultProps}
-        menuGroups={[{
-          group: 'Settings',
-          icon: 'Settings',
-          section: 'System',
-          items: [{
-            name: 'acct-process-monitor',
-            label: 'Accounting Process',
-            featureFlag: 'acct-process-monitor',
-          }],
-        }]}
+        menuGroups={[
+          { group: 'Favorites', icon: 'Star', section: 'General', items: [] },
+          {
+            group: 'Settings',
+            icon: 'Settings',
+            section: 'System',
+            items: [{
+              name: 'acct-process-monitor',
+              label: 'Accounting Process',
+              capability: 'isAdminOrClientAdmin',
+            }],
+          },
+        ]}
       />);
 
-      expect(screen.queryByTestId('menu-item-acct-process-monitor')).not.toBeInTheDocument();
-    });
-
-    it('renders the accounting-process item when its declared feature flag is on', () => {
-      mockUseFeatureFlag.mockReturnValue(true);
-      render(<SideMenu
-        {...defaultProps}
-        menuGroups={[{
-          group: 'Settings',
-          icon: 'Settings',
-          section: 'System',
-          items: [{
-            name: 'acct-process-monitor',
-            label: 'Accounting Process',
-            featureFlag: 'acct-process-monitor',
-          }],
-        }]}
-      />);
-
-      expect(screen.getByTestId('menu-item-acct-process-monitor')).toBeInTheDocument();
+      await user.click(screen.getByText('Favorites'));
+      // One entry under Settings plus the saved favorite.
+      expect(screen.getAllByText('Accounting Process')).toHaveLength(2);
     });
 
     it('fails closed for an explicitly unknown feature flag', () => {

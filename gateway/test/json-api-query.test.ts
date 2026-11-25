@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { HttpException } from '@nestjs/common';
-import type { PublicApiEntity } from '@etendosoftware/api-gateway-core';
+import type { PublicApiEntity } from '@etendo-ai/api-gateway-core';
 import { filterOperatorsFor, neoListParams, pagination, parseListQuery } from '../src/public-api/json-api-query.ts';
 
 const field = (internalPath: string, dataType: Record<string, string> | undefined, extra: Record<string, unknown> = {}) =>

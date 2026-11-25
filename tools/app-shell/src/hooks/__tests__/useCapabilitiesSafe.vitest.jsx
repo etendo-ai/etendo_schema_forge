@@ -3,7 +3,7 @@
  *
  * `@/auth/AuthContext.jsx` is mocked directly so the three real-world shapes
  * of `useAuth()` can be exercised deterministically, independent of whether
- * the published `@etendosoftware/app-shell-core` package (no windowAccess/
+ * the published `@etendo-ai/app-shell-core` package (no windowAccess/
  * capabilities support yet) or the LOCAL_CORE source is resolved:
  *   - no `AuthProvider` ancestor → `useAuth()` throws (its real contract)
  *   - `AuthProvider` present, capabilities loaded → returns the map

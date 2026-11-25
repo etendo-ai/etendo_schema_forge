@@ -31,7 +31,7 @@ vi.mock('@/auth/AuthContext.jsx', () => ({
   useAuth: () => ({ selectedOrg: { id: 'org-1' }, logout: vi.fn() }),
 }));
 
-vi.mock('@etendosoftware/app-shell-core/auth', () => ({
+vi.mock('@etendo-ai/app-shell-core/auth', () => ({
   authHeaders: (t) => ({ 'Accept-Language': 'es_ES', ...(t ? { Authorization: `Bearer ${t}` } : {}) }),
   buildHeaders: (t) => ({ 'Content-Type': 'application/json', 'Accept-Language': 'es_ES', ...(t ? { Authorization: `Bearer ${t}` } : {}) }),
   useAuth: () => ({ selectedOrg: { id: 'org-1' }, logout: vi.fn() }),

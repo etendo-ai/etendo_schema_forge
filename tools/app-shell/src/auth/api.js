@@ -1,1 +1,1 @@
-export * from '@etendosoftware/app-shell-core/auth';
+export * from '@etendo-ai/app-shell-core/auth';

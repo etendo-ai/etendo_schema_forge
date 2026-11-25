@@ -39,7 +39,7 @@ vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.f
 // from `@/auth/AuthContext.jsx`. This suite renders those REAL generated pages
 // with no `AuthProvider` ancestor, so the real hook throws "must be used
 // within AuthProvider". Mocked here the same way
-// `PurchaseInvoiceTopbar.vitest.jsx` mocks `@etendosoftware/app-shell-core/auth`
+// `PurchaseInvoiceTopbar.vitest.jsx` mocks `@etendo-ai/app-shell-core/auth`
 // for the identical situation — full, non-fail-closed access so the guard
 // never blocks the render and the reactivate-confirm assertions are
 // unaffected.

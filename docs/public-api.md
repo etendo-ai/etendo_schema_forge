@@ -441,6 +441,8 @@ Content-Type: application/vnd.api+json
 - **Master-child documents (lines).** A child resource is addressed through its master (`/api/v1/{master}/{masterId}/{child}`), for example `sales-order/{id}/lines`. The master foreign key (for example `salesOrder`) is never an attribute and is not part of the body: the gateway takes it from the URL and sends it to Etendo as `parentId`. A child resource's `type` is its own public name (`sales-order-lines`).
 > **Change for integrators (V1, contact categories and taxes published).** Publishing `contact-category` and `tax` turned two existing write fields into relationships: `contacts.category` and the `tax` of order and quotation lines. Before, both were plain id attributes; now a body that sends either under `attributes` is refused with `400` (`"<field>" is a relationship`), and responses carry them under `relationships` only. Send `{ "data": { "type": "contact-category", "id": "..." } }` or `{ "data": { "type": "tax", "id": "..." } }` instead. The contact's category lookup now answers values of `type` `contact-category`.
 
+> **Change for integrators (V1, conversion rate validity with time).** The validity range of a conversion rate now carries a time (ETP-6365): `conversion-rates.valid_from_date` and `valid_to_date` are published as `{ "type": "string", "format": "date-time" }` instead of `format: "date"`. A client that parsed them as a calendar date must accept a timestamp. Filters on them keep the day-level semantics of [4.10](#410-list-queries-pagination-sorting-and-filtering).
+
 - **Contact category (foreign key).** `contacts.category` points to `contact-category`. It is written and read under `relationships` like the product category; sending it under `attributes` is refused with `400`.
 - **Tax category (foreign key).** `tax.tax_category` points to `tax-category`. Both resources are read-only, so the relationship only appears in responses.
 - **Tax of a line (foreign key).** `tax` on `sales-order-lines`, `purchase-order-lines` and `sales-quotation-quotationLine` points to `tax`. It stays writable: send it under `relationships` as `{ "data": { "type": "tax", "id": "..." } }` and find the ids with `GET /api/v1/tax`. Before `tax` was published it was a plain id attribute.
@@ -562,7 +564,7 @@ It prints the key ids, never a password, cookie, CSRF token or secret. The gatew
 | `PUBLIC_API_E2E_GATEWAY_PORT` | fixed gateway port instead of a free one |
 | `PUBLIC_API_E2E_TIMEOUT_MINUTES` | overall limit of the run, default `30`; when it is reached the script stops the suite and the gateway, deletes the keys and exits `124` |
 
-The gateway must be built first: `make public-api-e2e-ci-install` installs the exact published `@etendosoftware/api-gateway-core` pin from `gateway/package.json` and builds the gateway. npm requires GitHub Packages read credentials. No Core clone, `PUBLIC_API_CORE_DIR` or `PUBLIC_API_CORE_REPO` is needed. A second call with the same pin only rebuilds. See the [gateway deployment runbook](ops/public-api-gateway-deploy.md#0-published-gateway-dependency-etp-6150) for registry access and verified stable package releases.
+The gateway must be built first: `make public-api-e2e-ci-install` installs the exact published `@etendo-ai/api-gateway-core` pin from `gateway/package.json` and builds the gateway. npm requires GitHub Packages read credentials. No Core clone, `PUBLIC_API_CORE_DIR` or `PUBLIC_API_CORE_REPO` is needed. A second call with the same pin only rebuilds. See the [gateway deployment runbook](ops/public-api-gateway-deploy.md#0-published-gateway-dependency-etp-6150) for registry access and verified stable package releases.
 
 ```bash
 make public-api-e2e-ci-install
@@ -934,7 +936,7 @@ integrator                gateway (Nest)                     Etendo (com.etendoe
 ## 9. Operational notes
 
 - The gateway Docker image bundles `public-api/` and `gateway/public`, listens on port 4300 and runs as the `node` user (`gateway/Dockerfile`).
-- The image builds `@etendosoftware/api-gateway-core` from `.schema_forge_core/packages/api-gateway-core`, packs it as the tarball `etendosoftware-api-gateway-core-0.1.0.tgz` and installs that tarball, so the gateway is compiled against the core source present at build time.
+- The image builds `@etendo-ai/api-gateway-core` from `.schema_forge_core/packages/api-gateway-core`, packs it as the tarball `etendosoftware-api-gateway-core-0.1.0.tgz` and installs that tarball, so the gateway is compiled against the core source present at build time.
 - `make generate-base-public-api-manifest` regenerates and validates the manifest.
 
 ---

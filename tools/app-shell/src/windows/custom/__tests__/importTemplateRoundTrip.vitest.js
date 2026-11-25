@@ -2,11 +2,11 @@ import { describe, it, vi, afterEach } from 'vitest';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { buildTemplateCsv } from '@etendosoftware/app-shell-core/lib/import/buildTemplateCsv.js';
-import { mapColumns } from '@etendosoftware/app-shell-core/lib/import/mapColumns.js';
-import { parseDelimited } from '@etendosoftware/app-shell-core/lib/import/parseDelimited.js';
-import { validateRow } from '@etendosoftware/app-shell-core/lib/import/validateRows.js';
-import { buildOperations } from '@etendosoftware/app-shell-core/lib/import/buildOperations.js';
+import { buildTemplateCsv } from '@etendo-ai/app-shell-core/lib/import/buildTemplateCsv.js';
+import { mapColumns } from '@etendo-ai/app-shell-core/lib/import/mapColumns.js';
+import { parseDelimited } from '@etendo-ai/app-shell-core/lib/import/parseDelimited.js';
+import { validateRow } from '@etendo-ai/app-shell-core/lib/import/validateRows.js';
+import { buildOperations } from '@etendo-ai/app-shell-core/lib/import/buildOperations.js';
 import {
   BANK_STATEMENT_IMPORT_FIELDS,
   bankStatementFieldLabel,

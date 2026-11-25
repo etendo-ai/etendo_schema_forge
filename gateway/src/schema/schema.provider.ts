@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
-import type { PublicApiSchema } from '@etendosoftware/api-gateway-core';
-import { PUBLIC_API_SCHEMA } from '@etendosoftware/api-gateway-core';
+import type { PublicApiSchema } from '@etendo-ai/api-gateway-core';
+import { PUBLIC_API_SCHEMA } from '@etendo-ai/api-gateway-core';
 
 export const schemaProvider = {
   provide: PUBLIC_API_SCHEMA,

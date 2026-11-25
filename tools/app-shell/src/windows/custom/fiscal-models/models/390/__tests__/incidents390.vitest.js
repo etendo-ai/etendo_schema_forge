@@ -11,9 +11,9 @@ import esES from '@/locales/es_ES.json';
 import enUS from '@/locales/en_US.json';
 import esAR from '@/locales/es_AR.json';
 
-vi.mock('@etendosoftware/app-shell-core/auth/api', () => ({ apiFetch: vi.fn() }));
+vi.mock('@etendo-ai/app-shell-core/auth/api', () => ({ apiFetch: vi.fn() }));
 
-import { apiFetch } from '@etendosoftware/app-shell-core/auth/api';
+import { apiFetch } from '@etendo-ai/app-shell-core/auth/api';
 import {
   groupIncidents390, incidentText390, incidentActions390, organizationPath,
   nameWarningsFromIncidents390, ORGANIZATION_SECTION_ANCHOR, INCIDENT_KEY_PREFIX_390,

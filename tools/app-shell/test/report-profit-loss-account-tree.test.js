@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import Handlebars from 'handlebars';
 import { registerReportHelpers, buildJsreportHelpersString } from '../../../templates/reports/helpers/report-html-helpers.js';
-import { buildContractLabels } from '@etendosoftware/schema-forge-cli/src/report-i18n.js';
+import { buildContractLabels } from '@etendo-ai/schema-forge-cli/src/report-i18n.js';
 import { expandBrandingPartial } from './reportBrandingPartialHelper.js';
 import { registerJsreportHelpers } from './reportJsreportHelpers.js';
 

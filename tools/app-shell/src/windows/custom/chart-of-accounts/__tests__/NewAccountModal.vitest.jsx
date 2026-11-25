@@ -392,7 +392,7 @@ describe('NewAccountModal', () => {
 
   // ── Bug A: long parent-account names overflow the dialog (ETP-4884) ───────
   //
-  // DialogContent (@etendosoftware/app-shell-core, dialog.jsx) uses `display: grid`,
+  // DialogContent (@etendo-ai/app-shell-core, dialog.jsx) uses `display: grid`,
   // which makes the `<div className="flex flex-col gap-5 py-2">` fields wrapper a
   // grid item. Grid items default to `min-width: auto`, so the wrapper grows to fit
   // its widest child's full intrinsic content width instead of respecting the

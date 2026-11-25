@@ -134,7 +134,7 @@ The `accounting` entity (`C_Tax_Acct`, tab `333`) was un-excluded and classified
 
 The known gap documented above ("List-view delete disabled at the API level") is now closed by a new generic decisions.json slot: `window.hideDeleteButton`. Unlike `window.hideDelete` (which only disables the CRUD delete capability in `contract.json`/the API), `hideDeleteButton` unconditionally hides the Delete button/icon in **both** the detail toolbar (`DetailView.jsx`) and the list-row hover actions (`RowQuickActions.jsx`, via `DataTable`'s `rowQuickActions.hideDeleteButton`), for every record regardless of status.
 
-- Generator support for `hideDeleteButton` shipped in `@etendosoftware/schema-forge-cli@0.3.6` (already installed — no core bump needed for this change).
+- Generator support for `hideDeleteButton` shipped in `@etendo-ai/schema-forge-cli@0.3.6` (already installed — no core bump needed for this change).
 - Added `"hideDeleteButton": true` to `artifacts/tax/decisions.json → window` (alongside the pre-existing `hideDelete: true`).
 - Wired the receiving side in this repo (`tools/app-shell/src/components/contract-ui/`):
   - `RowQuickActions.jsx` — new `hideDeleteButton` prop (default `false`); `showDelete` is now `!hideDeleteButton && isDeleteVisibleForRecord(...)`, short-circuiting before the status-based gate.
