@@ -1,8 +1,8 @@
 {
-  "version": "0.11.0",
+  "version": "0.12.0",
   "generatedAt": "2026-09-17T15:12:05.434Z",
-  "updatedAt": "2026-11-23T13:46:17.092Z",
-  "checksum": "8787594a3fb2ae25",
+  "updatedAt": "2026-11-24T16:50:37.552Z",
+  "checksum": "9f9801789dfe1af6",
   "frontendContract": {
     "window": {
       "id": "183",
@@ -1779,6 +1779,28 @@
             "validation": {
               "maxLength": 0
             }
+          },
+          {
+            "name": "etgoImportDua",
+            "apiKey": "etgoImportDua",
+            "column": "EM_Etgo_Import_Dua",
+            "label": "EM_Etgo_Import_Dua",
+            "type": "boolean",
+            "tsType": "boolean",
+            "visibility": "editable",
+            "required": true,
+            "grid": false,
+            "form": false,
+            "sourceRequired": true,
+            "derivation": {
+              "type": "computed",
+              "source": "N"
+            },
+            "defaultValue": "N",
+            "validation": {
+              "required": true,
+              "maxLength": 1
+            }
           }
         ],
         "searchableFields": [
@@ -1953,6 +1975,13 @@
           },
           {
             "name": "etvfacSentToVerifac",
+            "derivation": {
+              "type": "computed",
+              "source": "N"
+            }
+          },
+          {
+            "name": "etgoImportDua",
             "derivation": {
               "type": "computed",
               "source": "N"
@@ -6941,6 +6970,14 @@
             "type": "button",
             "visibility": "discarded",
             "required": false
+          },
+          {
+            "name": "etgoImportDua",
+            "apiKey": "etgoImportDua",
+            "column": "EM_Etgo_Import_Dua",
+            "type": "boolean",
+            "visibility": "editable",
+            "required": true
           }
         ],
         "namedFilters": [
@@ -11415,6 +11452,14 @@
         "description": "Default value for 'dueAmount' in header should be a string"
       },
       {
+        "id": "t-default-value-type-header-etgoImportDua",
+        "category": "default-value-type",
+        "entity": "header",
+        "field": "etgoImportDua",
+        "runner": "node",
+        "description": "Default value for 'etgoImportDua' in header should be a string"
+      },
+      {
         "id": "t-default-value-type-header-etsgDateOperation",
         "category": "default-value-type",
         "entity": "header",
@@ -12557,6 +12602,14 @@
         "field": "eTGODueDate",
         "runner": "node",
         "description": "Field 'eTGODueDate' should be present in header"
+      },
+      {
+        "id": "t-field-presence-header-etgoImportDua",
+        "category": "field-presence",
+        "entity": "header",
+        "field": "etgoImportDua",
+        "runner": "node",
+        "description": "Field 'etgoImportDua' should be present in header"
       },
       {
         "id": "t-field-presence-header-eTGOTbaiStatus",
@@ -13885,6 +13938,14 @@
         "field": "eTGODueDate",
         "runner": "node",
         "description": "Field 'eTGODueDate' should have type 'string' in header"
+      },
+      {
+        "id": "t-field-type-header-etgoImportDua",
+        "category": "field-type",
+        "entity": "header",
+        "field": "etgoImportDua",
+        "runner": "node",
+        "description": "Field 'etgoImportDua' should have type 'boolean' in header"
       },
       {
         "id": "t-field-type-header-eTGOTbaiStatus",
@@ -19180,15 +19241,15 @@
       }
     ],
     "summary": {
-      "total": 1032,
+      "total": 1035,
       "byCategory": {
         "action-endpoint": 26,
         "crud-flags": 13,
-        "default-value-type": 41,
+        "default-value-type": 42,
         "displaylogic-evaluable": 28,
         "displaylogic-valid": 28,
-        "field-presence": 166,
-        "field-type": 166,
+        "field-presence": 167,
+        "field-type": 167,
         "readonlylogic-evaluable": 76,
         "readonlylogic-valid": 76,
         "rule-declared": 23,
@@ -19198,7 +19259,7 @@
         "visibility": 13
       },
       "byRunner": {
-        "node": 1032,
+        "node": 1035,
         "junit": 0
       }
     }
