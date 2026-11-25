@@ -34,10 +34,14 @@ const DELETE_ROW = vi.hoisted(() => ({
   id: 'rate-1', toCurrency: 'usd-id', validFromDate: '2026-11-01T00:00:00', sMFCRSynced: false,
 }));
 
-// The list exposes its delete action; the confirm dialog exposes its confirm button.
+// The list exposes its delete action and the name of each listed currency; the confirm dialog
+// exposes its confirm button.
 vi.mock('../CurrencyRatesList.jsx', () => ({
-  CurrencyRatesList: ({ onDelete }) => (
-    <button type="button" data-testid="stub-row-delete" onClick={() => onDelete(DELETE_ROW)}>delete</button>
+  CurrencyRatesList: ({ onDelete, entries }) => (
+    <>
+      <button type="button" data-testid="stub-row-delete" onClick={() => onDelete(DELETE_ROW)}>delete</button>
+      {entries.map((e) => <span key={e.currencyId} data-testid={`stub-name-${e.isoCode}`}>{e.name}</span>)}
+    </>
   ),
 }));
 vi.mock('@/components/contract-ui/DeleteConfirmDialog.jsx', () => ({
@@ -51,6 +55,7 @@ const api = vi.hoisted(() => ({
   fetchHistory: vi.fn(),
   deleteManualRate: vi.fn(),
   fetchServerClock: vi.fn(),
+  fetchManualCurrencyOptions: vi.fn(),
 }));
 vi.mock('../conversionRatesApi.js', () => api);
 
@@ -63,6 +68,20 @@ beforeEach(() => {
   api.fetchCurrentRates.mockResolvedValue([]);
   api.fetchHistory.mockResolvedValue([]);
   api.fetchServerClock.mockResolvedValue({ now: '2026-11-20T10:00:00', timeZone: 'UTC' });
+  api.fetchManualCurrencyOptions.mockResolvedValue([]);
+});
+
+describe('ConversionRatesPage — currency names', () => {
+  it('a currency with no rate in force shows the server name, not the Intl one', async () => {
+    api.fetchHistory.mockResolvedValue([
+      { id: 'r-jpy', toCurrency: 'jpy-id', 'toCurrency$_identifier': 'JPY', validFromDate: '2026-11-01T00:00:00' },
+    ]);
+    api.fetchManualCurrencyOptions.mockResolvedValue([{ id: 'jpy-id', isoCode: 'JPY', name: 'Yen Japonés', symbol: '¥' }]);
+    render(<ConversionRatesPage apiBaseUrl="/sws/neo/conversion-rates" />);
+
+    await waitFor(() => expect(screen.getByTestId('stub-name-JPY')).toHaveTextContent('Yen Japonés'));
+    expect(api.fetchManualCurrencyOptions.mock.calls[0][2]).toEqual({ withoutRates: false });
+  });
 });
 
 describe('ConversionRatesPage — delete confirmation', () => {

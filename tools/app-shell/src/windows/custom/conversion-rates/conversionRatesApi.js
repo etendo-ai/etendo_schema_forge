@@ -90,9 +90,13 @@ export async function fetchServerClock(apiFetch, signal) {
   return now || timeZone ? { now, timeZone } : null;
 }
 
-/** Active currencies that can still receive a FIRST manual rate (no rates yet, never USD/GBP). */
-export async function fetchManualCurrencyOptions(apiFetch, signal) {
-  const data = await postAction(apiFetch, 'manualCurrencyOptions', { withoutRates: true }, signal);
+/**
+ * Active currencies, with their server (translated) name and symbol, that can receive a manual
+ * rate (never the organization currency nor the downloaded USD/GBP). By default only those that
+ * can still receive a FIRST manual rate (no rates yet); `withoutRates: false` lists them all.
+ */
+export async function fetchManualCurrencyOptions(apiFetch, signal, { withoutRates = true } = {}) {
+  const data = await postAction(apiFetch, 'manualCurrencyOptions', { withoutRates }, signal);
   return Array.isArray(data) ? data : [];
 }
 

@@ -19,7 +19,7 @@ import ReportDrawer from '@/components/contract-ui/ReportDrawer.jsx';
 import { CurrencyRatesList } from './CurrencyRatesList.jsx';
 import { ManualRateDialog, DIALOG_MODES } from './ManualRateDialog.jsx';
 import {
-  fetchCurrentRates, fetchHistory, deleteManualRate, fetchServerClock,
+  fetchCurrentRates, fetchHistory, deleteManualRate, fetchServerClock, fetchManualCurrencyOptions,
 } from './conversionRatesApi.js';
 import {
   DEFAULT_PERIOD, PERIODS, STATUSES, RATE_STATUS, NO_ZONE,
@@ -116,6 +116,38 @@ function listStateOf(zoneReady, entries, loading, loaded) {
 }
 
 /**
+ * Server names and symbols of the manual currencies (`manualCurrencyOptions` with
+ * `withoutRates: false`, one request), by currency id: the name a currency with no rate in force
+ * shows — `currentRates` only names the ones that have one. The same translated name the GO
+ * currency selectors show; an empty map when the request fails.
+ */
+function useServerCurrencyNames(apiFetch) {
+  const [byId, setById] = useState(() => new Map());
+  useEffect(() => {
+    const ctrl = new AbortController();
+    Promise.resolve()
+      .then(() => fetchManualCurrencyOptions(apiFetch, ctrl.signal, { withoutRates: false }))
+      .then((list) => setById(new Map((list ?? []).map((c) => [c.id, c]))))
+      .catch(() => {});
+    return () => ctrl.abort();
+  }, [apiFetch]);
+  return byId;
+}
+
+/**
+ * A listed currency with its name and symbol: the server's (`currentRates`, else
+ * `manualCurrencyOptions`), `Intl` only when the server gives none.
+ */
+export function withCurrencyNames(entry, serverNames, locale) {
+  const server = serverNames.get(entry.currencyId);
+  return {
+    ...entry,
+    name: entry.name || server?.name || currencyDisplayName(entry.isoCode, locale),
+    symbol: entry.symbol || server?.symbol || getCurrencySymbol(entry.isoCode),
+  };
+}
+
+/**
  * The server's time zone (`serverClock.timeZone`), read once: `{ready, zone}`. `ready` turns true
  * when the answer arrives or fails — a failure (or an answer with no zone) leaves `zone` null, and
  * the page then shows the server's wall clock unconverted, as before the zone was known.
@@ -159,6 +191,7 @@ export default function ConversionRatesPage({ apiBaseUrl }) {
   const title = ui('convRateWindowTitle');
   const serverZone = useServerZone(apiFetch);
   const zone = useMemo(() => createZoneView(serverZone.zone), [serverZone.zone]);
+  const serverNames = useServerCurrencyNames(apiFetch);
 
   // ── Filters (URL) ───────────────────────────────────────────────────────────
   const [searchParams, setSearchParams] = useSearchParams();
@@ -232,11 +265,7 @@ export default function ConversionRatesPage({ apiBaseUrl }) {
   // ── Currency list, sort, accordion ──────────────────────────────────────────
   const [sort, setSort] = useState(DEFAULT_SORT);
   const entries = useMemo(() => buildCurrencyList(currentRates, rows, { currencyId: filters.currencyId, sort })
-    .map((e) => ({
-      ...e,
-      name: e.name || currencyDisplayName(e.isoCode, locale),
-      symbol: e.symbol || getCurrencySymbol(e.isoCode),
-    })), [currentRates, rows, filters.currencyId, sort, locale]);
+    .map((e) => withCurrencyNames(e, serverNames, locale)), [currentRates, rows, filters.currencyId, sort, locale, serverNames]);
   const entryById = useMemo(() => new Map(entries.map((e) => [e.currencyId, e])), [entries]);
   // Divisa options: every currency known to the page, not narrowed by the Divisa filter itself.
   const currencyOptions = useMemo(
