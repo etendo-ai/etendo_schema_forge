@@ -1,3 +1,6 @@
+// @covers tools/app-shell/src/components/contract-ui/DetailView.jsx
+// @covers artifacts/payment-in/custom/ReactivarConfirmModal.jsx
+// @covers artifacts/payment-out/custom/ReactivarConfirmModal.jsx
 /**
  * Integration regression test for ETP-4332: clicking "Reactivar" on a
  * deposited payment's FORM/DETAIL toolbar must show a confirmation modal

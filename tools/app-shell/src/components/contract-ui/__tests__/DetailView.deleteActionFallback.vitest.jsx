@@ -1,3 +1,4 @@
+// @covers tools/app-shell/src/components/contract-ui/DetailView.jsx
 /**
  * Behavioral test for the per-window `deleteAction` fallback (ETP-4479).
  *

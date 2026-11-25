@@ -1,3 +1,4 @@
+// @covers tools/app-shell/src/windows/custom/shared/PaymentEditModalLauncher.jsx
 // --- Mocks (before imports) ---
 
 const apiFetch = vi.fn();

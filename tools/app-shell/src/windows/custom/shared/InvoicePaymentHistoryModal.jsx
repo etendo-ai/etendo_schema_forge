@@ -291,6 +291,70 @@ function getOutstandingAmount({ isCreditInstrument, installments, fallbackOutsta
   return isCreditInstrument ? Math.abs(installmentTotal) : installmentTotal;
 }
 
+/**
+ * The invoice-header facts the modal shows — currency, grand total, business partner and document
+ * number — each with the fallback the list row may need when a value is missing.
+ */
+function readInvoiceHeaderFacts(invoiceData) {
+  return {
+    currency: invoiceData?.['currency$_identifier'] || 'EUR',
+    grandTotal: parseFloat(invoiceData?.grandTotalAmount ?? 0),
+    bpName: invoiceData?.['businessPartner$_identifier'] || invoiceData?.businessPartner || '',
+    docNo: invoiceData?.documentNo || '',
+  };
+}
+
+/**
+ * Whether "Añadir cobro/pago" is offered, offered disabled, or hidden, and whether the invoice has a
+ * remitted part to show.
+ *
+ * A credit note's remaining balance is consumed FROM other payments, never paid into, so it never
+ * takes one. The button is shown but disabled, rather than hidden, when a draft already covers the
+ * invoice: the user needs to know the button exists and what unblocks it. An invoice that genuinely
+ * takes no payment (settled, a credit note, still in draft) keeps hiding it — and so does one whose
+ * whole outstanding is in a confirmed remittance (ETP-6247): nothing the user does here unblocks it,
+ * the banner says what happens next, and a dead button only reads as broken.
+ */
+function resolveAddPaymentAvailability({ isCreditInstrument, isCompleted, outstandingAmt, newPaymentAmount, remittance }) {
+  const invoiceTakesPayments = !isCreditInstrument && isCompleted && outstandingAmt > 0;
+  const canAddPayment = invoiceTakesPayments && newPaymentAmount > 0;
+  const fullyRemitted = invoiceTakesPayments && !canAddPayment && isBlockedByRemittance(remittance);
+  const addPaymentBlockedByDraft = invoiceTakesPayments && !canAddPayment && !fullyRemitted;
+  const hasRemitted = !isCreditInstrument && remittance.remitted > REMITTANCE_EPSILON;
+  return { canAddPayment, addPaymentBlockedByDraft, hasRemitted };
+}
+
+/**
+ * How "Añadir cobro/pago" looks: muted, explained by a tooltip and not clickable while a draft
+ * already covers the invoice; the regular call to action otherwise.
+ */
+function getAddPaymentButtonLook(blockedByDraft, ui) {
+  if (blockedByDraft) {
+    return {
+      title: ui('cpAddPaymentBlockedByDraft'),
+      className: 'bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]',
+      cursor: 'not-allowed',
+    };
+  }
+  return {
+    title: undefined,
+    className: 'bg-[hsl(var(--foreground))] text-primary-foreground hover:bg-[hsl(var(--accent-highlight))] hover:text-[hsl(var(--accent-highlight-foreground))] transition-colors',
+    cursor: 'pointer',
+  };
+}
+
+/**
+ * The amount and installment handed to the payment entry modal. Editing a draft offers what is free
+ * once the OTHER drafts are reserved, with no installment; a new payment goes to the installment
+ * resolvePaymentTarget picked, capped at its payable part.
+ */
+function resolveEntryModalAllocation(editingPayment, freeToAllocate, newPaymentTarget) {
+  if (editingPayment) {
+    return { outstanding: freeToAllocate(editingPayment.id), scheduleId: undefined };
+  }
+  return { outstanding: newPaymentTarget.amount, scheduleId: newPaymentTarget.scheduleId || undefined };
+}
+
 function getRowAmountMeta({ isCreditInstrument, payment, isSales }) {
   // ETP-6247 — this invoice's share of the payment, not the payment's total: a remittance grouped
   // by customer pays several invoices with ONE payment.
@@ -550,10 +614,7 @@ export default function InvoicePaymentHistoryModal({
     navigate(`/remittance/${remittanceId}`);
   }, [navigate, onClose]);
 
-  const currency = invoiceData?.['currency$_identifier'] || 'EUR';
-  const grandTotal = parseFloat(invoiceData?.grandTotalAmount ?? 0);
-  const bpName = invoiceData?.['businessPartner$_identifier'] || invoiceData?.businessPartner || '';
-  const docNo = invoiceData?.documentNo || '';
+  const { currency, grandTotal, bpName, docNo } = readInvoiceHeaderFacts(invoiceData);
   const isCompleted = isCompletedStatus(invoiceData?.documentStatus);
 
   // Credit instruments (credit notes / returns) carry negative totals end to end. Their
@@ -724,17 +785,11 @@ export default function InvoicePaymentHistoryModal({
   // handed to the entry modal (see resolvePaymentTarget). Editing a draft keeps freeToAllocate.
   const newPaymentTarget = resolvePaymentTarget(installments, freeToAllocate(null));
 
-  // A credit note's remaining balance is consumed FROM other payments, never paid into.
-  const invoiceTakesPayments = !isCreditInstrument && isCompleted && outstandingAmt > 0;
-  const canAddPayment = invoiceTakesPayments && newPaymentTarget.amount > 0;
-  // Shown but disabled, rather than hidden, when a draft already covers the invoice: the user needs
-  // to know the button exists and what unblocks it. An invoice that genuinely takes no payment
-  // (settled, a credit note, still in draft) keeps hiding it — and so does one whose whole
-  // outstanding is in a confirmed remittance (ETP-6247): nothing the user does here unblocks it, the
-  // banner says what happens next, and a dead button only reads as broken.
-  const fullyRemitted = invoiceTakesPayments && !canAddPayment && isBlockedByRemittance(remittance);
-  const addPaymentBlockedByDraft = invoiceTakesPayments && !canAddPayment && !fullyRemitted;
-  const hasRemitted = !isCreditInstrument && remittance.remitted > REMITTANCE_EPSILON;
+  const { canAddPayment, addPaymentBlockedByDraft, hasRemitted } = resolveAddPaymentAvailability({
+    isCreditInstrument, isCompleted, outstandingAmt, newPaymentAmount: newPaymentTarget.amount, remittance,
+  });
+  const addPaymentButtonLook = getAddPaymentButtonLook(addPaymentBlockedByDraft, ui);
+  const entryModalAllocation = resolveEntryModalAllocation(editingPayment, freeToAllocate, newPaymentTarget);
 
   // Table layout: Nº documento · Fecha · Método · Estado · Importe (right) · trash (draft-only).
   // 760px modal − 48px side padding − 60px column gaps (5 gaps) = 652px to distribute.
@@ -907,13 +962,11 @@ export default function InvoicePaymentHistoryModal({
               <button
                 type="button"
                 disabled={addPaymentBlockedByDraft}
-                title={addPaymentBlockedByDraft ? ui('cpAddPaymentBlockedByDraft') : undefined}
+                title={addPaymentButtonLook.title}
                 onClick={() => { setEditingPayment(null); setShowPaymentModal(true); }}
                 data-testid="InvoicePaymentHistoryModal__add-btn"
-                className={addPaymentBlockedByDraft
-                  ? 'bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]'
-                  : 'bg-[hsl(var(--foreground))] text-primary-foreground hover:bg-[hsl(var(--accent-highlight))] hover:text-[hsl(var(--accent-highlight-foreground))] transition-colors'}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 14, lineHeight: '24px', fontWeight: 500, padding: '8px 14px', borderRadius: 360, border: 'none', outline: 'none', cursor: addPaymentBlockedByDraft ? 'not-allowed' : 'pointer' }}
+                className={addPaymentButtonLook.className}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 14, lineHeight: '24px', fontWeight: 500, padding: '8px 14px', borderRadius: 360, border: 'none', outline: 'none', cursor: addPaymentButtonLook.cursor }}
               >
                 <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
                 {isSales ? ui('addCobro') : ui('addPago')}
@@ -929,8 +982,8 @@ export default function InvoicePaymentHistoryModal({
           specName={specName}
           invoiceId={invoiceId}
           invoiceData={invoiceData}
-          outstanding={editingPayment ? freeToAllocate(editingPayment.id) : newPaymentTarget.amount}
-          scheduleId={editingPayment ? undefined : (newPaymentTarget.scheduleId || undefined)}
+          outstanding={entryModalAllocation.outstanding}
+          scheduleId={entryModalAllocation.scheduleId}
           apiBaseUrl={apiBaseUrl}
           payment={editingPayment}
           onClose={() => { setShowPaymentModal(false); setEditingPayment(null); }}
