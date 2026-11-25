@@ -1,3 +1,4 @@
+// @covers tools/app-shell/src/components/contract-ui/ListView.jsx
 /**
  * ListView — `tableOwnsScroll` / `ListTableRegion`'s `ownScroll` branch (ETP-4658).
  *
