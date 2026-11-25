@@ -3759,7 +3759,7 @@ the hook actually produced a segment. (This was a real ETP-5188 bug during devel
 early-return used to key off whether ANY segment was produced across the whole conditions array, so
 a hook legitimately returning `null` for one operator let that condition leak straight back into
 `criteria=` — exactly what this mechanism exists to prevent. Fixed before shipping; the regression
-is now pinned in `gridQuery.vitest.jsx`.)
+is now pinned in schema_forge_core `packages/app-shell-core/src/lib/__tests__/gridQuery.vitest.test.jsx`.)
 
 **Requires `filterable: true`** on the column — a `type: 'custom'` column with no
 `column`/`backendFilterKey` is otherwise silently dropped from the advanced-filter field list
