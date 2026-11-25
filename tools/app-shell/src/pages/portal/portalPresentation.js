@@ -254,6 +254,20 @@ export function initialPortalRange(group, reference = new Date()) {
   return group ? null : defaultPortalRange(reference);
 }
 
+/**
+ * The status tabs that mean "everything in this state now", not "what happened in a period"
+ * (QA pass 2, CP-18b): an overdue invoice is by definition older than its due date, so the rolling
+ * last month hid every overdue invoice while Inicio said "1 Vencida". Selecting one of these tabs
+ * switches the list to all time (`null`), exactly as arriving from an Inicio tile does; the
+ * customer can still pick a narrower range afterwards.
+ */
+export const PORTAL_ALL_TIME_GROUPS = Object.freeze(['awaiting', 'pending', 'overdue', 'inProgress']);
+
+/** Whether selecting the `group` tab shows the whole history ({@link PORTAL_ALL_TIME_GROUPS}). */
+export function isAllTimeGroup(group) {
+  return PORTAL_ALL_TIME_GROUPS.includes(group);
+}
+
 /** A local `Date` as the `yyyy-MM-dd` calendar day the API expects. */
 export function toCalendarParam(date) {
   return date instanceof Date ? todayCalendarISO(date) : null;

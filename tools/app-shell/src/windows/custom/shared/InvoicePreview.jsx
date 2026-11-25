@@ -31,7 +31,7 @@ import EmailsCard from './preview-cards/EmailsCard.jsx';
 import RelatedDocumentsCard from './preview-cards/RelatedDocumentsCard.jsx';
 import { useDocumentCurrency, resolveDualCurrencyDisplay } from './useDocumentCurrency.js';
 import { useCurrencyPrecision } from '@/hooks/useCurrencyPrecision.js';
-import { getArSubtype } from '@generated/sales-invoice/custom/invoiceSubtype.js';
+import { getArSubtype, salesInvoiceSendDocumentType } from '@generated/sales-invoice/custom/invoiceSubtype.js';
 import { isCompletedStatus, isDraftStatus } from '../../../lib/docStatus.js';
 
 // ETP-4841: a credit instrument is identified by the SIGN of its total, not by its
@@ -498,7 +498,11 @@ export default function InvoicePreview({ invoice, token, apiBaseUrl, windowName,
       )}
       {p.showSendModal && (
         <SendDocumentModal
-          documentType={windowLabel}
+          // A sales credit note is sent as «Factura rectificativa» (ETP-6209); purchase invoices
+          // keep the window's label.
+          documentType={specName === 'purchase-invoice'
+            ? windowLabel
+            : salesInvoiceSendDocumentType(p.displayInvoice, { tMenu, ui })}
           documentNo={p.displayInvoice?.documentNo}
           bpName={p.partnerName}
           bPartnerId={p.displayInvoice?.businessPartner}

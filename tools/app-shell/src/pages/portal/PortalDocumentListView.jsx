@@ -11,7 +11,8 @@ import {
 } from './PortalBits.jsx';
 import { PortalMobileCard, PortalMobileFilters, usePortalCardActions } from './PortalListMobile.jsx';
 import {
-  PORTAL_KIND_GROUPS, PORTAL_KIND_META, initialPortalRange, isPortalSubtype, toCalendarParam,
+  PORTAL_KIND_GROUPS, PORTAL_KIND_META, initialPortalRange, isAllTimeGroup, isPortalSubtype,
+  toCalendarParam,
 } from './portalPresentation.js';
 
 const SEARCH_DEBOUNCE_MS = 300;
@@ -55,15 +56,22 @@ export default function PortalDocumentListView({
   });
 
   // A new kind starts from the defaults: the rolling last month, or all time when the link named a
-  // status group (`initialPortalRange`). Switching tabs inside the list keeps the chosen range.
+  // status group (`initialPortalRange`).
   useEffect(() => {
     setRange(initialPortalRange(group));
     setSubtype(null);
     setSearchInput('');
     setSearch('');
-    // Only a new kind resets the range: a tab (group) change keeps what the customer chose.
+    // Only a new kind resets everything: a tab (group) change is handled below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kind]);
+
+  // CP-18b: a "state" tab (Vencido, Pendiente, Bajo evaluación, En proceso) lists everything in
+  // that state, whatever the range: selecting it switches to all time, as an Inicio tile does, and
+  // the date button then reads «Todo el tiempo». Any other tab keeps the range the customer chose.
+  useEffect(() => {
+    if (isAllTimeGroup(group)) setRange(null);
+  }, [group]);
 
   useEffect(() => {
     const timer = setTimeout(() => setSearch(searchInput), SEARCH_DEBOUNCE_MS);

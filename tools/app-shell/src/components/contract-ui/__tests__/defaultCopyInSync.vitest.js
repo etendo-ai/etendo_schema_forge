@@ -1,5 +1,6 @@
 // @covers tools/app-shell/src/components/contract-ui/SendDocumentModal.jsx
 // @covers tools/app-shell/src/components/contract-ui/documentEmailSend.js
+// @covers artifacts/sales-invoice/custom/invoiceSubtype.js
 import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -106,6 +107,21 @@ describe('document email default copy stays in sync with the module catalog', ()
         const key = DOCUMENT_EMAIL_BODY_KEYS[contract];
         expect(labels.genericLabels[key], `${contract} → ${key}`).toBe(asRendered(body));
       }
+    }
+  });
+
+  // ETP-6209 QA pass 2 — the modal names the document itself in the subject and the message, so
+  // the type it passes must be the catalog's `<contract>.documentType` (what an MCP send names):
+  // the window's menu label for a sales invoice and a quotation («Presupuesto de Venta», no «s»),
+  // and «Factura rectificativa» / "Credit Note" for a rectificative invoice
+  // (`salesInvoiceSendDocumentType`).
+  it.runIf(available)('names the sent document as the catalog does, credit notes included', () => {
+    for (const [file, labels] of [[CATALOG, esES], [CATALOG_EN, enUS]]) {
+      const catalog = readCatalog(file);
+      expect(labels.menus['Sales Invoice'].label).toBe(catalog.get('sales-invoice-send.documentType'));
+      expect(labels.menus['Sales Quotation'].label).toBe(catalog.get('sales-quotation-send.documentType'));
+      expect(labels.genericLabels.sendDocumentTypeCreditNote)
+        .toBe(catalog.get('sales-invoice-send.documentType.creditNote'));
     }
   });
 

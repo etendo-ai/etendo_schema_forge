@@ -18420,6 +18420,7 @@
     "sendModalDefaultGreeting": "Hola, **{bpName}**:",
     "sendModalDefaultMessage": "Te enviamos tu {documentType} **{documentNo}**.",
     "sendModalDefaultMessageSupplier": "Le enviamos su {documentType} **{documentNo}**.",
+    "sendDocumentTypeCreditNote": "Factura rectificativa",
     "sendModalMessagePlaceholder": "Añade un mensaje personal...",
     "sendModalSend": "Enviar",
     "sendModalSending": "Enviando...",

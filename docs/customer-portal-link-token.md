@@ -130,6 +130,25 @@ safe from tags still apply to any tag the app adds:
 - **Never add a static `<script>` to `index.html`** for a tag. A classic or `async` script there would
   run on portal pages too, before the module graph, and could read the token.
 
+## The etendo.ai links carry the tenant, never the token
+
+The portal's two links to etendo.ai are built by `etendoLinkFor(piece, clientId)`
+(`tools/app-shell/src/pages/portal/portalMarketingLinks.js`):
+
+- "Creado con etendo.ai" (the desktop pill and the mobile tile) uses the `learnMore` link;
+- the rail banner's «Empieza gratis» uses the `startFree` link.
+
+Each link is marketing's verbatim UTM URL plus `&portal_ref=<AD_Client_ID>` (marketing's UTM
+document, 2026-11-25). The id is the tenant the portal already knows: from the URL, or from `/me`
+for a pre-CP-43 link. `PortalPage` provides it through `PortalClientContext`.
+
+`etendoLinkFor` only accepts a value shaped like a tenant id (`isPortalClientId`, 32 hex
+characters). So the 43-character token can never become a `portal_ref`, and nothing about the
+recipient ever travels in the link. When the tenant is not known, the link is the bare base URL.
+
+The links still open in a new tab with `rel="noopener noreferrer"`. The transactional emails carry
+no `portal_ref`.
+
 ## Closed: HubSpot click tracking captured element text
 
 QA found `track.hubspot.com/__ptc.gif?…_hs_element_text=24/11/2026 PR1000060 … Bajo evaluación

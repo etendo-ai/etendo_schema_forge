@@ -40,7 +40,7 @@ vi.mock('@/components/contract-ui/CopyRecordLinkButton', () => ({
 }));
 
 vi.mock('@/components/contract-ui/SendDocumentModal', () => ({
-  default: () => <div data-testid="send-document-modal" />,
+  default: (props) => <div data-testid="send-document-modal" data-document-type={props.documentType} />,
   SendDocumentButton: (props) => (
     <button type="button" data-testid="send-document-btn" onClick={props.onClick} />
   ),
@@ -206,5 +206,17 @@ describe('InvoiceTopbarExtra — send modal opens on every non-draft branch', ()
     await waitFor(() => {
       expect(screen.getByTestId('send-document-modal')).toBeInTheDocument();
     });
+  });
+
+  // ETP-6209 QA pass 2: an app send names a rectificative invoice as the module does for an MCP
+  // send («Factura rectificativa» / "Credit Note"), and any other invoice by the window label.
+  it.each([
+    ['a rectificative invoice', { arInvoiceSubtype: 'RECTIFICATIVA', grandTotalAmount: -500, outstandingAmount: -500 }, 'sendDocumentTypeCreditNote'],
+    ['a regular invoice', {}, 'Sales Invoice'],
+  ])('names %s in the send modal', async (_label, overrides, expected) => {
+    mockInstallments([{ amount: '1000', paidAmount: '0', outstandingAmount: '1000', daysOverdue: '0' }]);
+    renderTopbar({ ...DATA, ...overrides });
+    await openSendModalAfterBadge();
+    expect(screen.getByTestId('send-document-modal')).toHaveAttribute('data-document-type', expected);
   });
 });

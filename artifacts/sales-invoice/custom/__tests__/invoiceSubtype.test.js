@@ -1,6 +1,7 @@
+// @covers artifacts/sales-invoice/custom/invoiceSubtype.js
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { getArSubtype } from '../invoiceSubtype.js';
+import { getArSubtype, salesInvoiceSendDocumentType } from '../invoiceSubtype.js';
 
 describe('getArSubtype', () => {
   it('returns FAC for null row', () => {
@@ -54,5 +55,24 @@ describe('getArSubtype', () => {
     assert.equal(getArSubtype({ 'transactionDocument$_identifier': 'Standard Invoice' }), 'FAC');
     assert.equal(getArSubtype({ 'transactionDocument$_identifier': 'Factura' }), 'FAC');
     assert.equal(getArSubtype({}), 'FAC');
+  });
+});
+
+// ETP-6209 QA pass 2 — what an app send names the document as, like the module catalog's
+// `sales-invoice-send.documentType(.creditNote)`.
+describe('salesInvoiceSendDocumentType', () => {
+  const labels = { tMenu: (key) => `menu:${key}`, ui: (key) => `ui:${key}` };
+
+  it('names a rectificative invoice «Factura rectificativa»', () => {
+    assert.equal(salesInvoiceSendDocumentType({ arInvoiceSubtype: 'RECTIFICATIVA' }, labels), 'ui:sendDocumentTypeCreditNote');
+    assert.equal(
+      salesInvoiceSendDocumentType({ 'transactionDocument$_identifier': 'AR Credit Memo' }, labels),
+      'ui:sendDocumentTypeCreditNote',
+    );
+  });
+
+  it('names any other invoice by the window label', () => {
+    assert.equal(salesInvoiceSendDocumentType({ arInvoiceSubtype: 'FAC' }, labels), 'menu:Sales Invoice');
+    assert.equal(salesInvoiceSendDocumentType(null, labels), 'menu:Sales Invoice');
   });
 });

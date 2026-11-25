@@ -18189,6 +18189,7 @@
     "sendModalDefaultGreeting": "Hello **{bpName}**,",
     "sendModalDefaultMessage": "Please find your {documentType} **{documentNo}** below.",
     "sendModalDefaultMessageSupplier": "Please find your {documentType} **{documentNo}** below.",
+    "sendDocumentTypeCreditNote": "Credit Note",
     "sendModalMessagePlaceholder": "Add a personal message...",
     "sendModalSend": "Send",
     "sendModalSending": "Sending...",

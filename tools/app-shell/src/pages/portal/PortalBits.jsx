@@ -1,3 +1,4 @@
+import { createContext, useContext } from 'react';
 import { CaretRightIcon } from '@phosphor-icons/react';
 import { SearchBar } from '@/components/layout/SearchBar.jsx';
 import { useLocale, useLocaleSwitch, useUI } from '@/i18n';
@@ -8,15 +9,29 @@ import { AmountText } from '@/components/currency-summary';
 import { formatCalendarDate } from '@/lib/dateOnly.js';
 import { getDueDateDotStyle, getDueDateState } from '@/lib/invoiceDueDate.js';
 import { invoicePaymentState, quotationValidity } from './portalPresentation.js';
+import { etendoLinkFor } from './portalMarketingLinks.js';
 
 /**
- * Where the "Creado con etendo.ai" pill (desktop) and the compact Etendo tile (mobile)
- * send the visitor: marketing's URL with its UTM, verbatim (ETP-6209, approved 2026-11-24). The one
- * place it lives; both links read it. Each opens with `rel="noopener noreferrer"`, and portal
- * pages carry `<meta name="referrer" content="same-origin">` (`lib/portal/portalLinkSession.js`),
- * so etendo.ai never receives the portal URL as a referrer.
+ * The portal's tenant id (`AD_Client_ID`), provided by `PortalPage` for the etendo.ai links'
+ * `portal_ref` (see `portalMarketingLinks.js`). `null` when the portal does not know it yet.
  */
-export const ETENDO_PRICING_URL = 'https://etendo.ai/?utm_source=portal_clientes&utm_medium=in_app&utm_campaign=portal_clientes&utm_content=boton_conoce_mas';
+export const PortalClientContext = createContext(null);
+
+/** The portal's tenant id, for its etendo.ai links. */
+export function usePortalClientId() {
+  return useContext(PortalClientContext);
+}
+
+/**
+ * Where the "Creado con etendo.ai" pill (desktop) and the compact Etendo tile (mobile) send the
+ * visitor: marketing's `learnMore` link with the portal's `portal_ref` (`etendoLinkFor`). Each opens
+ * with `rel="noopener noreferrer"`, and portal pages carry `<meta name="referrer"
+ * content="same-origin">` (`lib/portal/portalLinkSession.js`), so etendo.ai never receives the
+ * portal URL as a referrer.
+ */
+function useEtendoLearnMoreLink() {
+  return etendoLinkFor('learnMore', usePortalClientId());
+}
 
 /**
  * Etendo's mark as the Figma draws it on the "Creado con Etendo" link: a 32×32 lime (#B8FA50)
@@ -53,13 +68,14 @@ function EtendoWordmark() {
  * "Creado con Etendo · Conoce más"): 40px tall, padding 4px 4px 4px 16px, gap 8px, #1B1A1F, radius
  * 200px; "Creado con" (Inter 500 12/16, -0.005em, white), the etendo.ai horizontal logo and a 32px
  * 10%-white round arrow with a 50%-white CaretRight. It opens marketing's page
- * ({@link ETENDO_PRICING_URL}) in a new tab; the arrow is part of the link, not a button.
+ * (`etendoLinkFor('learnMore')`) in a new tab; the arrow is part of the link, not a button.
  */
 export function PortalCreatedWithPill({ className }) {
   const ui = useUI();
+  const href = useEtendoLearnMoreLink();
   return (
     <a
-      href={ETENDO_PRICING_URL}
+      href={href}
       target="_blank"
       rel="noopener noreferrer"
       aria-label={ui('portalCreatedWithLinkLabel')}
@@ -90,9 +106,10 @@ export function PortalCreatedWithPill({ className }) {
 export function PortalCreatedWithTile({ testId = 'portal-created-with-mobile' }) {
   const ui = useUI();
   const label = ui('portalCreatedWithLinkLabel');
+  const href = useEtendoLearnMoreLink();
   return (
     <a
-      href={ETENDO_PRICING_URL}
+      href={href}
       target="_blank"
       rel="noopener noreferrer"
       aria-label={label}

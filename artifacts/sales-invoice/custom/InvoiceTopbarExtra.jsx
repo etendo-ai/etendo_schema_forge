@@ -5,6 +5,7 @@ import SendDocumentModal from '@/components/contract-ui/SendDocumentModal';
 import { useInvoicePdf } from '@/windows/custom/shared/useInvoicePdf.js';
 import { resolveInvoicePaymentBadge } from '@/windows/custom/shared/invoicePaymentBadge.js';
 import { formatCurrency } from '@/lib/formatCurrency.js';
+import { salesInvoiceSendDocumentType } from './invoiceSubtype.js';
 import { useApiFetch } from '@/auth/useApiFetch.js';
 import BadgeAmount, { BADGE_CHIP_FIT_CLASS } from '@/windows/custom/shared/BadgeAmount.jsx';
 
@@ -208,7 +209,7 @@ export default function InvoiceTopbarExtra({ data, recordId, token, apiBaseUrl }
   // or the click is swallowed silently (ETP-6209 CP-1b).
   const sendModal = showSendModal && (
     <SendDocumentModal
-      documentType={tMenu('Sales Invoice')}
+      documentType={salesInvoiceSendDocumentType(data, { tMenu, ui })}
       documentNo={data?.documentNo}
       bpName={data?.['businessPartner$_identifier']}
       bPartnerId={data?.businessPartner}

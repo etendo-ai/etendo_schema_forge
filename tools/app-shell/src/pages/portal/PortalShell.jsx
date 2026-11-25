@@ -24,15 +24,10 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { LanguageMenuSection } from '@/components/LanguageMenuSection.jsx';
-import { PortalTag } from './PortalBits.jsx';
+import { PortalTag, usePortalClientId } from './PortalBits.jsx';
+import { etendoLinkFor } from './portalMarketingLinks.js';
 import { PORTAL_HIGHLIGHTS, PORTAL_KIND_META } from './portalPresentation.js';
 
-/**
- * Where the promo card's "Empieza gratis" sends the visitor: marketing's pricing page with its UTM,
- * verbatim (ETP-6209, decided 2026-11-25). It replaced the app's own sign-up route. It opens in a
- * new tab with `rel="noopener noreferrer"`, so etendo.ai never receives the portal URL.
- */
-export const ETENDO_SIGNUP_URL = 'https://etendo.ai/precios/?utm_source=portal_clientes&utm_medium=in_app&utm_campaign=portal_clientes&utm_content=banner_empieza_gratis';
 
 /**
  * Icon per destination: the design's Phosphor glyphs, the same everywhere a kind is drawn (rail,
@@ -501,10 +496,12 @@ function PortalRailFooter({ identity, collapsed }) {
 
 /**
  * The expanded rail's banner ("Lleva tu negocio más lejos"), at the bottom of the menu list.
- * "Empieza gratis" opens marketing's pricing page (`ETENDO_SIGNUP_URL`) in a new tab.
+ * "Empieza gratis" opens marketing's pricing page (`etendoLinkFor('startFree')`, with the portal's
+ * `portal_ref`) in a new tab.
  */
 function PortalPromo() {
   const ui = useUI();
+  const href = etendoLinkFor('startFree', usePortalClientId());
   return (
     <aside className="flex w-full flex-col gap-3 rounded-lg border border-[#E3E7EC] bg-white p-3" data-testid="portal-promo">
       <div className="flex flex-col gap-1">
@@ -515,7 +512,7 @@ function PortalPromo() {
         <span className="text-xs leading-4 text-[#6B7280]">{ui('portalPromoDescription')}</span>
       </div>
       <a
-        href={ETENDO_SIGNUP_URL}
+        href={href}
         target="_blank"
         rel="noopener noreferrer"
         className="flex h-8 w-full items-center justify-center rounded-lg bg-[#325CFF] px-2 py-1 text-sm font-medium leading-6 text-white hover:bg-[#2849CC]"

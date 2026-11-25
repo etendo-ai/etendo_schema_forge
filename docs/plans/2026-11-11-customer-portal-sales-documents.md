@@ -1458,7 +1458,9 @@ Figma `6cMWBbmrAt65GwZCT5YIF1`, node `3377-13236`. Built in `sf/tools/app-shell/
 
 - **Desktop "Creado con etendo.ai" pill** (`PortalBits.jsx` `PortalCreatedWithPill`): 40px tall,
   "Creado con", the etendo.ai horizontal logo and the arrow. "Conoce más" is gone. The link is
-  unchanged (`ETENDO_PRICING_URL`). The rest of desktop is unchanged.
+  unchanged, now built by `etendoLinkFor('learnMore', clientId)` with `&portal_ref=<AD_Client_ID>`
+  (`portalMarketingLinks.js`, marketing's UTM document of 2026-11-25; the banner uses `startFree`).
+  The rest of desktop is unchanged.
 - **Inicio** (`PortalHomeView.jsx`):
   - the dark summary (`MobileHomeSummary`): company logo, name, Etendo's compact link and search;
     "Hola, …" with the number of invoices pending payment; "Total pendiente" (the converted "≈" one

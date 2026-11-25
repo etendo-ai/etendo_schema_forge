@@ -283,14 +283,19 @@ const urlView = () => Object.fromEntries(new URLSearchParams(screen.getByTestId(
 const listKind = () => screen.getByTestId('portal-document-list').querySelector('[data-kind]')?.getAttribute('data-kind');
 
 /**
- * Marketing's URL with its UTM, verbatim (approved 2026-11-24). Written out here rather than read
- * from `ETENDO_PRICING_URL`, so an edit of the constant cannot pass unnoticed.
+ * Marketing's URLs with their UTM, verbatim (approved 2026-11-24/25). Written out here rather than
+ * read from `ETENDO_LINK_BASES`, so an edit of the constants cannot pass unnoticed. Inside the
+ * portal each one carries `&portal_ref=<AD_Client_ID>` (marketing's UTM document, 2026-11-25) —
+ * never the token.
  */
 const ETENDO_MARKETING_URL = 'https://etendo.ai/?utm_source=portal_clientes&utm_medium=in_app&utm_campaign=portal_clientes&utm_content=boton_conoce_mas';
+const ETENDO_START_FREE_URL = 'https://etendo.ai/precios/?utm_source=portal_clientes&utm_medium=in_app&utm_campaign=portal_clientes&utm_content=banner_empieza_gratis';
+const withPortalRef = (url) => `${url}&portal_ref=${CLIENT}`;
 
 /** Every "Creado con Etendo" link: marketing's page, in a new tab, with no opener, named by its label. */
-function expectEtendoLink(link) {
-  expect(link).toHaveAttribute('href', ETENDO_MARKETING_URL);
+function expectEtendoLink(link, href = withPortalRef(ETENDO_MARKETING_URL)) {
+  expect(link).toHaveAttribute('href', href);
+  expect(link.getAttribute('href')).not.toContain(TOKEN);
   expect(link).toHaveAttribute('target', '_blank');
   expect(link).toHaveAttribute('rel', 'noopener noreferrer');
   expect(link).toHaveAccessibleName('portalCreatedWithLinkLabel');
@@ -708,7 +713,8 @@ describe('PortalPage — shell', () => {
     expect(pill).toHaveClass('h-10', 'bg-[#1B1A1F]', 'rounded-[200px]');
     expect(compact.textContent).toBe('');
     expect(compact).toHaveAttribute('title', 'portalCreatedWithLinkLabel');
-    for (const link of [pill, compact]) expectEtendoLink(link);
+    // Rendered outside a portal (no tenant id known): the base URL, without portal_ref.
+    for (const link of [pill, compact]) expectEtendoLink(link, ETENDO_MARKETING_URL);
   });
 
   // Each view draws its own headers: the link must be in every one of them, and the rail (where
@@ -716,7 +722,7 @@ describe('PortalPage — shell', () => {
   for (const { view, path, width, ready, desktopHeader, mobileHeader, mobileLogo = false } of [
     {
       view: 'home',
-      path: `/portal/${TOKEN}`,
+      path: `/portal/${CLIENT}/${TOKEN}`,
       ready: shellReady,
       desktopHeader: () => screen.getByTestId('portal-view-header'),
       // The mobile redesign's dark summary carries Inicio's header (logo, name, Etendo, search).
@@ -724,7 +730,7 @@ describe('PortalPage — shell', () => {
     },
     {
       view: 'list',
-      path: `/portal/${TOKEN}?view=list&kind=INVOICE`,
+      path: `/portal/${CLIENT}/${TOKEN}?view=list&kind=INVOICE`,
       ready: listReady,
       desktopHeader: () => screen.getByTestId('portal-view-header'),
       // The list's mobile header has no test id of its own; the only tile on this view is in it.
@@ -734,7 +740,7 @@ describe('PortalPage — shell', () => {
     {
       // Below md a document is a full page with both headers (desktop opens it as a drawer).
       view: 'document page',
-      path: `/portal/${TOKEN}?view=doc&kind=ORDER&id=ord-1`,
+      path: `/portal/${CLIENT}/${TOKEN}?view=doc&kind=ORDER&id=ord-1`,
       width: 500,
       ready: detailReady,
       desktopHeader: () => screen.getByTestId('portal-back').closest('header'),
@@ -790,8 +796,11 @@ describe('PortalPage — rail', () => {
 
     const rail = screen.getByTestId('portal-sidebar');
     expect(rail).toHaveAttribute('data-collapsed', 'false');
-    // "Empieza gratis" opens the app's sign-up (PO answer).
-    expect(within(rail).getByTestId('portal-promo-cta')).toHaveAttribute('href', 'https://etendo.ai/precios/?utm_source=portal_clientes&utm_medium=in_app&utm_campaign=portal_clientes&utm_content=banner_empieza_gratis');
+    // "Empieza gratis" opens marketing's pricing page, with the portal's tenant as portal_ref.
+    const cta = within(rail).getByTestId('portal-promo-cta');
+    expect(cta).toHaveAttribute('href', withPortalRef(ETENDO_START_FREE_URL));
+    expect(cta).toHaveAttribute('target', '_blank');
+    expect(cta).toHaveAttribute('rel', 'noopener noreferrer');
 
     await user.click(screen.getByTestId('portal-rail-toggle'));
 
@@ -2131,3 +2140,81 @@ describe('PortalPage — mobile list card options and filters', () => {
     expectFrom(listQueries().at(-1).get('dateFrom'), initialFrom);
   });
 });
+
+// QA pass 2, CP-18b: the «Vencido» tab was empty while Inicio said «1 Vencida» — the default range
+// (the last month) hid every older overdue invoice. A "state" tab lists everything in its state.
+describe('PortalPage — state tabs list the whole history', () => {
+  // As the server filters: an old overdue invoice only comes back without a date range.
+  const OLD_OVERDUE = {
+    kind: 'INVOICE', id: 'inv-old', documentNo: 'FV/0099', date: '2025-01-10', dueDate: '2025-02-10',
+    documentStatus: 'CO', currency: 'EUR', taxBase: 100, grandTotal: 121, outstandingAmount: 121, overdue: true,
+  };
+  beforeEach(() => {
+    responses.documents = (params) => jsonResponse(params.get('dateFrom')
+      ? LISTS.invoice
+      : { documents: [OLD_OVERDUE], totalCount: 1, statuses: ['CO'] });
+  });
+
+  it('switches «Vencido» to all time, lists the old overdue invoice and says «Todo el tiempo»', async () => {
+    const user = userEvent.setup();
+    renderPortal(`/portal/${TOKEN}?view=list&kind=INVOICE`);
+    await listReady();
+    expect(listQueries().at(-1).get('dateFrom')).toBeTruthy();
+
+    await user.click(screen.getByTestId('portal-status-tab-overdue'));
+
+    await waitFor(() => {
+      const query = listQueries().at(-1);
+      expect([query.get('group'), query.get('dateFrom'), query.get('dateTo')]).toEqual(['overdue', null, null]);
+    });
+    await waitFor(() => expect(within(screen.getByTestId('portal-document-table')).getByText('FV/0099')).toBeInTheDocument());
+    expect(screen.getByTestId('portal-date-range')).toHaveTextContent('dateRangeAllTime');
+  });
+
+  it.each(['awaiting', 'pending', 'inProgress'])('treats the %s tab as a state tab too', async (group) => {
+    const user = userEvent.setup();
+    const kind = group === 'awaiting' ? 'QUOTATION' : group === 'inProgress' ? 'ORDER' : 'INVOICE';
+    responses.documents = () => jsonResponse({ documents: [order(1)], totalCount: 1 });
+    renderPortal(`/portal/${TOKEN}?view=list&kind=${kind}`);
+    await listReady();
+
+    await user.click(screen.getByTestId(`portal-status-tab-${group.toLowerCase()}`));
+
+    await waitFor(() => expect(listQueries().at(-1).get('group')).toBe(group));
+    expect(listQueries().at(-1).get('dateFrom')).toBeNull();
+  });
+
+  it('keeps the chosen range on a period tab («Pagado»)', async () => {
+    const user = userEvent.setup();
+    renderPortal(`/portal/${TOKEN}?view=list&kind=INVOICE`);
+    await listReady();
+
+    await user.click(screen.getByTestId('portal-status-tab-paid'));
+
+    await waitFor(() => expect(listQueries().at(-1).get('group')).toBe('paid'));
+    expect(listQueries().at(-1).get('dateFrom')).toBeTruthy();
+  });
+});
+
+// Marketing's UTM document (2026-11-25): the portal's etendo.ai links carry `portal_ref`, the
+// tenant's AD_Client_ID — only when the portal knows it, and never the token.
+describe('PortalPage — portal_ref on the etendo.ai links', () => {
+  it('adds no portal_ref when the portal does not know its tenant (a pre-CP-43 link)', async () => {
+    renderPortal(`/portal/${TOKEN}`);
+    await shellReady();
+
+    expect(within(screen.getByTestId('portal-sidebar')).getByTestId('portal-promo-cta'))
+      .toHaveAttribute('href', ETENDO_START_FREE_URL);
+    expectEtendoLink(within(screen.getByTestId('portal-view-header')).getByTestId('portal-created-with'), ETENDO_MARKETING_URL);
+  });
+
+  it('takes the tenant from /me when the URL does not name it', async () => {
+    responses.me = jsonResponse({ ...IDENTITY, clientId: OTHER_CLIENT });
+    renderPortal(`/portal/${TOKEN}`);
+    await shellReady();
+
+    await waitFor(() => expect(within(screen.getByTestId('portal-sidebar')).getByTestId('portal-promo-cta'))
+      .toHaveAttribute('href', `${ETENDO_START_FREE_URL}&portal_ref=${OTHER_CLIENT}`));
+  });
+});
+

@@ -19,6 +19,7 @@ import {
   resolvePortalBaseUrl,
 } from '@/lib/portal/portalApi.js';
 import PortalShell from './portal/PortalShell.jsx';
+import { PortalClientContext } from './portal/PortalBits.jsx';
 import PortalHomeView from './portal/PortalHomeView.jsx';
 import PortalDocumentListView from './portal/PortalDocumentListView.jsx';
 import PortalDocumentDetailView from './portal/PortalDocumentDetailView.jsx';
@@ -555,7 +556,9 @@ export default function PortalPage() {
     onInvalid: showInvalid,
   });
 
+  // The portal's tenant id for the etendo.ai links' `portal_ref` (never the token).
   return (
+    <PortalClientContext.Provider value={route.clientId ?? tenantId}>
     <PortalShell
       identity={identity}
       logoUrl={logoUrl}
@@ -574,5 +577,6 @@ export default function PortalPage() {
       )}
       {body}
     </PortalShell>
+    </PortalClientContext.Provider>
   );
 }
