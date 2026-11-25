@@ -4,7 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useUI } from '@/i18n';
 import { buildUrlWithParams } from '@/lib/buildUrlWithParams.js';
 import { getCatalogOptions } from '@/lib/selectorCatalog.js';
-import { createQueryKey, useOptionalDataCache } from '@etendosoftware/app-shell-core/data';
+import { createQueryKey, useOptionalDataCache } from '@etendo-ai/app-shell-core/data';
 import { needsSelectorRevalidation } from '@/lib/selectorRevalidation.js';
 import { shouldKeepLocating, centerOptionInPanel } from './selectorSelection.js';
 

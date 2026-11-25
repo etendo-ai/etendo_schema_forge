@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { createQueryKey, useOptionalDataCache } from '@etendosoftware/app-shell-core/data';
+import { createQueryKey, useOptionalDataCache } from '@etendo-ai/app-shell-core/data';
 
 import { useApiFetch } from '@/auth/useApiFetch.js';
 /* eslint-disable react/prop-types */

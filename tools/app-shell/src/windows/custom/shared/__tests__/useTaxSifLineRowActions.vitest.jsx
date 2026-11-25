@@ -13,7 +13,7 @@
 
 // Mocks must come before imports (Vitest hoisting)
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { setSessionCredentials, CREDENTIAL_MODES } from '@etendosoftware/app-shell-core/auth/sessionCredentials.js';
+import { setSessionCredentials, CREDENTIAL_MODES } from '@etendo-ai/app-shell-core/auth/sessionCredentials.js';
 
 const useFiscalConfigMock = vi.fn();
 const useAuthMock = vi.fn();
@@ -24,7 +24,7 @@ vi.mock('@/windows/custom/fiscal-config/useFiscalConfig.js', () => ({
 
 // ETP-5022 — the hook's requests come from `useApiFetch`, which reads the token from the
 // core session rather than from the `token` argument.
-vi.mock('@etendosoftware/app-shell-core/auth', async (importOriginal) => ({
+vi.mock('@etendo-ai/app-shell-core/auth', async (importOriginal) => ({
   ...(await importOriginal()),
   useAuthOptional: () => ({ token: 'test-token' }),
 }));

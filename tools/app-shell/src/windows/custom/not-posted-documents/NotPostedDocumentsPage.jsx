@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import { SealCheckIcon, LinkSimpleIcon } from '@phosphor-icons/react';
 import { useUI, useLabel } from '@/i18n';
 import { useSetPageMeta } from '@/components/layout/PageMetaContext';
-import { DistinctValuesFilter } from '@etendosoftware/app-shell-core/components/ui/distinct-values-filter.jsx';
+import { DistinctValuesFilter } from '@etendo-ai/app-shell-core/components/ui/distinct-values-filter.jsx';
 import { DataTable } from '@/components/contract-ui';
 import SelectionToolbar from '@/components/contract-ui/SelectionToolbar.jsx';
 import { ListSortPopover } from '@/components/contract-ui/ListSortPopover.jsx';

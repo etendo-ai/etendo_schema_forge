@@ -35,7 +35,7 @@ import {
   extractBackendMessageParams,
 } from '@/lib/backendErrors.js';
 import { downloadBlobAsFile } from '@/windows/custom/shared/pdfUtils.js';
-import { fetchNeoList } from '@etendosoftware/app-shell-core/lib/import/fetchNeoList.js';
+import { fetchNeoList } from '@etendo-ai/app-shell-core/lib/import/fetchNeoList.js';
 
 export const GROUPING_NONE = 'P';
 

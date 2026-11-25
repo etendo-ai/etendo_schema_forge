@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { ClockIcon, DownloadSimpleIcon, ArrowsClockwiseIcon } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { evalRowVisibleWhen } from '@/utils/recordActions.js';
-import { useAuthOptional } from '@etendosoftware/app-shell-core/auth';
+import { useAuthOptional } from '@etendo-ai/app-shell-core/auth';
 import { useApiFetch } from '@/auth/useApiFetch.js';
 import { getApiBase } from '@/hooks/useNeoResource.js';
 import { useUI } from '@/i18n';

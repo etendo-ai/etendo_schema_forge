@@ -1,7 +1,7 @@
 /**
  * ETP-4520 — Resolves whether a `visibleWhenCapability`-gated field/column/pill
  * should render, given the `capabilities` map from `useAuth()`
- * (`@etendosoftware/app-shell-core/auth`, populated via the SFWindowAccessMap
+ * (`@etendo-ai/app-shell-core/auth`, populated via the SFWindowAccessMap
  * webhook — see `App.jsx`'s `fetchWindowAccess`).
  *
  * Plain function (not a hook) so callers can pull `capabilities` once via

@@ -6,7 +6,7 @@ let mockTier = 'full';
 let mockAuth = {};
 const mockWindowIds = [];
 
-vi.mock('@etendosoftware/app-shell-core/auth', () => ({ useAuthOptional: () => mockAuth }));
+vi.mock('@etendo-ai/app-shell-core/auth', () => ({ useAuthOptional: () => mockAuth }));
 vi.mock('@/auth/AuthContext.jsx', () => ({ useWindowAccess: (id) => { mockWindowIds.push(id); return mockTier; } }));
 vi.mock('@/hooks/useCapabilitiesSafe.js', () => ({ useCapabilitiesSafe: () => mockCapabilities }));
 vi.mock('@/components/access/ProcessAccessGuard.jsx', () => ({

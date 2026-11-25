@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { createQueryKey, useOptionalDataCache } from '@etendosoftware/app-shell-core/data';
-import { fetchEnvironments, loginEnvironment } from '@etendosoftware/etendo-go-core/onboarding/api';
-import { rememberEnvironment } from '@etendosoftware/etendo-go-core/onboarding/state';
+import { createQueryKey, useOptionalDataCache } from '@etendo-ai/app-shell-core/data';
+import { fetchEnvironments, loginEnvironment } from '@etendo-ai/etendo-go-core/onboarding/api';
+import { rememberEnvironment } from '@etendo-ai/etendo-go-core/onboarding/state';
 import { useAuthOptional } from '@/auth/AuthContext.jsx';
 import { requestTransition, suppressNextUnloadPrompt } from '@/lib/unsavedChanges.js';
 import { getApiBase } from './useNeoResource.js';

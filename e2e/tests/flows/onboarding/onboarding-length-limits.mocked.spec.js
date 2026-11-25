@@ -37,12 +37,15 @@ const LIMITS = {
   address: 60,
   // ETP-5806 — the free-text address field was replaced by structured Street/Number/Building
   // Name/City cells; streetName is the closest conceptual replacement for this length-limit
-  // check. The input's maxLength is `STREET_NAME_MAX_LENGTH` from
-  // `@etendosoftware/app-shell-core` (`lib/locationAddress.js`), which is deliberately 60 — the
-  // width of `C_LOCATION.ADDRESS1`, the column the composed address line lands in — and NOT the
-  // 70 of `EM_OBSEPA_StrtNm`. e2e specs never import app code, so the value is mirrored here:
-  // when the constant moves, this literal moves with it.
+  // check. Its limit is `STREET_NAME_MAX_LENGTH` from `@etendo-ai/etendo-go-core`
+  // (`onboarding/fieldLimits.js`), which is deliberately 60 — the width of
+  // `C_LOCATION.ADDRESS1`, the column the composed address line lands in — and NOT the 70 of
+  // `EM_OBSEPA_StrtNm`. Like clientName, the input itself caps at a looser
+  // `STREET_NAME_INPUT_MAX_LENGTH` (70) so an overflow is kept and flagged instead of silently
+  // dropped. e2e specs never import app code, so the values are mirrored here: when the
+  // constants move, these literals move with them.
   streetName: 60,
+  streetNameInput: 70,
 };
 
 // ── Mock installer ───────────────────────────────────────────────────────────
@@ -285,11 +288,11 @@ test.describe('ETP-4665 — Step 3 length limits', () => {
     await expect(clientName).toHaveAttribute('aria-invalid', 'true');
     await expect(page.getByText(new RegExp(`${LIMITS.clientName} (caracteres|characters)`))).toBeVisible();
     await expect(start).toBeDisabled();
-    // streetName's maxLength is set to the AD column limit itself (no separate looser input
-    // cap), so the overflow is truncated by the browser's native maxlength enforcement.
-    await expect(page.locator('#streetName')).toHaveValue('D'.repeat(LIMITS.streetName));
+    await expect(page.locator('#streetName')).toHaveValue('D'.repeat(LIMITS.streetNameInput));
+    await expect(page.getByText(new RegExp(`${LIMITS.streetName} (caracteres|characters)`))).toBeVisible();
 
     await clientName.fill('E'.repeat(LIMITS.clientName));
+    await page.locator('#streetName').fill('D'.repeat(LIMITS.streetName));
     await expect(clientName).not.toHaveAttribute('aria-invalid', 'true');
     // ETP-5806 — filling streetName starts the address block, which makes buildingNumber and
     // city mandatory together with it (isAddressBlockStarted/isCompanyStepValid); fill them too

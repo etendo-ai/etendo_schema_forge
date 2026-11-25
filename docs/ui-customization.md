@@ -101,8 +101,8 @@ replaced; only brand marks (logo, isotype) keep their own artwork.
 
 `@phosphor-icons/react` is in the `dedupe` lists of `vite.config.js` / `vitest.config.js` so core icons share
 the app's single Phosphor instance (and its `IconContext`). `lucide-react` stays in
-`tools/app-shell/package.json` (and those lists) for one reason only: the published `@etendosoftware/app-shell-core` and
-`@etendosoftware/etendo-go-core` packages still import it at runtime (and declare it as a peer
+`tools/app-shell/package.json` (and those lists) for one reason only: the published `@etendo-ai/app-shell-core` and
+`@etendo-ai/etendo-go-core` packages still import it at runtime (and declare it as a peer
 dependency). The app-shell source itself has no lucide import (enforced by
 `test/icon-library-policy.test.js`). Uninstall it once those core packages are migrated to Phosphor
 and a release is consumed here.
@@ -145,10 +145,21 @@ Exception (ETP-4997, SHELL-02): the list toolbar Export/Import buttons follow th
   `svg`, so find a rendered icon with `findIcon(root, Icon)` (`src/test/iconGlyph.js`).
 - Guardrail: `tools/app-shell/test/icon-library-policy.test.js` fails on a file that imports
   or mocks lucide-react or one of the replaced hand-drawn icon modules.
-- Icons rendered by `@etendosoftware/app-shell-core` (dialogs, selects, date pickers) are owned by
+- Icons rendered by `@etendo-ai/app-shell-core` (dialogs, selects, date pickers) are owned by
   that package and migrate there.
 
 ---
+
+## Date and time in one field — `DateTimeField` (ETP-6365)
+
+`tools/app-shell/src/components/ui/date-time-field.jsx` (pure helpers in `date-time-field-model.js`) is the date-and-time sibling of the shared `DateField`: ONE field showing `19/11/2026 14:20` (locale date order + `HH:mm`, 24h), built on the same pieces (`DateField`'s field shell, calendar-icon trigger, `Popover`, `Calendar`, the `HeaderRow` / `PillButton` chrome of `date-picker-chrome.jsx`), so it looks like `DateField`: height, border, focus ring, hover, disabled look; `aria-invalid` paints the destructive border.
+
+- **Value:** a wall-clock string `yyyy-MM-ddTHH:mm` (`:ss` accepted), emitted as `yyyy-MM-ddTHH:mm:00` — never through `Date`/UTC (NeoDateFormat convention, ETP-5100). `onChange('')` when cleared, `onChange(null)` when the typed text is not a real day plus a 24h time (the field stays in error until fixed).
+- **Typing:** digits only; separators, the space and the colon are inserted (`191120261420` → `19/11/2026 14:20`); committed on blur or Enter (Enter does not submit the surrounding form, as in `DateField`); Esc restores the committed text.
+- **Popover:** the calendar picks the day and keeps the time; a time input (`HH:mm`) inside sets the time; *Ahora* sets `max` (or the browser's minute), *Limpiar* empties it; Esc closes it.
+- **Props:** `value`, `onChange`, `onBlur`, `placeholder` (default `dd/mm/aaaa hh:mm`), `disabled`, `readOnly` (disabled-looking shell, no popover; an empty value shows `placeholder`, e.g. *— (sin fecha de fin)*), `invalid` / `aria-invalid`, `max` (days after it disabled; a later value is flagged, not clamped), `required`, `id`, `name`, `className`, `aria-label`, `data-testid` (on the text input; popover parts derive `-trigger`, `-time`, `-now`, `-clear`, `-calendar`).
+- **i18n:** `dateTimeFieldTime`, `dateTimeFieldNow` (plus the existing `datePickerOpen`, `clear`).
+- **First user:** Currency Conversion's *Válido desde* (Nueva divisa / Nueva tasa, `max` = the server clock) and the read-only *Válido desde* / *Válido hasta* of *Modificar tasa*.
 
 ## Default column widths by field type (ETP-5833)
 
@@ -1556,6 +1567,9 @@ rule" and the Movimientos kebab bullet) and the `resolveStateKey` entry in `docs
 
 ---
 
+
+**Copy override (ETP-6365).** `DeleteConfirmDialog` takes optional `title` and `message` that replace "Eliminar registros" and the "¿Estás seguro…?" question for a host whose copy must differ (Currency Conversion words it impersonally and names the rate). Omitted, every other surface is unchanged.
+
 ### 10. `window.dateFilterKey` — date range filter column
 
 Declares which list column the date range shortcut in the list toolbar targets.
@@ -1799,6 +1813,10 @@ I want row quick actions on my window
 
 **Custom action content in hand-built tables.** A hand-built window that needs domain-specific row actions can reuse `DataTable`'s same reserved column, hover-sticky positioning, background mask and horizontal-scroll behavior instead of appending a synthetic actions column. Pass `rowQuickActions.render(row)` for the custom content and `rowQuickActions.buttonCount` for the maximum number of 32px buttons it renders. If the content does not follow the canonical button geometry, pass `rowQuickActions.reservedWidthPx` instead; it takes priority over `buttonCount`. These are direct `DataTable` props for custom React tables, not `decisions.json` keys. Without `render`, the standard `RowQuickActions` behavior is unchanged.
 
+**Edit / delete hover buttons without `DataTable` — `ListModalRowActions` (ETP-6365).** A custom table that does not render through `DataTable` (e.g. the grouped history of Currency Conversion, whose group header rows `DataTable` cannot draw) reuses the list-modal hover buttons: `contract-ui/ListModalRowActions.jsx`, extracted unchanged from `ListModalWindow` (payment terms, match rules). Pencil + trash on the shared 32px `rowVisuals.js` buttons, a spinner while `deleting`, hidden at rest and shown on hover of the nearest `group/row` ancestor (put `group/row` on the `<tr>`) or on keyboard focus. Each button renders only when its handler (`onEdit` / `onClone` / `onDelete`) is passed. Optional props, defaulting to what `ListModalWindow` always rendered: `editLabel` / `deleteLabel` (accessible names, default `ui('edit')` / `ui('delete')`) and `testIdPrefix` (default `list-modal`, so the buttons are `${prefix}-edit-${row.id}` / `${prefix}-delete-${row.id}`).
+
+**Printing a custom list — `ReportDrawer`'s `rows` prop (ETP-6365).** `contract-ui/ReportDrawer.jsx` (the list print drawer `ListView` opens: preview, PDF, Excel, CSV, the organization's list-print design) normally reads every record of `entity` itself. A custom page whose list is a filtered or grouped view (Currency Conversion) passes `rows` — the display rows to print, keyed by the `columns`' `key`s — plus `activeFilters` (`[{label, value}]`), and the drawer prints them as given. Without `rows` nothing changes.
+
 **Visibility is inherited from the edit view.** When an action does not apply to a record (AD permission, document state, `documentPreview` absent, delete gate), it is **hidden** — never rendered as a disabled, greyed-out button. Disabled state is reserved exclusively for the in-flight case (see below). The Delete visibility gate (`hideDeleteWhenComplete` + status check) lives in the shared utility `tools/app-shell/src/utils/recordActions.js`, which is the single source of truth used by both `DetailView` and `RowQuickActions`. Custom `visibleWhen` predicates are AND-chained with that base visibility — they refine, never force-show.
 
 **In-flight feedback.** While a quick action's handler is pending, only that specific button on that specific row is disabled and shows a `Loader2` spinner. The rest of the row stays interactive, and actions on **different rows run in parallel** with no global lock.
@@ -1925,7 +1943,7 @@ Clicking either the chevron or the hover action toggles the same expand state �
 
 **Shared building blocks:** `tools/app-shell/src/components/contract-ui/DimensionsPanel.jsx` exports `DimBadge`, `DimSummary`, `DimensionGrid`. `InlineLinesPanel` only uses `DimensionGrid` now (the expanded content). **Update (same ticket, follow-up pass):** `AmortizationLinesTable.jsx` also stopped using `DimSummary`/`DimBadge` — it hand-patched the same static Layers/"Edit dimensions" hover-action pattern (see below) instead of the permanent grid-column summary it used to render. `DimSummary`/`DimBadge` currently have no consumer left in this repo but remain exported as reusable building blocks.
 
-**Pipeline-generator support (unchanged by ETP-4610):** `generateTableComponent` (`schema_forge_core`'s `cli/src/generate-frontend.js`) still emits this column type directly from `decisions.json` — no generator change was needed for the column-hiding requirement, since `InlineLinesPanel` (a generic component owned entirely by this functional repo, not part of `@etendosoftware/app-shell-core`) decides how the metadata renders, not the generator. Flag a field `"dimensionsPanel": true` (any `grid` value; see `docs/decisions-reference.md`) and the generator collects it into the synthetic column automatically for the pipeline-generated `<Window>LineTable.jsx`/`LinesTable.jsx`/`GoodsShipmentLineTable.jsx`/`GoodsReceiptLineTable.jsx` files. Fully additive — an entity with zero `dimensionsPanel: true` fields generates byte-for-byte the same `columns` array as before.
+**Pipeline-generator support (unchanged by ETP-4610):** `generateTableComponent` (`schema_forge_core`'s `cli/src/generate-frontend.js`) still emits this column type directly from `decisions.json` — no generator change was needed for the column-hiding requirement, since `InlineLinesPanel` (a generic component owned entirely by this functional repo, not part of `@etendo-ai/app-shell-core`) decides how the metadata renders, not the generator. Flag a field `"dimensionsPanel": true` (any `grid` value; see `docs/decisions-reference.md`) and the generator collects it into the synthetic column automatically for the pipeline-generated `<Window>LineTable.jsx`/`LinesTable.jsx`/`GoodsShipmentLineTable.jsx`/`GoodsReceiptLineTable.jsx` files. Fully additive — an entity with zero `dimensionsPanel: true` fields generates byte-for-byte the same `columns` array as before.
 
 **Real example:** the generated `LinesTable.jsx` (sales-invoice, purchase-invoice), `GoodsShipmentLineTable.jsx`/`GoodsReceiptLineTable.jsx` (goods-shipment, goods-receipt), and `GLJournalLineTable.jsx` (manual-journals) — all driven purely by `decisions.json`, all 5 in-scope windows regenerated and validated as part of ETP-4610. `goods-shipment` needed two extra local-DB regen attempts reverted (this sandbox's incomplete `AD_Ref_List_Trl` es_ES data silently strips unrelated translations on this window) before ultimately regenerating clean via the pre-push hook's offline/cached-AD-snapshot pipeline run — see `docs/feedback.md` for the full trail.
 
@@ -2427,7 +2445,7 @@ the subtitle/image and lets per-part sort/filter target the absorbed fields.
 `media.kind: "neoImage"` renders through the `useNeoImage(imageId, token, apiBaseUrl)` hook, which
 issues an **authenticated Bearer fetch** to `{apiBaseUrl}/image/{imageId}` and returns an object URL for
 an `<img>` src. On a missing id or a failed fetch it falls back to the `BoxIcon` package glyph
-(`fallback: "box"`). The hook now lives in the core package (`@etendosoftware/app-shell-core`) and is
+(`fallback: "box"`). The hook now lives in the core package (`@etendo-ai/app-shell-core`) and is
 consumed via the shim `@/hooks/useNeoImage`.
 
 #### Validation (rule F18)
@@ -3863,7 +3881,7 @@ Render each entry point only when it is defined. The reference implementation,
 an "Ask Copilot" button that calls `copilot.open`, and `useLaunchWalkthrough(source)`
 (`lib/walkthrough/useLaunchWalkthrough.js`, see `docs/walkthrough-flows.md` §9) to start a guided tutorial.
 
-The core `ImportDropzone` (`@etendosoftware/app-shell-core/components/import/ImportDropzone.jsx`) is shared
+The core `ImportDropzone` (`@etendo-ai/app-shell-core/components/import/ImportDropzone.jsx`) is shared
 by every window's `ImportDialog` and by this empty state, so its look changes everywhere at once (ETP-5600):
 by default a 1px dashed gray/200 border with no fill; on hover a 5% `#121217` overlay and a gray/400 border
 (200ms ease-in); while a file is dragged over, the primary highlight. An optional `disabled` prop (default

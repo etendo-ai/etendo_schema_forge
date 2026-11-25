@@ -8,14 +8,14 @@
  * no shared cache, so cross-mount reuse, dedup, and mutation-driven invalidation
  * do not happen.
  *
- * Run under the LOCAL_CORE profile so @etendosoftware/app-shell-core resolves to
+ * Run under the LOCAL_CORE profile so @etendo-ai/app-shell-core resolves to
  * the sibling schema_forge_core source (feature/ETP-4562, which ships the cache):
  *   cd tools/app-shell && LOCAL_CORE=1 npx vitest run src/hooks/__tests__/useEntity.cache.vitest.jsx
  */
 import { renderHook, act, waitFor } from '@testing-library/react';
-import { AuthProvider, createMemoryAuthStorage } from '@etendosoftware/app-shell-core/auth';
-import { DataProvider } from '@etendosoftware/app-shell-core/data';
-import { createQueryCache } from '@etendosoftware/app-shell-core/data';
+import { AuthProvider, createMemoryAuthStorage } from '@etendo-ai/app-shell-core/auth';
+import { DataProvider } from '@etendo-ai/app-shell-core/data';
+import { createQueryCache } from '@etendo-ai/app-shell-core/data';
 import { toast } from 'sonner';
 import { useEntity } from '../useEntity';
 import { useApiFetch } from '@/auth/useApiFetch.js';

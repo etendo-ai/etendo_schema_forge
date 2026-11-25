@@ -12,10 +12,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog.jsx';
-import { changePassword, resolveAuthErrorMessage } from '@etendosoftware/etendo-go-core/onboarding/api';
-import { isStrongPassword } from '@etendosoftware/etendo-go-core/onboarding/password-policy';
-import { PasswordStrengthChecklist } from '@etendosoftware/etendo-go-core/onboarding/password-strength-checklist';
-import { getSessionCsrfToken } from '@etendosoftware/app-shell-core/auth/sessionCredentials.js';
+import { changePassword, resolveAuthErrorMessage } from '@etendo-ai/etendo-go-core/onboarding/api';
+import { isStrongPassword } from '@etendo-ai/etendo-go-core/onboarding/password-policy';
+import { PasswordStrengthChecklist } from '@etendo-ai/etendo-go-core/onboarding/password-strength-checklist';
+import { getSessionCsrfToken } from '@etendo-ai/app-shell-core/auth/sessionCredentials.js';
 import { detectBaseUrl } from './copilot/copilotApi.js';
 
 const EMPTY_FORM = { currentPassword: '', newPassword: '', confirmPassword: '' };

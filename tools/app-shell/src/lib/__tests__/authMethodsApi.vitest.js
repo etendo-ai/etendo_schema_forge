@@ -1,7 +1,7 @@
-import { AUTH_ERROR_UI_KEYS } from '@etendosoftware/etendo-go-core/onboarding/api';
+import { AUTH_ERROR_UI_KEYS } from '@etendo-ai/etendo-go-core/onboarding/api';
 // The same entry point the module under test uses, so the read below travels the same path the
 // account GET does in production.
-import { apiFetch } from '@etendosoftware/app-shell-core/auth/api';
+import { apiFetch } from '@etendo-ai/app-shell-core/auth/api';
 import {
   TEST_BEARER_TOKEN,
   TEST_CSRF_TOKEN,

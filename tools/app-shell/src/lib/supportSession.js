@@ -23,7 +23,7 @@
  * Plain module (no JSX): imports `apiFetch` from the core subpath, never the `@/auth/api.js`
  * barrel, so `node --test` can load it (see docs/request-policy.md).
  */
-import { apiFetch, createApiFetch } from '@etendosoftware/app-shell-core/auth/api';
+import { apiFetch, createApiFetch } from '@etendo-ai/app-shell-core/auth/api';
 
 /** The router path Classic opens. Relative to the router base, like every other route. */
 export const SUPPORT_ACCESS_PATH = '/support-access';

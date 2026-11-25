@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { detectBaseUrl } from '@etendosoftware/app-shell-core/auth';
+import { detectBaseUrl } from '@etendo-ai/app-shell-core/auth';
 import { useApiFetch } from '@/auth/useApiFetch.js';
 
 /**

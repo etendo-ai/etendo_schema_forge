@@ -492,7 +492,7 @@ What they protect:
 
 - **Bug 1 — 400 `missing_updated`.** ETP-5073 made the backend require the record's `updated`
   optimistic-locking token. Only `useEntity` remembered it, so panels reading with `apiFetch`
-  directly patched without one. Fixed centrally in `@etendosoftware/app-shell-core`
+  directly patched without one. Fixed centrally in `@etendo-ai/app-shell-core`
   (`auth/api.js` harvests the token on every GET).
 - **Bug 1b — the token cache must be keyed by `(entity, id)`, not by `id`.** Because `AD_Org`
   and `AD_OrgInfo` share the id, an id-only cache let the second GET clobber the first record's
@@ -600,7 +600,7 @@ There are two layers, and they were fixed in that order:
 1. **The panel:** `tools/app-shell/src/hooks/useRecordWriteQueue.js` serialises per record and
    coalesces a mid-flight edit (last value wins per field, edits to different fields all survive,
    a refusal discards what was queued behind it).
-2. **The transport:** `@etendosoftware/app-shell-core` (`auth/api.js`) serialises versioned writes
+2. **The transport:** `@etendo-ai/app-shell-core` (`auth/api.js`) serialises versioned writes
    per `(canonical entity, id)` and awaits the version harvest before releasing the next write.
    Layer 1 alone did NOT close the defect — it stopped the overlap but the replay still went out
    with the consumed token, because the harvest (`res.clone().json().then(remember)`) was a

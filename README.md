@@ -25,13 +25,13 @@ Schema Forge is split across three repos. Know which one a change belongs to bef
 | `schema_forge_core` | `etendosoftware/schema_forge_core` | Tooling/platform: generators, extractors, pipeline, shared React runtime (`app-shell-core`) |
 | `com.etendoerp.go` | `etendosoftware/com.etendoerp.go` | Runtime (NEO Headless, Java), lives in `modules/` of Etendo Core |
 
-Most developers only work in `schema_forge` and consume the published `@etendosoftware/*` packages. Clone `schema_forge_core` only if you also change the tooling.
+Most developers only work in `schema_forge` and consume the published `@etendo-ai/*` packages. Clone `schema_forge_core` only if you also change the tooling.
 
 ## Prerequisites
 
 - **Node.js >= 22** and npm — [download](https://nodejs.org/)
 - **GitHub CLI (`gh`)** — window locks and PR workflow (`brew install gh && gh auth login`)
-- **GitHub Packages token** — the `@etendosoftware/*` packages are private. Add to `~/.npmrc` a token with `read:packages`:
+- **GitHub Packages token** — the `@etendo-ai/*` packages are private. Add to `~/.npmrc` a token with `read:packages`:
   ```
   //npm.pkg.github.com/:_authToken=<GITHUB_TOKEN_WITH_read:packages>
   ```
@@ -366,7 +366,7 @@ etendo_core/                     ← branch: epic/ETP-3504
 ### Running the UI against the published core or your local core
 
 ```bash
-make dev              # published @etendosoftware/app-shell-core
+make dev              # published @etendo-ai/app-shell-core
 make dev-local-core   # hot reload from ../schema_forge_core (requires the sibling clone)
 ```
 

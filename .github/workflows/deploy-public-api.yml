@@ -107,7 +107,7 @@ jobs:
             BUILD=true; DEPLOY=true
           fi
 
-          CORE_VERSION=$(jq -r '.dependencies["@etendosoftware/api-gateway-core"] // empty' gateway/package.json)
+          CORE_VERSION=$(jq -r '.dependencies["@etendo-ai/api-gateway-core"] // empty' gateway/package.json)
           # Refuse ranges: tests and image must install the same published version.
           printf '%s' "$CORE_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$' \
             || { echo "::error::api-gateway-core pin in gateway/package.json is '$CORE_VERSION', expected an exact version"; exit 1; }
@@ -140,7 +140,7 @@ jobs:
         with:
           node-version: 22
           registry-url: https://npm.pkg.github.com
-          scope: '@etendosoftware'
+          scope: '@etendo-ai'
 
       # What reaches main goes straight to production, so the gateway's own
       # test suite is a gate on both PRs and main. Tests and image both install
@@ -171,7 +171,7 @@ jobs:
         run: |
           set -euo pipefail
           trap 'rm -f "$RUNNER_TEMP/gateway.npmrc"' EXIT
-          printf '@etendosoftware:registry=https://npm.pkg.github.com\n//npm.pkg.github.com/:_authToken=%s\n' "$NODE_AUTH_TOKEN" > "$RUNNER_TEMP/gateway.npmrc"
+          printf '@etendo-ai:registry=https://npm.pkg.github.com\n//npm.pkg.github.com/:_authToken=%s\n' "$NODE_AUTH_TOKEN" > "$RUNNER_TEMP/gateway.npmrc"
           docker build --platform linux/amd64 -f gateway/Dockerfile \
             --secret id=npmrc,src="$RUNNER_TEMP/gateway.npmrc" \
             --label "org.opencontainers.image.revision=${{ github.sha }}" \

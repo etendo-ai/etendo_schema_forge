@@ -1,1 +1,1 @@
-export * from '@etendosoftware/app-shell-core/hooks/useNeoImage.js';
+export * from '@etendo-ai/app-shell-core/hooks/useNeoImage.js';
