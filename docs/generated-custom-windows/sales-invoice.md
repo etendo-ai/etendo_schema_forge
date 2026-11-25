@@ -394,7 +394,7 @@ already recorded ("Rechazado") is not duplicated. Runtime details:
 `TbaiXmlgeneratorHandler`".
 
 **Manual verification (Europe/Madrid browser timezone).**
-1. Configure SII for an org today (Configuración fiscal), create and confirm an invoice dated today:
+1. Configure SII for an org today (Configuración Fiscal), create and confirm an invoice dated today:
    the preview, the form kebab and the grid row kebab all offer "Enviar a SII" (the form topbar offers no
    send button), and the
    SII status column shows "Pendiente", not "—".
@@ -2002,7 +2002,7 @@ purchase-invoice — see `purchase-invoice.md` for this window's mirror of the s
 AEAT 349 messages this window can raise on save, Confirmar or a SIF send whose Classic text names
 Classic-only UI (e.g. "solapa Facturas Rectificativas", the "Añadir Certificado Digital" process,
 "Verifique en la cabecera del tercero") reach the user reworded with GO's own labels ("pestaña
-Rectificaciones", "pestaña SIF", Configuración fiscal → Certificado digital, Contactos → NIF/CIF,
+Rectificaciones", "pestaña SIF", Configuración Fiscal → Certificado digital, Contactos → NIF,
 pestaña Dirección), in the UI language, and keep their AD_MESSAGE key in `messageKeys` (REST: the
 `error` object; MCP: the root of the error result). Only messages a GO user can trigger are
 reworded. Done server-side at NEO's exit (`ClassicMessageRemap`, `com.etendoerp.go`
@@ -2013,7 +2013,7 @@ this window:
 | System | Keys |
 |---|---|
 | VERI\*FACTU | `ETVFAC_invoice_type_rectifying`, `ETVFAC_reversed_invoice` (Tipo de Factura in the SIF tab vs the Rectificaciones tab), `ETVFAC_Missing_DocType_Config`, `ETVFAC_error_code_idtype` (Clave NIF País Residencia of the contact) |
-| TicketBAI | `TBAI_ConfigNotFound`, `TBAI_CertificateNotValid`, `TBAI_NullCertificate`, `TBAI_SetKey`; on Confirmar or Anular (`ProcessInvoiceTbaiHook`, sales only), the recipient checks `TBAI_EmptyNifCode`, `TBAI_EmptyPostalCode`, `TBAI_EmptyDir` (a contact not marked as Factura Simplificada needs NIF/CIF, and its invoice Dirección needs a postal code and a Primera línea — fixed in Contactos, pestaña Dirección) |
+| TicketBAI | `TBAI_ConfigNotFound`, `TBAI_CertificateNotValid`, `TBAI_NullCertificate`, `TBAI_SetKey`; on Confirmar or Anular (`ProcessInvoiceTbaiHook`, sales only), the recipient checks `TBAI_EmptyNifCode`, `TBAI_EmptyPostalCode`, `TBAI_EmptyDir` (a contact not marked as Factura Simplificada needs a NIF, and its invoice Dirección needs a postal code and a Primera línea — fixed in Contactos, pestaña Dirección) |
 | SII | `AEATSII_EmptyCertificatePath`, `AEATSII_InvoiceManualSending`, `AEATSII_SII_ACCRUAL_DATE_EMPTY` (Fecha incorporación al SII), and the literal `siiMissingInvoiceType` (below) |
 | AEAT 349 | `AEAT349_CINVREV_CHECK` (the Rectificaciones tab mixes Year/Period) |
 

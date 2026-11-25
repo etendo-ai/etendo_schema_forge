@@ -158,7 +158,7 @@ fiscal-incident deep link. A hidden section is not rendered at all (no collapsed
   no flag logic of its own. Full rule: fiscal-models guide, "Modelo 390 behind the backend-only
   flag `fiscal-model-390`".
 - **SII / TicketBAI / VERI\*FACTU:** the active `siiRecord` / `tbaiRecord` / `verifactuRecord` of
-  `fiscal-config/useFiscalConfig.js`, reused as is. Toggled in Configuración fiscal.
+  `fiscal-config/useFiscalConfig.js`, reused as is. Toggled in Configuración Fiscal.
 
 **Loading and errors:** every flag starts `false` and only turns `true` once its source settles, so a
 section never appears and then disappears. A source that fails to load contributes nothing (fail
