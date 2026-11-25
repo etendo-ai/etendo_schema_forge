@@ -14,7 +14,7 @@ This is the counterpart to [`not-posted-documents.md`](not-posted-documents.md).
 
 Like Not Posted Documents, this has **no backing AD window** — it is a synthetic app-shell page (no artifact, no `decisions.json`, no `ETGO_SF_SPEC` row) served by a single Etendo GO webhook.
 
-Delivered by **ETP-5269**, behind the `acct-process-monitor` feature flag (default `false`).
+Delivered by **ETP-5269** and promoted to general availability by **ETP-6425**: the `acct-process-monitor` feature flag was retired and the page is permanent.
 
 ---
 
@@ -63,7 +63,7 @@ Source of truth: `SFAcctProcessMonitor#triggerManualRun` javadoc (`§Why the cal
 ## Interaction model
 
 - **Route:** `/acct-process-monitor`, registered in `tools/app-shell/src/runtime-routes.jsx` via `lazyRoute('acct-process-monitor', AcctProcessMonitorPage)`. **Registered unconditionally** — see *Two gates* below.
-- **Menu entry:** `Settings` group in `tools/app-shell/src/menu.json`, item name `acct-process-monitor`, label `Accounting Process` / `Proceso contable`, icon `Cog`, `capability: "isAdminOrClientAdmin"`. Additionally hidden behind the `acct-process-monitor` feature flag.
+- **Menu entry:** `Settings` group in `tools/app-shell/src/menu.json`, item name `acct-process-monitor`, label `Accounting Process` / `Proceso contable`, icon `Cog`, `capability: "isAdminOrClientAdmin"`.
 - **Implementation type:** synthetic app-shell page. No artifact directory, no `decisions.json`, no `contract.json`, no `ETGO_SF_SPEC`/`ETGO_SF_ENTITY` rows, no pipeline involvement. It does not appear in `tools/app-shell/src/windows/registry.js`.
 - **Page shape:** two cards — a status card (title, subtitle, Refresh + Run now, three summary tiles, cadence hint, in-flight line, trigger outcome) and a history card (a five-column table, or an empty state).
 - **Mode:** read-mostly. The only mutation is scheduling a one-shot run; nothing on this page edits any record.
@@ -75,11 +75,10 @@ This distinction is load-bearing and has already been asserted end to end, so do
 
 | Gate | Where | What it actually does |
 |---|---|---|
-| `acct-process-monitor` feature flag | `SideMenu.jsx`, via `useFeatureFlag(ACCT_PROCESS_MONITOR)` | Hides the **menu entry**. Visual only. Anyone can flip a flag in their own browser, and the route stays reachable with the flag off. |
-| `capability: "isAdminOrClientAdmin"` in `menu.json` | `filterMenuGroupsByAccess` | Hides the **menu entry** from a non-admin. Also visual only. |
+| `capability: "isAdminOrClientAdmin"` in `menu.json` | `filterMenuGroupsByAccess` | Hides the **menu entry** (and its Favorites and command-palette entries) from a non-admin. Visual only. |
 | **`NeoAccessHelper.isAdminOrClientAdmin(role)`** | `SFAcctProcessMonitor.get`, server-side | **The real authorization boundary.** Checked before anything is read *and* before anything is scheduled. A caller with a restricted role, or with no role at all, gets the `notAuthorized` payload and the endpoint neither reads history nor touches the scheduler. |
 
-The route is registered unconditionally on purpose, following the `/upgrade` precedent documented in [`../feature-flags.md`](../feature-flags.md) §3: hiding the route would imply the flag was protecting something, which it is not. What protects the data is the server-side role check.
+The route is registered unconditionally on purpose, following the `/upgrade` precedent documented in [`../feature-flags.md`](../feature-flags.md) §3: gating the route on the menu visibility would imply that visibility was protecting something, which it is not. What protects the data is the server-side role check.
 
 ### Reading is the default; triggering is opt-in
 
@@ -264,17 +263,17 @@ The backend emits `yyyy-MM-ddTHH:mm:ss` with **no zone**, because the underlying
 
 This is a full instant, not a calendar date, so the repo-wide `parseCalendarDate` rule (`tools/app-shell/src/lib/dateOnly.js`) deliberately does **not** apply — that helper exists for date-only values, where a UTC-midnight parse rolls the day back under a negative offset. There is no day to roll here. Display formatting uses the selected UI locale (`en_US`/`es_ES` are normalized to `en-US`/`es-ES`); a null timestamp renders as an em dash.
 
-### Menu gating is item-level, and it covers Favorites
+### Menu gating (ETP-5269 history; the flag was retired in ETP-6425)
 
-`SideMenu` previously flag-gated only whole **groups** (`Proof of Concept`). ETP-5269 adds per-**item** gating via the item's declarative `featureFlag` metadata in `menu.json`; known metadata is indexed once, and an explicitly declared but unknown flag fails closed rather than accidentally exposing the entry.
+At delivery, `SideMenu` previously flag-gated only whole **groups** (`Proof of Concept`). ETP-5269 adds per-**item** feature-flag gating via the item's declarative `featureFlag` metadata in `menu.json`; known metadata is indexed once, and an explicitly declared but unknown flag fails closed rather than accidentally exposing the entry.
 
-The memoized filter is applied to the **Favorites** group as well. Favorites are rebuilt from the user's own saved list rather than from `menuGroups`, so the previous early-return for that group let a favourited flag-gated item stay visible with the flag off — the one hole through which a gated entry could still be reached.
+The memoized filter is applied to the **Favorites** group as well. Favorites are rebuilt from the user's own saved list rather than from `menuGroups`, so the previous early-return for that group let a favourited flag-gated item stay visible with the flag off — the one hole through which a gated entry could still be reached. This mechanism still exists for other flags; the monitor no longer uses it and is gated only by `capability: "isAdminOrClientAdmin"`, including in Favorites and the command palette.
 
 ---
 
 ## Gap assessment
 
-- **The flag is not a boundary, and must not be made one.** If someone later "hardens" this by wrapping the route in the flag, the real protection (`NeoAccessHelper.isAdminOrClientAdmin`) becomes invisible and the next reviewer will assume the flag is doing security work. The E2E spec pins the current behaviour (`flag off: the route still works`).
+- **The menu capability is not a boundary, and must not be made one.** The real protection is `NeoAccessHelper.isAdminOrClientAdmin` on the server; hiding the menu entry is visual only. The E2E spec pins that the route works without any feature flag.
 - **No log, ever.** Every future request for "just show me why it failed" must be answered somewhere other than this endpoint (Etendo classic's Process Monitor window, or the server log). See *What is deliberately not exposed*.
 - **A vetoed run looks like a failed run.** Deliberate and unfixable from here without exposing the log. No UI or backend logic may branch on zero-duration `ERR`.
 - **No cancel / kill.** The page can start a run; it cannot stop one. A run stuck at `PRC` is handled only by the 1-hour staleness window, which re-enables the button — it does not clean up the row.
@@ -286,11 +285,11 @@ The memoized filter is applied to the **Favorites** group as well. Favorites are
 
 ## Manual verification
 
-Prerequisites: an Etendo GO instance with the accounting process installed and a recurring request active; a session whose role is admin or client-admin; the app served with `acct-process-monitor` enabled (`VITE_FEATURE_FLAGS='{"acct-process-monitor":true}'`, since the flag is fixed at Vite start).
+Prerequisites: an Etendo GO instance with the accounting process installed and a recurring request active; a session whose role is admin or client-admin.
 
-1. **Menu, flag on.** Expand the sidebar, open **Configuración / Settings** and confirm an **Accounting Process** / **Proceso contable** entry sits after **Roles**. Open it; the status card and history table render.
-2. **Menu, flag off.** Restart the dev server without the flag and confirm the entry is gone from Settings *and* from Favorites if it was favourited there.
-3. **Route is not flag-gated.** With the flag still off, navigate directly to `/acct-process-monitor` — the page must load normally. (This is the intended behaviour, not a leak: the backend gate is what protects the data.)
+1. **Menu.** Expand the sidebar, open **Configuración / Settings** and confirm an **Accounting Process** / **Proceso contable** entry sits after **Roles**. Open it; the status card and history table render.
+2. **Favorites and palette.** Favourite the entry and find it in the command palette; both must offer it to an admin.
+3. **Direct route.** Navigate directly to `/acct-process-monitor` — the page loads; the backend gate is what protects the data.
 4. **A bare load fires nothing.** With the network tab open, load the page and confirm the request is `GET /sws/neo/acctprocessmonitor?Limit=20` with **no `Action` parameter**, and that no new row appears in `AD_PROCESS_RUN`.
 5. **Run now — convergence.** Press **Run now**. The button must disable immediately and *"Starting the run…"* must appear; within a few seconds a new row appears at the top of the history, labelled **Manual**, **without pressing Refresh**.
 6. **Client scoping.** After that run, confirm in the DB that the new `AD_PROCESS_REQUEST` and `AD_PROCESS_RUN` rows carry the **caller's** `ad_client_id`, not `'0'`:
@@ -313,7 +312,7 @@ Prerequisites: an Etendo GO instance with the accounting process installed and a
 9. **No log in the DOM.** With a history row whose `AD_PROCESS_RUN.LOG` is non-empty in the DB, search the rendered page (and the network response) for any of that log text. There must be none, and there must be no expand/details affordance on a row.
 10. **Refusals.** Press **Run now** twice in rapid succession, or press it while the cadence run is mid-flight on the same client/org, and confirm the refusal renders as a message (not as a started run) with `data-reason="alreadyRunning"`.
 11. **System context.** Log in with a System-context session and press **Run now** — the message must be the `systemClientNotScopable` one ("Switch to a specific company…"), and nothing must be scheduled.
-12. **Non-admin.** With a restricted role, the menu entry must be absent whatever the flag says, and navigating to `/acct-process-monitor` directly must render the **no-access** card, not a crash and not data.
+12. **Non-admin.** With a restricted role, the menu entry must be absent, and navigating to `/acct-process-monitor` directly must render the **no-access** card, not a crash and not data.
 13. **Statuses in Spanish.** Switch the UI to Spanish and confirm every status renders as a word (`Correcta`, `Error`, …) and never as `SUC`/`ERR`.
 
 ### What QA could NOT verify on the reference instance
@@ -344,8 +343,6 @@ These correspond to the open `manual-trigger-runtime-verification` item in `flag
 - `tools/app-shell/src/lib/acctProcessMonitorApi.js` — `fetchAcctProcessStatus` / `triggerAcctProcessRun`, both through `fetchNeoWebhookJson` (shared base URL, fresh token, `{result: "<json-string>"}` unwrap).
 - `tools/app-shell/src/runtime-routes.jsx` — unconditional `lazyRoute('acct-process-monitor', …)`.
 - `tools/app-shell/src/menu.json` — Settings item, `capability: "isAdminOrClientAdmin"`.
-- `tools/app-shell/src/lib/flags/flag-keys.js` + `index.js` — `ACCT_PROCESS_MONITOR`, `FLAG_DEFAULTS[…] = false`.
-- `tools/app-shell/src/components/layout/SideMenu/SideMenu.jsx` — `flagGatedItems` / `isFlagVisible`, applied to Favorites too.
 - i18n: **43 `acctProcess*` keys**, present in all three locales (`en_US.json`, `es_ES.json`, `es_AR.json`).
 
 **Frontend tests (93 new cases):**
@@ -357,7 +354,7 @@ These correspond to the open `manual-trigger-runtime-verification` item in `flag
 - `tools/app-shell/src/components/layout/SideMenu/__tests__/SideMenu.vitest.jsx` + `windows/__tests__/navigationExpectations.js` (`catalogFeatureFlags`) + `windows/__tests__/registry.vitest.jsx` (`capabilitySiblings`) — catalog membership and flag gating. `registry.vitest.jsx` needed the `capabilitySiblings` change because a capability is a **named boolean**, not a per-entry grant: this is the second `isAdminOrClientAdmin` entry next to `roles`, which made that latent distinction visible.
 - Whole-suite result at delivery: **16,348 vitest + 2,160 node tests green**.
 
-**E2E — `e2e/tests/flows/acct-process-monitor.mocked.spec.js`** (13/13 in **both** flag arms):
+**E2E — `e2e/tests/flows/accounting/acct-process-monitor.mocked.spec.js`** (no feature flag or `VITE_FEATURE_FLAGS` needed):
 
 - `the initial read never carries Action, so loading the page cannot fire the process`
 - `Run now converges on the new run by polling, with no manual refresh` — the mock models the real ordering (the triggering response cannot contain the new run), so the spec fails if the poll regresses
@@ -366,21 +363,15 @@ These correspond to the open `manual-trigger-runtime-verification` item in `flag
 - `never renders the raw process log, before or after a trigger` — the fixtures deliberately send a `LOG_SENTINEL` the backend would never emit
 - `shows each status as a human label, never the raw three-letter code`
 - `a denial from the backend renders the no-access state, not a crash`
-- menu gating: `flag on: an admin sees the menu entry and it opens the page`, `flag off: the menu entry is not offered`, `flag off: the route still works — the flag is not the authorization boundary`
-- non-admin: `does NOT see the menu entry, whatever the flag says`
+- route and menu: `the route works without any feature flag`, `an admin finds the menu entry in Settings and opens the page, with no overrides`
+- non-admin: `does NOT see the menu entry`
 
 Run it with (mock mode only; never `make dev-mock`, whose in-page `window.fetch` replacement bypasses `page.route()`):
 
 ```bash
-# flag off (default)
 npx vite --port 3105
 E2E_USE_MOCK=1 BASE_URL=http://localhost:3105 \
-  npx playwright test tests/flows/acct-process-monitor.mocked.spec.js --project=mocked
-
-# flag on
-VITE_FEATURE_FLAGS='{"acct-process-monitor":true}' npx vite --port 3105
-E2E_USE_MOCK=1 BASE_URL=http://localhost:3105 E2E_ACCT_PROCESS_MONITOR_FLAG=on \
-  npx playwright test tests/flows/acct-process-monitor.mocked.spec.js --project=mocked
+  npx playwright test tests/flows/accounting/acct-process-monitor.mocked.spec.js --project=mocked
 ```
 
 **Backend (`com.etendoerp.go`):**
@@ -393,7 +384,7 @@ E2E_USE_MOCK=1 BASE_URL=http://localhost:3105 E2E_ACCT_PROCESS_MONITOR_FLAG=on \
 
 **Registry:**
 
-- `flags-registry.json` → `acct-process-monitor` — owner, Jira, TTL `2026-12-31`, owned paths, the `$scopeChangeComment` recording the client-scope product decision, the `$defectFoundComment` recording the `DIRECT`→`BACKGROUND` defect, and the one open `manual-trigger-runtime-verification` item.
+- `flags-registry.json` → `acct-process-monitor` — owner, Jira, owned paths, the `$scopeChangeComment` recording the client-scope product decision, the `$defectFoundComment` recording the `DIRECT`→`BACKGROUND` defect, and the one open `manual-trigger-runtime-verification` item.
 
 ---
 

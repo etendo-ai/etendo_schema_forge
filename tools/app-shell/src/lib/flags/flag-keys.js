@@ -20,13 +20,6 @@ export const PROOF_OF_CONCEPT_MENU = 'proof-of-concept-menu';
 /** Enables proactive DOM-based page-help suggestions next to the Copilot. */
 export const PAGE_HELP_SUGGESTIONS = 'page-help-suggestions';
 
-/**
- * Reveals the admin-only accounting server process monitor in the Settings menu (ETP-5269).
- * Visual gating only: the route is registered unconditionally and the backend
- * (`SFAcctProcessMonitor`) enforces admin/client-admin access on both its read and its trigger.
- */
-export const ACCT_PROCESS_MONITOR = 'acct-process-monitor';
-
 /** Enables the admin-only public API key management entry point (ETP-5345). */
 export const PUBLIC_API_KEYS = 'public-api-keys';
 
@@ -128,7 +121,6 @@ export const NO_EXPOSURE_FLAGS = Object.freeze(
 export const FLAG_DEFAULTS = Object.freeze({
   [PROOF_OF_CONCEPT_MENU]: false,
   [PAGE_HELP_SUGGESTIONS]: false,
-  [ACCT_PROCESS_MONITOR]: false,
   [PUBLIC_API_KEYS]: false,
   [UNIFIED_CALENDAR_POC]: false,
   [IMPORT_BATCH_SIZE]: 0,
