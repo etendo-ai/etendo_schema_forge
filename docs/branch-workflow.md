@@ -57,6 +57,7 @@ develop  (protected — staging and integration point; PRs need NOT be up to dat
 | Merge | Gate | Who merges |
 |-------|------|------------|
 | `feature → develop` | PR checks: mini pipeline (schema_forge: `Mini Pipeline: Unit tests + Sonar + coverage` and `Mocked E2E`; com.etendoerp.go: `Mini Pipeline: Go tests + Sonar + coverage`), `verify`, review, code-owner gate | **Human**, in GitHub, merge commit |
+| `taskpack → develop` (task pack) | Same as `feature → develop`; each task reviewed first (`docs/task-pack.md` § Stage 1) | **Human**, in GitHub, merge commit |
 | `main → develop` | PR checks; `back-merge-main.yml` opens it when main moves | **Auto-merge** once the checks pass; its assignee when it conflicts |
 | `mergeblock → main` (the cut) | Full pipeline in GitHub Actions (`full-pipeline.yml`: unit tests + Sonar, mocked and integration E2E); every required check green; branch up to date with main | **Human only** |
 | `hotfix → main` | Full pipeline | **Human only**; comes back at once through `main → develop` |
@@ -288,6 +289,15 @@ cannot report (Jenkins down, or a lost webhook already re-triggered without succ
 2. An admin unticks the setting (Settings → Branches → the branch rule), merges the PR and ticks it
    again right away.
 3. Re-run what was skipped and leave the reason as a comment on the PR.
+
+## Task Pack — several tasks into develop at once
+
+Several ready tasks (typically pre-worked by Etendo Bot) can be reviewed together, tested in one
+local-env environment and merged into `develop` through one PR per repo, from
+`taskpack/ETP-P` (`ETP-P` = a Jira task `Task Pack DD/MM - <Person>`). It targets `develop`, not
+`main`: what it carries reaches production with the daily cut like any task. The tasks' own PRs stay
+open and GitHub marks them merged when the pack enters `develop`. Full procedure (review checklist,
+building the branch, fixes, taking a task out): `docs/task-pack.md`.
 
 ## New Feature Branch Policy (MANDATORY)
 
