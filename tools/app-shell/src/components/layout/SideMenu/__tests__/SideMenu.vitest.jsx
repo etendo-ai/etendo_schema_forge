@@ -166,7 +166,9 @@ vi.mock('@/components/UserAvatarButton.jsx', () => ({
 // Mock Phosphor icons — return simple span stubs
 // Every icon SideMenu imports, stubbed (allIconsAs takes the list from the real module).
 vi.mock('@phosphor-icons/react', async (importOriginal) =>
-  allIconsAs(({ className, weight }) => <span className={className} data-weight={weight} />, importOriginal));
+  allIconsAs(({ className, weight }) => <span className={className} data-weight={weight} />, importOriginal, {
+    ShoppingCart: ({ className, weight }) => <span className={className} data-weight={weight} data-icon="ShoppingCart" />,
+  }));
 
 import SideMenu, { findActiveGroup } from '../SideMenu.jsx';
 import { applySupportSessionFromServer, resetSupportSessionForTests } from '@/lib/supportSession.js';
@@ -465,9 +467,12 @@ describe('SideMenu', () => {
     expect(group).toHaveAttribute('aria-expanded', 'true');
     expect(group.className).not.toMatch(/bg-card|shadow-sm|font-medium/);
     const active = screen.getByTestId('menu-item-purchase-order');
-    expect(active.className).toMatch(/rounded/);
-    expect(active.className).toMatch(/\bborder\b/);
+    expect(active.className).toMatch(/rounded-md/);
+    expect(active.className).toMatch(/bg-card/);
+    expect(active.className).toMatch(/border-border-control/);
     expect(active.className).not.toMatch(/font-semibold/);
+    const inactive = screen.getByTestId('menu-item-other');
+    expect(inactive.className).not.toMatch(/bg-card|border-border-control/);
     expect(active.closest('nav').querySelector('span.w-px')).toBeNull();
     mockUseLocation.mockReturnValue({ pathname: '/dashboard', search: '' });
   });
@@ -487,8 +492,9 @@ describe('SideMenu', () => {
   it('renders an active expanded direct link as a bordered rounded card', () => {
     render(<SideMenu {...defaultProps} />);
     const link = screen.getByTestId('menu-item-dashboard');
-    expect(link.className).toMatch(/rounded/);
-    expect(link.className).toMatch(/\bborder\b/);
+    expect(link.className).toMatch(/rounded-md/);
+    expect(link.className).toMatch(/bg-card/);
+    expect(link.className).toMatch(/border-border-control/);
     expect(link.className).not.toMatch(/font-medium|shadow-sm/);
   });
 
@@ -496,6 +502,15 @@ describe('SideMenu', () => {
     const { readFileSync } = await vi.importActual('node:fs');
     const menu = JSON.parse(readFileSync(`${process.cwd()}/src/menu.json`, 'utf8'));
     expect(menu.menu.find(g => g.group === 'Sales').icon).toBe('ShoppingCart');
+    // ...and ICON_MAP resolves it (a missing key would fall back to the Package icon).
+    menuFixture.useShippedMenu = true;
+    try {
+      render(<SideMenu menuGroups={buildMenuGroups()} expanded onToggle={vi.fn()} />);
+      const icon = screen.getByTestId('menu-group-sales').querySelector('[data-weight]');
+      expect(icon).toHaveAttribute('data-icon', 'ShoppingCart');
+    } finally {
+      menuFixture.useShippedMenu = false;
+    }
   });
 
   it('renders the navigation aria label', () => {

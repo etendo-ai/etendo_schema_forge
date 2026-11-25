@@ -377,10 +377,9 @@ function ExpandedDirectLink({ group, singleItem, Icon, showSectionLabel, section
 }
 
 // The parent group is never highlighted in the expanded rail; only the open
-// state (see `openGroups`) and the active item mark where the user is.
-function getGroupHeaderClass() {
-  return 'hover:bg-muted/50 border-transparent';
-}
+// state (see `openGroups`) and the active item mark where the user is. Same 1px
+// transparent border as the option cards so every top-level row lines up.
+const GROUP_HEADER_CLASS = 'border border-transparent hover:bg-muted/50';
 
 function ExpandedGroupSection({
   group,
@@ -389,7 +388,6 @@ function ExpandedGroupSection({
   sectionLabel,
   groupLabel,
   isOpen,
-  isGroupActive,
   onToggle,
   emptyFavoritesLabel,
   visibleItems,
@@ -415,8 +413,8 @@ function ExpandedGroupSection({
           aria-expanded={!!isOpen}
           data-testid={`menu-group-${group.group.replace(/\s+/g, '-').toLowerCase()}`}
           className={cn(
-            'flex w-full items-center gap-2.5 px-3 py-1.5 text-sm transition-colors border-l-[3px]',
-            getGroupHeaderClass()
+            'flex w-full items-center gap-2.5 px-3 py-1.5 text-sm transition-colors',
+            GROUP_HEADER_CLASS
           )}
         >
           <Icon
@@ -449,7 +447,7 @@ function ExpandedGroupSection({
                 <button
                   type="button"
                   onClick={onShowMoreFavorites}
-                  className="relative flex w-full items-center pl-[52px] pr-4 py-1.5 text-sm text-muted-foreground hover:bg-muted/50 transition-colors"
+                  className="flex w-full items-center pl-[52px] pr-4 py-1.5 text-sm text-muted-foreground hover:bg-muted/50 transition-colors"
                 >
                   <span className="flex-1 text-left">{andNMoreLabel}</span>
                   <CaretDownIcon className="h-3.5 w-3.5 shrink-0" data-testid="ChevronDown__247c75" />
@@ -1015,12 +1013,12 @@ export default function SideMenu({
                   key={item.name}
                   to={`/${itemPath}`}
                   className={cn(
-                    'relative mx-2 flex w-[calc(100%-1rem)] items-center pl-[44px] pr-3 py-1.5 text-sm transition-colors',
+                    'mx-2 flex w-[calc(100%-1rem)] items-center pl-[44px] pr-3 py-1.5 text-sm transition-colors',
                     getActiveOptionClass(isItemActive),
                     !isItemActive && 'text-text-primary'
                   )}
                   data-testid={`menu-item-${item.slug || item.name?.replace(/\s+/g, '-').toLowerCase()}`}>
-                  <span className="relative z-10">
+                  <span>
                     {isFavorites
                       ? (item.labels?.[locale] || tMenu(favNameMap[item.path || item.name] || item.label))
                       : tMenu(item.label)}
@@ -1034,9 +1032,9 @@ export default function SideMenu({
                 <GuardedNavLink
                   key={item.name}
                   to={`/${itemPath}`}
-                  className="relative flex w-full items-center pl-[52px] pr-4 py-1.5 text-sm text-text-primary hover:bg-muted/50 transition-colors"
+                  className="mx-2 flex w-[calc(100%-1rem)] items-center rounded-md border border-transparent pl-[44px] pr-3 py-1.5 text-sm text-text-primary hover:bg-muted/50 transition-colors"
                   data-testid="NavLink__247c75">
-                  <span className="relative z-10">
+                  <span>
                     {item.labels?.[locale] || tMenu(favNameMap[itemPath] || item.label)}
                   </span>
                 </GuardedNavLink>
@@ -1053,7 +1051,6 @@ export default function SideMenu({
                 sectionLabel={tMenu(g.section)}
                 groupLabel={tMenu(g.group)}
                 isOpen={isOpen}
-                isGroupActive={isGroupActive}
                 onToggle={() => toggleGroup(g.group)}
                 emptyFavoritesLabel={ui('noFavoritesYet')}
                 visibleItems={visibleSubItems}
