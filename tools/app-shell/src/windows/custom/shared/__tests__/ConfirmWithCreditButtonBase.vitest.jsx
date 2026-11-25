@@ -642,6 +642,16 @@ describe('ConfirmWithCreditButtonBase — CreateInvoiceConfirmModal stays open d
     expect(toast.error).toHaveBeenCalledWith('Business partner on hold');
   });
 
+  // ETP-6179 CP-12 — a handler refusal carries its sentence in `error.message`; it toasted
+  // "Error (400)".
+  it('on a handler refusal: toasts its error.message, not "Error (<status>)"', async () => {
+    toast.error.mockClear();
+    await refuseWith(400, { error: { status: 400,
+      message: 'Business Partner is missing mandatory Payment Terms or Payment Method' } });
+    expect(toast.error).toHaveBeenCalledWith(
+      'Business Partner is missing mandatory Payment Terms or Payment Method');
+  });
+
   it('on a refusal with no message: toasts "Error (<status>)"', async () => {
     toast.error.mockClear();
     await refuseWith(403, { error: { status: 403 } });
