@@ -4,6 +4,7 @@ import { OBSERVABILITY_EVENTS } from './events.js';
 import { createMixpanelProvider } from './providers/mixpanel.js';
 import { createRumProvider } from '../rum.js';
 import { createDatadogProvider } from './providers/datadog.js';
+import { clearMixpanelCookies, onAnalyticsConsent } from '../marketing/consent.js';
 
 export function buildBrowserObservabilityConfig({
   env = import.meta.env,
@@ -49,6 +50,9 @@ export function buildBrowserObservabilityConfig({
         storage,
         hostname,
         allowLocal: env.VITE_MIXPANEL_ALLOW_LOCAL,
+        // ETP-6363 — only after the visitor accepts the Analytics cookies of marketing's banner.
+        consent: onAnalyticsConsent,
+        onConsentWithdrawn: () => clearMixpanelCookies(),
       }),
     ],
   };

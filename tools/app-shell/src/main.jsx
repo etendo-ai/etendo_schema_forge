@@ -4,6 +4,7 @@ import { initBrowserObservability } from './lib/observability/browser.js';
 import { initFeatureFlags } from './lib/flags/index.js';
 import { bootSupportSession, isSupportModeActive } from './lib/supportSession.js';
 import { installGtm, resolveGtmId } from './lib/marketing/gtm.js';
+import { captureLandingAttribution } from '@etendo-ai/etendo-go-core/onboarding/hubspot-attribution';
 import { detectBasePath } from './lib/neoBaseUrl.js';
 
 // ETP-5351 — runs before initFeatureFlags / initBrowserObservability (static imports are evaluated
@@ -19,6 +20,10 @@ installGtm(resolveGtmId({
   hostname: window.location.hostname,
   supportSession: isSupportModeActive(),
 }));
+
+// ETP-6363 — before the router mounts: its redirect to /onboarding drops the campaign parameters
+// (utm_*, gclid…) the sign-up must send to HubSpot, so the landing page is kept for this tab first.
+captureLandingAttribution();
 
 // ETP-4952 — before anything can issue a request: one network read per resource per page load
 // (the NEO session, a record's header, its marked attachment). See lib/neoRequestDedupe.js for
