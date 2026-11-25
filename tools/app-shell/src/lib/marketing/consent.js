@@ -47,10 +47,10 @@ export function clearMixpanelCookies(doc = globalThis.document, hostname = globa
     .filter(name => name.startsWith('mp_'));
   const labels = typeof hostname === 'string' ? hostname.split('.') : [];
   const parent = labels.length > 1 ? `.${labels.slice(-2).join('.')}` : null;
-  const domains = parent ? [null, parent] : [null];
+  const scopes = parent ? ['', `; domain=${parent}`] : [''];
   for (const name of names) {
-    for (const domain of domains) {
-      doc.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/${domain ? `; domain=${domain}` : ''}`;
+    for (const scope of scopes) {
+      doc.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/${scope}`;
     }
   }
 }
