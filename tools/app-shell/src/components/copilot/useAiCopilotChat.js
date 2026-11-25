@@ -202,6 +202,11 @@ export function interactWithDom(registry, { elementId, action, value }) {
   return { ok: true, elementId, action };
 }
 
+/** "step 2 — reason; step 3 — reason", for the errors the model reads. */
+function describeStepProblems(problems) {
+  return problems.map(entry => `step ${entry.step} — ${entry.reason}`).join('; ');
+}
+
 /**
  * Execute `highlight_element`, in either of its two shapes.
  *
@@ -229,7 +234,7 @@ export function runHighlightTool(args, { registry, root = document, highlight, h
   if (!steps.length) {
     // Every step was malformed: say why, in the same voice as the resolver's
     // own errors, so the model can retry instead of narrating a failure.
-    throw new Error(`No usable step in steps: ${rejected.map(entry => `step ${entry.step} — ${entry.reason}`).join('; ')}`);
+    throw new Error(`No usable step in steps: ${describeStepProblems(rejected)}`);
   }
 
   const outcome = highlightScript({
@@ -243,7 +248,7 @@ export function runHighlightTool(args, { registry, root = document, highlight, h
   });
 
   if (!outcome.currentStep) {
-    throw new Error(`No step of this tutorial is on the page: ${outcome.skipped.map(entry => `step ${entry.step} — ${entry.reason}`).join('; ')}`);
+    throw new Error(`No step of this tutorial is on the page: ${describeStepProblems(outcome.skipped)}`);
   }
 
   const shownStep = steps[outcome.currentStep - 1];
