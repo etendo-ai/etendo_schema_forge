@@ -503,6 +503,34 @@ describe('useEntity — overlapping list loads (latest wins)', () => {
     expect(result.current.hasMore).toBe(false);
   });
 
+  it('keeps hasMore when a superseded next page fails after a reload', async () => {
+    globalThis.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ response: { data: rowsOf(75, 'p0') } }),
+    });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { result } = renderHook(() => useEntity('header', null, defaultOpts));
+    await waitFor(() => expect(result.current.items).toHaveLength(75));
+
+    let rejectPage;
+    const stalePage = new Promise((_, reject) => { rejectPage = reject; });
+    const reload = deferredResponse();
+    globalThis.fetch
+      .mockReturnValueOnce(stalePage)
+      .mockReturnValueOnce(reload.promise);
+
+    act(() => { result.current.loadMore(); });
+    act(() => { result.current.refresh(); });
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledTimes(3));
+
+    await act(async () => { reload.resolveWith(rowsOf(75, 'reload')); });
+    await act(async () => { rejectPage(new Error('500')); });
+
+    expect(result.current.items[0].id).toBe('reload-0');
+    expect(result.current.hasMore).toBe(true);
+    expect(result.current.loadingMore).toBe(false);
+  });
+
   it('drops a next page that belongs to a query replaced by a reload', async () => {
     globalThis.fetch.mockResolvedValueOnce({
       ok: true,
