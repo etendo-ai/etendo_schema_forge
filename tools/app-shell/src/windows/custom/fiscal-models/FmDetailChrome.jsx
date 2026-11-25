@@ -8,7 +8,7 @@ import { useFavorites } from '@/components/layout/FavoritesContext';
 import { useSupportChatSafe } from '@/components/support/SupportChatContext.jsx';
 import { StatusTag } from '@/components/ui/status-tag';
 import { TONE_STYLES } from '@/components/ui/status-tag-tokens.js';
-import { Check } from 'lucide-react';
+import { CheckIcon } from '@phosphor-icons/react';
 
 // Shared chrome of the Modelo 303 / 349 detail pages (ETP-5584): the app top-bar meta (title,
 // breadcrumb, model badge, kebab), the status chip (also used by the list's "Estado" column), the
@@ -83,7 +83,7 @@ function DetailStatusPill({ tone, label }) {
       style={{ ...DETAIL_PILL_STYLE, background: palette.background, color: palette.color }}
     >
       {tone === 'success' && (
-        <Check size={16} color={DETAIL_ICON_COLOR.success} aria-hidden="true" data-testid="FmStatusChip__icon" />
+        <CheckIcon size={16} color={DETAIL_ICON_COLOR.success} aria-hidden="true" data-testid="FmStatusChip__icon" />
       )}
       <span style={{ padding: '0 4px' }}>{label}</span>
     </span>
@@ -205,7 +205,7 @@ export function FmEmptyState({ message, icon, title, sub, cta, 'data-testid': te
 // The declaration title lives in the app TopBar, at the same place as the list's "Modelos
 // Fiscales" title, published through the same `useSetPageMeta` the list uses:
 //   title       "Modelo 303 - 2026/T1"
-//   breadcrumb  "Finanzas / Modelos Fiscales / Modelo 303 - 2026/T1" (the TopBar subtitle)
+//   breadcrumb  "Impuestos / Modelos Fiscales / Modelo 303 - 2026/T1" (the TopBar subtitle)
 //   titleExtra  the model badge ("303"/"349") — TopBar's adornment slot next to the title
 //               (precedent: financial-account's sync status); the badge is the same
 //               `.fm-model-badge` element the list's model column renders, not a lookalike.

@@ -78,28 +78,26 @@ fails otherwise.
 
 ---
 
-## Copilot Agent Navigation (`webmcp-agent-chat`)
+## Copilot Agent Navigation
 
-`e2e/tests/flows/copilot-agent-navigation.mocked.spec.js` covers the browser
-half of the AI Copilot loop: a fabricated AI SDK UI-message stream stands in for
-the BFF, so the spec asserts that a `navigate_to` / `open_form` tool call lands
-in the router and that the three failure messages stay distinct (external URL →
-security error, unresolved name → recoverable, ambiguous name → candidates).
-Whether the model *chooses* to call the tool is not testable here.
+The Etendo AI chat and its WebMCP tools are always on (ETP-6424): there is no
+feature flag and no override to set. Current coverage is unit-level:
 
-Two environment constraints, both fixed when Vite starts:
+- `tools/app-shell/src/components/__tests__/CopilotContext.vitest.jsx` — history,
+  conversation ids, agent actions and attachment cleanup when the panel closes.
+- `tools/app-shell/src/components/webmcp/__tests__/WebMcpEtendoGoTools.vitest.jsx` —
+  session token, endpoint, and that the chat tool opens the panel and sends the message.
 
-```bash
-# NOTE: no VITE_MOCK — see below
-VITE_FEATURE_FLAGS='{"webmcp-agent-chat":true}' npx vite --port 3104
-E2E_USE_MOCK=1 BASE_URL=http://localhost:3104 E2E_WEBMCP_AGENT_CHAT_FLAG=on \
-  npx playwright test tests/flows/copilot-agent-navigation.mocked.spec.js --project=mocked
-```
+The former `copilot-agent-navigation.mocked.spec.js` is not in the tree; a
+Playwright spec for the browser half of the loop (a fabricated AI SDK UI-message
+stream standing in for the BFF, asserting a `navigate_to` / `open_form` call
+lands in the router) would have to be written anew. Whether the model *chooses*
+to call a tool is not testable there.
 
-- **The flag must be on at server start.** `webmcp-agent-chat` defaults to
-  `false`, and there is no runtime override — same constraint as
-  `proof-of-concept-menu.mocked.spec.js`. The spec skips itself without
-  `E2E_WEBMCP_AGENT_CHAT_FLAG=on` rather than failing on an absent feature.
+If such a spec intercepts `/api/ai/chat`, keep two things apart: the test's
+network mock (`page.route`) and the app's mock mode. `page.route` intercepts at the
+network layer, so it only works when the server runs without `VITE_MOCK`.
+
 - **The server must NOT run in mock mode.** ⚠️ In mock mode `App.jsx` patches
   `window.fetch` and sets the API base to `/api`, and `mockFetch.js` claims
   every URL starting with that prefix. The Copilot's endpoint is `/api/ai/chat`,
@@ -492,7 +490,7 @@ What they protect:
 
 - **Bug 1 — 400 `missing_updated`.** ETP-5073 made the backend require the record's `updated`
   optimistic-locking token. Only `useEntity` remembered it, so panels reading with `apiFetch`
-  directly patched without one. Fixed centrally in `@etendosoftware/app-shell-core`
+  directly patched without one. Fixed centrally in `@etendo-ai/app-shell-core`
   (`auth/api.js` harvests the token on every GET).
 - **Bug 1b — the token cache must be keyed by `(entity, id)`, not by `id`.** Because `AD_Org`
   and `AD_OrgInfo` share the id, an id-only cache let the second GET clobber the first record's
@@ -600,7 +598,7 @@ There are two layers, and they were fixed in that order:
 1. **The panel:** `tools/app-shell/src/hooks/useRecordWriteQueue.js` serialises per record and
    coalesces a mid-flight edit (last value wins per field, edits to different fields all survive,
    a refusal discards what was queued behind it).
-2. **The transport:** `@etendosoftware/app-shell-core` (`auth/api.js`) serialises versioned writes
+2. **The transport:** `@etendo-ai/app-shell-core` (`auth/api.js`) serialises versioned writes
    per `(canonical entity, id)` and awaits the version harvest before releasing the next write.
    Layer 1 alone did NOT close the defect — it stopped the overlap but the replay still went out
    with the consumed token, because the harvest (`res.clone().json().then(remember)`) was a

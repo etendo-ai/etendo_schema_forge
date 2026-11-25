@@ -38,19 +38,16 @@ import { Button } from '@/components/ui/button.jsx';
 import { TruncatedText } from '@/components/ui/truncated-text';
 import { UserAvatarButton } from '@/components/UserAvatarButton.jsx';
 import {
-  PanelLeftOpen,
-  PanelLeftClose,
-  ChevronRight,
-  ChevronDown,
-  Headphones,
-  FileJson,
-  HelpCircle,
-  MessageCircle,
-  ExternalLink,
-  Loader2,
-  Check,
-} from 'lucide-react';
-import {
+  SidebarSimpleIcon,
+  CaretRightIcon,
+  CaretDownIcon,
+  HeadsetIcon,
+  FileCodeIcon,
+  QuestionIcon,
+  ChatCircleIcon,
+  ArrowSquareOutIcon,
+  CircleNotchIcon,
+  CheckIcon,
   ClipboardText as ClipboardCheck,
   House,
   Star,
@@ -59,6 +56,8 @@ import {
   ChartLineUp,
   Receipt,
   Bank,
+  Wallet,
+  SealPercent,
   Package,
   Briefcase,
   Users,
@@ -74,7 +73,7 @@ import {
 import { cn } from '@/lib/utils.js';
 import { useMenuLabel, useUI, useLocaleSwitch } from '@/i18n';
 import { useFavorites } from '@/components/layout/FavoritesContext';
-import { useFeatureFlag, PROOF_OF_CONCEPT_MENU, ACCT_PROCESS_MONITOR, PUBLIC_API_KEYS, UNIFIED_CALENDAR_POC, DOC_TEMPLATE_SELECTION } from '@/lib/flags';
+import { useFeatureFlag, PROOF_OF_CONCEPT_MENU, PUBLIC_API_KEYS, UNIFIED_CALENDAR_POC, DOC_TEMPLATE_SELECTION } from '@/lib/flags';
 import { useEnvironmentSwitch } from '@/hooks/useEnvironmentSwitch.js';
 import { useSupportSession } from '@/hooks/useSupportSession.js';
 import { isSupportRestrictedMenuItem } from '@/lib/supportSession.js';
@@ -96,6 +95,9 @@ const ICON_MAP = {
   TrendingUp:     ChartLineUp,
   Receipt,
   Building2:      Bank,
+  Wallet,
+  // Lucide `BadgePercent`: Phosphor's equivalent is SealPercent (ETP-6380).
+  BadgePercent:   SealPercent,
   Package,
   Briefcase,
   Users,
@@ -218,10 +220,30 @@ function CollapsedGroupPopover({
   );
 }
 
+/**
+ * Whether the current location belongs to a menu item.
+ *
+ * A plain target (`payment-in`) matches its own path and anything below it
+ * (`payment-in/<id>`). A target with a query string (`report-viewer?category=treasury`)
+ * matches when the pathname is the same and every query param of the target is present in
+ * the current URL with the same value — extra params are allowed, so an open report
+ * (`report-viewer?category=treasury&report=aging-payable`) still highlights its Informes
+ * entry (ETP-6389).
+ */
 function matchesItem(item, currentPath, currentFull) {
   const target = item.path || item.name;
-  if (target.includes('?')) {
-    return currentFull === target;
+  const queryIdx = target.indexOf('?');
+  if (queryIdx !== -1) {
+    const targetPath = target.slice(0, queryIdx);
+    const currentQueryIdx = currentFull.indexOf('?');
+    const fullPath = currentQueryIdx === -1 ? currentFull : currentFull.slice(0, currentQueryIdx);
+    if (fullPath !== targetPath) return false;
+    const targetParams = new URLSearchParams(target.slice(queryIdx + 1));
+    const currentParams = new URLSearchParams(currentQueryIdx === -1 ? '' : currentFull.slice(currentQueryIdx + 1));
+    for (const [key, value] of targetParams) {
+      if (currentParams.get(key) !== value) return false;
+    }
+    return true;
   }
   return currentPath === target || currentPath.startsWith(target + '/');
 }
@@ -284,11 +306,11 @@ function CompanyOption({ env, isCurrent, switching, onSwitch, logoSrc, ui }) {
         </span>
       </span>
       {switching === env.clientId && (
-        <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" data-testid="Loader2__247c75" />
+        <CircleNotchIcon className="mt-0.5 h-4 w-4 shrink-0 animate-spin" data-testid="Loader2__247c75" />
       )}
       {isCurrent && switching !== env.clientId && (
         <span className="mt-0.5 flex shrink-0 items-center gap-1 text-xs font-medium text-primary">
-          <Check className="h-4 w-4" aria-hidden="true" data-testid="Check__247c75" />
+          <CheckIcon className="h-4 w-4" aria-hidden="true" data-testid="Check__247c75" />
           {ui('currentCompany')}
         </span>
       )}
@@ -400,7 +422,7 @@ function ExpandedGroupSection({
           <span className={cn('flex-1 text-left truncate', !(isGroupActive && !isOpen) && 'text-text-primary')}>
             {groupLabel}
           </span>
-          <ChevronDown
+          <CaretDownIcon
             className={cn(
               'h-3.5 w-3.5 shrink-0 transition-transform duration-200 text-muted-foreground',
               isOpen && 'rotate-180'
@@ -427,7 +449,7 @@ function ExpandedGroupSection({
                 >
                   <span className="absolute left-[33px] top-0 bottom-0 w-px bg-[hsl(var(--border-subtle))]" />
                   <span className="flex-1 text-left">{andNMoreLabel}</span>
-                  <ChevronDown className="h-3.5 w-3.5 shrink-0" data-testid="ChevronDown__247c75" />
+                  <CaretDownIcon className="h-3.5 w-3.5 shrink-0" data-testid="ChevronDown__247c75" />
                 </button>
               )
           )}
@@ -518,7 +540,7 @@ function HelpEntryPoint({ expanded, onOpenChat, unreadCount, ui }) {
       title={ui('helpAndSupport')}
       className="relative flex h-10 w-10 items-center justify-center rounded-lg bg-page-bg text-muted-foreground hover:text-foreground transition-colors"
     >
-      <Headphones className="h-5 w-5" data-testid="Headphones__247c75" />
+      <HeadsetIcon className="h-5 w-5" data-testid="Headphones__247c75" />
       <UnreadBadge
         unreadCount={unreadCount}
         expanded={false}
@@ -530,12 +552,12 @@ function HelpEntryPoint({ expanded, onOpenChat, unreadCount, ui }) {
       className="flex w-full items-center gap-2.5 px-3 py-2 text-sm rounded-md text-foreground hover:bg-muted/50 transition-colors"
     >
       <span className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
-        <Headphones className="h-4 w-4" data-testid="Headphones__247c75" />
+        <HeadsetIcon className="h-4 w-4" data-testid="Headphones__247c75" />
       </span>
       <span className="flex-1 text-left truncate">{ui('helpAndSupport')}</span>
       <UnreadBadge unreadCount={unreadCount} expanded data-testid="UnreadBadge__247c75" />
       {unreadCount === 0 && (
-        <ChevronRight
+        <CaretRightIcon
           className="h-4 w-4 shrink-0 text-muted-foreground"
           data-testid="ChevronRight__247c75" />
       )}
@@ -556,13 +578,13 @@ function HelpEntryPoint({ expanded, onOpenChat, unreadCount, ui }) {
       >
         <DropdownMenuItem asChild className="py-2.5 px-3 text-[15px]" data-testid="help-menu-report-bug">
           <a href={REPORT_BUG_URL} target="_blank" rel="noopener noreferrer">
-            <HelpCircle className="h-[18px] w-[18px] mr-2" data-testid="HelpCircle__247c75" />
+            <QuestionIcon className="h-[18px] w-[18px] mr-2" data-testid="HelpCircle__247c75" />
             {ui('helpReportBug')}
-            <ExternalLink className="h-3.5 w-3.5 ml-auto text-muted-foreground" data-testid="ExternalLink__247c75" />
+            <ArrowSquareOutIcon className="h-3.5 w-3.5 ml-auto text-muted-foreground" data-testid="ExternalLink__247c75" />
           </a>
         </DropdownMenuItem>
         <DropdownMenuItem onClick={onOpenChat} className="py-2.5 px-3 text-[15px]" data-testid="help-menu-open-chat">
-          <MessageCircle className="h-[18px] w-[18px] mr-2" data-testid="MessageCircle__247c75" />
+          <ChatCircleIcon className="h-[18px] w-[18px] mr-2" data-testid="MessageCircle__247c75" />
           {ui('helpOpenChat')}
         </DropdownMenuItem>
       </DropdownMenuContent>
@@ -582,7 +604,7 @@ function ArtifactsLink({ expanded, isActive, tMenu }) {
               isActive ? 'text-foreground bg-muted' : 'text-muted-foreground hover:bg-muted hover:text-foreground'
             )}
             data-testid="NavLink__247c75">
-            <FileJson className="h-5 w-5" data-testid="FileJson__247c75" />
+            <FileCodeIcon className="h-5 w-5" data-testid="FileJson__247c75" />
           </GuardedNavLink>
         </TooltipTrigger>
         <TooltipContent side="right" data-testid="TooltipContent__247c75">{tMenu('Artifacts')}</TooltipContent>
@@ -597,7 +619,7 @@ function ArtifactsLink({ expanded, isActive, tMenu }) {
         isActive ? 'text-foreground bg-muted' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
       )}
       data-testid="NavLink__247c75">
-      <FileJson className="h-4 w-4" data-testid="FileJson__247c75" />
+      <FileCodeIcon className="h-4 w-4" data-testid="FileJson__247c75" />
       <span>{tMenu('Artifacts')}</span>
     </GuardedNavLink>
   );
@@ -647,9 +669,6 @@ export default function SideMenu({
   // This is visual gating only. The windows remain protected by normal AD role
   // filtering; the flag merely stops offering this internal menu section.
   const showProofOfConceptMenu = useFeatureFlag(PROOF_OF_CONCEPT_MENU);
-  // ETP-5269. Item-level flag gating, where Proof of Concept above gates a whole group. Visual
-  // only: the route is registered unconditionally and SFAcctProcessMonitor enforces admin access.
-  const showAcctProcessMonitor = useFeatureFlag(ACCT_PROCESS_MONITOR);
   const showPublicApiKeys = useFeatureFlag(PUBLIC_API_KEYS);
   const showDocTemplateSelection = useFeatureFlag(DOC_TEMPLATE_SELECTION);
   const showUnifiedCalendarPoc = useFeatureFlag(UNIFIED_CALENDAR_POC);
@@ -676,7 +695,6 @@ export default function SideMenu({
   }, []);
 
   const featureFlagValues = useMemo(() => ({
-    [ACCT_PROCESS_MONITOR]: showAcctProcessMonitor,
     [PUBLIC_API_KEYS]: showPublicApiKeys,
     [DOC_TEMPLATE_SELECTION]: showDocTemplateSelection,
     // ETP-5436 — an item can now ALSO declare featureFlag: PROOF_OF_CONCEPT_MENU (e.g.
@@ -688,7 +706,7 @@ export default function SideMenu({
     // Unified Calendar PoC — item-level flag. It sits inside the Proof of Concept group, so it is
     // visible only when BOTH proof-of-concept-menu (group gate above) and this flag are on.
     [UNIFIED_CALENDAR_POC]: showUnifiedCalendarPoc,
-  }), [showAcctProcessMonitor, showPublicApiKeys, showProofOfConceptMenu, showUnifiedCalendarPoc]);
+  }), [showPublicApiKeys, showDocTemplateSelection, showProofOfConceptMenu, showUnifiedCalendarPoc]);
 
   // Applied to Favorites TOO. Favorites are rebuilt from the user's own saved list rather than
   // from menuGroups, so returning early for that group let a favourited flag-gated item stay
@@ -808,7 +826,7 @@ export default function SideMenu({
                     )}
                   </span>
                   {!isSupportMode && (
-                    <ChevronDown
+                    <CaretDownIcon
                       className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
                       data-testid="ChevronDown__247c75" />
                   )}
@@ -862,7 +880,7 @@ export default function SideMenu({
               data-testid="sidebar-collapse"
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
             >
-              <PanelLeftClose className="h-4 w-4" data-testid="PanelLeftClose__247c75" />
+              <SidebarSimpleIcon className="h-4 w-4" data-testid="PanelLeftClose__247c75" />
             </button>
             <div className="absolute bottom-0 left-3 right-3 border-t border-border/50" />
           </div>
@@ -882,7 +900,7 @@ export default function SideMenu({
                   data-testid="sidebar-expand"
                   className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
                 >
-                  <PanelLeftOpen className="h-5 w-5" data-testid="PanelLeftOpen__247c75" />
+                  <SidebarSimpleIcon className="h-5 w-5" data-testid="PanelLeftOpen__247c75" />
                 </button>
               </TooltipTrigger>
               <TooltipContent side="right" data-testid="TooltipContent__247c75">{ui('expandMenu')}</TooltipContent>

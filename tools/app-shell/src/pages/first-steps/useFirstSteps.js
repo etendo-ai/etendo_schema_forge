@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useAuthOptional } from '@etendosoftware/app-shell-core/auth';
+import { useAuthOptional } from '@etendo-ai/app-shell-core/auth';
 import { useApiFetch } from '@/auth/useApiFetch.js';
 import { getApiBase } from '@/hooks/useNeoResource.js';
 
@@ -32,7 +32,7 @@ import { getApiBase } from '@/hooks/useNeoResource.js';
  * The POST replaces the whole object, so every mutation here sends the full next state.
  *
  * This hook is deliberately the transport layer only: it knows nothing about the step
- * catalogue (`firstStepsConfig.js`) and therefore does not drag that module's lucide icons
+ * catalogue (`firstStepsConfig.js`) and therefore does not drag that module's icons
  * into `DashboardPage`, which mounts it purely for the one-time redirect. The caller that
  * actually toggles steps passes `allowedIds` so a non-toggleable id can never reach the wire
  * — the server allowlists exactly those ids and silently drops the rest, so sending one would

@@ -4,7 +4,7 @@
 // ETP-5073 made the backend require the token of the record AS IT WAS READ; only
 // `useEntity` remembered one, so every panel that reads with `apiFetch` directly — this one
 // — patched without it and the server answered 400 `missing_updated`. The fix is central,
-// in `@etendosoftware/app-shell-core` (`auth/api.js` harvests the token from every GET,
+// in `@etendo-ai/app-shell-core` (`auth/api.js` harvests the token from every GET,
 // keyed by entity AND id, and injects it into the PUT/PATCH that follows), so NOTHING in
 // this screen changed. What this test pins is the screen's half of that contract: it reads
 // its rows through `apiFetch` at a path whose (entity, id) matches the write, which is the
@@ -28,7 +28,7 @@ vi.mock('@/i18n', () => ({
 vi.mock('@/lib/selectorCatalog.js', () => ({ getCatalogOptions: () => [] }));
 
 // Stub every icon the tree pulls in (shared Dialog, CreatableSearchSelect, the steppers).
-vi.mock('lucide-react', () => {
+vi.mock('@phosphor-icons/react', () => {
   const isReserved = (prop) => typeof prop !== 'string' || prop === 'then' || prop === '__esModule';
   return new Proxy({}, {
     has: (_t, prop) => !isReserved(prop),

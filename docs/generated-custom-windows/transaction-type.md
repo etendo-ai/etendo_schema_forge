@@ -10,7 +10,7 @@ Predates the `cli/config/regen-windows.json` convention — see [match-rule](mat
 
 ## Interaction model
 
-- **No UI surface of its own**: no AD menu, no React route, no wired frontend (the artifact is backend-only in `registry.js`/`menu.json`; the validator's `BACKEND_ONLY_ARTIFACTS` set — published in `@etendosoftware/schema-forge-cli`'s `validate-pipeline.js` post-split — exempts it from the F3 "contract without registry entry" rule).
+- **No UI surface of its own**: no AD menu, no React route, no wired frontend (the artifact is backend-only in `registry.js`/`menu.json`; the validator's `BACKEND_ONLY_ARTIFACTS` set — published in `@etendo-ai/schema-forge-cli`'s `validate-pipeline.js` post-split — exempts it from the F3 "contract without registry entry" rule).
 - **Backed by** the new core-style table `ETGO_Transaction_Type` (search key `Value` + `Name`), exposed as a NEO Headless **W spec** (`transaction-type`) with a technical AD window/tab that carries **no menu entry** — it exists only so NEO can serve the selector list and the create endpoint.
 - **Where it is used**: the match-rule `transactionType` field is a FK (`ETGO_Transaction_Type_ID`) rendered as a searchable, inline-creatable selector.
 
@@ -22,7 +22,7 @@ Predates the `cli/config/regen-windows.json` convention — see [match-rule](mat
 ## Reactive behavior and dependencies
 
 - **Server-side enrichment**: `TransactionTypeHandler` (`@Named("transaction-type")`) is a NEO write pre-hook. On create it:
-  - requires a non-blank `name` (max 60) — HTTP 400. Since ETP-5978 the generated `list-modal` page (`TransactionTypePage.jsx`) also carries `maxLength: 60` on `name` (the DB column length, emitted by the generator); the page has no route, so this is not user-visible today, but it would cap the input if the window were ever wired. Its save / toggle / delete refusals would likewise be translated through the shared `lib/backendErrors.js`, like every `list-modal` window;
+  - requires a non-blank `name` (max 60) — HTTP 400. Since ETP-5978 the generated `list-modal` page (`TransactionTypePage.jsx`) also carries `maxLength: 60` on `name` (the DB column length, emitted by the generator); the page has no route, so this is not user-visible today, but it would cap the input if the window were ever wired. Likewise `templateConfig.viewTitleKey` → `transactionTypeViewTitle` (ETP-6221) titles the read-only view mode a read-only role would get on row click or deep link. Its save / toggle / delete refusals would likewise be translated through the shared `lib/backendErrors.js`, like every `list-modal` window;
   - derives the `Value` (search key) from the name as an uppercase, accent-stripped slug (e.g. "Comisión bancaria" → `COMISION_BANCARIA`) when the caller did not supply one, and injects it into the request body so the generic CRUD persists it (the create form only sends a name);
   - rejects a duplicate search key — HTTP 409.
 - **Referential integrity**: match-rule rows reference a transaction type through the `ETGO_MR_TRXTYPE_FK` foreign key; the value shown in the rule list/grid is the type's `Name`.

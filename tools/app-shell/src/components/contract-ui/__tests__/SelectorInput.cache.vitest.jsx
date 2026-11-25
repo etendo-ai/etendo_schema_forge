@@ -11,7 +11,7 @@ import { render, waitFor, act } from '@testing-library/react';
 vi.mock('@/i18n', () => ({ useUI: () => (k) => k }));
 vi.mock('@/lib/buildUrlWithParams.js', () => ({ buildUrlWithParams: (url) => url }));
 vi.mock('@/lib/selectorCatalog.js', () => ({ getCatalogOptions: () => [] }));
-vi.mock('lucide-react', () => ({ Loader2: () => <span />, ChevronDown: () => <span /> }));
+vi.mock('@phosphor-icons/react', () => ({ CircleNotchIcon: () => <span />, CaretDownIcon: () => <span /> }));
 vi.mock('@/components/ui/select', () => ({
   Select: ({ children }) => <div>{children}</div>,
   SelectTrigger: React.forwardRef(({ children, ...rest }, ref) => <button ref={ref} {...rest}>{children}</button>),
@@ -20,8 +20,8 @@ vi.mock('@/components/ui/select', () => ({
   SelectItem: ({ children, value }) => <div data-value={value}>{children}</div>,
 }));
 
-import { AuthProvider, createMemoryAuthStorage } from '@etendosoftware/app-shell-core/auth';
-import { DataProvider, createQueryCache } from '@etendosoftware/app-shell-core/data';
+import { AuthProvider, createMemoryAuthStorage } from '@etendo-ai/app-shell-core/auth';
+import { DataProvider, createQueryCache } from '@etendo-ai/app-shell-core/data';
 import { SelectorInput } from '../SelectorInput.jsx';
 
 const URL = '/api/header/selectors/C_BPartner_ID';

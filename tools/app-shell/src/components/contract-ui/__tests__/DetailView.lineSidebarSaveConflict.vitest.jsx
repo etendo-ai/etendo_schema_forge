@@ -24,7 +24,7 @@ import {
 } from '@/lib/saveConflict.js';
 import {
   getRecordVersion, rememberRecordVersion, resetRecordVersionsForTests,
-} from '@etendosoftware/app-shell-core/lib/recordVersions.js';
+} from '@etendo-ai/app-shell-core/lib/recordVersions.js';
 import {
   subscribeNavigationPrompt, savePendingNavigation, resetUnsavedChangesForTests,
 } from '@/lib/unsavedChanges.js';
@@ -163,7 +163,6 @@ vi.mock('../SummaryBar.jsx', () => ({ SummaryBar: () => null }));
 vi.mock('../DocumentTotalsPanel.jsx', () => ({ default: () => null }));
 vi.mock('../LinesSelectionBar.jsx', () => ({ default: () => null }));
 vi.mock('../DocumentStatusPill.jsx', () => ({ default: ({ status }) => <span>{status}</span> }));
-vi.mock('@/components/attachments/AttachmentIcon', () => ({ AttachmentIcon: () => <span>A</span> }));
 
 const MockForm = ({ data }) => <div data-testid="mock-form">{data?.documentNo}</div>;
 

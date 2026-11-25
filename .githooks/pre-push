@@ -798,7 +798,7 @@ fi
 # versions CI would install — not whatever happens to already be on disk from
 # an earlier `npm install` of a newer core-package build. Without this, a
 # locally-ahead node_modules can make `make regen-check` pass here using a
-# newer @etendosoftware/schema-forge-cli than what package.json/lockfile
+# newer @etendo-ai/schema-forge-cli than what package.json/lockfile
 # actually pin, while CI's `npm ci` installs the older pinned version and
 # fails (see ETP-4584: Offline Regen Check drift on `warehouse.editModal`
 # caused entirely by a stale core-package pin that only `npm ci` — not a
@@ -894,8 +894,8 @@ run_test_hygiene() {
 # exit non-zero when the Quality Gate is in ERROR, so this step (and the push) is
 # blocked exactly when CI's gate would fail. The overall coverage comparison
 # (--compare-coverage) is not run here: with a selection the overall figure always
-# drops. The PR's required "Sonar Build" check runs it over the whole suite, as does
-# Jenkins' "Compare Coverage Results" stage (docs/coverage-gate.md).
+# drops. The PR's required "Unit tests + Sonar + coverage" check (mini pipeline into develop, full
+# pipeline into main) runs it over the whole suite (docs/coverage-gate.md).
 run_step_2() {
   if [ "$RUN_S2" != "1" ]; then
     echo "==> [2/5] Running unit tests and SonarQube analysis... SKIPPED ⏭️  (no source/test/sonar-config changes)"
@@ -993,7 +993,7 @@ process.stdout.write(r.windows.filter(w=>{\
     git --no-pager diff | head -200
     echo ""
     echo "👉 Either regenerate + commit (make regen ONLY=<window>), or the pinned"
-    echo "   core package (@etendosoftware/schema-forge-cli) is missing/behind a"
+    echo "   core package (@etendo-ai/schema-forge-cli) is missing/behind a"
     echo "   generator feature the committed artifacts already rely on."
     echo "========================================================================="
     mkdir -p "$(dirname "$LAST_FAILED_FILE")"

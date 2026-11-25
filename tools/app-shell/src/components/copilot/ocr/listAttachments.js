@@ -1,4 +1,4 @@
-import { apiFetch } from '@etendosoftware/app-shell-core/auth/api';
+import { apiFetch } from '@etendo-ai/app-shell-core/auth/api';
 /**
  * Thin client for the NEO Headless attachments endpoints
  * (com.etendoerp.go NeoBuiltInEndpointHandler /sws/neo/attachments/*).

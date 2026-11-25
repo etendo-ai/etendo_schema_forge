@@ -1,9 +1,9 @@
-import { registerImportDescriptor } from '@etendosoftware/app-shell-core/lib/import/buildOperations.js';
-import { registerImportRowValidator } from '@etendosoftware/app-shell-core/lib/import/rowValidators.js';
-import { registerImportRunReset } from '@etendosoftware/app-shell-core/lib/import/importRunState.js';
-import { getFkResolver } from '@etendosoftware/app-shell-core/lib/import/fkResolvers.js';
-import { resolveOrAutoCreateDependentEntity, getResolutionCache } from '@etendosoftware/app-shell-core/lib/import/resolveDependentEntity.js';
-import { fetchNeoList } from '@etendosoftware/app-shell-core/lib/import/fetchNeoList.js';
+import { registerImportDescriptor } from '@etendo-ai/app-shell-core/lib/import/buildOperations.js';
+import { registerImportRowValidator } from '@etendo-ai/app-shell-core/lib/import/rowValidators.js';
+import { registerImportRunReset } from '@etendo-ai/app-shell-core/lib/import/importRunState.js';
+import { getFkResolver } from '@etendo-ai/app-shell-core/lib/import/fkResolvers.js';
+import { resolveOrAutoCreateDependentEntity, getResolutionCache } from '@etendo-ai/app-shell-core/lib/import/resolveDependentEntity.js';
+import { fetchNeoList } from '@etendo-ai/app-shell-core/lib/import/fetchNeoList.js';
 import {
   getCachedCategories,
   categoryLookupFailedMessage,
@@ -17,7 +17,7 @@ import {
 import { registerExportHints } from '@/lib/importExportColumns.js';
 import { asDependentEntityInput } from '@/lib/dependentEntityCell.js';
 import { stripUrlScheme } from './contactsWebUrl.js';
-import { apiFetch } from '@etendosoftware/app-shell-core/auth/api';
+import { apiFetch } from '@etendo-ai/app-shell-core/auth/api';
 import { readFeatureFlag } from '@/lib/flags/useFeatureFlag.js';
 import { CONTACT_CATEGORY_TYPE } from '@/lib/flags/flag-keys.js';
 import { hasImportCapability } from '@/lib/importCapabilities.js';
@@ -27,7 +27,7 @@ import {
   STREET_NAME_MAX_LENGTH,
   composeAddressLines,
   effectiveBuildingNumber,
-} from '@etendosoftware/app-shell-core/lib/locationAddress.js';
+} from '@etendo-ai/app-shell-core/lib/locationAddress.js';
 
 /**
  * Feature flag `contact-category-type` (ETP-5791) — the toggle point of this descriptor. Read per
@@ -605,7 +605,7 @@ function translatedWithParams(key, params, fallback, translate) {
  * that says anything about an address needs a street (Calle), a city and a country. Number is
  * never required (the server falls back to "s/n"). The server's max-length check
  * (`rejectOversizedFields`) is mirrored too, since it is two comparisons: Calle carries a whole
- * address when it comes from an old "Dirección" column, which can exceed the street's 70.
+ * address when it comes from an old "Dirección" column, which can exceed the street's 60.
  *
  * Flag OFF: a Número with no Calle is reported on the Calle cell (the single address line is
  * built from Calle, so the number would otherwise be dropped in silence), and so is a Calle longer

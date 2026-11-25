@@ -181,7 +181,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createAuthContextMock, createFiscalConfigMock } from '@/test/mockOrderWindowAuth.jsx';
-import PurchaseInvoiceWindow from '../index.jsx';
+import PurchaseInvoiceWindow, { allowConfirmWithManualTaxLines } from '../index.jsx';
 import { consumeFollowUpPrompt } from '@/components/follow-up-documents/followUpDocuments.js';
 import { expectInvoiceBulkUnpostWiring } from '../../shared/__tests__/testUtils/invoiceBulkUnpostAssertions.js';
 
@@ -714,5 +714,20 @@ describe('PurchaseInvoiceWindow — SIF send entry points', () => {
   it('loads the fiscal config in the list view', () => {
     render(<PurchaseInvoiceWindow windowName="purchase-invoice" apiBaseUrl="/api" token="tkn" />);
     expect(sifHookCalls[sifHookCalls.length - 1].args.loadConfig).toBe(true);
+  });
+});
+
+describe('allowConfirmWithManualTaxLines — import invoice confirmed with tax lines only', () => {
+  it('allows an empty import with DUA only when the header reports manual tax lines', () => {
+    expect(allowConfirmWithManualTaxLines({ etgoImportDua: true, hasManualTaxLines: true })).toBe(true);
+    expect(allowConfirmWithManualTaxLines({ etgoImportDua: 'Y', hasManualTaxLines: 'Y' })).toBe(true);
+    expect(allowConfirmWithManualTaxLines({ etgoImportDua: true, hasManualTaxLines: false })).toBe(false);
+    expect(allowConfirmWithManualTaxLines({ etgoImportDua: true, hasManualTaxLines: 'N' })).toBe(false);
+    // A legacy F5 / LC import counts as checked; another SII type does not.
+    expect(allowConfirmWithManualTaxLines({ hasManualTaxLines: true, aeatsiiClaveTipoFc: 'F5' })).toBe(true);
+    expect(allowConfirmWithManualTaxLines({ hasManualTaxLines: true, aeatsiiClaveTipoFc: 'F1' })).toBe(false);
+    expect(allowConfirmWithManualTaxLines({ etgoImportDua: false, hasManualTaxLines: true })).toBe(false);
+    expect(allowConfirmWithManualTaxLines({})).toBe(false);
+    expect(allowConfirmWithManualTaxLines(null)).toBe(false);
   });
 });

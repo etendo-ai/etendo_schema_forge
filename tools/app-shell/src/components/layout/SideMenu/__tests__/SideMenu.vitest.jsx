@@ -1,5 +1,6 @@
 // @covers tools/app-shell/src/components/layout/SideMenu/SideMenu.jsx
 import { render, screen, fireEvent, within } from '@testing-library/react';
+import { allIconsAs } from '@/test/iconMock.js';
 import userEvent from '@testing-library/user-event';
 
 const { mockUseFeatureFlag } = vi.hoisted(() => ({
@@ -58,7 +59,6 @@ vi.mock('@/components/layout/FavoritesContext', () => ({
 vi.mock('@/lib/flags', () => ({
   useFeatureFlag: (...args) => mockUseFeatureFlag(...args),
   PROOF_OF_CONCEPT_MENU: 'proof-of-concept-menu',
-  ACCT_PROCESS_MONITOR: 'acct-process-monitor',
   PUBLIC_API_KEYS: 'public-api-keys',
   DOC_TEMPLATE_SELECTION: 'doc-template-selection',
   UNIFIED_CALENDAR_POC: 'unified-calendar-poc',
@@ -163,32 +163,11 @@ vi.mock('@/components/UserAvatarButton.jsx', () => ({
 }));
 
 // Mock Phosphor icons — return simple span stubs
-vi.mock('@phosphor-icons/react', () => {
-  const iconStub = ({ className }) => <span className={className} />;
-  return {
-    ClipboardText: iconStub,
-    House: iconStub,
-    Star: iconStub,
-    IdentificationCard: iconStub,
-    ShareNetwork: iconStub,
-    ChartLineUp: iconStub,
-    Receipt: iconStub,
-    Bank: iconStub,
-    Package: iconStub,
-    Briefcase: iconStub,
-    Users: iconStub,
-    Presentation: iconStub,
-    Plug: iconStub,
-    Gear: iconStub,
-    Flask: iconStub,
-    SquaresFour: iconStub,
-    Eye: iconStub,
-    FileCode: iconStub,
-    Storefront: iconStub,
-  };
-});
+// Every icon SideMenu imports, stubbed (allIconsAs takes the list from the real module).
+vi.mock('@phosphor-icons/react', async (importOriginal) =>
+  allIconsAs(({ className, weight }) => <span className={className} data-weight={weight} />, importOriginal));
 
-import SideMenu from '../SideMenu.jsx';
+import SideMenu, { findActiveGroup } from '../SideMenu.jsx';
 import { applySupportSessionFromServer, resetSupportSessionForTests } from '@/lib/supportSession.js';
 import { buildMenuGroups, filterMenuGroupsByAccess } from '@/windows/registry.js';
 import { defaultNavigation, optionalNavigation, hiddenNavigation, navigationProfiles, expectedNavigation, navigationPermissions, catalogFeatureFlags } from '@/windows/__tests__/navigationExpectations.js';
@@ -238,6 +217,172 @@ describe('SideMenu shipped navigation profiles (ETP-5240)', () => {
   });
 });
 
+// A report-category entry (`report-viewer?category=<cat>`) is matched by its pathname plus every
+// query param it declares; extra params of the current URL (`&report=<id>`) do not break the match.
+// Runs against the shipped menu so the Treasury / Finance split is the real one.
+describe('findActiveGroup — report-category entries', () => {
+  beforeEach(() => { menuFixture.useShippedMenu = true; });
+  afterEach(() => { menuFixture.useShippedMenu = false; });
+  const groups = () => buildMenuGroups();
+  const activeGroupName = (pathname, search) => findActiveGroup(groups(), pathname, search)?.group ?? null;
+
+  it.each([
+    ['?category=treasury&report=aging-payable', 'Treasury'],
+    ['?category=treasury&report=aging-receivable', 'Treasury'],
+    ['?category=treasury', 'Treasury'],
+    ['?category=finance&report=balance-sheet', 'Finance'],
+    ['?category=taxes&report=tax-report', 'Taxes'],
+    ['?category=taxes', 'Taxes'],
+    ['?category=finance', 'Finance'],
+    ['?category=inventory&report=inventory-stock-report', 'Inventory'],
+  ])('/report-viewer%s resolves to %s', (search, expected) => {
+    expect(activeGroupName('/report-viewer', search)).toBe(expected);
+  });
+
+  it('a category=finance URL never matches the Treasury entry, even for an aging report id', () => {
+    const treasury = groups().find(g => g.group === 'Treasury');
+    expect(findActiveGroup([treasury], '/report-viewer', '?category=finance&report=aging-payable')).toBeNull();
+    expect(findActiveGroup([treasury], '/report-viewer', '?category=finance')).toBeNull();
+  });
+
+  it('a report-viewer URL without the category param matches no report-category entry', () => {
+    expect(activeGroupName('/report-viewer', '?report=aging-payable')).toBeNull();
+    expect(activeGroupName('/report-viewer', '')).toBeNull();
+  });
+
+  it('a different pathname with the same query never matches a report-category entry', () => {
+    expect(activeGroupName('/report-viewer-x', '?category=treasury')).toBeNull();
+  });
+
+  it.each([
+    ['/payment-in', 'Treasury'],
+    ['/payment-in/ABC123', 'Treasury'],
+    ['/financial-account', 'Treasury'],
+    ['/chart-of-accounts', 'Finance'],
+  ])('non-query target %s keeps resolving by path (%s)', (pathname, expected) => {
+    expect(activeGroupName(pathname, '')).toBe(expected);
+  });
+
+  // ETP-6380 — every visible entry resolves to its OWN group: no Finance route lights up Impuestos
+  // (or the reverse), whatever the order of the two adjacent groups in the Finance section.
+  it('every visible Finance and Taxes entry resolves to its own group', () => {
+    for (const group of groups().filter(g => g.group === 'Finance' || g.group === 'Taxes')) {
+      for (const item of group.items) {
+        const target = `/${item.path || item.name}`;
+        const q = target.indexOf('?');
+        const [pathname, search] = q === -1 ? [target, ''] : [target.slice(0, q), target.slice(q)];
+        expect(activeGroupName(pathname, search), item.name).toBe(group.group);
+        if (q === -1) expect(activeGroupName(`${pathname}/ABC123`, ''), `${item.name} detail`).toBe(group.group);
+      }
+    }
+  });
+
+  it('a non-query target does not match a longer slug that only shares its prefix', () => {
+    expect(activeGroupName('/payment-input', '')).toBeNull();
+  });
+});
+
+// ETP-6380 — the Impuestos header is styled as active (filled icon, card background) only when the
+// route belongs to it; on a Finance window it renders like any other inactive group.
+describe('SideMenu — Taxes group header state', () => {
+  beforeEach(() => { menuFixture.useShippedMenu = true; });
+  afterEach(() => {
+    menuFixture.useShippedMenu = false;
+    mockUseLocation.mockReturnValue({ pathname: '/dashboard', search: '' });
+  });
+  const headerWeight = testId => screen.getByTestId(testId).querySelector('[data-weight]').getAttribute('data-weight');
+
+  it.each([
+    ['/chart-of-accounts', '', 'regular', 'fill'],
+    ['/report-viewer', '?category=finance', 'regular', 'fill'],
+    ['/fiscal-config', '', 'fill', 'regular'],
+    ['/report-viewer', '?category=taxes&report=tax-report', 'fill', 'regular'],
+  ])('at %s%s Taxes is %s and Finance is %s', (pathname, search, taxesWeight, financeWeight) => {
+    mockUseLocation.mockReturnValue({ pathname, search });
+    render(<SideMenu menuGroups={buildMenuGroups()} expanded onToggle={vi.fn()} />);
+    expect(headerWeight('menu-group-taxes')).toBe(taxesWeight);
+    expect(headerWeight('menu-group-finance')).toBe(financeWeight);
+  });
+});
+
+// Generic matching rules on a synthetic menu (moved here from the retired findActiveGroup.test.js,
+// which exercised a hand-copied version of the function rather than this one).
+describe('findActiveGroup — generic matching', () => {
+  const SAMPLE = [
+    { group: 'Home', items: [{ name: 'dashboard', label: 'Dashboard' }] },
+    { group: 'Sales', items: [{ name: 'sales-order', label: 'Sales Order' }, { name: 'sales-invoice', label: 'Sales Invoice' }] },
+    { group: 'Purchases', items: [{ name: 'purchase-order', label: 'Purchase Order' }, { name: 'report-viewer-purchases', label: 'Reports', path: 'report-viewer?category=purchases' }] },
+  ];
+
+  it('matches a plain item by name, with or without a search argument', () => {
+    expect(findActiveGroup(SAMPLE, '/sales-order')?.group).toBe('Sales');
+    expect(findActiveGroup(SAMPLE, '/sales-invoice', '')?.group).toBe('Sales');
+    expect(findActiveGroup(SAMPLE, '/dashboard', undefined)?.group).toBe('Home');
+  });
+
+  it('matches a query-string item only when its params are in the current URL', () => {
+    expect(findActiveGroup(SAMPLE, '/report-viewer', '?category=purchases')?.group).toBe('Purchases');
+    expect(findActiveGroup(SAMPLE, '/report-viewer', '?category=sales')).toBeNull();
+  });
+
+  it('returns null when nothing matches, and for an empty menu', () => {
+    expect(findActiveGroup(SAMPLE, '/nonexistent')).toBeNull();
+    expect(findActiveGroup([], '/dashboard')).toBeNull();
+  });
+
+  it('returns the first matching group when two groups hold the same item', () => {
+    const groups = [
+      { group: 'A', items: [{ name: 'shared', label: 'A' }] },
+      { group: 'B', items: [{ name: 'shared', label: 'B' }] },
+    ];
+    expect(findActiveGroup(groups, '/shared')?.group).toBe('A');
+  });
+
+  it('never returns the Favorites group, even when one of its entries matches', () => {
+    const groups = [
+      { group: 'Favorites', items: [{ name: 'sales-order', label: 'Fav' }] },
+      ...SAMPLE,
+    ];
+    expect(findActiveGroup(groups, '/sales-order')?.group).toBe('Sales');
+    expect(findActiveGroup([groups[0]], '/sales-order')).toBeNull();
+  });
+});
+
+describe('SideMenu — Treasury entry highlighting', () => {
+  beforeEach(() => {
+    menuFixture.useShippedMenu = true;
+    mockUseFavorites.mockReturnValue({ favorites: [] });
+  });
+
+  afterEach(() => {
+    menuFixture.useShippedMenu = false;
+    mockUseLocation.mockReturnValue({ pathname: '/dashboard', search: '' });
+  });
+
+  const ACTIVE = /ring-border-control/;
+
+  it('an open aging report highlights Tesorería › Informes and not Finanzas › Informes', () => {
+    mockUseLocation.mockReturnValue({ pathname: '/report-viewer', search: '?category=treasury&report=aging-payable' });
+    render(<SideMenu menuGroups={buildMenuGroups()} expanded onToggle={vi.fn()} />);
+    // The active group opens on mount, so the Treasury item is rendered without a click.
+    expect(screen.getByTestId('menu-item-report-viewer-treasury').className).toMatch(ACTIVE);
+    expect(screen.queryByTestId('menu-item-report-viewer-finance')?.className ?? '').not.toMatch(ACTIVE);
+  });
+
+  it('a finance report highlights Finanzas › Informes and not Tesorería › Informes', () => {
+    mockUseLocation.mockReturnValue({ pathname: '/report-viewer', search: '?category=finance&report=tax-report' });
+    render(<SideMenu menuGroups={buildMenuGroups()} expanded onToggle={vi.fn()} />);
+    expect(screen.getByTestId('menu-item-report-viewer-finance').className).toMatch(ACTIVE);
+    expect(screen.queryByTestId('menu-item-report-viewer-treasury')?.className ?? '').not.toMatch(ACTIVE);
+  });
+
+  it('a payment-in record highlights Tesorería › Cobro', () => {
+    mockUseLocation.mockReturnValue({ pathname: '/payment-in/ABC123', search: '' });
+    render(<SideMenu menuGroups={buildMenuGroups()} expanded onToggle={vi.fn()} />);
+    expect(screen.getByTestId('menu-item-payment-in').className).toMatch(ACTIVE);
+  });
+});
+
 const MENU_GROUPS = [
   {
     group: 'Favorites',
@@ -281,6 +426,16 @@ describe('SideMenu', () => {
   it('renders without crashing with minimal props', () => {
     render(<SideMenu {...defaultProps} />);
     expect(screen.getByRole('navigation')).toBeInTheDocument();
+  });
+
+  // ETP-6155 — Fill is reserved for the navigation rail's active entry; the rest stays Regular.
+  it('draws only the active rail entry with the fill weight', () => {
+    render(<SideMenu {...defaultProps} />);
+    const active = screen.getByTestId('menu-item-dashboard');
+    expect(active.querySelector('[data-weight]')).toHaveAttribute('data-weight', 'fill');
+    const nav = active.closest('nav');
+    expect(nav.querySelectorAll('[data-weight="regular"]').length).toBeGreaterThan(0);
+    expect(nav.querySelectorAll('[data-weight="fill"]')).toHaveLength(1);
   });
 
   it('renders the navigation aria label', () => {
@@ -752,42 +907,32 @@ describe('SideMenu', () => {
       expect(screen.queryByText('Proof of Concept')).not.toBeInTheDocument();
     });
 
-    it('hides the accounting-process item when its declared feature flag is off', () => {
+    it('keeps a saved accounting-process favorite visible with every feature flag off', async () => {
+      const user = userEvent.setup();
       mockUseFeatureFlag.mockReturnValue(false);
+      mockUseFavorites.mockReturnValue({
+        favorites: [{ name: 'acct-process-monitor', label: 'Accounting Process' }],
+      });
       render(<SideMenu
         {...defaultProps}
-        menuGroups={[{
-          group: 'Settings',
-          icon: 'Settings',
-          section: 'System',
-          items: [{
-            name: 'acct-process-monitor',
-            label: 'Accounting Process',
-            featureFlag: 'acct-process-monitor',
-          }],
-        }]}
+        menuGroups={[
+          { group: 'Favorites', icon: 'Star', section: 'General', items: [] },
+          {
+            group: 'Settings',
+            icon: 'Settings',
+            section: 'System',
+            items: [{
+              name: 'acct-process-monitor',
+              label: 'Accounting Process',
+              capability: 'isAdminOrClientAdmin',
+            }],
+          },
+        ]}
       />);
 
-      expect(screen.queryByTestId('menu-item-acct-process-monitor')).not.toBeInTheDocument();
-    });
-
-    it('renders the accounting-process item when its declared feature flag is on', () => {
-      mockUseFeatureFlag.mockReturnValue(true);
-      render(<SideMenu
-        {...defaultProps}
-        menuGroups={[{
-          group: 'Settings',
-          icon: 'Settings',
-          section: 'System',
-          items: [{
-            name: 'acct-process-monitor',
-            label: 'Accounting Process',
-            featureFlag: 'acct-process-monitor',
-          }],
-        }]}
-      />);
-
-      expect(screen.getByTestId('menu-item-acct-process-monitor')).toBeInTheDocument();
+      await user.click(screen.getByText('Favorites'));
+      // One entry under Settings plus the saved favorite.
+      expect(screen.getAllByText('Accounting Process')).toHaveLength(2);
     });
 
     it('fails closed for an explicitly unknown feature flag', () => {

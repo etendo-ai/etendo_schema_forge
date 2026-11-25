@@ -1,7 +1,7 @@
 export SF_ROOT := $(CURDIR)
 
 # --- CLI source resolution -------------------------------------------------
-# By default the pipeline runs the PUBLISHED CLI (@etendosoftware/schema-forge-cli)
+# By default the pipeline runs the PUBLISHED CLI (@etendo-ai/schema-forge-cli)
 # via `npx`. Set LOCAL_CORE=1 to run the CLI from the sibling schema_forge_core
 # SOURCE instead (for developers who also work on the core tooling). Requires
 # schema_forge_core cloned as a sibling AND its deps installed (`npm install`
@@ -19,6 +19,7 @@ endif
 test: ## Run all unit tests (CLI data-fixes + repo scripts + app-shell + artifacts + vitest)
 	node --test 'cli/test/*.test.js'
 	node --test 'scripts/__tests__/*.test.js'
+	node --test 'e2e/tests/helpers/__tests__/*.test.js'
 	node --test 'tools/app-shell/src/**/__tests__/*.test.js'
 	node --test 'tools/app-shell/test/*.test.js'
 	node --test 'artifacts/**/__tests__/*.test.js'
@@ -293,7 +294,7 @@ test-e2e-headless: ## Build a no-PWA E2E bundle, serve+test+teardown on its own 
 
 .PHONY: test-e2e-purchase-sales
 test-e2e-purchase-sales: ## Run only the failing Sales Order and Purchase Order integration specs
-	E2E_FILES=tests/flows/sales/sales-order-happy-path.integration.spec.js,tests/flows/purchases/purchase-order-full-flow.integration.spec.js ./scripts/run-e2e-last-failed.sh
+	E2E_FILES=tests/flows/before-financial-accounts/sales-order-happy-path.integration.spec.js,tests/flows/purchases/purchase-order-full-flow.integration.spec.js ./scripts/run-e2e-last-failed.sh
 
 .PHONY: test-e2e-last-failed
 test-e2e-last-failed: ## Rerun only failed integration tests recorded by the previous Playwright run
@@ -395,7 +396,7 @@ generate-base-public-api-manifest: ## Generate public-api/base.v1.json, the mani
 	node scripts/generate-base-public-api-manifest.mjs artifacts public-api/base.v1.json
 	node scripts/validate-base-public-api-manifest.mjs public-api/base.v1.json
 
-# gateway/'s package.json declares @etendosoftware/api-gateway-core as a real npm
+# gateway/'s package.json declares @etendo-ai/api-gateway-core as a real npm
 # dependency (not a CLI bin, not bundler-resolved React source) — neither of the two
 # mechanisms above fits, so LOCAL_CORE consumption here uses `npm link`, gated the
 # same way: opt-in, never touches the default (published) install. Requires
@@ -415,7 +416,7 @@ gateway-link-local-core: ## Build api-gateway-core in the sibling core repo and 
 		exit 1; \
 	fi
 	cd $(GATEWAY_CORE_PKG) && npm run build && npm link
-	cd gateway && npm link @etendosoftware/api-gateway-core
+	cd gateway && npm link @etendo-ai/api-gateway-core
 
 # `npm link` resolves a linked package against its REAL (symlink-target) path, not
 # the symlink's location in gateway/node_modules — so api-gateway-core would still
@@ -435,6 +436,18 @@ gateway-dev-local-core: ## Start the gateway dev server against the linked local
 .PHONY: public-api-e2e
 public-api-e2e: ## Run the public API end-to-end suite against a RUNNING gateway (PUBLIC_API_BASE_URL, PUBLIC_API_KEY; localhost only)
 	cd gateway && npm run test:e2e
+
+# Unattended form used by the full Jenkins pipelines (docs/public-api.md §4.9). The install step
+# packs api-gateway-core from the schema_forge_core tag pinned in package.json (it is not
+# published); the run step signs in to NEO, mints two API keys, starts the gateway, runs the
+# suite and always cleans up. Environment variables: scripts/public-api-e2e-ci.mjs.
+.PHONY: public-api-e2e-ci-install
+public-api-e2e-ci-install: ## Install + build gateway/ with api-gateway-core from the pinned core tag (PUBLIC_API_CORE_DIR or a git clone)
+	node scripts/public-api-e2e-ci.mjs install
+
+.PHONY: public-api-e2e-ci
+public-api-e2e-ci: ## Sign in to NEO, create API keys, start the gateway and run the e2e suite (NEO_BASE_URL, PUBLIC_API_E2E_CREDENTIALS_FILE)
+	node scripts/public-api-e2e-ci.mjs run
 
 .PHONY: docs-api-sync
 docs-api-sync: ## Copy the running gateway OpenAPI contract into the Docusaurus portal
@@ -787,7 +800,7 @@ ai-bff-install:
 	@test -d tools/ai-bff/node_modules || npm install --prefix tools/ai-bff
 
 .PHONY: dev-local-core
-dev-local-core: ensure-locale ## Start dev server resolving @etendosoftware/app-shell-core from local ../schema_forge_core source (hot-reload; requires it cloned as sibling; frees only SPA_PORT/BFF_PORT first)
+dev-local-core: ensure-locale ## Start dev server resolving @etendo-ai/app-shell-core from local ../schema_forge_core source (hot-reload; requires it cloned as sibling; frees only SPA_PORT/BFF_PORT first)
 	@core="$${SCHEMA_FORGE_CORE:-../schema_forge_core}"; test -d "$$core/packages/app-shell-core/src" || { echo "ERROR: $$core/packages/app-shell-core/src not found."; echo "Clone schema_forge_core as a sibling of this repo (or point SCHEMA_FORGE_CORE at it), or use 'make dev' to run against the published package."; exit 1; }
 	@echo ">> LOCAL_CORE dev mode: app-shell-core resolves to ../schema_forge_core (published package bypassed)"
 	@for port in $(SPA_PORT) $(BFF_PORT); do \

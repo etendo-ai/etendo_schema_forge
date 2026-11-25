@@ -18,17 +18,19 @@ import { loadReportCli } from './report-cli.js';
 // loaded through loadReportCli() instead of a static import, so a
 // LOCAL_CORE=1 dev run consumes schema_forge_core's own source (report-auth.js
 // is new in this change and not yet published) while a normal run keeps
-// resolving the published @etendosoftware/schema-forge-cli package exactly as
+// resolving the published @etendo-ai/schema-forge-cli package exactly as
 // every static import here always has. See report-cli.js / design id 455
 // ("Local verification of the plugin") and tasks id 458 (WU3.1/WU3.2).
 const { REPORT_UI_STRINGS, pickLabel, buildContractLabels } = await loadReportCli('report-i18n');
-const { resolveGrouping, buildNestedGroups, buildAccountReportTree, buildRenderAccountTree, foldOpeningBalance, foldAggregateRows } =
+const { resolveGrouping, buildNestedGroups, buildAccountReportTree, buildRenderAccountTree, buildRenderChartTree, foldOpeningBalance, foldAggregateRows } =
   await loadReportCli('report-grouping');
 const { applyPlaceholders } = await loadReportCli('report-sql');
 const { filterAndTransformParams } = await loadReportCli('report-filters');
 const { hydrateDocumentBranding, resolveCompanyLogoDataUrl } = await loadReportCli('report-branding');
 const { resolveReportSession, reportAuthErrorBody, assertReportOrgAccess, assertReportAccess } = await loadReportCli('report-auth');
-const { handleReportQuery, runReportSql } = await loadReportCli('report-query');
+// isChartTreeRender defaults off until the published core carries ETP-6084.
+const { handleReportQuery, runReportSql, isChartTreeRender = () => false } = await loadReportCli('report-query');
+const CHART_TREE_SUPPORTED = typeof buildRenderChartTree === 'function';
 const { buildPeriodMeta, normalizeCompareMode, maxPeriodBucketsFor } = await loadReportCli('report-periods');
 
 const ARTIFACTS_DIR = resolve(import.meta.dirname, '../../../artifacts');
@@ -94,7 +96,7 @@ function parseGradleProps(path) {
 }
 
 // ---------------------------------------------------------------------------
-// Rendered-report i18n (ETP-4898) now lives in @etendosoftware/schema-forge-cli
+// Rendered-report i18n (ETP-4898) now lives in @etendo-ai/schema-forge-cli
 // (cli/src/report-i18n.js) and is imported above. It used to be defined right
 // here, which is exactly why the production report-server never had it: code
 // written inline in this plugin does not reach the server, only shared modules
@@ -103,7 +105,7 @@ function parseGradleProps(path) {
 
 // ---------------------------------------------------------------------------
 // Row grouping, opening balances and account trees now live in
-// @etendosoftware/schema-forge-cli (cli/src/report-grouping.js) and are loaded
+// @etendo-ai/schema-forge-cli (cli/src/report-grouping.js) and are loaded
 // above via loadReportCli(). They used to be defined right here, which is
 // exactly why the production report-server never had them: code written
 // inline in this plugin does not reach the server, only shared modules do.
@@ -139,6 +141,11 @@ function listReports() {
             outputs: contract.outputs,
             parameters: contract.parameters || [],
             sections: contract.sections || [],
+            // ETP-6084: the dynamic view's chart-tree contract (mirrors core's buildReportDescriptor).
+            // Only when the loaded core can serve the chart path: with the published core (no
+            // buildRenderChartTree) forwarding `tree` would open a dynamic view that cannot work.
+            ...(CHART_TREE_SUPPORTED && contract.tree !== undefined ? { tree: contract.tree } : {}),
+            ...(CHART_TREE_SUPPORTED && contract.amountColumns !== undefined ? { amountColumns: contract.amountColumns } : {}),
           });
         }
       } catch { /* skip malformed */ }
@@ -402,7 +409,7 @@ async function fetchReportData(reportId, { limit, session, params = {}, locale, 
     // Main query plus Libro Mayor's openingQuery (ETP-4898) and Profit & Loss's
     // operandsQuery (ETP-4899): core's runner, shared with `/query` and the report-server.
     // `periods` (ETP-6239) also returns periodRows/periodSpec; the cap depends on the format.
-    const { rows, openingRows, operandRows, periodRows, periodSpec } = await runReportSql(pool, contract, { clientId, params, locale, mainSql: sql, maxPeriodBuckets: maxPeriodBucketsFor(format) });
+    const { rows, openingRows, operandRows, periodRows, periodSpec } = await runReportSql(pool, contract, { clientId, params, locale, mainSql: sql, maxPeriodBuckets: maxPeriodBucketsFor(format), chartTree: isChartTreeRender(contract, params) });
 
     // Company logo for listing reports (ETP-5013) — "document" contracts
     // (print-*) resolve org_logo_id from their own header SQL row (see the
@@ -519,13 +526,7 @@ export default function reportApiPlugin(options = {}) {
               // silently return every client's rows.
               const clientId = session.clientId;
               const byClient = (col) => `AND ${col} = '${clientId}'`;
-              const queries = {
-                'bpartner': {
-                  fromWhere: `FROM c_bpartner WHERE isactive='Y' ${byClient('ad_client_id')} AND name ILIKE $1`,
-                  orderBy: 'ORDER BY name',
-                  select: `SELECT c_bpartner_id AS id, name, name AS label`
-                },
-                'product': {
+              const productQuery = {
                   // ETP-4967: excludes products under a category flagged EM_Etgo_IsSystemCategory='Y'
                   // (e.g. ETGO_DTO, category "Discounts") — mirrors ReportSelectorsServlet.buildProductQuery
                   // (com.etendoerp.go). This dev-only mock hits Postgres directly, so the real Java
@@ -533,7 +534,18 @@ export default function reportApiPlugin(options = {}) {
                   fromWhere: `FROM m_product WHERE isactive='Y' ${byClient('ad_client_id')} AND (name ILIKE $1 OR value ILIKE $1) AND NOT EXISTS (SELECT 1 FROM m_product_category mpc WHERE mpc.m_product_category_id = m_product.m_product_category_id AND mpc.em_etgo_issystemcategory = 'Y')`,
                   orderBy: 'ORDER BY value, name',
                   select: `SELECT m_product_id AS id, value AS "searchKey", name, value || ' - ' || name AS label`
+                };
+              const queries = {
+                'bpartner': {
+                  fromWhere: `FROM c_bpartner WHERE isactive='Y' ${byClient('ad_client_id')} AND name ILIKE $1`,
+                  orderBy: 'ORDER BY name',
+                  select: `SELECT c_bpartner_id AS id, name, name AS label`
                 },
+                'product': productQuery,
+                // ETP-6080: same query without the stock clause below (mirrors the servlet's stockScoped=false).
+                // The servlet also scopes it by the session's role orgs; this mock only gets `roleOrgIds` as a
+                // query param, which the SPA never sends for products, so that scoping is skipped here.
+                'product-all': productQuery,
                 'warehouse': {
                   fromWhere: `FROM m_warehouse WHERE isactive='Y' ${byClient('ad_client_id')} AND name ILIKE $1`,
                   orderBy: 'ORDER BY name',
@@ -626,8 +638,29 @@ export default function reportApiPlugin(options = {}) {
               };
               const queryCfg = queries[type];
               if (!queryCfg) throw new Error(`Unknown selector type: ${type}`);
-              const search = `%${q}%`;
-              const whereFragments = [queryCfg.fromWhere];
+              // ETP-6239: `ids` resolves exactly those rows (bpartner/product/product-all only; q/limit/offset ignored,
+              // blank or invalid = empty, capped at 100). Mirrors ReportSelectorsServlet's `ids`; keep both in sync.
+              const idsRaw = url.searchParams.get('ids');
+              const byIds = idsRaw !== null;
+              let idList = [];
+              if (byIds) {
+                if (type !== 'bpartner' && type !== 'product' && type !== 'product-all') {
+                  res.statusCode = 400;
+                  res.setHeader('Content-Type', 'application/json');
+                  res.end(JSON.stringify({ error: `ids is not supported for ${type}` }));
+                  return;
+                }
+                // Invalid ids are dropped one by one (the servlet's charset), the valid ones kept; none left = empty.
+                idList = [...new Set(idsRaw.split(',').map((s) => s.trim()))].filter((i) => /^[0-9A-Fa-f-]{1,36}$/.test(i)).slice(0, 100);
+                if (idList.length === 0) {
+                  res.setHeader('Content-Type', 'application/json');
+                  res.end(JSON.stringify({ items: [], totalCount: 0, hasMore: false }));
+                  return;
+                }
+              }
+              const search = byIds ? '%' : `%${q}%`;
+              // `ids` ignores isactive like the servlet: a deactivated contact/product still resolves its name.
+              const whereFragments = [byIds ? queryCfg.fromWhere.replace("isactive='Y'", '1=1') : queryCfg.fromWhere];
               // $1 = search; additional dynamic params start at $2
               const values = [search];
 
@@ -685,13 +718,17 @@ export default function reportApiPlugin(options = {}) {
                 whereFragments.push(`AND ev.c_element_id IN (SELECT c_element_id FROM c_acctschema_element WHERE c_acctschema_id = $${values.length} AND c_element_id IS NOT NULL)`);
               }
 
+              if (byIds) {
+                values.push(idList);
+                whereFragments.push(`AND ${type === 'bpartner' ? 'c_bpartner_id' : 'm_product_id'} = ANY($${values.length})`);
+              }
               const fullFromWhere = whereFragments.join(' ');
               const countSql = `SELECT COUNT(*)::int AS total ${fullFromWhere}`;
               const rowsSql = `${queryCfg.select} ${fullFromWhere} ${queryCfg.orderBy} LIMIT $${values.length + 1} OFFSET $${values.length + 2}`;
 
               const countResult = await pool.query(countSql, values);
               const totalCount = countResult.rows[0]?.total ?? 0;
-              const { rows } = await pool.query(rowsSql, [...values, limit, offset]);
+              const { rows } = await pool.query(rowsSql, [...values, byIds ? 100 : limit, byIds ? 0 : offset]);
               res.setHeader('Content-Type', 'application/json');
               res.end(JSON.stringify({
                 items: rows,
@@ -792,7 +829,16 @@ export default function reportApiPlugin(options = {}) {
             // the FLAT node list, and the indented tree (roll-up, formula nodes,
             // account-level cutoff) is assembled here, replacing `rows` so
             // recordCount/totals and the Excel/CSV templates keep working unchanged.
-            if (contract.sql?.operandsQuery !== undefined && Array.isArray(rows)) {
+            // ETP-6084: a chart-tree report (Trial Balance) asked for the interactive view's tree
+            // (it sent `expandedNodeIds`): same branch as the report-server's resolveReportData.
+            let chartMeta; let chartGrouping;
+            if (isChartTreeRender(contract, params) && Array.isArray(rows)) {
+              const chart = buildRenderChartTree(rows, params, result.periodRows
+                ? { periodRows: result.periodRows, spec: result.periodSpec, compareMode: normalizeCompareMode(params.compareMode) } : null);
+              rows = chart.rows;
+              chartMeta = chart.meta;
+              chartGrouping = resolveGrouping(contract, { ...params, groupBy: '' }, null, locale);
+            } else if (contract.sql?.operandsQuery !== undefined && Array.isArray(rows)) {
               rows = buildRenderAccountTree(rows, operandRows, params, contract,
                 result.periodRows ? { periodRows: result.periodRows, spec: result.periodSpec, compareMode: normalizeCompareMode(params.compareMode) } : null);
             }
@@ -809,7 +855,7 @@ export default function reportApiPlugin(options = {}) {
             // identically instead of almost-identically.
             let groupLabel; let descriptionLabel; let dimensionLabel; let dimensionField; let tbGroups;
             ({ groupLabel, descriptionLabel, dimensionLabel, dimensionField, tbGroups, rows } =
-              resolveGrouping(contract, params, rows, locale));
+              chartGrouping ? { ...chartGrouping, rows } : resolveGrouping(contract, params, rows, locale));
             const activeFilters = filterAndTransformParams(params, contract, locale);
             const artifactDir = join(ARTIFACTS_DIR, reportId);
             // Excel/CSV get their own flat, calculation-friendly template when the report
@@ -864,7 +910,7 @@ export default function reportApiPlugin(options = {}) {
             const isInteractive = format === 'html' || format === 'preview';
             const templateData = documentData
               ? { css, meta: { title, generatedAt: new Date().toISOString(), filters: activeFilters, params, locale, ui, labels, isInteractive }, header: documentData.header, lines: documentData.lines, taxes: documentData.taxes }
-              : { css, meta: { title, generatedAt: new Date().toISOString(), recordCount, filters: activeFilters, params, locale, ui, labels, totals, groupLabel, descriptionLabel, dimensionLabel, dimensionField, groups, tbGroups, companyLogoDataUrl, isInteractive, ...neoMeta, ...buildPeriodMeta(result.periodSpec, { format, compareMode: params.compareMode }) }, rows };
+              : { css, meta: { title, generatedAt: new Date().toISOString(), recordCount, filters: activeFilters, params, locale, ui, labels, totals, groupLabel, descriptionLabel, dimensionLabel, dimensionField, groups, tbGroups, companyLogoDataUrl, isInteractive, ...neoMeta, ...chartMeta, ...buildPeriodMeta(result.periodSpec, { format, compareMode: params.compareMode }) }, rows };
 
             // Document (print-*) reports render a QR of the header. QRCode.toDataURL
             // is async while Handlebars.compile is sync, so the QR cannot be a helper

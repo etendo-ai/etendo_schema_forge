@@ -7,6 +7,10 @@ import { useFiscalConfig } from '@/windows/custom/fiscal-config/useFiscalConfig.
 import { normalizeDateInputValue } from '@/windows/custom/fiscal-config/fiscalConfig.utils.js';
 import { getInvoiceFiscalTargets, isSifEligibleByDate } from '@/windows/custom/shared/fiscalTargets.js';
 import { resolveInvoiceOrgId } from '@/windows/custom/shared/resolveInvoiceOrgId.js';
+import { isDraftStatus } from '../../../lib/docStatus.js';
+import { useCapabilitiesSafe } from '@/hooks/useCapabilitiesSafe.js';
+import { SII_IMPORT_DUA_CAPABILITY, isCapabilityVisible } from '@/lib/capabilityVisibility.js';
+import { importDuaInvoiceTypeToSet } from '@/windows/custom/shared/importDua.js';
 
 export const CLAVE_TIPO_OPTIONS = [
   { value: 'F1', labelKey: 'sifDataTabs.option.invoice' },
@@ -122,7 +126,9 @@ export function useSifFieldPatcher({ data, recordId, apiBaseUrl, onChange, locke
   const orgId = resolveInvoiceOrgId(data, selectedOrg?.id);
   const specName = apiBaseUrl?.split('/').filter(Boolean).pop() || 'sales-invoice';
 
-  const { profile, tbaiRecord, earliestSiiCutoverDate } = useFiscalConfig(orgId, apiBaseUrl);
+  const { profile, tbaiRecord, siiRecord, earliestSiiCutoverDate } = useFiscalConfig(orgId, apiBaseUrl);
+  // ETP-6284: 'IVA' | 'IGIC' (AEATSII_CONFIG.TAXTYPE), null while unknown — drives the LC prefix hint.
+  const siiTaxType = siiRecord?.taxtype ? String(siiRecord.taxtype).toUpperCase() : null;
   const territory = tbaiRecord?.etsgSifTerritory ?? null;
   const { showSii, showTbai, showVerifactu } = getInvoiceFiscalTargets(specName, profile, territory);
   // ETP-5432: `showSii` only says the SII SYSTEM applies to this org/territory —
@@ -142,7 +148,7 @@ export function useSifFieldPatcher({ data, recordId, apiBaseUrl, onChange, locke
     : data?.['aeatsiiDescription$_identifier'];
   const siiTypeOptions = isPurchaseInvoice ? PURCHASE_CLAVE_TIPO_FC_OPTIONS : CLAVE_TIPO_OPTIONS;
 
-  const isDraft = data?.documentStatus === 'DR';
+  const isDraft = isDraftStatus(data?.documentStatus);
   const isSentToSii = data?.aeatsiiIssent === true || data?.aeatsiiIssent === 'Y';
   // ETP-5229 (item #3): manual testing confirmed the SII sub-panel fields (Tipo
   // factura, Descripción SII, Causa exención, Fecha registro contable,
@@ -162,8 +168,6 @@ export function useSifFieldPatcher({ data, recordId, apiBaseUrl, onChange, locke
 
   // ETP-5745 CP-23: the record id the heads-up rectification-code toast already fired for.
   const rectifCodeToastRef = useRef(null);
-  // ETP-5747: the record id the user explicitly picked an SII invoice type for (see setSiiType).
-  const siiTypeUserChoiceRef = useRef(null);
 
   function getVal(key) {
     return data?.[key] ?? '';
@@ -173,10 +177,9 @@ export function useSifFieldPatcher({ data, recordId, apiBaseUrl, onChange, locke
     return normalizeDateInputValue(data?.[key] ?? '');
   }
 
-  // ETP-5747: the SII "Tipo factura" Select writes through here, so the auto-set-to-R effect
-  // below can tell a type the USER chose (respected) from one the record state was reset to.
+  // The SII "Tipo factura" Select writes through here. On a sales rectificative the Select only
+  // offers 'R' (SifTab.jsx), since the server enforces it (SalesRectificativeFiscalDefaults).
   function setSiiType(value) {
-    siiTypeUserChoiceRef.current = recordId;
     onChange?.(siiTypeField, value);
   }
 
@@ -226,22 +229,43 @@ export function useSifFieldPatcher({ data, recordId, apiBaseUrl, onChange, locke
   // the failure). Purchase-side corrective-invoice support (rectification-reason handling,
   // AEAT XML payload) isn't implemented yet, so purchase invoices stay at 'F1' for now.
   //
-  // ETP-5747: no longer a one-shot per record. The value it writes is a PENDING edit (saved with
-  // the "Motivo de rectificación", which EM_AEATSII_C_INV_RECT_CHK requires alongside 'R'), and
-  // anything that re-reads the record replaces pending edits with the stored 'F1' — "Importar
+  // ETP-5747: no longer a one-shot per record. The value it writes is a PENDING edit, and anything
+  // that re-reads the record before it is stored replaces pending edits — "Importar
   // desde factura origen" does exactly that after importing (DetailView onRefresh → fetchById).
   // The old `${recordId}:rectif` guard had already fired, so the tab showed F1 until a page
-  // reload reset the guard. It now re-applies whenever the record shows anything but 'R',
-  // unless the user picked a type in the Select (setSiiType) — that choice is never overridden.
+  // reload reset the guard. It now re-applies whenever the record shows anything but 'R'. There
+  // is no user choice to respect: on a sales rectificative 'R' is the only type the Select offers
+  // and the one the server stores (ETP-5747 review W1). Loop-free: once 'R', it is a no-op.
+  // ETP-5747 QA pass 1: the server now stores 'R' + 'I' itself on every write of a rectificative
+  // draft (SalesRectificativeFiscalDefaults), and EM_AEATSII_C_INV_RECT_CHK only demands the
+  // motivo once the invoice is processed, so this pending 'R' saves without the motivo (CP-10) and
+  // the effect is a no-op once the record has been saved.
   useEffect(() => {
     if (isPurchaseInvoice) return;
     if (!showSii || !isDraft || !recordId) return;
     if (!data?.isRectificative) return;
     if (data?.[siiTypeField] === 'R') return; // already correct — no-op
-    if (siiTypeUserChoiceRef.current === recordId) return; // the user chose — respect it
     onChange?.(siiTypeField, 'R');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPurchaseInvoice, showSii, isDraft, recordId, data?.isRectificative, siiTypeField, data?.[siiTypeField], onChange]);
+
+  // ETP-6284: an import with DUA (Lines tab check `etgoImportDua`) of an organization in SII is
+  // reported as F5 "Importación (DUA)": when the SII panel finds the check on and a type other than
+  // F5 / LC, it writes F5 as a pending edit — saved by the next header save like a user change; the
+  // user can still pick LC. Same loop-free shape as the rectificative 'R' effect above (no-op once
+  // F5 / LC). The DUA fields it implies live in the Lines tab.
+  // Unchecking in the Lines tab writes the check off AND Tipo factura F1 in one batch
+  // (`importDuaUncheckPatch`, check first), so the effective check (`isImportDuaChecked`) reads off
+  // and this effect stays idle; the saved record then carries both values, so no re-read sets F5 back.
+  const importDuaEnabled = isCapabilityVisible(useCapabilitiesSafe(), SII_IMPORT_DUA_CAPABILITY);
+  const importDuaType = importDuaInvoiceTypeToSet({
+    enabled: importDuaEnabled, isPurchaseInvoice, showSii, isDraft, locked: siiFieldReadOnly,
+    recordId, record: data, typeField: siiTypeField,
+  });
+  useEffect(() => {
+    if (importDuaType) onChange?.(siiTypeField, importDuaType);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [importDuaType, siiTypeField, onChange]);
 
   // ETP-5745 CP-14/CP-16/CP-23: non-blocking heads-up when the invoice becomes rectificative AND
   // at least one active fiscal system still needs its own rectification code/motive — none of
@@ -301,7 +325,7 @@ export function useSifFieldPatcher({ data, recordId, apiBaseUrl, onChange, locke
   // panel — the UI only ever lets the user pick "Motivo de rectificación" (aeatsiiMotivoRectif),
   // via the Select in SifTab.jsx. But `EM_AEATSII_C_INV_RECT_CHK` (the DB check constraint,
   // shared by sales AND purchase: see its `ISSOTRX` branches) requires BOTH columns non-null
-  // once the SII type is 'R' — setting only the motivo left `aeatsiiTipoRectif` NULL on any
+  // once the SII type is 'R' and the invoice is processed (ETP-5747: drafts are exempt) — setting only the motivo left `aeatsiiTipoRectif` NULL on any
   // invoice that never had it populated (e.g. one created via "Import from source invoice"),
   // and Confirm failed with a raw, untranslated DB constraint violation instead of a validation
   // message. Mirrors the etvfacReverseinvtype pattern above: always 'I' (Por diferencias) — the
@@ -338,5 +362,6 @@ export function useSifFieldPatcher({ data, recordId, apiBaseUrl, onChange, locke
     getVal,
     getDateVal,
     setSiiType,
+    siiTaxType,
   };
 }

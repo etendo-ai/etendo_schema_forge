@@ -1,8 +1,8 @@
 {
-  "version": "0.94.0",
+  "version": "0.96.0",
   "generatedAt": "2026-10-19T17:29:21.531Z",
-  "updatedAt": "2026-11-05T13:33:52.854Z",
-  "checksum": "04aee433b679c46b",
+  "updatedAt": "2026-11-19T15:06:53.694Z",
+  "checksum": "6f45244001b03489",
   "frontendContract": {
     "window": {
       "id": "167",
@@ -1640,8 +1640,8 @@
             "apiKey": "eTGOCurrencyRate",
             "column": "EM_ETGO_Currency_Rate",
             "label": "EM_ETGO_Currency_Rate",
-            "type": "string",
-            "tsType": "string",
+            "type": "decimal",
+            "tsType": "number",
             "visibility": "editable",
             "required": false,
             "grid": false,
@@ -2806,13 +2806,12 @@
             "apiKey": "rate",
             "column": "Rate",
             "label": "Rate",
-            "type": "number",
+            "type": "decimal",
             "tsType": "number",
             "visibility": "editable",
             "required": false,
             "grid": true,
             "form": true,
-            "explicitType": true,
             "validation": {
               "maxLength": 10
             },
@@ -4428,7 +4427,7 @@
             "name": "eTGOCurrencyRate",
             "apiKey": "eTGOCurrencyRate",
             "column": "EM_ETGO_Currency_Rate",
-            "type": "string",
+            "type": "decimal",
             "visibility": "editable",
             "required": false
           },
@@ -5601,7 +5600,7 @@
             "name": "rate",
             "apiKey": "rate",
             "column": "Rate",
-            "type": "number",
+            "type": "decimal",
             "visibility": "editable",
             "required": false
           },
@@ -9025,7 +9024,7 @@
         "entity": "header",
         "field": "eTGOCurrencyRate",
         "runner": "node",
-        "description": "Field 'eTGOCurrencyRate' should have type 'string' in header"
+        "description": "Field 'eTGOCurrencyRate' should have type 'number' in header"
       },
       {
         "id": "t-field-type-header-eTGODeliveryStatus",

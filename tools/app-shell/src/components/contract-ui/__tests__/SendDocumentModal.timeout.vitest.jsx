@@ -8,11 +8,12 @@
 //
 // The real client performs every request; only its options are recorded
 // (see `@/test/recordApiFetch.js`).
+import { allIconsAs } from '@/test/iconMock.js';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {
   registerErrorTranslator, resetErrorTranslatorForTests,
-} from '@etendosoftware/app-shell-core/auth';
+} from '@etendo-ai/app-shell-core/auth';
 
 const TRANSLATED = 'No se pudo completar la acción. Intenta nuevamente.';
 
@@ -28,15 +29,7 @@ vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 
-vi.mock('lucide-react', () => ({
-  Download: () => null,
-  Mail: () => null,
-  Maximize: () => null,
-  X: () => null,
-  Plus: () => null,
-  Search: () => null,
-  Loader2: () => null,
-}));
+vi.mock('@phosphor-icons/react', async importOriginal => allIconsAs(() => null, importOriginal));
 
 // A PDF blob is previewed through the react-pdf viewer (ETP-5598); pdfjs cannot run in jsdom.
 vi.mock('@/windows/custom/shared/PdfViewer.jsx', () => ({

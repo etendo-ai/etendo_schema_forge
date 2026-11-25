@@ -16,9 +16,11 @@
 
 vi.mock('@/i18n', () => ({ useUI: () => (key) => key }));
 
-vi.mock('lucide-react', () => ({
-  Minus: () => <span data-testid="icon-minus" />,
-  Plus: () => <span data-testid="icon-plus" />,
+vi.mock('@phosphor-icons/react', () => ({
+  MinusIcon: () => <span data-testid="icon-minus" />,
+  PlusIcon: () => <span data-testid="icon-plus" />,
+  ArrowUpIcon: () => <span data-testid="icon-arrow-up" />,
+  ArrowDownIcon: () => <span data-testid="icon-arrow-down" />,
 }));
 
 vi.mock('../BillingPreferencesForm', () => ({ default: () => <div data-testid="billing-form" /> }));
@@ -30,7 +32,7 @@ import {
   neoResponse, bodyOf, writeCalls, resetRecordVersionsForTests, rememberRecordVersion,
   createRealUseApiFetchMock,
 } from '@/test/realApiFetch.js';
-import { getRecordVersion } from '@etendosoftware/app-shell-core/lib/recordVersions.js';
+import { getRecordVersion } from '@etendo-ai/app-shell-core/lib/recordVersions.js';
 import ContactsFinancialPanel from '../ContactsFinancialPanel.jsx';
 
 const BP_ID = 'bp-1';

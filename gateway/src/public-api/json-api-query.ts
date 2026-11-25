@@ -1,4 +1,4 @@
-import type { PublicApiEntity } from '@etendosoftware/api-gateway-core';
+import type { PublicApiEntity } from '@etendo-ai/api-gateway-core';
 import { invalidQueryParameter, isRecord } from './json-api-http.ts';
 
 // The query contract of a list read: JSON:API pagination (`page[number]`,
@@ -26,6 +26,7 @@ export type FilterOperator = (typeof FILTER_OPERATORS)[number];
 type QueryField = {
   direction?: string;
   internalPath: string;
+  queryable?: boolean;
   dataType?: { type?: string; format?: string };
   relationship?: { resource: string };
 };
@@ -45,7 +46,7 @@ const OPERATORS_BY_KIND: Record<FieldKind, readonly FilterOperator[]> = {
 /** Operators a field accepts, or `[]` when it cannot be filtered (also used to document the OpenAPI parameters). */
 export function filterOperatorsFor(field: QueryField): readonly FilterOperator[] {
   const kind = kindOf(field);
-  return kind ? OPERATORS_BY_KIND[kind] : [];
+  return kind && field.queryable !== false ? OPERATORS_BY_KIND[kind] : [];
 }
 
 export function isReadable(field: QueryField | undefined): field is QueryField {
@@ -82,7 +83,7 @@ export interface ListQuery {
 /** Whether a field can be sorted by: filterable type, and not a relationship. */
 export function isSortable(field: QueryField): boolean {
   const kind = kindOf(field);
-  return isReadable(field) && Boolean(kind) && kind !== 'relationship';
+  return isReadable(field) && field.queryable !== false && Boolean(kind) && kind !== 'relationship';
 }
 
 const text = (value: unknown): value is string => typeof value === 'string';
@@ -126,7 +127,7 @@ function parseSort(entity: PublicApiEntity, sort: unknown): string | undefined {
     const field = name ? fieldOf(entity, name) : undefined;
     // A relationship would sort by the foreign key id, which means nothing to a client.
     const kind = field ? kindOf(field) : undefined;
-    if (!field || !kind || kind === 'relationship') throw invalidQueryParameter('sort', `Cannot sort by "${name}": unknown, not readable or not sortable field.`);
+    if (!field || !kind || kind === 'relationship' || field.queryable === false) throw invalidQueryParameter('sort', `Cannot sort by "${name}": unknown, not readable or not sortable field.`);
     if (seen.has(name)) throw invalidQueryParameter('sort', `Field "${name}" is listed twice in sort.`);
     seen.add(name);
     sortBy.push(`${descending ? '-' : ''}${field.internalPath}`);
@@ -217,7 +218,7 @@ function parseFilters(entity: PublicApiEntity, filter: unknown): { clauses: NeoC
   let count = 0;
   for (const [name, spec] of Object.entries(filter)) {
     const field = fieldOf(entity, name);
-    const kind = field ? kindOf(field) : undefined;
+    const kind = field && field.queryable !== false ? kindOf(field) : undefined;
     if (!field || !kind) throw invalidQueryParameter(`filter[${name}]`, `Cannot filter by "${name}": unknown or not filterable field.`);
     const operators: Array<[FilterOperator, unknown, string]> = text(spec)
       ? [['eq', spec, `filter[${name}]`]]
@@ -263,6 +264,61 @@ export function parseListQuery(entity: PublicApiEntity, query: Record<string, un
     ...(clauses.length ? { criteria: clauses } : {}),
     linkParams,
   };
+}
+
+/** A validated lookup query: a page plus the optional search text. */
+export interface LookupQuery extends ListQuery {
+  search?: string;
+}
+
+/**
+ * Validates the query of a lookup (`GET /api/v1/{resource}/lookups/{field}`): only
+ * `page[number]`, `page[size]` and `filter[search]`. Anything else is a 400, so no caller
+ * parameter can reach NEO's selector as validation context.
+ */
+export function parseLookupQuery(query: Record<string, unknown> | undefined): LookupQuery {
+  const raw = query ?? {};
+  for (const key of Object.keys(raw)) {
+    if (key !== 'page' && key !== 'filter') {
+      throw invalidQueryParameter(key, `Unknown query parameter "${key}". Supported: page[number], page[size], filter[search].`);
+    }
+  }
+  const page = parsePage(raw.page);
+  const linkParams: Array<[string, string]> = [];
+  let search: string | undefined;
+  if (raw.filter !== undefined) {
+    if (!isRecord(raw.filter)) throw invalidQueryParameter('filter', 'Use filter[search]=<text>.');
+    for (const key of Object.keys(raw.filter)) {
+      if (key !== 'search') throw invalidQueryParameter(`filter[${key}]`, 'A lookup can only be filtered with filter[search]=<text>.');
+    }
+    const value = raw.filter.search;
+    if (!text(value)) throw invalidQueryParameter('filter[search]', 'filter[search] must be a single text value.');
+    if (value.length > MAX_TEXT_LENGTH) throw invalidQueryParameter('filter[search]', `filter[search] must not be longer than ${MAX_TEXT_LENGTH} characters.`);
+    if (value !== '') {
+      search = value;
+      linkParams.push(['filter[search]', value]);
+    }
+  }
+  const startRow = (page.number - 1) * page.size;
+  return {
+    pageNumber: page.number,
+    pageSize: page.size,
+    startRow,
+    endRow: startRow + page.size - 1,
+    linkParams,
+    ...(search === undefined ? {} : { search }),
+  };
+}
+
+/**
+ * The query string NEO's selector endpoint receives for a lookup (no leading `?`): `limit`,
+ * `offset`, `q` and the lookup's fixed context, which comes from the manifest, never from the caller.
+ */
+export function neoLookupParams(query: LookupQuery, context: Record<string, string> = {}): string[] {
+  const params = [`limit=${query.pageSize}`, `offset=${query.startRow}`];
+  if (query.search !== undefined) params.push(`q=${encodeURIComponent(query.search)}`);
+  for (const [name, value] of Object.entries(context)) params.push(`${encodeURIComponent(name)}=${encodeURIComponent(value)}`);
+  return params;
 }
 
 /** The query string NEO receives for a list read (no leading `?`), values percent-encoded. */

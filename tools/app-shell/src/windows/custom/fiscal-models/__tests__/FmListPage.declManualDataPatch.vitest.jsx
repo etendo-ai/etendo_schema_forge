@@ -16,12 +16,13 @@
 // patch indirectly through `onSelect`: clicking the row hands the FULL cached `decl` object back
 // to the caller, so the patched `manualData` on it proves the underlying `decls` state was
 // actually updated (not just accepted as a prop and ignored).
+import { allIconsAs } from '@/test/iconMock.js';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { registerApiSession, resetApiSessionForTests } from '@/auth/api.js';
 
-vi.mock('@etendosoftware/app-shell-core', () => ({
+vi.mock('@etendo-ai/app-shell-core', () => ({
   useUI: () => (key) => key,
 }));
 vi.mock('sonner', () => ({
@@ -53,15 +54,7 @@ vi.mock('@/windows/custom/shared/CheckboxField.jsx', () => ({
   CheckboxField: ({ checked, onToggle }) =>
     React.createElement('input', { type: 'checkbox', checked: !!checked, onChange: e => onToggle?.(e.target.checked) }),
 }));
-vi.mock('lucide-react', () => ({
-  LayoutGrid: () => null, Settings: () => null, ListFilter: () => null,
-  ArrowUpDown: () => null, ChevronDown: () => null, MoreHorizontal: () => null,
-  MoreVertical: () => null, Calendar: () => null, Clock: () => null,
-  TriangleAlert: () => null, OctagonAlert: () => null, ArrowUpRight: () => null,
-  Search: () => null, Play: () => null, Check: () => null,
-  Pencil: () => null, Trash2: () => null, Loader2: () => null,
-  RotateCcw: () => null, X: () => null,
-}));
+vi.mock('@phosphor-icons/react', async importOriginal => allIconsAs(() => null, importOriginal));
 vi.mock('../FmCommon.jsx', () => ({
   StatusPillMenu: () => null,
   ResultPill: () => null,

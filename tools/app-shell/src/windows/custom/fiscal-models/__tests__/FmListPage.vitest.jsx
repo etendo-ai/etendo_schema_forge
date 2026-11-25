@@ -3,8 +3,9 @@
 // @covers tools/app-shell/src/windows/custom/fiscal-models/catalogAvailability.js
 // Vitest component tests for FmListPage.jsx
 // @covers tools/app-shell/src/windows/custom/fiscal-models/FmListPage.jsx
+import { allIconsAs } from '@/test/iconMock.js';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { setSessionCredentials, CREDENTIAL_MODES } from '@etendosoftware/app-shell-core/auth/sessionCredentials.js';
+import { setSessionCredentials, CREDENTIAL_MODES } from '@etendo-ai/app-shell-core/auth/sessionCredentials.js';
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { registerApiSession, resetApiSessionForTests } from '@/auth/api.js';
@@ -12,9 +13,9 @@ import { PageMetaProvider, usePageMeta } from '@/components/layout/PageMetaConte
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
-// NOTE: this mocks '@etendosoftware/app-shell-core' (bare package id), but
+// NOTE: this mocks '@etendo-ai/app-shell-core' (bare package id), but
 // FmListPage.jsx actually imports useUI/useLocaleSwitch from '@/i18n', which
-// re-exports the '@etendosoftware/app-shell-core/i18n' SUBPATH — a different
+// re-exports the '@etendo-ai/app-shell-core/i18n' SUBPATH — a different
 // module id, so this mock never intercepts anything (see the identical note in
 // FmListPage.breadcrumb.i18n.vitest.jsx). Every `t('fm.xxx')` call in this file
 // silently exercises the REAL useUI() with no LocaleProvider in scope, which
@@ -26,7 +27,7 @@ import { PageMetaProvider, usePageMeta } from '@/components/layout/PageMetaConte
 // assertions below expecting their raw keys instead of the old hardcoded
 // Spanish literals). Not fixing the broader test-infra gap here — out of scope
 // for this bugfix, flagged to Tester instead.
-vi.mock('@etendosoftware/app-shell-core', () => ({
+vi.mock('@etendo-ai/app-shell-core', () => ({
   useUI: () => (key) => key,
 }));
 vi.mock('@/i18n', () => ({
@@ -103,16 +104,7 @@ vi.mock('@/windows/custom/shared/CheckboxField.jsx', () => ({
       onChange: e => onToggle?.(e.target.checked),
     }),
 }));
-vi.mock('lucide-react', () => ({
-  LayoutGrid: () => null, Settings: () => null, ListFilter: () => null,
-  ArrowUpDown: () => null, ChevronDown: () => null, MoreHorizontal: () => null,
-  MoreVertical: () => null, Calendar: () => null, Clock: () => null,
-  TriangleAlert: () => null, OctagonAlert: () => null, ArrowUpRight: () => null,
-  Search: () => null, Play: () => null, Check: () => null,
-  // FmRowActions.jsx (ETP-5187 Edit/Delete for draft rows, ETP-5338 Reactivate for
-  // submitted/submitted_ack rows) imports these 4.
-  Pencil: () => null, Trash2: () => null, Loader2: () => null, RotateCcw: () => null,
-}));
+vi.mock('@phosphor-icons/react', async importOriginal => allIconsAs(() => null, importOriginal));
 vi.mock('../FmCommon.jsx', () => ({
   StatusPillMenu: () => null,
   ResultPill: () => null,

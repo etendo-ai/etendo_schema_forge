@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { isChromelessEmbed } from '@/lib/embeddedWindow.js';
 import { Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { Building2, ChevronDown, Loader2, LogOut, RefreshCw } from 'lucide-react';
+import {
+  BuildingsIcon,
+  CaretDownIcon,
+  CircleNotchIcon,
+  SignOutIcon,
+  ArrowsClockwiseIcon,
+} from '@phosphor-icons/react';
 import SideMenu from '@/components/layout/SideMenu';
 import { filterMenuGroupsByAccess } from '@/windows/registry.js';
 import { useRoleMenu } from '@/hooks/useRoleMenu.js';
@@ -9,19 +15,22 @@ import { useAccountIdentity } from '@/lib/flags/useAccountIdentity.js';
 import { useSessionStartTracking } from '@/lib/observability/useSessionStartTracking.js';
 import {
   announceSessionAccount, deleteCookieSession, readCookieSession, useAuthOptional,
-} from '@etendosoftware/app-shell-core/auth';
+} from '@etendo-ai/app-shell-core/auth';
 import { SessionConflictNotice } from '@/components/access/SessionConflictNotice.jsx';
 import { useCapabilitiesSafe, useWindowAccessSafe } from '@/hooks/useCapabilitiesSafe.js';
 import { SidebarProvider, useSidebar } from '@/components/layout/SidebarContext';
 import { FavoritesProvider } from '@/components/layout/FavoritesContext';
 import { PageMetaProvider, usePageMeta } from '@/components/layout/PageMetaContext';
 import TopBar from '@/components/layout/TopBar';
+import { ErrorBoundary, ErrorPage } from '@/components/errors/ErrorBoundary.jsx';
 import { BillingStatusBanner } from '@/components/billing/BillingStatusBanner.jsx';
 import { QuotaStatusBanner } from '@/components/billing/QuotaStatusBanner.jsx';
 import { useEnvironmentListFreshness } from '@/hooks/useEnvironmentListFreshness.js';
 import { CommandPalette } from '@/components/CommandPalette.jsx';
 import { GlobalSearchProvider } from '@/components/global-search/GlobalSearchContext.jsx';
 import { CopilotProvider } from '@/components/CopilotContext';
+import { HighlightProvider } from '@/components/copilot/highlight/HighlightContext.jsx';
+import { HighlightOverlay } from '@/components/copilot/highlight/HighlightOverlay.jsx';
 import { CopilotWidget } from '@/components/CopilotWidget';
 import { CurrentWindowProvider } from '@/components/CurrentWindowContext';
 import { FirstStepsProvider, useFirstStepsProgressOptional }
@@ -45,7 +54,7 @@ import { clearAccessLoadError, recordAccessLoadError } from '@/lib/accessLoadErr
 import { useUI } from '@/i18n';
 import { fetchCurrencyFormatConfig } from '@/lib/currencyFormatConfig.js';
 import { fetchMyReportAccess } from '@/lib/rolesApi.js';
-import { WalkthroughProvider } from '@etendosoftware/app-shell-core/walkthrough';
+import { WalkthroughProvider } from '@etendo-ai/app-shell-core/walkthrough';
 import { WALKTHROUGH_FLOWS, walkthroughFlowsForPlan } from '@/walkthrough/flows';
 import { handleWalkthroughFinish } from '@/lib/walkthrough/walkthrough-events.js';
 import { SupportSessionBanner } from '@/components/layout/SupportSessionBanner.jsx';
@@ -155,10 +164,10 @@ function NoAccessScreen() {
                 data-testid="no-access-company-trigger"
               >
                 {switching !== null
-                  ? <Loader2 className="h-4 w-4 mr-2 shrink-0 animate-spin" data-testid="Loader2__488148" />
-                  : <Building2 className="h-4 w-4 mr-2 shrink-0" data-testid="Building2__488148" />}
+                  ? <CircleNotchIcon className="h-4 w-4 mr-2 shrink-0 animate-spin" data-testid="Loader2__488148" />
+                  : <BuildingsIcon className="h-4 w-4 mr-2 shrink-0" data-testid="Building2__488148" />}
                 <span className="flex-1 truncate text-left">{companyName}</span>
-                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" data-testid="ChevronDown__488148" />
+                <CaretDownIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" data-testid="ChevronDown__488148" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-56" data-testid="DropdownMenuContent__488148">
@@ -171,12 +180,12 @@ function NoAccessScreen() {
                     onSelect={() => { if (!isCurrent) switchTo(env); }}
                     data-testid={`no-access-company-${env.clientId}`}
                   >
-                    <Building2 className="h-4 w-4 mr-2 shrink-0" data-testid="Building2__488148" />
+                    <BuildingsIcon className="h-4 w-4 mr-2 shrink-0" data-testid="Building2__488148" />
                     <span className="flex-1 truncate">
                       {env.clientName || env.orgName || ui('yourCompany')}
                     </span>
                     {switching === env.clientId && (
-                      <Loader2 className="h-3.5 w-3.5 ml-2 shrink-0 animate-spin" data-testid="Loader2__488148" />
+                      <CircleNotchIcon className="h-3.5 w-3.5 ml-2 shrink-0 animate-spin" data-testid="Loader2__488148" />
                     )}
                   </DropdownMenuItem>
                 );
@@ -193,7 +202,7 @@ function NoAccessScreen() {
         onClick={logout}
         data-testid="NoAccessScreenLogout__488148"
       >
-        <LogOut className="h-4 w-4 mr-2" data-testid="LogOut__488148" />
+        <SignOutIcon className="h-4 w-4 mr-2" data-testid="LogOut__488148" />
         {ui('logout')}
       </Button>
     </div>
@@ -225,7 +234,7 @@ function AccessLoadErrorScreen() {
           onClick={() => window.location.reload()}
           data-testid="AccessLoadErrorRetry__488148"
         >
-          <RefreshCw className="h-4 w-4 mr-2" data-testid="RefreshCw__488148" />
+          <ArrowsClockwiseIcon className="h-4 w-4 mr-2" data-testid="RefreshCw__488148" />
           {ui('retry')}
         </Button>
         <Button
@@ -234,7 +243,7 @@ function AccessLoadErrorScreen() {
           onClick={logout}
           data-testid="AccessLoadErrorLogout__488148"
         >
-          <LogOut className="h-4 w-4 mr-2" data-testid="LogOut__488148" />
+          <SignOutIcon className="h-4 w-4 mr-2" data-testid="LogOut__488148" />
           {ui('logout')}
         </Button>
       </div>
@@ -356,7 +365,7 @@ function BlockedAccessScreen({ decision }) {
           data-testid="ReactivationPendingNotice__488148" />
       )}
       {!pendingReactivationId && awaitingEnvironment && (
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground"
+        <CircleNotchIcon className="h-6 w-6 animate-spin text-muted-foreground"
           data-testid="blocked-access-loading" />
       )}
       {!pendingReactivationId && !awaitingEnvironment && (
@@ -405,10 +414,10 @@ function BlockedAccessScreen({ decision }) {
                 data-testid="blocked-access-company-trigger"
               >
                 {switching !== null
-                  ? <Loader2 className="h-4 w-4 mr-2 shrink-0 animate-spin" data-testid="Loader2__488148" />
-                  : <Building2 className="h-4 w-4 mr-2 shrink-0" data-testid="Building2__488148" />}
+                  ? <CircleNotchIcon className="h-4 w-4 mr-2 shrink-0 animate-spin" data-testid="Loader2__488148" />
+                  : <BuildingsIcon className="h-4 w-4 mr-2 shrink-0" data-testid="Building2__488148" />}
                 <span className="flex-1 truncate text-left">{companyName}</span>
-                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" data-testid="ChevronDown__488148" />
+                <CaretDownIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" data-testid="ChevronDown__488148" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-56" data-testid="DropdownMenuContent__488148">
@@ -421,12 +430,12 @@ function BlockedAccessScreen({ decision }) {
                     onSelect={() => { if (!isCurrent) switchTo(env); }}
                     data-testid={`blocked-access-company-${env.clientId}`}
                   >
-                    <Building2 className="h-4 w-4 mr-2 shrink-0" data-testid="Building2__488148" />
+                    <BuildingsIcon className="h-4 w-4 mr-2 shrink-0" data-testid="Building2__488148" />
                     <span className="flex-1 truncate">
                       {env.clientName || env.orgName || ui('yourCompany')}
                     </span>
                     {switching === env.clientId && (
-                      <Loader2 className="h-3.5 w-3.5 ml-2 shrink-0 animate-spin" data-testid="Loader2__488148" />
+                      <CircleNotchIcon className="h-3.5 w-3.5 ml-2 shrink-0 animate-spin" data-testid="Loader2__488148" />
                     )}
                   </DropdownMenuItem>
                 );
@@ -443,7 +452,7 @@ function BlockedAccessScreen({ decision }) {
         onClick={logout}
         data-testid="BlockedAccessScreenLogout__488148"
       >
-        <LogOut className="h-4 w-4 mr-2" data-testid="LogOut__488148" />
+        <SignOutIcon className="h-4 w-4 mr-2" data-testid="LogOut__488148" />
         {ui('logout')}
       </Button>
     </div>
@@ -555,7 +564,8 @@ function AppLayoutLoading() {
   );
 }
 
-function AppLayoutInner({ menuGroups, embedded }) {
+function AppLayoutInner({ menuGroups, embedded, reportAccess = null }) {
+  const ui = useUI();
   const location = useLocation();
   const { expanded, toggle } = useSidebar();
   const meta = usePageMeta();
@@ -570,6 +580,20 @@ function AppLayoutInner({ menuGroups, embedded }) {
 
   return (
     <>
+      {/* ETP-5792 — first tab stop, before the sidebar: jumps over the chrome to the <main> landmark. */}
+      {!embedded && (
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-[100] focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:ring-2 focus:ring-ring"
+          onClick={(e) => {
+            e.preventDefault();
+            document.getElementById('main-content')?.focus();
+          }}
+          data-testid="SkipLink__5792"
+        >
+          {ui('skipToMainContent')}
+        </a>
+      )}
       {!embedded && (
         <SideMenu
           menuGroups={menuGroups}
@@ -616,18 +640,27 @@ function AppLayoutInner({ menuGroups, embedded }) {
           const [, win, rec] = location.pathname.split('/');
           const pageKey = rec ? `${win}-detail` : (win || '/');
           return (
-            <div
+            <main
+              id="main-content"
+              tabIndex={-1}
               key={pageKey}
-              className="relative flex-1 min-h-0 flex flex-col page-transition pr-3 pb-3"
+              className="relative flex-1 min-h-0 flex flex-col page-transition pr-3 pb-3 focus:outline-none"
             >
               <div className="flex-1 flex flex-col min-h-0 bg-card rounded-xl border border-border/30 overflow-hidden">
-                <Outlet data-testid="Outlet__488148" />
+                {/* ETP-5792 — the surrounding <main key> remounts this on navigation, clearing a caught error. */}
+                <ErrorBoundary
+                  fallback={<ErrorPage data-testid="ErrorPage__488148" />}
+                  data-testid="ErrorBoundary__488148">
+                  <Outlet data-testid="Outlet__488148" />
+                </ErrorBoundary>
               </div>
-            </div>
+            </main>
           );
         })()}
       </div>
-      {!embedded && <CommandPalette data-testid="CommandPalette__488148" />}
+      {/* ETP-6389 — the palette lists report rows while searching; it gates them on the same
+          per-report grants the sidebar is filtered with. */}
+      {!embedded && <CommandPalette reportAccess={reportAccess} data-testid="CommandPalette__488148" />}
       {!embedded && <CopilotWidget hideTrigger data-testid="CopilotWidget__488148" />}
       {!embedded && !isSupportMode && <SupportChatWidget data-testid="SupportChatWidget__488148" />}
     </>
@@ -837,6 +870,9 @@ function AppLayoutAccessGate({ menuGroups }) {
   return (
     <GlobalSearchProvider>
       <CurrentWindowProvider data-testid="CurrentWindowProvider__488148">
+      {/* Above CopilotProvider on purpose: useAiCopilotChat calls useHighlight()
+          from inside it, so the highlight state must already exist here. */}
+      <HighlightProvider data-testid="HighlightProvider__488148">
       <CopilotProvider menuGroups={filteredMenuGroups} data-testid="CopilotProvider__488148">
         <SupportChatProvider data-testid="SupportChatProvider__488148">
           <FavoritesProvider data-testid="FavoritesProvider__488148">
@@ -854,6 +890,7 @@ function AppLayoutAccessGate({ menuGroups }) {
                   <AppLayoutInner
                     menuGroups={filteredMenuGroups}
                     embedded={embedded}
+                    reportAccess={reportAccess}
                     data-testid="AppLayoutInner__488148" />
                 </WalkthroughProvider>
               </PageMetaProvider>
@@ -861,6 +898,8 @@ function AppLayoutAccessGate({ menuGroups }) {
           </FavoritesProvider>
         </SupportChatProvider>
       </CopilotProvider>
+      <HighlightOverlay data-testid="HighlightOverlay__488148" />
+      </HighlightProvider>
       </CurrentWindowProvider>
     </GlobalSearchProvider>
   );

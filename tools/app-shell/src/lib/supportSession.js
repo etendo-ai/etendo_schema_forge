@@ -23,7 +23,7 @@
  * Plain module (no JSX): imports `apiFetch` from the core subpath, never the `@/auth/api.js`
  * barrel, so `node --test` can load it (see docs/request-policy.md).
  */
-import { apiFetch, createApiFetch } from '@etendosoftware/app-shell-core/auth/api';
+import { apiFetch, createApiFetch } from '@etendo-ai/app-shell-core/auth/api';
 
 /** The router path Classic opens. Relative to the router base, like every other route. */
 export const SUPPORT_ACCESS_PATH = '/support-access';
@@ -350,13 +350,23 @@ export async function completeSupportHandoff(data, {
 /**
  * Reads `supportSession` off `GET /sws/go/me`. Rejects when the account cannot be read, so the
  * caller keeps the mode it has instead of taking a failed read for "no support session".
+ *
+ * `onAccount` receives the whole account the same read returned (ETP-6363: its first key action),
+ * so nothing else has to ask `/me` again.
  */
-export async function fetchSupportSession({ request = apiFetch } = {}) {
+export async function fetchSupportSession({ request = apiFetch, onAccount } = {}) {
   const response = await request(ACCOUNT_ENDPOINT, { on401: 'ignore' });
   // The session is gone: a marker left behind would start the next load in support mode.
   if (response.status === 401) forgetSupportSessionMarker();
   if (!response.ok) throw new Error(`GET ${ACCOUNT_ENDPOINT} answered ${response.status}`);
   const payload = await readJson(response);
+  if (typeof onAccount === 'function') {
+    try {
+      onAccount(payload);
+    } catch {
+      // A failing listener must not cost the support-session mode.
+    }
+  }
   return normalizeSupportSession(payload?.supportSession);
 }
 

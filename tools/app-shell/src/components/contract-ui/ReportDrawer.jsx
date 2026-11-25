@@ -1,5 +1,13 @@
 import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
-import { X, Printer, FileDown, FileSpreadsheet, FileText, Loader2, Eye } from 'lucide-react';
+import {
+  XIcon,
+  PrinterIcon,
+  DownloadSimpleIcon,
+  FileXlsIcon,
+  FileTextIcon,
+  CircleNotchIcon,
+  EyeIcon,
+} from '@phosphor-icons/react';
 import { resolveIdentifier } from '@/lib/resolveIdentifier.js';
 import { statusLabel } from '@/lib/statusBadge.js';
 import { useAnimatedOpen } from '@/lib/useAnimatedOpen.js';
@@ -9,17 +17,17 @@ import { getCurrencyFormatConfig } from '@/lib/currencyFormatConfig.js';
 import { useApiFetch } from '@/auth/useApiFetch.js';
 import { loadCompanyLogo, loadDocTemplateConfig } from '@/windows/custom/shared/docTemplateConfig.js';
 import { resolveListingCss } from '@/windows/custom/shared/printableStyle.js';
-import { NetworkError } from '@etendosoftware/app-shell-core/auth';
+import { NetworkError } from '@etendo-ai/app-shell-core/auth';
 
 // ---------------------------------------------------------------------------
 // jsreport recipe ↔ format mapping
 // Labels are resolved at render time via useUI() (see FORMATS usage below).
 // ---------------------------------------------------------------------------
 const FORMATS = [
-  { id: 'preview', labelKey: 'preview', icon: Eye, recipe: 'html' },
-  { id: 'pdf', labelKey: 'pdf', icon: FileDown, recipe: 'chrome-pdf', ext: 'pdf', mime: 'application/pdf' },
-  { id: 'xlsx', labelKey: 'excel', icon: FileSpreadsheet, recipe: 'html-to-xlsx', ext: 'xlsx', mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
-  { id: 'csv', labelKey: 'csv', icon: FileText, recipe: 'text', ext: 'csv', mime: 'text/csv' },
+  { id: 'preview', labelKey: 'preview', icon: EyeIcon, recipe: 'html' },
+  { id: 'pdf', labelKey: 'pdf', icon: DownloadSimpleIcon, recipe: 'chrome-pdf', ext: 'pdf', mime: 'application/pdf' },
+  { id: 'xlsx', labelKey: 'excel', icon: FileXlsIcon, recipe: 'html-to-xlsx', ext: 'xlsx', mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+  { id: 'csv', labelKey: 'csv', icon: FileTextIcon, recipe: 'text', ext: 'csv', mime: 'text/csv' },
 ];
 
 // ---------------------------------------------------------------------------
@@ -248,10 +256,16 @@ export async function renderViaJsreport(recipe, title, columns, rows, filters, l
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
+/**
+ * `rows` (optional, ETP-6365): the rows to print, already filtered and ordered by the host. When
+ * given, the drawer prints them as they are instead of reading every record of `entity` — for a
+ * custom page whose list is a filtered, grouped view of the entity (Currency Conversion). Absent,
+ * the drawer fetches exactly as before.
+ */
 export default function ReportDrawer({
   open, onClose, windowName, columns, title,
   apiBaseUrl, entity, token, sortColumn, sortDirection,
-  activeFilters,
+  activeFilters, rows: providedRows,
 }) {
   const ui = useUI();
   // ETP-5300 (Lea's QA comment) — every label LISTING_TEMPLATE and the
@@ -318,6 +332,12 @@ export default function ReportDrawer({
 
   // Fetch all records when drawer opens
   useEffect(() => {
+    if (open && Array.isArray(providedRows)) {
+      setReportRows(resolveRows(providedRows, columns || []));
+      setFetchingData(false);
+      setError(null);
+      return;
+    }
     if (!open || !apiBaseUrl || !entity) {
       setReportRows(null);
       setError(null);
@@ -342,7 +362,7 @@ export default function ReportDrawer({
       });
 
     return () => { cancelled = true; };
-  }, [open, apiBaseUrl, apiFetch, entity, token, sortColumn, sortDirection, columns]);
+  }, [open, apiBaseUrl, apiFetch, entity, token, sortColumn, sortDirection, columns, providedRows]);
 
   // ETP-5300 (Lea's QA comment) — the drawer is never unmounted between opens
   // (ListView always renders it; only `shouldRender` toggles), so `activeFormat`
@@ -539,7 +559,7 @@ export default function ReportDrawer({
             <h2 className="text-sm font-semibold text-foreground">{title || windowName || ui('report')}</h2>
             {fetchingData ? (
               <span className="text-xs text-muted-foreground flex items-center gap-1">
-                <Loader2 className="h-3 w-3 animate-spin" data-testid="Loader2__3ba698" /> {ui('loadingAllRecords')}
+                <CircleNotchIcon className="h-3 w-3 animate-spin" data-testid="Loader2__3ba698" /> {ui('loadingAllRecords')}
               </span>
             ) : reportRows ? (
               <span className="text-xs text-muted-foreground">{reportRows.length} {ui('records')}</span>
@@ -581,7 +601,7 @@ export default function ReportDrawer({
               disabled={!dataReady || loading}
               className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
             >
-              <Printer className="h-3.5 w-3.5" data-testid="Printer__3ba698" />
+              <PrinterIcon className="h-3.5 w-3.5" data-testid="Printer__3ba698" />
               {ui('print')}
             </button>
 
@@ -589,7 +609,7 @@ export default function ReportDrawer({
               onClick={onClose}
               className="h-8 w-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors ml-1"
             >
-              <X className="h-4 w-4" data-testid="X__3ba698" />
+              <XIcon className="h-4 w-4" data-testid="X__3ba698" />
             </button>
           </div>
         </div>
@@ -606,7 +626,7 @@ export default function ReportDrawer({
           <div className="bg-card rounded-lg shadow-lg h-full overflow-hidden relative">
             {(fetchingData || loading) && (
               <div className="absolute inset-0 flex items-center justify-center bg-card/80 z-10 gap-2 text-muted-foreground">
-                <Loader2 className="h-5 w-5 animate-spin" data-testid="Loader2__3ba698" />
+                <CircleNotchIcon className="h-5 w-5 animate-spin" data-testid="Loader2__3ba698" />
                 <span>{fetchingData ? ui('fetchingAllRecords') : ui('renderingReport')}</span>
               </div>
             )}

@@ -188,7 +188,7 @@ the app registers once. That is why the ~150 call sites that show `err.message` 
 - **A fallback that was a hardcoded `'Network error'`** is `ui('networkErrorRetry')` now
   (`useEntity` save/delete/add-line/process).
 - **A raw `fetch`** (the `/jsreport` proxy) gets none of this. Map a `TypeError` yourself with
-  `new NetworkError({ reason: 'offline', cause: err })` from `@etendosoftware/app-shell-core/auth`
+  `new NetworkError({ reason: 'offline', cause: err })` from `@etendo-ai/app-shell-core/auth`
   — see `renderViaJsreport` in `ReportDrawer.jsx`.
 
 ## Rules for Adding New Translations
@@ -607,7 +607,7 @@ import { DocChip, RelatedDocumentsShell, STATUS_KEYS, CHIP_COLORS, formatAmount,
 ## Testing
 
 The i18n hooks (`useUI`, `useLabel`, `useMenuLabel`, …) are re-exported from
-`@etendosoftware/app-shell-core/i18n`; their behavior tests live in `schema_forge_core`, not here.
+`@etendo-ai/app-shell-core/i18n`; their behavior tests live in `schema_forge_core`, not here.
 This repo tests its own dictionaries and wiring:
 
 - `tools/app-shell/src/locales/__tests__/` — locale tests:

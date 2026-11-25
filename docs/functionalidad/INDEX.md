@@ -3,7 +3,7 @@
 Documentación funcional (no arquitectónica) de cuatro flujos del producto Etendo GO, reconstruida leyendo código y tests reales en:
 
 - `tools/app-shell` (SPA, este repo)
-- `node_modules/@etendosoftware/etendo-go-core` (motor de onboarding vendorizado, consumido por `tools/app-shell`)
+- `node_modules/@etendo-ai/etendo-go-core` (motor de onboarding vendorizado, consumido por `tools/app-shell`)
 - `etendo_core/modules/com.etendoerp.go` (backend "NEO Headless", su propio repo Git anidado)
 
 Alcance pedido: **creación de cuenta**, **upgrade de cuenta** (checkout de pago), **múltiples roles**, **entorno demo**. No cubre arquitectura general, deploy, ni otras ventanas del producto — para eso ver `docs/architecture-overview.md` y `docs/index.md`.

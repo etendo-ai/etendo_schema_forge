@@ -6,7 +6,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// LOCAL_CORE dev mode: when set, resolve @etendosoftware/app-shell-core (and
+// LOCAL_CORE dev mode: when set, resolve @etendo-ai/app-shell-core (and
 // etendo-go-core) from the sibling ../schema_forge_core source instead of the
 // published node_modules package — mirrors the same block in vite.config.js so
 // the test runner exercises local core source under the LOCAL_CORE profile.
@@ -39,14 +39,14 @@ export default defineConfig({
       // kebab-case subpath rules and the single-React pin) so tests resolve exactly
       // like the dev server does under the local-core profile.
       ...(LOCAL_CORE ? [
-        { find: /^@etendosoftware\/app-shell-core$/, replacement: resolve(CORE_APP_SHELL_SRC, 'index.js') },
-        { find: /^@etendosoftware\/app-shell-core\/(.*)$/, replacement: resolve(CORE_APP_SHELL_SRC, '$1') },
-        { find: /^@etendosoftware\/etendo-go-core$/, replacement: resolve(CORE_ETENDO_GO_SRC, 'index.js') },
-        { find: /^@etendosoftware\/etendo-go-core\/onboarding\/password-policy$/, replacement: resolve(CORE_ETENDO_GO_SRC, 'onboarding/passwordPolicy.js') },
-        { find: /^@etendosoftware\/etendo-go-core\/onboarding\/password-strength-checklist$/, replacement: resolve(CORE_ETENDO_GO_SRC, 'onboarding/components/PasswordStrengthChecklist.jsx') },
-        { find: /^@etendosoftware\/etendo-go-core\/onboarding\/oauth-return-to$/, replacement: resolve(CORE_ETENDO_GO_SRC, 'onboarding/oauthReturnTo.js') },
-        { find: /^@etendosoftware\/etendo-go-core\/onboarding$/, replacement: resolve(CORE_ETENDO_GO_SRC, 'onboarding/index.js') },
-        { find: /^@etendosoftware\/etendo-go-core\/(.*)$/, replacement: resolve(CORE_ETENDO_GO_SRC, '$1') },
+        { find: /^@etendo-ai\/app-shell-core$/, replacement: resolve(CORE_APP_SHELL_SRC, 'index.js') },
+        { find: /^@etendo-ai\/app-shell-core\/(.*)$/, replacement: resolve(CORE_APP_SHELL_SRC, '$1') },
+        { find: /^@etendo-ai\/etendo-go-core$/, replacement: resolve(CORE_ETENDO_GO_SRC, 'index.js') },
+        { find: /^@etendo-ai\/etendo-go-core\/onboarding\/password-policy$/, replacement: resolve(CORE_ETENDO_GO_SRC, 'onboarding/passwordPolicy.js') },
+        { find: /^@etendo-ai\/etendo-go-core\/onboarding\/password-strength-checklist$/, replacement: resolve(CORE_ETENDO_GO_SRC, 'onboarding/components/PasswordStrengthChecklist.jsx') },
+        { find: /^@etendo-ai\/etendo-go-core\/onboarding\/oauth-return-to$/, replacement: resolve(CORE_ETENDO_GO_SRC, 'onboarding/oauthReturnTo.js') },
+        { find: /^@etendo-ai\/etendo-go-core\/onboarding$/, replacement: resolve(CORE_ETENDO_GO_SRC, 'onboarding/index.js') },
+        { find: /^@etendo-ai\/etendo-go-core\/(.*)$/, replacement: resolve(CORE_ETENDO_GO_SRC, '$1') },
         // packages/app-shell-core is aliased straight to raw source above, so its own
         // dependencies (react-remove-scroll, pulled in by every Radix Dialog/Popover)
         // resolve via plain node_modules walk-up from that source directory and land on
@@ -77,7 +77,7 @@ export default defineConfig({
     // THIS repo's node_modules. Harmless when LOCAL_CORE is unset: these deps
     // already resolve from a single location. Mirrors vite.config.js.
     dedupe: [
-      'react', 'react-dom', 'react-router-dom', 'sonner', 'lucide-react',
+      'react', 'react-dom', 'react-router-dom', 'sonner', '@phosphor-icons/react',
       'clsx', 'cmdk', 'next-themes', 'date-fns', 'react-day-picker',
       'class-variance-authority', 'tailwind-merge',
       '@radix-ui/react-collapsible', '@radix-ui/react-dialog',
@@ -124,8 +124,8 @@ export default defineConfig({
     server: {
       deps: {
         inline: LOCAL_CORE ? true : [
-          '@etendosoftware/app-shell-core',
-          '@etendosoftware/etendo-go-core',
+          '@etendo-ai/app-shell-core',
+          '@etendo-ai/etendo-go-core',
         ],
       },
     },

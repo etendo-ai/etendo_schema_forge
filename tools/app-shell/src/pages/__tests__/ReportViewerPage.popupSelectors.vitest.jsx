@@ -114,7 +114,7 @@ vi.mock('@/components/ui/dialog', () => ({
   DialogTitle: ({ children }) => <h2>{children}</h2>,
 }));
 
-import ReportViewerPage from '../ReportViewerPage.jsx';
+import ReportViewerPage, { PopupMultiSelector } from '../ReportViewerPage.jsx';
 
 const BASE_REPORT = {
   id: 'report-1',
@@ -840,6 +840,57 @@ describe('ReportViewerPage — ReportViewer cross-frame + print + auto-default b
     await waitFor(() => {
       expect(globalThis.fetch.mock.calls.some(([u]) => typeof u === 'string' && u.includes('/api/reports/report-general-ledger/render'))).toBe(true);
     });
+  });
+
+  // "Open full report" opens the drill-down target under its OWN category: the aging reports live
+  // under treasury, the General Ledger under finance — never a hard-coded finance.
+  it.each([
+    {
+      label: 'aging drill-down from an aging report opens it under treasury',
+      parent: { ...BASE_REPORT, id: 'aging-receivable', category: 'treasury' },
+      message: { type: 'aging-drilldown', bpId: 'bp-42', bpName: 'Acme Corp' },
+      report: 'aging-receivable',
+      category: 'treasury',
+    },
+    {
+      label: 'trial-balance drill-down opens the General Ledger under finance',
+      parent: { ...BASE_REPORT, id: 'report-trial-balance', category: 'finance' },
+      message: { type: 'trial-balance-drilldown', accountId: 'acc-1', accountName: 'Cash', accountValue: '1100' },
+      report: 'report-general-ledger',
+      category: 'finance',
+    },
+  ])('openFullReport: $label', async ({ parent, message, report, category }) => {
+    const user = userEvent.setup();
+    mockSearchParams = new URLSearchParams({ report: parent.id });
+    globalThis.fetch = vi.fn().mockImplementation((url) => {
+      if (url === '/api/reports') return Promise.resolve(makeReportsListResponse(parent));
+      if (typeof url === 'string' && url.includes('/render')) {
+        return Promise.resolve({ ok: true, text: () => Promise.resolve('<html><body>detail</body></html>') });
+      }
+      return Promise.resolve(makeSelectorResponse([]));
+    });
+    const openSpy = vi.fn();
+    const originalOpen = window.open;
+    window.open = openSpy;
+
+    try {
+      render(<ReportViewerPage />);
+      await waitFor(() => expect(screen.getByText('runReport')).toBeInTheDocument());
+      act(() => { window.dispatchEvent(new MessageEvent('message', { data: message })); });
+
+      const dialog = await screen.findByTestId('dialog');
+      await user.click(within(dialog).getByText('openFullReport'));
+
+      expect(openSpy).toHaveBeenCalledTimes(1);
+      const [url, target] = openSpy.mock.calls[0];
+      expect(target).toBe('_blank');
+      const opened = new URL(url);
+      expect(opened.pathname).toMatch(/\/report-viewer$/);
+      expect(opened.searchParams.get('report')).toBe(report);
+      expect(opened.searchParams.get('category')).toBe(category);
+    } finally {
+      window.open = originalOpen;
+    }
   });
 
   it('opens the invoice in a new tab on postMessage("navigate-invoice") defaulting to sales-invoice', async () => {
@@ -1750,5 +1801,36 @@ describe('ReportViewerPage — gl-entry-drilldown dialog (ETP-5013)', () => {
       // extraParams still win for the account being drilled into.
       expect(sent.fromAccountId).toBe('43000000');
     });
+  });
+});
+
+// ETP-6239: the dynamic report caps a filter at MAX_PICKER_IDS and carries names as an array.
+describe('PopupMultiSelector — maxItems cap and exact names (ETP-6239)', () => {
+  it('blocks the selection past maxItems and says why; a selected item can still be unchecked', async () => {
+    const user = userEvent.setup();
+    globalThis.fetch = vi.fn().mockResolvedValue(makeSelectorResponse([{ id: 'a', name: 'Acme' }, { id: 'b', name: 'Beta' }, { id: 'c', name: 'Gamma' }]));
+    const onChange = vi.fn();
+    render(<PopupMultiSelector selector="bpartner" label="Contacts" onChange={onChange} maxItems={2} />);
+    await user.click(screen.getByText('Contacts'));
+    await waitFor(() => expect(screen.getByText('Gamma')).toBeInTheDocument());
+    const [a, b, c] = screen.getAllByRole('checkbox');
+    await user.click(a);
+    await user.click(b);
+    expect(c).toBeDisabled();
+    await user.click(c);
+    expect(screen.getByTestId('PopupMultiSelector__maxItems')).toHaveTextContent('dynamicReportMaxItems'); // the region is always mounted; its text appears at the cap
+    await user.click(a);
+    expect(screen.getByTestId('PopupMultiSelector__maxItems')).toBeEmptyDOMElement(); // unchecking frees a slot
+    expect(c).not.toBeDisabled();
+    await user.click(c);
+    await user.click(screen.getByText('OK'));
+    expect(onChange).toHaveBeenCalledWith('b,c', 'Beta, Gamma', ['Beta', 'Gamma']);
+  });
+
+  it('seeds one chip per entry of displayNames, so a name with a comma stays one chip', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(makeSelectorResponse([]));
+    render(<PopupMultiSelector selector="bpartner" label="Contacts" value="i1,i2" displayValue="A, B, Acme, S.L." displayNames={['A, B', 'Acme, S.L.']} onChange={vi.fn()} />);
+    expect(screen.getByText('A, B')).toBeInTheDocument();
+    expect(screen.getByText('Acme, S.L.')).toBeInTheDocument();
   });
 });

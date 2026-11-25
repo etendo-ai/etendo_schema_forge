@@ -48,7 +48,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { toast } from 'sonner';
 import {
   registerErrorTranslator, resetErrorTranslatorForTests,
-} from '@etendosoftware/app-shell-core/auth';
+} from '@etendo-ai/app-shell-core/auth';
 import ReversedInvoicesPanel from '../ReversedInvoicesPanel.jsx';
 import { formatCurrency } from '@/lib/formatCurrency.js';
 import esES from '../../../../locales/es_ES.json';

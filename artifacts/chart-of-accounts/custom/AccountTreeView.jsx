@@ -4,7 +4,7 @@ import { useFeatureFlag, GRID_COLUMN_VIEWS } from '@/lib/flags';
 import { GridViewControls } from '@/components/contract-ui/GridViewControls.jsx';
 import { gridHeaderProps, gridReorderHandle, gridResizeHandle } from '@/components/contract-ui/GridColumnHeaderControls.jsx';
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { Lock } from 'lucide-react';
+import { LockIcon } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { useUI } from '@/i18n';
 import { ACCOUNT_TYPE_UI_KEYS, accountTypeLabel, ELEMENT_LEVEL_UI_KEYS, elementLevelLabel } from './accountTypeLabels';
@@ -29,7 +29,7 @@ import { useApiFetch } from '@/auth/useApiFetch.js';
 // place that normally remembers each row's `updated` concurrency token. Without this, the
 // grid's inline active toggle (runInlineToggleRequest) PATCHes with no remembered token and
 // the backend correctly refuses it with 400 missing_updated, no matter how fresh the row is.
-import { rememberRecordVersions } from '@etendosoftware/app-shell-core/lib/recordVersions.js';
+import { rememberRecordVersions } from '@etendo-ai/app-shell-core/lib/recordVersions.js';
 // A tree needs its FULL leaf list upfront to know which top-level folders exist —
 // it can't discover them via ListView's incremental "scroll near bottom, load a bit
 // more" pagination (ListView only fetches one BATCH_SIZE page per `data` prop, and
@@ -454,7 +454,7 @@ function AccountTreeRow({ item, isExpanded, isSelected, onToggle, onRowClick, on
             </button>
           )}
           {isProtected && (
-            <Lock
+            <LockIcon
               size={12}
               className="shrink-0 text-[hsl(var(--text-disabled))]"
               data-testid={`account-tree-locked-${item.id}`}

@@ -21,7 +21,7 @@ const harness = vi.hoisted(() => ({ open: true, dataCache: null }));
 vi.mock('@/i18n', () => ({ useUI: () => (k) => k }));
 vi.mock('@/lib/buildUrlWithParams.js', () => ({ buildUrlWithParams: (url) => url }));
 vi.mock('@/lib/selectorCatalog.js', () => ({ getCatalogOptions: () => [] }));
-vi.mock('lucide-react', () => ({ Loader2: () => <span />, ChevronDown: () => <span /> }));
+vi.mock('@phosphor-icons/react', () => ({ CircleNotchIcon: () => <span />, CaretDownIcon: () => <span /> }));
 vi.mock('@/auth/useApiFetch.js', () => ({
   useApiFetch: () => (url, opts) => globalThis.fetch(url, opts),
 }));
@@ -34,12 +34,12 @@ vi.mock('@/components/ui/select', () => ({
   SelectContent: React.forwardRef(({ children }, ref) => (harness.open ? <div ref={ref}>{children}</div> : null)),
   SelectItem: ({ children, value }) => <div data-value={value}>{children}</div>,
 }));
-vi.mock('@etendosoftware/app-shell-core/data', async (importOriginal) => ({
+vi.mock('@etendo-ai/app-shell-core/data', async (importOriginal) => ({
   ...(await importOriginal()),
   useOptionalDataCache: () => harness.dataCache,
 }));
 
-import { createQueryCache } from '@etendosoftware/app-shell-core/data';
+import { createQueryCache } from '@etendo-ai/app-shell-core/data';
 import { SELECTOR_REVALIDATE_AFTER_MS, needsSelectorRevalidation } from '@/lib/selectorRevalidation.js';
 import { SelectorInput } from '../SelectorInput.jsx';
 

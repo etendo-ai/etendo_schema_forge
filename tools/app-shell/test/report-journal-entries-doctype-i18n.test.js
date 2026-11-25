@@ -7,7 +7,7 @@ import {
   registerReportHelpers,
   buildJsreportHelpersString,
 } from '../../../templates/reports/helpers/report-html-helpers.js';
-import { RETURN_LABELS, DOC_TYPE_LABEL_OVERRIDES } from '@etendosoftware/schema-forge-cli/src/report-i18n.js';
+import { RETURN_LABELS, DOC_TYPE_LABEL_OVERRIDES } from '@etendo-ai/schema-forge-cli/src/report-i18n.js';
 
 // ETP-5013 — Journal Entries "Detail"/"Detalle" column (document_type) i18n.
 //
@@ -206,7 +206,7 @@ const CASES = [
   // ETP-5273: Goods Movements (M_Movement, MMM) and Internal Consumption
   // (M_Internal_Consumption, MIC) used to render the generic "Journal" label.
   // Expected values are LITERAL on purpose: DOC_TYPE_LABEL_OVERRIDES is
-  // imported from the INSTALLED @etendosoftware/schema-forge-cli package, which
+  // imported from the INSTALLED @etendo-ai/schema-forge-cli package, which
   // does not carry MMM/MIC until the core is published and bumped here. Reading
   // `DOC_TYPE_LABEL_OVERRIDES.en_US.MMM` would be `undefined` and mask the
   // check. These cases are EXPECTED to fail until that core bump lands; they

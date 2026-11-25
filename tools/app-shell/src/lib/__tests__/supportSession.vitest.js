@@ -1,7 +1,7 @@
 // @covers tools/app-shell/src/lib/supportSession.js
 // @covers tools/app-shell/src/lib/observability.js
 import { declareCookieSession } from '@/test/sessionContract.js';
-import { registerApiSession, resetApiSessionForTests } from '@etendosoftware/app-shell-core/auth/api';
+import { registerApiSession, resetApiSessionForTests } from '@etendo-ai/app-shell-core/auth/api';
 import { isAnalyticsSuppressed } from '../observability.js';
 import {
   ACCOUNT_ENDPOINT,
@@ -299,6 +299,16 @@ describe('the support session reported by /me', () => {
     expect(await fetchSupportSession()).toEqual(SUPPORT_SESSION);
     expect(await fetchSupportSession()).toBeNull();
     expect(globalThis.fetch.mock.calls[0][0]).toMatch(new RegExp(`${ACCOUNT_ENDPOINT}$`));
+  });
+
+  it('hands the whole account it read to onAccount, and survives a listener that throws', async () => {
+    const account = { id: 'A1', firstKeyAction: { action: 'product', at: '2026-11-02T09:30:00Z' }, supportSession: null };
+    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse(account));
+    const onAccount = vi.fn();
+
+    expect(await fetchSupportSession({ onAccount })).toBeNull();
+    expect(onAccount).toHaveBeenCalledWith(account);
+    expect(await fetchSupportSession({ onAccount: () => { throw new Error('listener'); } })).toBeNull();
   });
 
   it('rejects when /me cannot be read, so the caller keeps the mode it has', async () => {

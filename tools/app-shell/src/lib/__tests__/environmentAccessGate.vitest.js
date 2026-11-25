@@ -8,7 +8,7 @@ import {
   subscribeEnvironmentAccessDecision,
   resetEnvironmentAccessGateForTest,
 } from '../environmentAccessGate.js';
-import * as coreGate from '@etendosoftware/app-shell-core/lib/environmentAccessGate.js';
+import * as coreGate from '@etendo-ai/app-shell-core/lib/environmentAccessGate.js';
 
 /**
  * ETP-5443 follow-up — the plain module that detects a commercial access cut-off (demo trial

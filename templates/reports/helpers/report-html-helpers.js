@@ -1,4 +1,4 @@
-import { RETURN_LABELS, DOC_TYPE_LABEL_OVERRIDES } from '@etendosoftware/schema-forge-cli/src/report-i18n.js';
+import { RETURN_LABELS, DOC_TYPE_LABEL_OVERRIDES } from '@etendo-ai/schema-forge-cli/src/report-i18n.js';
 
 /**
  * Neutralizes one spreadsheet cell value against formula injection (CWE-1236).
@@ -12,7 +12,7 @@ import { RETURN_LABELS, DOC_TYPE_LABEL_OVERRIDES } from '@etendosoftware/schema-
  *
  * The policy is specified by ADR-0004 (`com.etendoerp.go/docs/adr/`) and pinned by the
  * fixture table in `com.etendoerp.go/docs/security/csv-neutralization-fixtures.md`, whose
- * executable twin lives in `@etendosoftware/app-shell-core/lib/csv/csvNeutralizationFixtures.js`.
+ * executable twin lives in `@etendo-ai/app-shell-core/lib/csv/csvNeutralizationFixtures.js`.
  * Three implementations must satisfy it: this one, that package's `csvSerializer`, and
  * `NeoCsvExportService.java`.
  *
@@ -275,6 +275,9 @@ export function createReportHelpers({ numberFormat } = {}) {
     var size = typeof pageSize === 'number' && pageSize > 0 ? pageSize : ((columnPages || [])[0] || []).length || 1;
     var flat = [].concat.apply([], columnPages || []);
     var ordered = flat.filter(function(i) { return i !== 0; }).concat(flat.filter(function(i) { return i === 0; }));
+    // At most 7 groups fit a landscape page at 8 pt with 12-character amounts (measured, ETP-6239): a
+    // no-comparison PDF asks for every group on one page, so cut it in as even pages as the cap allows.
+    size = Math.max(1, Math.ceil(ordered.length / Math.max(1, Math.ceil(ordered.length / Math.min(size, 7)))));
     var pages = [];
     for (var i = 0; i < ordered.length; i += size) pages.push(ordered.slice(i, i + size));
     return pages;
@@ -285,9 +288,62 @@ export function createReportHelpers({ numberFormat } = {}) {
     return value === 'sly' || value === 'prev' ? value : '';
   }
 
+  // ETP-6239 — what a Comparado column is compared against, read from the SAME `periods` request
+  // param the engine was asked with (`from..to|slyFrom..slyTo|prevFrom..prevTo`, bucket 0 first,
+  // so tuple `idx` is bucket `idx`): the compared month / quarter as a short label ("ene 25",
+  // "T1 25" / "Q1 25"), or, for the range total and the Total grain, the compared dates
+  // (formatDateLocale: mm/dd/yyyy in en_US, dd/mm/yyyy otherwise, as the screen's chip). '' without a comparison.
+  function periodCompared(periodsParam, idx, mode, columns, locale) {
+    if (mode !== 'sly' && mode !== 'prev') return '';
+    var tuple = String(periodsParam || '').split(',')[idx];
+    var range = tuple && tuple.split('|')[mode === 'sly' ? 1 : 2];
+    var ends = range ? range.split('..') : [];
+    if (ends.length !== 2) return '';
+    if (idx !== 0 && (columns === 'month' || columns === 'quarter')) return periodLabel({ idx: 1, dateFrom: ends[0] }, columns, locale);
+    return formatDateLocale(ends[0], locale) + ' \u2013 ' + formatDateLocale(ends[1], locale);
+  }
+
+  // "Comparado (ene 25)" for the single header cell of Excel / CSV: the caption plus periodCompared.
+  function periodComparedHeader(caption, periodsParam, idx, mode, columns, locale) {
+    var against = periodCompared(periodsParam, idx, mode, columns, locale);
+    return against ? caption + ' (' + against + ')' : caption;
+  }
+
+  // A JSON string (a render param) as data for the template; null when it is missing or invalid.
+  function parseJson(value) {
+    if (typeof value !== 'string') return value && typeof value === 'object' ? value : null;
+    try { return JSON.parse(value); } catch (e) { return null; }
+  }
+
   // Columns a group header row spans: Concepto plus every sub-column of the page's groups.
   function periodSpan(groups, mode) {
     return 1 + groups * (mode === 'sly' || mode === 'prev' ? 4 : 1);
+  }
+
+  // ETP-6084 — Excel/CSV number cells, canonical (replaces the copies in six per-report helpers.js).
+  // A blank or non-finite value (null, '', NaN, +-Infinity) is an EMPTY cell, never 0: html-to-xlsx writes a
+  // data-cell-type="number" cell holding no number as the literal NaN (invalid XML). Rounds HALF AWAY FROM ZERO on
+  // the decimal value (12.345 -> 12.35, -12.345 -> -12.35, as the screen's formatCurrency does) and never returns -0.
+  // Mirrored in JSREPORT_HELPER_SOURCES.
+  function round2(value) {
+    if (value == null || value === '') return '';
+    var num = Number(value);
+    if (!isFinite(num)) return '';
+    var abs = Math.abs(num);
+    var shifted = Number(abs + 'e2');
+    var out = (isFinite(shifted) ? Math.round(shifted) : Math.round(abs * 100)) / 100;
+    return num < 0 && out !== 0 ? -out : out;
+  }
+
+  // 'number' when there is a number to write, 'string' (an empty cell) otherwise: use as data-cell-type="{{numCellType x}}".
+  function numCellType(value) {
+    return value == null || value === '' || !isFinite(Number(value)) ? 'string' : 'number';
+  }
+
+  // CSV text of round2: always 2 decimals, dot separator, '' when there is no value.
+  function fixed2(value) {
+    var r = round2(value);
+    return r === '' ? '' : r.toFixed(2);
   }
 
   return {
@@ -312,6 +368,12 @@ export function createReportHelpers({ numberFormat } = {}) {
     periodPages,
     periodMode,
     periodSpan,
+    periodCompared,
+    periodComparedHeader,
+    parseJson,
+    round2,
+    numCellType,
+    fixed2,
   };
 }
 
@@ -552,6 +614,22 @@ const JSREPORT_HELPER_SOURCES = {
   if (i < s.length && triggers.indexOf(s.charAt(i)) >= 0) s = "'" + s;
   return /[",\\n\\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }`,
+  round2: `function round2(value) {
+  if (value == null || value === '') return '';
+  var num = Number(value);
+  if (!isFinite(num)) return '';
+  var abs = Math.abs(num);
+  var shifted = Number(abs + 'e2');
+  var out = (isFinite(shifted) ? Math.round(shifted) : Math.round(abs * 100)) / 100;
+  return num < 0 && out !== 0 ? -out : out;
+}`,
+  numCellType: `function numCellType(value) {
+  return value == null || value === '' || !isFinite(Number(value)) ? 'string' : 'number';
+}`,
+  fixed2: `function fixed2(value) {
+  var r = round2(value);
+  return r === '' ? '' : r.toFixed(2);
+}`,
   periodLabel: `function periodLabel(period, columns, locale, totalLabel) {
   if (!period) return '';
   if (period.idx === 0) return totalLabel;
@@ -575,6 +653,9 @@ const JSREPORT_HELPER_SOURCES = {
   var size = typeof pageSize === 'number' && pageSize > 0 ? pageSize : ((columnPages || [])[0] || []).length || 1;
   var flat = [].concat.apply([], columnPages || []);
   var ordered = flat.filter(function(i) { return i !== 0; }).concat(flat.filter(function(i) { return i === 0; }));
+  // At most 7 groups fit a landscape page at 8 pt with 12-character amounts (measured, ETP-6239): a
+  // no-comparison PDF asks for every group on one page, so cut it in as even pages as the cap allows.
+  size = Math.max(1, Math.ceil(ordered.length / Math.max(1, Math.ceil(ordered.length / Math.min(size, 7)))));
   var pages = [];
   for (var i = 0; i < ordered.length; i += size) pages.push(ordered.slice(i, i + size));
   return pages;
@@ -584,6 +665,23 @@ const JSREPORT_HELPER_SOURCES = {
 }`,
   periodSpan: `function periodSpan(groups, mode) {
   return 1 + groups * (mode === 'sly' || mode === 'prev' ? 4 : 1);
+}`,
+  periodCompared: `function periodCompared(periodsParam, idx, mode, columns, locale) {
+  if (mode !== 'sly' && mode !== 'prev') return '';
+  var tuple = String(periodsParam || '').split(',')[idx];
+  var range = tuple && tuple.split('|')[mode === 'sly' ? 1 : 2];
+  var ends = range ? range.split('..') : [];
+  if (ends.length !== 2) return '';
+  if (idx !== 0 && (columns === 'month' || columns === 'quarter')) return periodLabel({ idx: 1, dateFrom: ends[0] }, columns, locale);
+  return formatDateLocale(ends[0], locale) + ' \\u2013 ' + formatDateLocale(ends[1], locale);
+}`,
+  periodComparedHeader: `function periodComparedHeader(caption, periodsParam, idx, mode, columns, locale) {
+  var against = periodCompared(periodsParam, idx, mode, columns, locale);
+  return against ? caption + ' (' + against + ')' : caption;
+}`,
+  parseJson: `function parseJson(value) {
+  if (typeof value !== 'string') return value && typeof value === 'object' ? value : null;
+  try { return JSON.parse(value); } catch (e) { return null; }
 }`,
 };
 

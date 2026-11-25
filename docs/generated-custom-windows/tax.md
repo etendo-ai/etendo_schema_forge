@@ -16,13 +16,17 @@ From the current generated form and decisions, the visible window allows a user 
 - set a valid-from date
 - choose whether document-level or line-level amounts drive tax calculation
 - choose the base amount definition, including line net amount, line net amount plus tax, tax amount, alternative base amount, or alternative base plus tax
-- open the **Accounting** tab and maintain the Tax Due and Tax Credit GL accounts for each accounting schema the tax rate is posted under
+
+The window also opens the **Accounting** tab, where users maintain the Tax Due and Tax Credit GL
+accounts for each accounting schema the tax rate is posted under. It is written as prose, not as a
+bullet, on purpose: the public API manifest publishes the bullets of this section as the `tax`
+capabilities, and the API does not publish the Accounting tab.
 
 The list also lets users scan existing definitions quickly by showing the rate as a colored percentage tag and the applicability as `Sales` / `Purchase` tags. When the tax applies to both flows, the list shows both tags side by side rather than a single `Both` badge. The rate tag has three visual states: a positive rate (e.g. 21) renders as a green `+21 %` tag; a zero rate renders as a neutral gray `0 %` tag; a negative rate (e.g. withholdings at −10) renders as a red `−10 %` tag.
 
 ## Interaction model
 - **Route:** `/tax` and `/tax/:recordId`.
-- **Visibility:** visible from the `System` section in `tools/app-shell/src/menu.json`.
+- **Visibility:** visible from the `Taxes` (Impuestos) group, Finance section, in `tools/app-shell/src/menu.json` (ETP-6380). Breadcrumb `Impuestos / Impuesto` (`window.breadcrumb: "Taxes / Tax"`).
 - **Implementation type:** generated window loaded through `tools/app-shell/src/windows/registry.js`.
 - **Window shape:** `tax` is the header entity; `accounting` (`C_Tax_Acct`) is the detail (child) entity, rendered with the standard `linesLayout: "classic"` add-line grid — one row per accounting schema, with Tax Due and Tax Credit as editable selector columns.
 - No declared process endpoints in the generated index.
@@ -50,7 +54,7 @@ No dependent selector behavior, automatic defaulting between these fields, statu
 - No current evidence shows validation rules that constrain incompatible combinations between applicability, document-tax amount mode, and base-amount mode.
 
 ## Manual verification
-1. Open `/tax` from the `System` menu and confirm the list view loads.
+1. Open `/tax` from the `Impuestos` menu and confirm the list view loads.
 2. Confirm the list renders the rate as a colored percentage tag (`+N %` green for positive rates, `0 %` neutral/gray for zero, `-N %` red for negative/withholding rates) and `Applicable To` as `Sales` / `Purchase` tags.
 3. For a tax whose applicability is `Both`, confirm the list shows both tags together instead of a raw code.
 4. Open `/tax/<recordId>` and confirm the form exposes `Name`, `Tax Category` (read-only), `Rate`, `Applicable To`, `Valid From`, `Doc Tax Amount`, and `Base Amount`. Confirm `Active` is NOT shown, and confirm `Tax Category` cannot be edited (same as the other standard tax fields).
@@ -130,7 +134,7 @@ The `accounting` entity (`C_Tax_Acct`, tab `333`) was un-excluded and classified
 
 The known gap documented above ("List-view delete disabled at the API level") is now closed by a new generic decisions.json slot: `window.hideDeleteButton`. Unlike `window.hideDelete` (which only disables the CRUD delete capability in `contract.json`/the API), `hideDeleteButton` unconditionally hides the Delete button/icon in **both** the detail toolbar (`DetailView.jsx`) and the list-row hover actions (`RowQuickActions.jsx`, via `DataTable`'s `rowQuickActions.hideDeleteButton`), for every record regardless of status.
 
-- Generator support for `hideDeleteButton` shipped in `@etendosoftware/schema-forge-cli@0.3.6` (already installed — no core bump needed for this change).
+- Generator support for `hideDeleteButton` shipped in `@etendo-ai/schema-forge-cli@0.3.6` (already installed — no core bump needed for this change).
 - Added `"hideDeleteButton": true` to `artifacts/tax/decisions.json → window` (alongside the pre-existing `hideDelete: true`).
 - Wired the receiving side in this repo (`tools/app-shell/src/components/contract-ui/`):
   - `RowQuickActions.jsx` — new `hideDeleteButton` prop (default `false`); `showDelete` is now `!hideDeleteButton && isDeleteVisibleForRecord(...)`, short-circuiting before the status-based gate.
@@ -244,3 +248,14 @@ Saving an account field of the Accounting tab (Tax Due / Tax Credit) now refuses
 ## ETP-6062 — Header handler bound by `@NeoExtension`
 
 `TaxSifOverrideHandler` (`com.etendoerp.go`, the header handler that lets a tenant save the SIF tax keys on a shared tax) is now bound with `@NeoExtension(spec = "tax", entity = "tax")` instead of the legacy `Java_Qualifier` binding. In this repo, the `javaQualifier: "taxSifOverrideHandler"` key was removed from `artifacts/tax/decisions.json → entities.tax`, so the predicted `ETGO_SF_ENTITY` row matches the GO XML that no longer carries the qualifier (otherwise the GO PR's Offline Regen Check reports `JAVA_QUALIFIER: <none> → "taxSifOverrideHandler"`). The `accounting` entity keeps `javaQualifier: "taxAccountingHandler"` (still legacy). `make regen ONLY=tax FROM_CACHE=1` changed only the two `javaQualifier` lines and the checksum in `contract.json` plus the checksum echo in `contract.mcp.json`; no UI change. `make regen-check ONLY=tax` reports OK (3/3 XML match) and `sf-validate-pipeline --scope=tax` 0 violations.
+
+## Public API — read-only `tax` — ETP-6174
+
+The public API publishes the Tax Rate tab as `GET`/`LIST` only (`/api/v1/tax`), declared with
+`entities.tax.publicApi.readOnly: true` in `decisions.json`. The window's category (`settings`) is
+excluded by default; the window is published because it is listed in the generator's V1 allowlist.
+The Tax Zone, Translation, Accounting and Parameter tabs are not published. `tax_category` is a
+relationship to `tax-category`. Every field is read-only (`out`); a write answers `404`.
+
+The window itself is unchanged: entity-level `publicApi` only affects the public API manifest.
+Contract: `docs/public-api.md` §3 and §4.6.

@@ -411,7 +411,7 @@ describe('report helper modules — cross-repo parity contract (ETP-4910)', () =
   // report-i18n from the published CLI package, which the image does not install — so
   // the assembly must rewrite that one import to the relative form before building.
   // When it did not, the container died on startup with
-  // `ERR_MODULE_NOT_FOUND: Cannot find package '@etendosoftware/schema-forge-cli'` and
+  // `ERR_MODULE_NOT_FOUND: Cannot find package '@etendo-ai/schema-forge-cli'` and
   // answered no request at all (unnoticed for weeks because the deploy job's steps are
   // skipped while its AWS variables are unset — ETP-4910). This runs the real assembly
   // and pins the two things that make the image bootable.

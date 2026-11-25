@@ -48,7 +48,7 @@ it is memoized on the base URL and the token.
 ### In a plain module (no React body to call a hook from)
 
 ```js
-import { apiFetch } from '@etendosoftware/app-shell-core/auth/api';
+import { apiFetch } from '@etendo-ai/app-shell-core/auth/api';
 
 const res = await apiFetch(`${base}/spec/entity?${params}`, { baseUrl: '', token });
 ```
@@ -76,11 +76,33 @@ Everything not listed here is forwarded to `fetch` untouched (`method`, `body`, 
 
 | `timeout` | ms to wait for a response before rejecting with a `NetworkError` (`reason: 'timeout'`). **Default: 60 s for a safe method (`GET`, `HEAD`, `OPTIONS`, or no method) and none for any other method.** An explicit value applies to any method; `0` disables it. Pass `timeout: 0` for a **long read** — see [Network failures and the timeout](#network-failures-and-the-timeout-etp-5424) |
 
+### A caller that belongs to no session (the customer portal, the support handoff)
+
+A client from `useApiFetch` or the ambient `apiFetch` is bound to the app's session identity: it
+captures the identity when the request leaves and, if the identity changed by the time the answer
+arrives, throws *"The request belongs to a superseded session."* and discards the answer — the
+right call for a tenant user whose session ended mid-request. It is the wrong call for a page
+that has no session at all: on a cold open the app's auth bootstrap resolves the identity
+(unknown, then anonymous) while that page's first requests are in flight, and a 200 the backend
+already committed is thrown away.
+
+Such a page builds its client OUTSIDE the session scope, still through the shared helper:
+`createApiFetch(baseUrl, () => null, null, null)` — the explicit `null` scope opts out of the
+ambient session, and the `null` logout handler means no 401 can log anybody out.
+
+| Caller | Client | Precedent |
+|---|---|---|
+| Customer portal (`/portal/*`, `/portal/decision/*`) | `usePortalApiFetch` (`lib/portal/usePortalApiFetch.js`) | ETP-6209: the decision landing showed "No pudimos aplicar tu decisión" for a decision the backend had applied |
+| Support handoff (`/support-access`) | `handoffFetch` (`lib/supportSession.js`) | the ticket was spent and the page read "no se pudo abrir el acceso" |
+
+Use it only for a page whose credential is not an app session. Anything a tenant user does keeps
+`useApiFetch`.
+
 ## Network failures and the timeout (ETP-5424)
 
 A request that never got an HTTP answer does not reach the call site as the browser's
 `TypeError('Failed to fetch')` anymore. `apiFetch` rejects with a `NetworkError`
-(`@etendosoftware/app-shell-core/auth`) whose `message` is **already translated**
+(`@etendo-ai/app-shell-core/auth`) whose `message` is **already translated**
 (`genericLabels.networkErrorRetry`), so any call site that shows `err.message` is correct
 without a special case.
 
@@ -266,7 +288,7 @@ that touches it — NEO, Copilot, MCP and the account endpoints acting on the te
 treats that answer like the 401: as a statement about the whole session, not about the request.
 Its single response exit (`finish()` in the core's `auth/api.js`) reads a **clone** of every 402
 and, when the decision is `DEMO_TRIAL_EXPIRED` or `SUBSCRIPTION_REQUIRED`, records it in the
-environment-access gate (`@etendosoftware/app-shell-core/lib/environmentAccessGate.js`, re-exported
+environment-access gate (`@etendo-ai/app-shell-core/lib/environmentAccessGate.js`, re-exported
 as `@/lib/environmentAccessGate.js`). `AppLayout` reads the gate and replaces the UI with the
 blocked-access screen.
 
@@ -327,7 +349,7 @@ sesión" now revokes the session server-side.
 
 ## Writes to child documents invalidate the parent order's cache (ETP-5525)
 
-The shared record cache (`@etendosoftware/app-shell-core/data`, 30 s `recordStaleTime`) is
+The shared record cache (`@etendo-ai/app-shell-core/data`, 30 s `recordStaleTime`) is
 invalidated by `useEntity` for **its own spec only**. Some specs show values the backend derives
 from other specs' documents — the order header's `needsPrimaryDoc` / `needsInvoiceDoc` are computed
 from its shipments/receipts and invoices — so a write to a shipment left the order record "fresh"
@@ -371,7 +393,7 @@ intentionally not included yet: it is owned by the Purchase cell, and adding it 
 map entries.
 
 Add a row there when a new spec starts displaying values derived from another spec's documents.
-Not covered: writes made through the plain-module `apiFetch` (`@etendosoftware/app-shell-core/auth/api`,
+Not covered: writes made through the plain-module `apiFetch` (`@etendo-ai/app-shell-core/auth/api`,
 e.g. `lib/batchDelete.js`), which has no access to the cache, and
 writes made in another tab or by another user — those still wait out `recordStaleTime`.
 Also not covered: hook-based writes made inside app-shell-core itself, which go through core's own
@@ -494,7 +516,7 @@ Consequence for tests: a test that needs a token must supply a **session**, not 
 prop:
 
 ```js
-vi.mock('@etendosoftware/app-shell-core/auth', async (importOriginal) => ({
+vi.mock('@etendo-ai/app-shell-core/auth', async (importOriginal) => ({
   ...(await importOriginal()),
   useAuthOptional: () => ({ token: 'test-token' }),
 }));

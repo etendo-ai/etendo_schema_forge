@@ -9,15 +9,16 @@
 //
 // FmListPage.jsx used to render `Tesorería / {t('fm.list.title') ?? 'Declaraciones'}` —
 // a raw hardcoded Spanish literal, never localized, never matched against the
-// menu section. The fix is `{ui('finance')} / {ui('fm.breadcrumb.section')}`.
+// menu section. The fix is `{ui('taxes')} / {ui('fm.breadcrumb.section')}`.
 //
-// NOTE: the sibling FmListPage.vitest.jsx mocks '@etendosoftware/app-shell-core'
+// NOTE: the sibling FmListPage.vitest.jsx mocks '@etendo-ai/app-shell-core'
 // for useUI, but FmListPage.jsx actually imports useUI from '@/i18n' — that mock
 // never intercepts the real import (verified empirically), so those tests only
 // ever exercise the REAL useUI() falling back to the raw key with no
 // LocaleProvider in scope (an existing, harmless test-infra gap, not something
 // this file needs to fix). This file mocks the path FmListPage.jsx actually
 // imports ('@/i18n') so the real locale dictionary is genuinely exercised.
+import { allIconsAs } from '@/test/iconMock.js';
 import { render, screen, act } from '@testing-library/react';
 import { PageMetaProvider, useSetPageMeta } from '@/components/layout/PageMetaContext';
 import { lastMeta, MetaProbe, renderWithMeta, describeTopBarKebab } from './testUtils/topBarMetaTestUtils.jsx';
@@ -58,13 +59,7 @@ vi.mock('../FmCatalogPage.jsx', () => ({
 vi.mock('@/windows/custom/shared/CheckboxField.jsx', () => ({
   CheckboxField: () => null,
 }));
-vi.mock('lucide-react', () => ({
-  LayoutGrid: () => null, Settings: () => null, ListFilter: () => null,
-  ArrowUpDown: () => null, ChevronDown: () => null, MoreHorizontal: () => null,
-  MoreVertical: () => null, Calendar: () => null, Clock: () => null,
-  TriangleAlert: () => null, OctagonAlert: () => null, ArrowUpRight: () => null,
-  Search: () => null, Play: () => null, Check: () => null,
-}));
+vi.mock('@phosphor-icons/react', async importOriginal => allIconsAs(() => null, importOriginal));
 vi.mock('../FmCommon.jsx', () => ({
   StatusPillMenu: () => null,
   ResultPill: () => null,
@@ -82,19 +77,19 @@ const defaultProps = {
 
 
 describe('FmListPage — breadcrumb against the real locale dictionary (ETP-4945)', () => {
-  it('resolves the es_ES breadcrumb to "Finanzas / Modelos Fiscales", not the stale "Tesorería"', () => {
+  it('resolves the es_ES breadcrumb to "Impuestos / Modelos Fiscales", not the stale "Tesorería"', () => {
     activeUi = realUiEs;
     renderWithMeta(<FmListPage declarations={[]} {...defaultProps} />);
 
-    expect(lastMeta.breadcrumb).toBe('Finanzas / Modelos Fiscales');
+    expect(lastMeta.breadcrumb).toBe('Impuestos / Modelos Fiscales');
     expect(document.body.textContent).not.toContain('Tesorería');
   });
 
-  it('resolves the en_US breadcrumb to "Finance / Fiscal Models"', () => {
+  it('resolves the en_US breadcrumb to "Taxes / Fiscal Models"', () => {
     activeUi = realUiEn;
     renderWithMeta(<FmListPage declarations={[]} {...defaultProps} />);
 
-    expect(lastMeta.breadcrumb).toBe('Finance / Fiscal Models');
+    expect(lastMeta.breadcrumb).toBe('Taxes / Fiscal Models');
   });
 });
 

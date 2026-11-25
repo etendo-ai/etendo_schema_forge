@@ -848,16 +848,41 @@ The printed order uses the organization's saved design (variant, color, font, te
 the window's confirm button, and answers the order re-read with `document_status` `CO`.
 
 - The API key needs `public-api:process`; a key without it gets `403`.
-- The order needs a payment method, which it inherits from its contact; without one Etendo refuses with
-  `422 business_rule`. **Known limitation:** a contact created through the API has no payment method and the
-  API cannot set one yet (no published contact payment-method fields, no payment-method lookup). Until a
-  follow-up (ETP-6160) publishes selector lookups, the caller must set `payment_method` on the order to an id it already
-  knows.
+- The order needs a payment method, which it inherits from its contact's `payment_method` when it is created;
+  without one Etendo refuses with `422 business_rule`. A contact created through the API has none: the caller
+  looks one up and sets it first (see "Public API — payment-method lookup" below).
 - Completing an order that is already `CO` answers `200` with `meta.alreadyApplied: true` and runs nothing.
 - A `PATCH` or `DELETE` on the completed order answers `422`; no public action reopens or voids it.
 
 Evidence: `gateway/e2e/support/orders.ts` (`complete action`), shared by the sales and purchase order flows.
 Contract: `docs/public-api.md` §4.2.1.
+
+## Public API — payment-method lookup — ETP-6160
+
+`decisions.json` declares a lookup on the header's `paymentMethod`
+(`publicApi.lookup: { "context": { "IsSOTrx": "Y" } }`), so the manifest publishes
+`GET /api/v1/sales-order/lookups/payment_method`. It lists the tenant's active payment methods, the same list the app
+offers, as `{ type: "payment-method", id, attributes: { label } }`, with `filter[search]` and
+`page[number]` / `page[size]`. The gateway calls `GET /sws/neo/sales-order/header/selectors/paymentMethod` with
+`IsSOTrx=Y` fixed; a caller's own parameters are refused with `400`. The context is forwarded to the field's
+selector; whether it narrows the list depends on that field's validation rule, as in the app. Integrators must not
+rely on the list being filtered by sales or purchase.
+
+An integrator with no id known beforehand completes an order this way: `GET /api/v1/contacts/lookups/payment_method`,
+`PATCH` the contact's `payment_method` (with `If-Match`), create the order (it inherits the value), then
+`POST /api/v1/sales-order/{id}/actions/complete`. Setting `payment_method` on the order directly, with an id from this
+window's lookup, works too.
+
+Evidence: `gateway/e2e/support/orders.ts` (`complete action`). Contract: `docs/public-api.md` §4.2.2.
+
+## Public API V1 warehouse selection
+
+The public API exposes this order and its lines, including the header's `complete` action.
+Choose the warehouse with `GET /api/v1/sales-order/lookups/warehouse` and send the selected id as
+`data.attributes.warehouse` when creating the order. The field is optional: if it is omitted,
+Etendo assigns a warehouse when the order is created. There is no `relationships.warehouse`,
+because the warehouse collection is outside V1. Partial updates can omit an unchanged
+warehouse. Document-state validation remains with the runtime, as in the app.
 
 ## Fiscal data step before the invoice is created — ETP-6179
 
@@ -907,3 +932,15 @@ operación* and, with VERI*FACTU active, *Fecha operación*; on a rectificative 
 rectification code, which order flows never preselect — only a customer return's preview comes with `R1`). The rule is shared with the invoices' SIF tab:
 `docs/ui-customization.md` §21b.
 Backend reference: `com.etendoerp.go` `docs/neo-headless.md` §4.12.36b (ETP-6179).
+
+## Public API — exchange rate and line currency — ETP-6177
+
+The `sales-order` window exposes `header.eTGOCurrencyRate` as numeric `currency_rate`
+through `entities.header.publicApi.inputFields` in `decisions.json` (`form: false`).
+
+See [Document currency, exchange rate and line prices](../public-api.md#412-document-currency-exchange-rate-and-line-prices)
+for the shared rate rules, completed-document lock, line conversion and pricing exceptions.
+
+## Rate and cost fields are numeric — ETP-6342
+
+Schema Forge core 0.3.110 maps AD reference `800019` (General Quantity: rates and costs) to `decimal` instead of the `string` fallback. The header `eTGOCurrencyRate` (`EM_ETGO_Currency_Rate`) is now `decimal` in the contract (`tsType: number`).

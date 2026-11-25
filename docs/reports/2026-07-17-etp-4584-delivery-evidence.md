@@ -21,7 +21,7 @@ The delivery intentionally spans both repositories. All local Node commands use 
 |---|---|
 | Moved to Core | `packages/etendo-go-core/test/onboardingOwnership.test.js` covers the API, state, SSO, password-policy, draft, and stream contracts against Core source. |
 | Retained in Schema Forge | `OnboardingPage.vitest.jsx`, runtime route tests, locale tests, observability/readiness/backdrop coverage, and `e2e/tests/flows/onboarding-logout-resume.mocked.spec.js` cover consumer composition and browser behavior. |
-| Removed from Schema Forge | Retired wrapper modules and their duplicate Core-owned API/state/SSO/password-policy tests were deleted because the implementation is published by `@etendosoftware/etendo-go-core/onboarding/*`. |
+| Removed from Schema Forge | Retired wrapper modules and their duplicate Core-owned API/state/SSO/password-policy tests were deleted because the implementation is published by `@etendo-ai/etendo-go-core/onboarding/*`. |
 
 ## Executed local gates
 
