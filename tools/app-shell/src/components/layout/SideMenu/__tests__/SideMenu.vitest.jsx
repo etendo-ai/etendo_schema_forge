@@ -283,8 +283,8 @@ describe('findActiveGroup — report-category entries', () => {
   });
 });
 
-// ETP-6380 — the Impuestos header is styled as active (filled icon, card background) only when the
-// route belongs to it; on a Finance window it renders like any other inactive group.
+// ETP-6380 / ETP-6438 — the group header is never highlighted (same light icon, no card background);
+// the group that owns the route is the one that is open.
 describe('SideMenu — Taxes group header state', () => {
   beforeEach(() => { menuFixture.useShippedMenu = true; });
   afterEach(() => {
@@ -294,15 +294,19 @@ describe('SideMenu — Taxes group header state', () => {
   const headerWeight = testId => screen.getByTestId(testId).querySelector('[data-weight]').getAttribute('data-weight');
 
   it.each([
-    ['/chart-of-accounts', '', 'regular', 'fill'],
-    ['/report-viewer', '?category=finance', 'regular', 'fill'],
-    ['/fiscal-config', '', 'fill', 'regular'],
-    ['/report-viewer', '?category=taxes&report=tax-report', 'fill', 'regular'],
-  ])('at %s%s Taxes is %s and Finance is %s', (pathname, search, taxesWeight, financeWeight) => {
+    ['/chart-of-accounts', '', 'false', 'true'],
+    ['/report-viewer', '?category=finance', 'false', 'true'],
+    ['/fiscal-config', '', 'true', 'false'],
+    ['/report-viewer', '?category=taxes&report=tax-report', 'true', 'false'],
+  ])('at %s%s Taxes open=%s and Finance open=%s, neither highlighted', (pathname, search, taxesOpen, financeOpen) => {
     mockUseLocation.mockReturnValue({ pathname, search });
     render(<SideMenu menuGroups={buildMenuGroups()} expanded onToggle={vi.fn()} />);
-    expect(headerWeight('menu-group-taxes')).toBe(taxesWeight);
-    expect(headerWeight('menu-group-finance')).toBe(financeWeight);
+    expect(screen.getByTestId('menu-group-taxes')).toHaveAttribute('aria-expanded', taxesOpen);
+    expect(screen.getByTestId('menu-group-finance')).toHaveAttribute('aria-expanded', financeOpen);
+    expect(headerWeight('menu-group-taxes')).toBe('light');
+    expect(headerWeight('menu-group-finance')).toBe('light');
+    expect(screen.getByTestId('menu-group-taxes').className).not.toMatch(/bg-card/);
+    expect(screen.getByTestId('menu-group-finance').className).not.toMatch(/bg-card/);
   });
 });
 
@@ -360,7 +364,7 @@ describe('SideMenu — Treasury entry highlighting', () => {
     mockUseLocation.mockReturnValue({ pathname: '/dashboard', search: '' });
   });
 
-  const ACTIVE = /ring-border-control/;
+  const ACTIVE = /border-border-control/;
 
   it('an open aging report highlights Tesorería › Informes and not Finanzas › Informes', () => {
     mockUseLocation.mockReturnValue({ pathname: '/report-viewer', search: '?category=treasury&report=aging-payable' });
@@ -429,14 +433,69 @@ describe('SideMenu', () => {
     expect(screen.getByRole('navigation')).toBeInTheDocument();
   });
 
-  // ETP-6155 — Fill is reserved for the navigation rail's active entry; the rest stays Regular.
-  it('draws only the active rail entry with the fill weight', () => {
+  // ETP-6438 — Figma Navigation Rail: every icon is thin-line, the active entry included.
+  it('draws every rail icon with the light weight and none filled', () => {
     render(<SideMenu {...defaultProps} />);
-    const active = screen.getByTestId('menu-item-dashboard');
-    expect(active.querySelector('[data-weight]')).toHaveAttribute('data-weight', 'fill');
-    const nav = active.closest('nav');
-    expect(nav.querySelectorAll('[data-weight="regular"]').length).toBeGreaterThan(0);
-    expect(nav.querySelectorAll('[data-weight="fill"]')).toHaveLength(1);
+    const nav = screen.getByTestId('menu-item-dashboard').closest('nav');
+    expect(nav.querySelectorAll('[data-weight="light"]').length).toBeGreaterThan(0);
+    expect(nav.querySelectorAll('[data-weight="fill"]')).toHaveLength(0);
+    expect(nav.querySelectorAll('[data-weight="regular"]')).toHaveLength(0);
+  });
+
+  it('toggles from the collapse and expand buttons (grey rounded, arrow icons)', () => {
+    const onToggle = vi.fn();
+    const { unmount } = render(<SideMenu {...defaultProps} expanded onToggle={onToggle} />);
+    const collapse = screen.getByTestId('sidebar-collapse');
+    expect(collapse.className).toMatch(/bg-muted/);
+    expect(collapse.className).toMatch(/rounded-lg/);
+    fireEvent.click(collapse);
+    expect(onToggle).toHaveBeenCalledTimes(1);
+    unmount();
+    render(<SideMenu {...defaultProps} expanded={false} onToggle={onToggle} />);
+    fireEvent.click(screen.getByTestId('sidebar-expand'));
+    expect(onToggle).toHaveBeenCalledTimes(2);
+  });
+
+  it('renders the active sub-item as a bordered rounded card with no vertical guide line', () => {
+    mockUseLocation.mockReturnValue({ pathname: '/purchase-order', search: '' });
+    render(<SideMenu {...defaultProps} menuGroups={[
+      { group: 'Purchases', icon: 'Receipt', items: [{ name: 'purchase-order', label: 'Purchase Order' }, { name: 'other', label: 'Other' }] },
+    ]} expanded />);
+    const group = screen.getByTestId('menu-group-purchases');
+    expect(group).toHaveAttribute('aria-expanded', 'true');
+    expect(group.className).not.toMatch(/bg-card|shadow-sm|font-medium/);
+    const active = screen.getByTestId('menu-item-purchase-order');
+    expect(active.className).toMatch(/rounded/);
+    expect(active.className).toMatch(/\bborder\b/);
+    expect(active.className).not.toMatch(/font-semibold/);
+    expect(active.closest('nav').querySelector('span.w-px')).toBeNull();
+    mockUseLocation.mockReturnValue({ pathname: '/dashboard', search: '' });
+  });
+
+  it('draws the Compras, Tesorería and Finanzas group icons with the light weight', () => {
+    menuFixture.useShippedMenu = true;
+    try {
+      render(<SideMenu menuGroups={buildMenuGroups()} expanded onToggle={vi.fn()} />);
+      ['purchases', 'treasury', 'finance'].forEach(g => {
+        expect(screen.getByTestId(`menu-group-${g}`).querySelector('[data-weight]')).toHaveAttribute('data-weight', 'light');
+      });
+    } finally {
+      menuFixture.useShippedMenu = false;
+    }
+  });
+
+  it('renders an active expanded direct link as a bordered rounded card', () => {
+    render(<SideMenu {...defaultProps} />);
+    const link = screen.getByTestId('menu-item-dashboard');
+    expect(link.className).toMatch(/rounded/);
+    expect(link.className).toMatch(/\bborder\b/);
+    expect(link.className).not.toMatch(/font-medium|shadow-sm/);
+  });
+
+  it('gives the Sales group the ShoppingCart icon', async () => {
+    const { readFileSync } = await vi.importActual('node:fs');
+    const menu = JSON.parse(readFileSync(`${process.cwd()}/src/menu.json`, 'utf8'));
+    expect(menu.menu.find(g => g.group === 'Sales').icon).toBe('ShoppingCart');
   });
 
   it('renders the navigation aria label', () => {
@@ -703,7 +762,7 @@ describe('SideMenu', () => {
       const activeLink = screen.getByTestId('menu-item-dashboard');
       const inactiveLink = screen.getByTestId('menu-item-dashboard-extra');
       expect(activeLink.className).toMatch(/bg-card/);
-      expect(activeLink.className).toMatch(/ring-border-control/);
+      expect(activeLink.className).toMatch(/border-border-control/);
       expect(inactiveLink.className).not.toMatch(/bg-card/);
       fireEvent.mouseLeave(trigger);
     });
