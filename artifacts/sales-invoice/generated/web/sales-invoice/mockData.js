@@ -1121,7 +1121,7 @@ export const exchangeRates = [
     "id": "mock-exchangeRates-001",
     "currency": "USD",
     "toCurrency": "USD",
-    "rate": 761,
+    "rate": 99.44,
     "foreignAmount": 38907,
     "headerId": "mock-header-001"
   },
@@ -1129,7 +1129,7 @@ export const exchangeRates = [
     "id": "mock-exchangeRates-002",
     "currency": "EUR",
     "toCurrency": "EUR",
-    "rate": 544,
+    "rate": 96.94,
     "foreignAmount": 9306,
     "headerId": "mock-header-002"
   },
@@ -1137,7 +1137,7 @@ export const exchangeRates = [
     "id": "mock-exchangeRates-003",
     "currency": "GBP",
     "toCurrency": "GBP",
-    "rate": 215,
+    "rate": 12.48,
     "foreignAmount": 11544,
     "headerId": "mock-header-003"
   },
@@ -1145,7 +1145,7 @@ export const exchangeRates = [
     "id": "mock-exchangeRates-004",
     "currency": "USD",
     "toCurrency": "USD",
-    "rate": 568,
+    "rate": 96.31,
     "foreignAmount": 11872,
     "headerId": "mock-header-004"
   },
@@ -1153,7 +1153,7 @@ export const exchangeRates = [
     "id": "mock-exchangeRates-005",
     "currency": "EUR",
     "toCurrency": "EUR",
-    "rate": 679,
+    "rate": 31.27,
     "foreignAmount": 48460,
     "headerId": "mock-header-005"
   },
@@ -1161,7 +1161,7 @@ export const exchangeRates = [
     "id": "mock-exchangeRates-006",
     "currency": "GBP",
     "toCurrency": "GBP",
-    "rate": 861,
+    "rate": 76.52,
     "foreignAmount": 45418,
     "headerId": "mock-header-006"
   },
@@ -1169,7 +1169,7 @@ export const exchangeRates = [
     "id": "mock-exchangeRates-007",
     "currency": "USD",
     "toCurrency": "USD",
-    "rate": 281,
+    "rate": 2.66,
     "foreignAmount": 33840,
     "headerId": "mock-header-007"
   },
@@ -1177,7 +1177,7 @@ export const exchangeRates = [
     "id": "mock-exchangeRates-008",
     "currency": "EUR",
     "toCurrency": "EUR",
-    "rate": 639,
+    "rate": 10.03,
     "foreignAmount": 25716,
     "headerId": "mock-header-008"
   },
@@ -1185,7 +1185,7 @@ export const exchangeRates = [
     "id": "mock-exchangeRates-009",
     "currency": "GBP",
     "toCurrency": "GBP",
-    "rate": 916,
+    "rate": 93.97,
     "foreignAmount": 44780,
     "headerId": "mock-header-009"
   },
@@ -1193,7 +1193,7 @@ export const exchangeRates = [
     "id": "mock-exchangeRates-010",
     "currency": "USD",
     "toCurrency": "USD",
-    "rate": 980,
+    "rate": 1.1,
     "foreignAmount": 12483,
     "headerId": "mock-header-010"
   },
@@ -1201,7 +1201,7 @@ export const exchangeRates = [
     "id": "mock-exchangeRates-011",
     "currency": "EUR",
     "toCurrency": "EUR",
-    "rate": 997,
+    "rate": 79.99,
     "foreignAmount": 46022,
     "headerId": "mock-header-011"
   },
@@ -1209,7 +1209,7 @@ export const exchangeRates = [
     "id": "mock-exchangeRates-012",
     "currency": "GBP",
     "toCurrency": "GBP",
-    "rate": 320,
+    "rate": 53.61,
     "foreignAmount": 38634,
     "headerId": "mock-header-012"
   }
