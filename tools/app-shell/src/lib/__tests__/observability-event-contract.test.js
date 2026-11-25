@@ -3,7 +3,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { isDeepStrictEqual } from 'node:util';
-import { REDACTED, sanitizeValue } from '@etendosoftware/app-shell-core/observability/sanitize';
+import { REDACTED, sanitizeValue } from '@etendo-ai/app-shell-core/observability/sanitize';
 import { TRUSTED_CONTEXT_KEYS, createObservability } from '../observability/core.js';
 import { OBSERVABILITY_EVENT_LIST, buildObservabilityEvent } from '../observability/events.js';
 import {
@@ -14,6 +14,9 @@ import {
 import { createDatadogProvider } from '../observability/providers/datadog.js';
 import { createRumProvider } from '../rum.js';
 import { createMixpanelProvider } from '../observability/providers/mixpanel.js';
+
+// ETP-5466 — Mixpanel only emits from a production host.
+const PROD_HOST = 'app.etendo.software';
 
 // ETP-4578 H8 — a guard against the "N5" failure: an approved property that the gateway's
 // sensitive-key-NAME rule quietly turns into [REDACTED] (or a declared event property the
@@ -63,6 +66,7 @@ function threeProviders() {
     logger: silent,
   });
   const mixpanel = createMixpanelProvider({
+    hostname: PROD_HOST,
     enabled: 'true',
     token: 'fake-project-token',
     storage: { getItem: () => '1', setItem() {} },

@@ -12,8 +12,11 @@ import { DateRangePopoverContent, computeTriggerLabel } from '@/components/ui/da
 import {
   PortalDate, PortalDocumentStatus, PortalDueDate, PortalInvoiceTypeBadge, PortalMoney,
   PortalPaymentStatus, PORTAL_FIGMA_SHADOW, PORTAL_ROW_FOCUS, portalRowActivation,
+  PortalConvertedAmount, portalShowsConverted, usePortalTabLabel,
 } from './PortalBits.jsx';
-import { PORTAL_KIND_META, documentLabelKey, quotationValidity } from './portalPresentation.js';
+import {
+  PORTAL_KIND_META, PORTAL_KIND_SUBTYPES, documentLabelKey, quotationValidity,
+} from './portalPresentation.js';
 
 /*
  * The desktop list of one document kind as the designer's Figma "PC Presupuestos" draws it
@@ -80,14 +83,16 @@ function DateRangeButton({ value, onChange }) {
  * the left; refresh on the right. "Descargar seleccionados" and the row checkboxes are out for now
  * (PO answer: bulk download is a performance risk); a document downloads from its detail.
  *
- * The funnel offers the same status groups as a menu. The portal has no other quick filter, and the
- * design gives the funnel no content of its own, so it adds no new filter — it keeps the status
- * choice reachable when the tabs do not fit.
+ * The funnel holds the quick filters the tabs do not cover (QA 24/11 CP-16): the document type of a
+ * kind that mixes types — invoices and credit notes ({@link PORTAL_KIND_SUBTYPES}) — first, then
+ * the same status groups as the tabs, so the status stays reachable when the tabs do not fit.
  */
 export function PortalListToolbar({
-  kind, tabs, group, onGroup, range, onRange, onRefresh,
+  kind, tabs, group, onGroup, range, onRange, onRefresh, subtype = null, onSubtype,
 }) {
   const ui = useUI();
+  const tabLabel = usePortalTabLabel();
+  const subtypes = PORTAL_KIND_SUBTYPES[kind] ?? null;
   return (
     <div className="hidden items-start justify-between gap-2.5 p-2 md:flex" data-kind={kind} data-testid="portal-list-toolbar">
       <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -104,7 +109,7 @@ export function PortalListToolbar({
               onClick={() => onGroup(tab.code)}
               testId={`portal-status-tab-${(tab.code ?? 'all').toLowerCase()}`}
               data-testid="Tab__b71e0c">
-              {ui(tab.labelKey)}
+              {tabLabel(tab)}
             </Tab>
           ))}
         </div>
@@ -116,6 +121,27 @@ export function PortalListToolbar({
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" data-testid="DropdownMenuContent__b71e0c">
+            {subtypes ? (
+              <>
+                <div className="px-2 py-1.5 text-xs font-semibold text-[#6B7280]">{ui('documentType')}</div>
+                {[{ code: null, labelKey: 'portalStatusAll' }, ...subtypes].map((option) => (
+                  <DropdownMenuItem
+                    key={option.code ?? 'all'}
+                    onSelect={() => onSubtype?.(option.code)}
+                    aria-checked={(subtype ?? null) === option.code}
+                    data-testid={`portal-list-subtype-${(option.code ?? 'all').toLowerCase()}`}
+                  >
+                    <CheckIcon
+                      size={16}
+                      className={cn('mr-2', (subtype ?? null) === option.code ? 'opacity-100' : 'opacity-0')}
+                      aria-hidden="true"
+                      data-testid="Check__b71e0c" />
+                    {ui(option.labelKey)}
+                  </DropdownMenuItem>
+                ))}
+                <div className="my-1 h-px bg-[#E3E7EC]" />
+              </>
+            ) : null}
             <div className="px-2 py-1.5 text-xs font-semibold text-[#6B7280]">{ui('portalColStatus')}</div>
             {tabs.map((tab) => (
               <DropdownMenuItem
@@ -128,7 +154,7 @@ export function PortalListToolbar({
                   className={cn('mr-2', (group ?? null) === tab.code ? 'opacity-100' : 'opacity-0')}
                   aria-hidden="true"
                   data-testid="Check__b71e0c" />
-                {ui(tab.labelKey)}
+                {tabLabel(tab)}
               </DropdownMenuItem>
             ))}
           </DropdownMenuContent>
@@ -167,7 +193,7 @@ const TABLE_BADGE = 'h-6 rounded-full border-transparent px-2 py-1 font-normal t
 
 /**
  * Sums of the rows shown, one per currency (never two currencies in one figure). A shipment list
- * has no amounts and no totals.
+ * has no amounts and no totals. Only the fallback for a backend that sends no `totals`.
  */
 function totalsByCurrency(documents) {
   const totals = new Map();
@@ -182,14 +208,33 @@ function totalsByCurrency(documents) {
 }
 
 /**
+ * The totals row(s) of the table (QA 24/11 CP-47 and f):
+ * - several currencies and the backend's converted figure → ONE row, "≈ 1.234,56 €" in the company
+ *   currency (the app's list footer), no tax base (it is not converted);
+ * - otherwise the backend's per-currency totals of the WHOLE filtered set (the "Y" of "Mostrando X
+ *   de Y"), so the total does not change with "Cargar más";
+ * - an older backend without totals → the sum of the rows loaded, as before.
+ *
+ * @returns {{ converted: object|null, rows: Array<{currency, taxBase, grandTotal}> }}
+ */
+function tableTotals(documents, totals, convertedTotal) {
+  const perCurrency = Array.isArray(totals) && totals.length ? totals : totalsByCurrency(documents);
+  if (portalShowsConverted(perCurrency, convertedTotal)) return { converted: convertedTotal, rows: [] };
+  return { converted: null, rows: perCurrency };
+}
+
+/**
  * The table (Figma "Tabla"): the kind's columns at the Figma's widths (no checkbox column: bulk
  * download is out), 40px rows split by #E3E7EC rules, and a "Total" row per currency of the rows shown.
  * Quotations: date (semibold), number, reference, "Válido hasta" with its dot, status, tax base,
  * total. Invoices keep the story's columns (document type, due date, payment state, outstanding);
  * shipments carry no amounts. A row opens its document.
  */
-export function PortalListTable({ kind, documents, onOpen }) {
+export function PortalListTable({
+  kind, documents, totals = null, convertedTotal = null, onOpen,
+}) {
   const ui = useUI();
+  const summary = tableTotals(documents, totals, convertedTotal);
   const isInvoice = kind === 'INVOICE';
   const isQuotation = kind === 'QUOTATION';
   const hasAmounts = kind !== 'SHIPMENT';
@@ -228,11 +273,12 @@ export function PortalListTable({ kind, documents, onOpen }) {
               <td className={cn(td, 'font-semibold tabular-nums')}><PortalDate value={document.date} data-testid="PortalDate__b71e0c" /></td>
               {isInvoice ? <td className={td}><PortalInvoiceTypeBadge document={document} data-testid="PortalInvoiceTypeBadge__b71e0c" /></td> : null}
               <td className={td}>
-                {/* The number stays its own link-like control; the row opens the same document. */}
+                {/* The number stays its own button (keyboard and screen readers); the row opens the
+                    same document. Hover is the row's only (Figma): no colour change on the number. */}
                 <button
                   type="button"
                   onClick={(event) => { event.stopPropagation(); onOpen(document); }}
-                  className="hover:text-[#325CFF]"
+                  className="rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   data-testid="portal-document-open"
                 >
                   {document.documentNo}
@@ -266,7 +312,20 @@ export function PortalListTable({ kind, documents, onOpen }) {
               ) : null}
             </tr>
           ))}
-          {hasAmounts ? totalsByCurrency(documents).map((total) => (
+          {hasAmounts && summary.converted ? (
+            <tr className="font-semibold" data-testid="portal-document-totals">
+              <td colSpan={leadingColumns} className="h-10 px-3 text-sm leading-5 text-[#1B1A1F]">{ui('portalTotal')}</td>
+              <td className={cn('h-10 px-3', taxBase)} />
+              <td className="h-10 px-3 text-right text-sm leading-5 tabular-nums text-[#1B1A1F]">
+                <PortalConvertedAmount
+                  converted={summary.converted}
+                  testId="portal-document-totals-converted"
+                  data-testid="PortalConvertedAmount__b71e0c" />
+              </td>
+              {isInvoice ? <td /> : null}
+            </tr>
+          ) : null}
+          {hasAmounts ? summary.rows.map((total) => (
             <tr key={total.currency ?? 'none'} className="font-semibold" data-testid="portal-document-totals">
               <td colSpan={leadingColumns} className="h-10 px-3 text-sm leading-5 text-[#1B1A1F]">{ui('portalTotal')}</td>
               <td className={cn('h-10 px-3 text-right text-sm leading-5 tabular-nums text-[#1B1A1F]', taxBase)}>

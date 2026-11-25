@@ -24,7 +24,7 @@ set -euo pipefail
 
 BASE="develop"
 HEAD="main"
-DOC="https://github.com/etendosoftware/etendo_schema_forge/blob/develop/docs/branch-workflow.md#back-to-develop"
+DOC="https://github.com/etendo-ai/etendo_schema_forge/blob/develop/docs/branch-workflow.md#back-to-develop"
 
 if [ "$(git rev-list --count "origin/$BASE..origin/$HEAD")" -eq 0 ]; then
   echo "origin/$BASE already contains origin/$HEAD: nothing to bring back."

@@ -4,7 +4,7 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { OpenFeature, TypedInMemoryProvider } from '@openfeature/web-sdk';
-import { createTelemetryGateway } from '@etendosoftware/app-shell-core/observability/gateway';
+import { createTelemetryGateway } from '@etendo-ai/app-shell-core/observability/gateway';
 import { createDatadogProvider } from '../observability/providers/datadog.js';
 import { createRumProvider } from '../rum.js';
 import { createMixpanelProvider } from '../observability/providers/mixpanel.js';
@@ -22,6 +22,9 @@ import {
   readKillState,
 } from '../observability/killSwitch.js';
 import { buildBrowserObservabilityConfig, initBrowserObservability } from '../observability/browser.js';
+
+// ETP-5466 — Mixpanel only emits from a production host.
+const PROD_HOST = 'app.etendo.software';
 
 // ETP-4578 H5 — the telemetry kill switch: build default + OpenFeature flags, per provider and
 // global. Uses the real OpenFeature SDK, the real gateway and the real host providers; only the
@@ -74,6 +77,7 @@ function countingProviders() {
     logger: silent,
   });
   const mixpanel = createMixpanelProvider({
+    hostname: PROD_HOST,
     enabled: 'true',
     token: 'fake-project-token',
     storage: { getItem: () => '1', setItem() {} },

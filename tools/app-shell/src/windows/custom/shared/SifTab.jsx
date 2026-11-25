@@ -18,8 +18,11 @@ import { CheckboxField } from '@/windows/custom/shared/CheckboxField.jsx';
 import RequiredMark from '@/components/ui/required-mark.jsx';
 // The one rule that says which SIF fields are mandatory, shared with the "Datos fiscales" step.
 import { isSifFieldRequired } from '@/windows/custom/shared/sifRequiredFields.js';
+// ETP-6284: purchase imports with DUA, behind the siiImportDua capability (renders nothing when off).
+import { SiiLcPrefixHint } from '@/windows/custom/shared/SiiImportDuaSection.jsx';
 
 import { useApiFetch } from '@/auth/useApiFetch.js';
+import { isVoidedStatus } from '../../../lib/docStatus.js';
 function Field({ label, htmlFor, children, required = false }) {
   return (
     <div className="space-y-1.5">
@@ -302,6 +305,20 @@ function shouldShowNoRecipientIdArt61d(invType) {
  * ERROR-type message was found (signals that the optimistic update must be reverted).
  * Extracted from handleAuthorizationToggle to reduce its cognitive complexity (S3776).
  */
+/** A Y/N column as the NEO payload carries it: `true` or `'Y'`. */
+function isYes(value) {
+  return value === true || value === 'Y';
+}
+
+/**
+ * Modificada-error-registral follows AD readOnly logic: editable only when SII estado is CO
+ * (Correcto) or AE (Aceptado con errores) and the invoice is not voided.
+ */
+function isErrorRegistralReadOnly(data, accessReadOnly) {
+  return accessReadOnly
+    || !['CO', 'AE'].includes(data?.aeatsiiEstado ?? '') || isVoidedStatus(data?.documentStatus);
+}
+
 function applyCalloutMessages(messages) {
   let hasError = false;
   for (const msg of messages) {
@@ -316,7 +333,10 @@ function applyCalloutMessages(messages) {
 }
 
 
-export default function SifTab({ recordId, data, token, apiBaseUrl, onChange, onVisibilityChange, accessReadOnly = false }) {
+export default function SifTab({
+  recordId, data, token, apiBaseUrl, onChange, onVisibilityChange,
+  accessReadOnly = false,
+}) {
   const {
     ui,
     specName,
@@ -334,6 +354,7 @@ export default function SifTab({ recordId, data, token, apiBaseUrl, onChange, on
     getVal,
     getDateVal,
     setSiiType,
+    siiTaxType,
   } = useSifFieldPatcher({ data, recordId, token, apiBaseUrl, onChange, locked: accessReadOnly });
   const apiFetch = useApiFetch(apiBaseUrl);
 
@@ -342,7 +363,7 @@ export default function SifTab({ recordId, data, token, apiBaseUrl, onChange, on
   // add/edit/delete (useEntity#refreshHeaderTotals re-GETs the header), so it always
   // reflects the CURRENT line state and correctly gates the exemption-cause field
   // read-only when the invoice no longer carries any exempt tax.
-  const hasExemptTaxes = data?.hasExemptTaxes === true || data?.hasExemptTaxes === 'Y';
+  const hasExemptTaxes = isYes(data?.hasExemptTaxes);
   const exemptionCauseEditable = hasExemptTaxes && isDraft && !siiFieldReadOnly;
 
   // ETP-4783: Replicates SiiAuthorizationCallout for the Go frontend (ETP-4783).
@@ -379,7 +400,7 @@ export default function SifTab({ recordId, data, token, apiBaseUrl, onChange, on
   // that checkbox would start appearing on any completed-but-unsent invoice.
   // aeatsiiIssent has type=boolean in the contract, so the server returns true/false;
   // handle both boolean and legacy string serializations.
-  const siiSentReadOnly = data?.aeatsiiIssent === true || data?.aeatsiiIssent === 'Y';
+  const siiSentReadOnly = isYes(data?.aeatsiiIssent);
   // ETP-5229 (item #3): manual testing found Descripción SII and Fecha registro
   // contable still editable on a COMPLETED invoice that had not yet been sent to
   // SII — the previous comment here claimed Classic parity kept them editable
@@ -388,10 +409,7 @@ export default function SifTab({ recordId, data, token, apiBaseUrl, onChange, on
   // Lock these two fields (independently of the `siiSentReadOnly` visibility gate
   // above) as soon as the document is processed, same as every other SII field.
   const siiCompletionLockedReadOnly = siiSentReadOnly || isProcessed;
-  // Modificada-error-registral follows AD readOnly logic: editable only when SII estado
-  // is CO (Correcto) or AE (Aceptado con errores) and the invoice is not voided.
-  const errorRegistralReadOnly = accessReadOnly ||
-    !['CO', 'AE'].includes(data?.aeatsiiEstado ?? '') || data?.documentStatus === 'VO';
+  const errorRegistralReadOnly = isErrorRegistralReadOnly(data, accessReadOnly);
 
   // ETP-4751 (Block B/F): Classic parity for the SII module's ExemptTaxes line-save behaviour.
   // The invoice-LINE NeoHandler (InvoiceLineHandler#autoFillExemptionCauseAfterLineSave) stamps
@@ -589,6 +607,18 @@ export default function SifTab({ recordId, data, token, apiBaseUrl, onChange, on
                 </SelectContent>
               </Select>
             </Field>
+            {/* ETP-6284: LC holds a customs complementary-liquidation number, SII only. The DUA and
+                import-tax cards live in the Lines tab ("Importación con DUA"). */}
+            {isPurchaseInvoice && (
+              <SiiLcPrefixHint
+                ui={ui}
+                siiTypeKey={getVal(siiTypeField)}
+                dua={getVal('aeatsiiDua')}
+                multiDua={isYes(getVal('aeatsiiMultiDua'))}
+                siiTaxType={siiTaxType}
+                className="col-span-2"
+                data-testid="SiiLcPrefixHint__b99c8b" />
+            )}
             {getVal(siiTypeField) === 'R' && (
               <Field
                 label={ui('sifDataTabs.field.rectificationReason')}
@@ -689,6 +719,7 @@ export default function SifTab({ recordId, data, token, apiBaseUrl, onChange, on
             <SifAttachmentsSection
               tableName="aeatsii_facturas"
               recordId={data?.aeatsiiFacturaId}
+              recordIds={data?.aeatsiiFacturaIds}
               token={token}
               apiBaseUrl={apiBaseUrl}
               data-testid="SifAttachmentsSection__sii" />

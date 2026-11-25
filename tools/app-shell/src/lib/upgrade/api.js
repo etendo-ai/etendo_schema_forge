@@ -1,4 +1,4 @@
-import { apiFetch } from '@etendosoftware/app-shell-core/auth/api';
+import { apiFetch } from '@etendo-ai/app-shell-core/auth/api';
 
 /*
  * ETP-4576 — every call in this module went out through an injected `fetchImpl` with

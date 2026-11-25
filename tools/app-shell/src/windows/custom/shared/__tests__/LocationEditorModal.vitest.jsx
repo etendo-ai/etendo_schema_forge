@@ -793,7 +793,7 @@ describe('LocationEditorModal', () => {
 
   it('caps Street/Number/Building name inputs at their DB column lengths', () => {
     renderModal();
-    expect(streetNameInput()).toHaveAttribute('maxLength', '70');
+    expect(streetNameInput()).toHaveAttribute('maxLength', '60');
     expect(buildingNumberInput()).toHaveAttribute('maxLength', '16');
     expect(buildingNameInput()).toHaveAttribute('maxLength', '35');
   });
@@ -2211,5 +2211,221 @@ describe('LocationEditorModal — keyboard handling (ETP-5806 CP-9)', () => {
 
     expect(screen.queryByPlaceholderText('countrySearchPlaceholder')).not.toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Dynamic modal width (ETP-5806 follow-up round 3) — `modalMaxWidth` tracks the
+// measured pixel width of the wider preview pill instead of always paying for the
+// fixed 900 budget. jsdom does not implement canvas text measurement, so
+// `HTMLCanvasElement.prototype.getContext` is mocked here with a deterministic
+// per-character width so the clamp/measure logic itself can be exercised; the real
+// `canvas.measureText` call is exactly what `measurePreviewTextWidth` performs
+// (see the component's module-scope helper), only the measurement backend differs.
+// ---------------------------------------------------------------------------
+describe('LocationEditorModal — dynamic modal width (ETP-5806 follow-up round 3)', () => {
+  beforeEach(() => {
+    global.fetch = vi.fn(() =>
+      Promise.resolve({ ok: true, json: () => Promise.resolve({ items: [], hasMore: false }) }),
+    );
+    useCapabilitiesOn();
+  });
+
+  const CHAR_WIDTH_PX = 13; // chosen so a 60-char zero-space worst case clamps to the 900 ceiling
+    let measureTextMock;
+
+    beforeEach(() => {
+      measureTextMock = vi.fn((text) => ({ width: String(text ?? '').length * CHAR_WIDTH_PX }));
+      vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+        font: '',
+        measureText: measureTextMock,
+      });
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+      // `vi.restoreAllMocks()` above also restores the outer describe's `global.fetch`
+      // spy target, but `global.fetch` itself is a plain assignment (not a spy) in the
+      // outer `beforeEach`, so the next test's `beforeEach` still re-assigns it fresh.
+    });
+
+    /** The modal's card element — the direct child of the `location-modal` dialog whose
+     * inline `maxWidth` is `modalMaxWidth`. There is no dedicated `data-testid` for it. */
+    function modalCard() {
+      return screen.getByTestId('location-modal').firstElementChild;
+    }
+
+    function mockLegacyRecordWithLines(rowId, address, address2 = '') {
+      global.fetch = vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            response: { data: [{ id: rowId, address, address2, country: 'ES', 'country$_identifier': 'Spain' }] },
+            items: [],
+            hasMore: false,
+          }),
+        }),
+      );
+    }
+
+    it('clamps to the 560 floor for a short/typical address instead of defaulting to 900', async () => {
+      mockLegacyRecordWithLines('loc-width-short', 'Avenida Principal 100', '');
+      renderModal({ rowId: 'loc-width-short' });
+
+      await screen.findByTestId('location-resulting-address1');
+      expect(modalCard()).toHaveStyle({ maxWidth: '560px' });
+    });
+
+    it('drives the width up toward the 900 ceiling for a 60-char, zero-space Primera línea', async () => {
+      const worstCaseLine1 = 'W'.repeat(60);
+      mockLegacyRecordWithLines('loc-width-line1', worstCaseLine1, '');
+      renderModal({ rowId: 'loc-width-line1' });
+
+      expect((await screen.findByTestId('location-resulting-address1'))).toHaveTextContent(worstCaseLine1);
+      // 60 * 13 * 1.05 + 40 (pill chrome) + 64 (modal chrome) = 923.6 -> clamped to the 900 ceiling.
+      expect(modalCard()).toHaveStyle({ maxWidth: '900px' });
+      expect(measureTextMock).toHaveBeenCalledWith(worstCaseLine1);
+    });
+
+    it('also drives the width up for a long Segunda línea even when Primera línea is short (max-of-both-lines)', async () => {
+      const shortLine1 = 'Calle Corta';
+      const longLine2 = 'B'.repeat(60);
+      mockLegacyRecordWithLines('loc-width-line2', shortLine1, longLine2);
+      renderModal({ rowId: 'loc-width-line2' });
+
+      expect(await screen.findByTestId('location-resulting-address2')).toHaveTextContent(longLine2);
+      expect(modalCard()).toHaveStyle({ maxWidth: '900px' });
+      expect(measureTextMock).toHaveBeenCalledWith(longLine2);
+    });
+
+    it('never produces a width below 560 or above 900 regardless of input', async () => {
+      mockLegacyRecordWithLines('loc-width-clamp', 'X'.repeat(500), 'Y'.repeat(500));
+      renderModal({ rowId: 'loc-width-clamp' });
+
+      await screen.findByTestId('location-resulting-address1');
+      const width = parseInt(modalCard().style.maxWidth, 10);
+      expect(width).toBeGreaterThanOrEqual(560);
+      expect(width).toBeLessThanOrEqual(900);
+    });
+
+    it('does not attempt to measure anything and stays at the 560 floor when structuredAddressForSepa is off', () => {
+      useCapabilitiesOff();
+      renderModal();
+
+      expect(modalCard()).toHaveStyle({ maxWidth: '560px' });
+      expect(measureTextMock).not.toHaveBeenCalled();
+    });
+
+    it('falls back to the 560 floor without throwing when the canvas 2D context is unavailable', async () => {
+      // Some privacy/extension configurations make `getContext('2d')` return null even though
+      // the canvas element itself exists — `measurePreviewTextWidth` must short-circuit to 0
+      // instead of calling `.font`/`.measureText` on a null context.
+      HTMLCanvasElement.prototype.getContext.mockReturnValue(null);
+      mockLegacyRecordWithLines('loc-width-no-ctx', 'W'.repeat(60), '');
+
+      expect(() => renderModal({ rowId: 'loc-width-no-ctx' })).not.toThrow();
+
+      await screen.findByTestId('location-resulting-address1');
+      expect(modalCard()).toHaveStyle({ maxWidth: '560px' });
+      expect(measureTextMock).not.toHaveBeenCalled();
+    });
+});
+
+/**
+ * ETP-5806 CP-6 (QA finding) — the Street field used to enforce its 60-character cap ONLY through
+ * the input's own `maxLength`, which drops the extra characters with no feedback whatsoever: the
+ * user typed "...mil novecientos setenta" and watched it stop mid-word. The limit is now stated
+ * continuously (a counter next to the label) and called out explicitly when it is reached.
+ *
+ * The over-limit case is the second half of the same finding: QA found real addresses created on
+ * 2026-11-20 with a 69-70 character Street (the column is still VARCHAR(70); only the composer's
+ * cap is 60). Opening one of those for editing must NOT silently truncate it and must NOT let the
+ * save fail with the backend's opaque 400 — the field says the street has to be shortened and Save
+ * stays blocked until it is.
+ */
+describe('LocationEditorModal — Street length is communicated, never silently cut (ETP-5806 CP-6)', () => {
+  const STREET_MAX = 60;
+  const counter = () => screen.getByTestId('location-field-streetName-counter');
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('shows a character counter that tracks what has been typed', () => {
+    renderModal();
+    expect(counter()).toBeInTheDocument();
+
+    fireEvent.change(screen.getByTestId('location-field-streetName'), {
+      target: { value: 'Gran Via' },
+    });
+    expect(counter()).toBeInTheDocument();
+    expect(screen.getByTestId('location-field-streetName')).toHaveValue('Gran Via');
+  });
+
+  it('caps the input at the enforced maximum rather than relying on the backend', () => {
+    renderModal();
+    expect(screen.getByTestId('location-field-streetName')).toHaveAttribute(
+      'maxlength',
+      String(STREET_MAX),
+    );
+  });
+
+  it('says nothing while the street is below the limit', () => {
+    renderModal();
+    fireEvent.change(screen.getByTestId('location-field-streetName'), {
+      target: { value: 'A'.repeat(STREET_MAX - 1) },
+    });
+    expect(screen.queryByTestId('location-field-streetName-at-limit')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('location-field-streetName-over-limit')).not.toBeInTheDocument();
+  });
+
+  it('announces the limit once the street reaches it', () => {
+    renderModal();
+    fireEvent.change(screen.getByTestId('location-field-streetName'), {
+      target: { value: 'A'.repeat(STREET_MAX) },
+    });
+    expect(screen.getByTestId('location-field-streetName-at-limit')).toBeInTheDocument();
+    expect(screen.queryByTestId('location-field-streetName-over-limit')).not.toBeInTheDocument();
+  });
+
+  it('explains and blocks Save for a pre-existing street longer than the limit', async () => {
+    // jsdom does not enforce `maxLength` on a programmatic value, which is exactly the real
+    // situation: a 69-character street can only ever arrive from the server, never from typing.
+    const longStreet = 'C'.repeat(69);
+    global.fetch = vi.fn((url, opts) => {
+      if (String(url).includes('/locationAddress/loc-long') && !opts?.method) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            response: {
+              data: [{
+                id: 'loc-long',
+                streetName: longStreet,
+                buildingNumber: '1',
+                cityName: 'Madrid',
+                country: 'ES',
+                'country$_identifier': 'España',
+              }],
+            },
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ items: [], hasMore: false }) });
+    });
+
+    renderModal({ rowId: 'loc-long' });
+
+    await vi.waitFor(() =>
+      expect(screen.getByTestId('location-field-streetName')).toHaveValue(longStreet),
+    );
+    expect(screen.getByTestId('location-field-streetName-over-limit')).toBeInTheDocument();
+    expect(saveButton()).toHaveAttribute('aria-disabled', 'true');
+
+    // Shortening it to the cap clears the message and releases Save.
+    fireEvent.change(screen.getByTestId('location-field-streetName'), {
+      target: { value: 'C'.repeat(STREET_MAX) },
+    });
+    expect(screen.queryByTestId('location-field-streetName-over-limit')).not.toBeInTheDocument();
+    expect(saveButton()).toHaveAttribute('aria-disabled', 'false');
   });
 });

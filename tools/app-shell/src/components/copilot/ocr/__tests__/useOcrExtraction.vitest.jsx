@@ -10,7 +10,7 @@ vi.mock('../../copilotApi.js', () => ({
 }));
 
 import { renderHook, act, waitFor } from '@testing-library/react';
-import { NetworkError } from '@etendosoftware/app-shell-core/auth';
+import { NetworkError } from '@etendo-ai/app-shell-core/auth';
 import {
   useOcrExtraction,
   OCR_NO_DATA_ERROR,

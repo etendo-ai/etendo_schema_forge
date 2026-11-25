@@ -31,7 +31,8 @@ import EmailsCard from './preview-cards/EmailsCard.jsx';
 import RelatedDocumentsCard from './preview-cards/RelatedDocumentsCard.jsx';
 import { useDocumentCurrency, resolveDualCurrencyDisplay } from './useDocumentCurrency.js';
 import { useCurrencyPrecision } from '@/hooks/useCurrencyPrecision.js';
-import { getArSubtype } from '@generated/sales-invoice/custom/invoiceSubtype.js';
+import { getArSubtype, salesInvoiceSendDocumentType } from '@generated/sales-invoice/custom/invoiceSubtype.js';
+import { isCompletedStatus, isDraftStatus } from '../../../lib/docStatus.js';
 
 // ETP-4841: a credit instrument is identified by the SIGN of its total, not by its
 // document type. This used to compare `arInvoiceSubtype` against the pre-ETP-4737
@@ -241,6 +242,15 @@ function InvoiceGeneralTab({ invoice, relatedDocs, partnerName, badgeProps, stat
   );
 }
 
+/**
+ * The document type a send from the preview names: a sales credit note is «Factura rectificativa»
+ * (ETP-6209, `salesInvoiceSendDocumentType`); a purchase invoice keeps the window's label.
+ */
+function invoiceSendDocumentType(specName, invoice, { tMenu, ui }) {
+  if (specName === 'purchase-invoice') return tMenu('Purchase Invoice');
+  return salesInvoiceSendDocumentType(invoice, { tMenu, ui });
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 /**
@@ -303,11 +313,11 @@ export default function InvoicePreview({ invoice, token, apiBaseUrl, windowName,
 
   // ── Attachment config ──────────────────────────────────────────────────────
 
-  const isDraft = invoice?.documentStatus === 'DR';
+  const isDraft = isDraftStatus(invoice?.documentStatus);
   // ETP-4717 — Send is only available once the invoice is Confirmed (CO),
   // matching the Grid row quick-action and Form-view topbar gates. The
   // existing purchase-invoice exclusion stays: this window never sends email.
-  const isDownloadable = specName !== 'purchase-invoice' && invoice?.documentStatus === 'CO';
+  const isDownloadable = specName !== 'purchase-invoice' && isCompletedStatus(invoice?.documentStatus);
   // ETP-5205 — Solo-Lectura tier: Send, Add payment and Send-to-SIF are writes and are
   // hidden; Download PDF stays (D1), and the stored document stays visible.
   const isSendable = isDownloadable && !readOnly;
@@ -497,7 +507,7 @@ export default function InvoicePreview({ invoice, token, apiBaseUrl, windowName,
       )}
       {p.showSendModal && (
         <SendDocumentModal
-          documentType={windowLabel}
+          documentType={invoiceSendDocumentType(specName, p.displayInvoice, { tMenu, ui })}
           documentNo={p.displayInvoice?.documentNo}
           bpName={p.partnerName}
           bPartnerId={p.displayInvoice?.businessPartner}

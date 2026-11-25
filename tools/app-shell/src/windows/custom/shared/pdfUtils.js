@@ -13,7 +13,7 @@ import {
   fetchBrandingUpdated,
 } from '@/components/copilot/ocr/listAttachments';
 
-import { apiFetch } from '@etendosoftware/app-shell-core/auth/api';
+import { apiFetch } from '@etendo-ai/app-shell-core/auth/api';
 import { COMMON_HANDLEBARS_HELPERS, JSREPORT_CHROME_A4 } from './printableSources.js';
 // ---------------------------------------------------------------------------
 // Shared PDF CSS, movement templates and return-doc helpers — defined in printableSources.js

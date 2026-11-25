@@ -38,7 +38,7 @@ npx sf-validate-pipeline --skip=F4,F7
 > subdirectory of it. Set `SF_ROOT=$PWD` when running from outside the repo.
 > `make` and `.githooks/pre-commit` set `SF_ROOT` either way.
 >
-> This needs a `@etendosoftware/schema-forge-cli` release that includes ETP-5511. Older
+> This needs a `@etendo-ai/schema-forge-cli` release that includes ETP-5511. Older
 > releases resolved the root from the installed package's own location (inside
 > `node_modules`): without `SF_ROOT`, no artifacts were found and the run printed
 > `Pipeline validation: OK` **having validated nothing** — a silent false pass. If the

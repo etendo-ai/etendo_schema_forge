@@ -1,10 +1,23 @@
 // @covers tools/app-shell/src/components/contract-ui/SendDocumentModal.jsx
+// @covers tools/app-shell/src/components/contract-ui/documentEmailSend.js
+
+// `es: true` makes `useUI` resolve the REAL es_ES copy, for the tests that pin the wording the
+// customer reads; otherwise it echoes `key:{params}`, so a test pins the composition only.
+const i18nMode = vi.hoisted(() => ({ es: false }));
 
 // Mock dependencies BEFORE any import
-vi.mock('@/i18n', () => ({
-  useUI: () => (key, params) => (params ? `${key}:${JSON.stringify(params)}` : key),
-  useLocaleSwitch: () => ({ locale: 'es_ES' }),
-}));
+vi.mock('@/i18n', async () => {
+  const { default: esES } = await import('@/locales/es_ES.json');
+  const fill = (template, params) => String(template)
+    .replace(/\{(\w+)\}/g, (match, name) => (params && name in params ? String(params[name]) : match));
+  return {
+    useUI: () => (key, params) => {
+      if (i18nMode.es && esES.genericLabels[key] != null) return fill(esES.genericLabels[key], params);
+      return params ? `${key}:${JSON.stringify(params)}` : key;
+    },
+    useLocaleSwitch: () => ({ locale: 'es_ES' }),
+  };
+});
 
 // The modal GETs the contract's default subject/message before anything else (ETP-5003). Queue an
 // answer for it first, so the responses a test lines up still meet the requests it cares about.
@@ -444,11 +457,11 @@ describe('SendDocumentModal', () => {
     expect(screen.getByRole('status')).toHaveTextContent('sendModalThrottled');
   });
 
-  it('shows duplicate state as a successful idempotent send even with non-2xx HTTP', async () => {
+  it('shows duplicate state as an error (nothing was sent) and keeps the modal open', async () => {
     const user = userEvent.setup();
     global.fetch.mockResolvedValueOnce({
-      ok: false,
-      status: 409,
+      ok: true,
+      status: 200,
       json: async () => ({
         response: { data: { status: 'DUPLICATE' } },
       }),
@@ -465,9 +478,10 @@ describe('SendDocumentModal', () => {
     await user.click(getSendButton());
 
     await waitFor(() => {
-      expect(toast.success).toHaveBeenCalledWith('sendModalDuplicate:{"documentType":"Invoice"}');
+      expect(toast.error).toHaveBeenCalledWith('sendModalDuplicate:{"documentType":"Invoice"}');
     });
-    expect(BASE.onClose).toHaveBeenCalled();
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(BASE.onClose).not.toHaveBeenCalled();
   });
 
   it('shows unauthorized state from the email contract executor', async () => {
@@ -610,9 +624,6 @@ describe('SendDocumentModal', () => {
 
 // ETP-4226 coverage closure: error-message branches, download paths, the iframe
 // preview render path, and the standalone SendDocumentButton export.
-// NOTE: line 18 (the DUPLICATE branch inside resolveEmailSendErrorMessage) is
-// intentionally NOT covered — DUPLICATE is handled as success before the error
-// resolver runs, so it is unreachable from the send flow.
 describe('SendDocumentModal — error resolver branches', () => {
   // Each test mocks the single send fetch (cachePreviewBeforeSend is false in
   // BASE, so the preview cache fetch is skipped) and asserts the toast key.
@@ -969,6 +980,36 @@ describe('SendDocumentModal — subject and message editing (ETP-4717)', () => {
       'sendModalDefaultGreeting:{"bpName":"ACME"}\n\n'
       + 'sendModalDefaultMessage:{"documentType":"Invoice","documentNo":"INV-001"}');
   });
+
+  // ETP-6209 — supplier documents keep «usted»; every customer document says «tú». The sentence the
+  // operator reads (and sends) must be the one the module's catalog declares for that contract.
+  describe('default message register (es_ES)', () => {
+    afterEach(() => { i18nMode.es = false; });
+
+    it.each([
+      ['purchase-order', 'Le enviamos su Pedido **DOC-1**.'],
+      ['return-to-vendor', 'Le enviamos su Pedido **DOC-1**.'],
+      ['return-to-vendor-shipment', 'Le enviamos su Pedido **DOC-1**.'],
+      ['sales-invoice', 'Te enviamos tu Pedido **DOC-1**.'],
+      ['sales-order', 'Te enviamos tu Pedido **DOC-1**.'],
+      ['sales-quotation', 'Te enviamos tu Pedido **DOC-1**.'],
+    ])('%s opens with "%s" after the greeting', (windowName, sentence) => {
+      i18nMode.es = true;
+      render(
+        <SendDocumentModal
+          {...BASE}
+          documentType="Pedido"
+          documentNo="DOC-1"
+          windowName={windowName}
+          bpEmail="user@domain.com"
+          apiBaseUrl={`http://localhost:8080/etendo/neo/${windowName}`}
+        />,
+      );
+
+      const message = screen.getAllByRole('textbox').find((box) => box.tagName === 'TEXTAREA');
+      expect(message.value).toBe(`Hola, **ACME**:\n\n${sentence}`);
+    });
+  });
 });
 
 describe('SendDocumentButton', () => {
@@ -1033,20 +1074,20 @@ describe('SendDocumentModal — onSent success callback (ETP-5069)', () => {
     expect(onSent).toHaveBeenCalledWith({ status: 'SENT', auditId: 'aud-1', requestId: 'req-1' });
   });
 
-  it('fires onSent on a DUPLICATE response — an idempotent re-send is still a success', async () => {
+  it('does not fire onSent on a DUPLICATE response — no email went out', async () => {
     const user = userEvent.setup();
     const onSent = vi.fn();
     global.fetch.mockResolvedValueOnce({
-      ok: false,
-      status: 409,
+      ok: true,
+      status: 200,
       json: async () => ({ response: { data: { status: 'DUPLICATE', auditId: 'aud-2' } } }),
     });
 
     render(<SendDocumentModal {...BASE} bpEmail="user@domain.com" onSent={onSent} />);
     await user.click(getSendButton());
 
-    await waitFor(() => expect(onSent).toHaveBeenCalledTimes(1));
-    expect(onSent).toHaveBeenCalledWith(expect.objectContaining({ status: 'DUPLICATE', auditId: 'aud-2' }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalled());
+    expect(onSent).not.toHaveBeenCalled();
   });
 
   it('fires onSent BEFORE onClose, so the caller can react while the outcome is still known', async () => {

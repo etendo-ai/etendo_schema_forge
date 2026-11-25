@@ -57,7 +57,9 @@ This folder is the entry point for documentation that describes how generated an
 | [warehouse.md](warehouse.md) | Custom warehouse flow with products/transactions tabs |
 | [warehouse-storage-bins.md](warehouse-storage-bins.md) | Hidden route-only warehouse storage-bin master/detail window |
 
-## Finance
+## Treasury
+
+Menu group "Tesorería" (ETP-6389): Cobro, Pago, Cuentas, Informes (aging reports only) and Condiciones de pago, in that order.
 
 | File | Description |
 |------|-------------|
@@ -66,10 +68,18 @@ This folder is the entry point for documentation that describes how generated an
 | [financial-account.md](financial-account.md) | Financial account detail: Movimientos, Conciliación (split panel, automatch, bounce pairs and discarded lines since ETP-5581), Extractos importados, cash close and Reconciliaciones |
 | [financial-accounts-page.md](financial-accounts-page.md) | Cuentas landing page (ETP-4095) + offline account create / edit / archive (ETP-4096) |
 | [financial-account-management.md](financial-account-management.md) | Financial account create / edit / archive, bank connection and bank sync (one sync per account, shared state across its four entry points since ETP-6154), `financial-account` spec endpoint and MCP access (ETP-4096 onwards; split out of `financial-account.md`) |
-| [remittance.md](remittance.md) | SEPA remittances ("Remesas", ETP-6148, capability `sepaRemittances`). The `remittance` spec over the Classic REM window reuses Classic columns, including REM's own `Remittance_Status` (added in ETP-6148 on `feature/ETP-6148`): list, header form and read-only lines. The Classic process buttons are hidden; selection, XML and settlement come later |
-| [bank-reconciliation.md](bank-reconciliation.md) | Legacy placeholder; superseded by `financial-account.md` (kept hidden in menu.json until T8) |
+| [bank-reconciliation.md](bank-reconciliation.md) | Retired generated window (removed in ETP-4100, no menu entry or route). Reconciliation is the Conciliación tab of `financial-account.md` (Tesorería › Cuentas) |
 | [match-rule.md](match-rule.md) | Bank Reconciliation matching-rules catalog ("Reglas de matcheo") — first `list-modal` window (grid + create/edit modal, no detail) on generic W CRUD + validation hook |
 | [transaction-type.md](transaction-type.md) | Backend-only user-definable lookup behind the match-rule "Tipo de transacción" field — no menu/route; created inline from the selector (W spec + `TransactionTypeHandler`) |
+| [aging-receivable.md](aging-receivable.md) | NEO-backed aging report of open receivables per contact (Tesorería › Informes), with a per-contact detail drill-down |
+| [aging-payable.md](aging-payable.md) | Payables counterpart of `aging-receivable.md` (Tesorería › Informes) |
+| [payment-term.md](payment-term.md) | Generated `list-modal` payment-term catalog (grid + compact create/edit popup, no detail view; `/payment-term/<id>` opens the popup): name + days only, key and month offset derived server-side, rename syncs translations (ETP-5978). Moved from Settings in ETP-6389 |
+
+## Finance
+
+| File | Description |
+|------|-------------|
+| [remittance.md](remittance.md) | SEPA remittances ("Remesas", ETP-6148, capability `sepaRemittances`). The `remittance` spec over the Classic REM window reuses Classic columns, including REM's own `Remittance_Status` (added in ETP-6148 on `feature/ETP-6148`): list, header form and read-only lines. The Classic process buttons are hidden; selection, XML and settlement come later |
 | [chart-of-accounts.md](chart-of-accounts.md) | Generated chart-of-accounts maintenance window |
 | [cost-center.md](cost-center.md) | Generated cost-center master window (ETP-4892) — flat accounting-dimension catalog, no hierarchy |
 | [service-project.md](service-project.md) | Generated Project master window (ETP-4892) — minimal Search Key/Name/Description/Active view of AD window "Service Project" (`C_Project`), sub-tabs and ~65 other header columns excluded |
@@ -79,8 +89,23 @@ This folder is the entry point for documentation that describes how generated an
 | [amortization.md](amortization.md) | Generated amortization master/detail flow (MVP read+draft, sidebar metrics, linked assets) |
 | [manual-journals.md](manual-journals.md) | Generated manual-journal (Asientos Manuales) master/detail flow with a debit/credit balance footer that blocks save until Σ debit = Σ credit (posting deferred) |
 | [recurring-invoice.md](recurring-invoice.md) | Hidden route-only recurring-invoice template window |
-| [conversion-rates.md](conversion-rates.md) | General currency conversion-rate catalog; auto-downloaded rates lock as Synced and feed the invoice completion guard |
+| [conversion-rates.md](conversion-rates.md) | Currency Conversion (Conversión de divisas): rates in force per currency, grouped history, manual rates (new currency, new rate, edit, delete); USD/GBP downloaded automatically; feeds the invoice completion guard |
 | [general-ledger-configuration.md](general-ledger-configuration.md) | Custom 4-tab accounting schema setup window aligned to the Figma-first ETP-4246 scope |
+
+## Taxes
+
+Menu group "Impuestos" (ETP-6380), in the Finance section right after Finanzas: Impuesto, Categoría de impuesto, Monitor fiscal, Informes (Tax Report only, `report-viewer?category=taxes`), Configuración Fiscal and Modelos fiscales, in that order. None of them is listed under Finanzas or Configuración any more.
+
+| File | Description |
+|------|-------------|
+| [tax.md](tax.md) | Generated tax-rate maintenance window |
+| [tax-category.md](tax-category.md) | Generated tax-category catalog window (groups tax rates; ETP-4249) |
+| [fiscal-monitor.md](fiscal-monitor.md) | Custom fiscal monitor window — real-time invoice submission status for SII, TBAI, and Verifactu |
+| [fiscal-config.md](fiscal-config.md) | Custom fiscal configuration window — onboarding wizard (SII/TBAI/Verifactu) and ongoing config maintenance; SIF activation through the backend `fiscalSystemCatalog` / `configureFiscalSystem` actions on `sii-config` (ETP-6053) |
+| [fiscal-models.md](fiscal-models.md) | Custom fiscal models window — declaration list and per-model detail pages (303, 349, 390) with auto-compute, file generation (390: validated by the AEAT before download) and direct presentation to the AEAT |
+| [sii-monitor.md](sii-monitor.md) | API-only sub-window — SII invoice submission records consumed by FiscalMonitorPage |
+| [monitor-verifactu.md](monitor-verifactu.md) | API-only sub-window — Verifactu invoice submission records consumed by FiscalMonitorPage |
+| [tbai-facturas-enviadas.md](tbai-facturas-enviadas.md) | API-only sub-window — TBAI invoice submission records consumed by FiscalMonitorPage |
 
 ## Projects
 
@@ -94,11 +119,11 @@ This folder is the entry point for documentation that describes how generated an
 
 | File | Description |
 |------|-------------|
-| [balance-sheet.md](balance-sheet.md) | Contract-driven financial report — point-in-time assets, liabilities, and owner equity by accounting schema and year |
+| [balance-sheet.md](balance-sheet.md) | Contract-driven financial report — Classic account-report tree (Activo / Patrimonio Neto y Pasivo); behind `dynamic-reports`, an interactive balance at a date with end-date shortcuts, one-day comparisons, Grupo/Epígrafe fold, balance check, ledger drill and the 129 result panel (ETP-6083) |
 | [report-journal-entries.md](report-journal-entries.md) | Contract-driven journal book — entries grouped with debit/credit lines for a date range with dimension filters |
 | [report-general-ledger.md](report-general-ledger.md) | Contract-driven General Ledger — per-account movements with opening balance, dimension filters (Product lists every active product) and optional grouping |
 | [profit-loss.md](profit-loss.md) | Contract-driven financial report — the period result as Classic's account-report tree, with contact/product filters and comparison; behind `dynamic-reports`, an interactive view with live filters, columns by month/quarter, a collapsible panel, splits and a ledger/entry/document drill-down; landscape PDF |
-| [report-trial-balance.md](report-trial-balance.md) | Contract-driven trial balance — opening/period/closing balances per account with General Ledger drill-down |
+| [report-trial-balance.md](report-trial-balance.md) | Contract-driven trial balance — opening/period/closing balances per account with General Ledger drill-down; dynamic view with level fold, dimensions, comparison and exports (ETP-6084) |
 
 ## Settings
 
@@ -107,19 +132,10 @@ This folder is the entry point for documentation that describes how generated an
 | [organization.md](organization.md) | Custom organization-settings window (ETP-4749) — flattens the Classic Organization/Information AD tabs (window 110) into one tabless screen: identity, fiscal data, and contact details, plus the Certificado digital, IAE and Modelo 390 sections shown only when a fiscal configuration that uses them is active (ETP-5831) |
 | [document-sequence.md](document-sequence.md) | Document numbering window (ETP-5190, AD window 112) — prefix/suffix/next-number per sequence, with the Spanish localization prefix rules enforced on write; target of the First Steps invoicing step |
 | [price-list.md](price-list.md) | Custom price-list flow with product-price workspace |
-| [payment-term.md](payment-term.md) | Generated `list-modal` payment-term catalog (grid + compact create/edit popup, no detail view; `/payment-term/<id>` opens the popup): name + days only, key and month offset derived server-side, rename syncs translations (ETP-5978) |
-| [tax.md](tax.md) | Generated tax-rate maintenance window |
-| [tax-category.md](tax-category.md) | Generated tax-category catalog window (groups tax rates; ETP-4249) |
 | [business-partner-category.md](business-partner-category.md) | Generated business-partner-category master/detail flow behind a thin wrapper; contact type + accounts by type (Accounting tab), list type columns and contact-type quick filter behind the `contact-category-type` flag (ETP-5791) |
 | [user.md](user.md) | Generated user window — multi-role template composition with a live permission-preview matrix (ETP-4906) and defaults dependencies |
-| [fiscal-config.md](fiscal-config.md) | Custom fiscal configuration window — onboarding wizard (SII/TBAI/Verifactu) and ongoing config maintenance; SIF activation through the backend `fiscalSystemCatalog` / `configureFiscalSystem` actions on `sii-config` (ETP-6053) |
-| [fiscal-models.md](fiscal-models.md) | Custom fiscal models window — declaration list and per-model detail pages (303, 349, 390) with auto-compute, file generation (390: validated by the AEAT before download) and direct presentation to the AEAT |
-| [fiscal-monitor.md](fiscal-monitor.md) | Custom fiscal monitor window — real-time invoice submission status for SII, TBAI, and Verifactu |
 | [not-posted-documents.md](not-posted-documents.md) | Custom cross-document posting window — aggregates all unposted documents, single-row and bulk Post actions |
 | [acct-process-monitor.md](acct-process-monitor.md) | Synthetic admin-only page (ETP-5269, flag `acct-process-monitor`) — status, next automatic run and execution history of the accounting server process, plus a manual run scoped to the caller's own company. No logs, by design |
-| [sii-monitor.md](sii-monitor.md) | API-only sub-window — SII invoice submission records consumed by FiscalMonitorPage |
-| [monitor-verifactu.md](monitor-verifactu.md) | API-only sub-window — Verifactu invoice submission records consumed by FiscalMonitorPage |
-| [tbai-facturas-enviadas.md](tbai-facturas-enviadas.md) | API-only sub-window — TBAI invoice submission records consumed by FiscalMonitorPage |
 | [conversion-rate-downloader-log.md](conversion-rate-downloader-log.md) | API-only window (ETP-5068) — read-only audit log of automated conversion-rate downloader runs, retired from the Settings menu |
 
 ## Scope

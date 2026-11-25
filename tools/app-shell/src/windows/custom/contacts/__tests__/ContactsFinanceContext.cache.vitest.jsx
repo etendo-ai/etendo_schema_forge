@@ -1,7 +1,7 @@
 /**
  * ETP-4564 [SEC T01 3/3] — cache behavior for the Contacts finance KPIs
  * (bp-stats / bp-trend). Asserts request counts per endpoint so amplification is
- * measured directly. Run under LOCAL_CORE so @etendosoftware/app-shell-core
+ * measured directly. Run under LOCAL_CORE so @etendo-ai/app-shell-core
  * resolves the shared cache from local source:
  *   cd tools/app-shell && LOCAL_CORE=1 npx vitest run \
  *     src/windows/custom/contacts/__tests__/ContactsFinanceContext.cache.vitest.jsx
@@ -15,8 +15,8 @@ vi.mock('@/auth/useApiFetch.js', () => ({ useApiFetch: () => mockApiFetch }));
 vi.mock('@/i18n', () => ({ useUI: () => (key) => key }));
 
 import { render, screen, act, waitFor } from '@testing-library/react';
-import { AuthProvider, createMemoryAuthStorage } from '@etendosoftware/app-shell-core/auth';
-import { DataProvider, createQueryCache } from '@etendosoftware/app-shell-core/data';
+import { AuthProvider, createMemoryAuthStorage } from '@etendo-ai/app-shell-core/auth';
+import { DataProvider, createQueryCache } from '@etendo-ai/app-shell-core/data';
 import {
   ContactsFinanceProvider,
   useContactsFinance,

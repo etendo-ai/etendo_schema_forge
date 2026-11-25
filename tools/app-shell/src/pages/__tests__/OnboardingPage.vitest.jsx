@@ -52,7 +52,7 @@ vi.mock('../../i18n/index.js', () => ({
   useMenuLabel: () => (key) => key,
 }));
 
-vi.mock('@etendosoftware/app-shell-core/i18n', () => ({
+vi.mock('@etendo-ai/app-shell-core/i18n', () => ({
   useUI: () => (key, params) => {
     if (params) return `${key} ${JSON.stringify(params)}`;
     return key;
@@ -76,7 +76,7 @@ const MOCK_AUTH_ERROR_UI_KEYS = vi.hoisted(() => ({
   INTERNAL_ERROR: 'onboardingConnectionError',
   PASSWORD_RESET_INVALID: 'onboardingCredentialResetFailed',
 }));
-vi.mock('@etendosoftware/etendo-go-core/onboarding/api', () => ({
+vi.mock('@etendo-ai/etendo-go-core/onboarding/api', () => ({
   ONBOARDING_ERROR_CODES: {},
   // ETP-4664: RegisterStep/LoginStep resolve the backend's stable error code through this
   // table before rendering it. Mirrored from the real module — a factory mock replaces the
@@ -108,7 +108,7 @@ vi.mock('@etendosoftware/etendo-go-core/onboarding/api', () => ({
 
 // One provider is returned so the module-level SSO_PROVIDERS list (evaluated at
 // import time) is non-empty and the SSO credential callback can be exercised.
-vi.mock('@etendosoftware/etendo-go-core/onboarding/sso', () => ({
+vi.mock('@etendo-ai/etendo-go-core/onboarding/sso', () => ({
   getConfiguredSsoProviders: vi.fn(() => [{ id: 'google', clientId: 'test-client-id' }]),
   renderSsoProviderButton: vi.fn(() => Promise.resolve()),
 }));
@@ -119,7 +119,7 @@ vi.mock('../onboarding/onboardingReadiness.js', () => ({
 }));
 
 // Mock onboarding state
-vi.mock('@etendosoftware/etendo-go-core/onboarding/state', () => ({
+vi.mock('@etendo-ai/etendo-go-core/onboarding/state', () => ({
   applyProgressMessage: (prev, message) =>
     prev.map((step) => (step.name === message.step ? { ...step, status: message.status } : step)),
   // ETP-4576 — the seven sf_auth_* handoff keys and their writer are gone from the core:
@@ -176,13 +176,13 @@ vi.mock('@/components/ui/label', () => ({
   Label: ({ children, ...props }) => <label {...props}>{children}</label>,
 }));
 
-vi.mock('@etendosoftware/app-shell-core/components/ui/button', () => ({
+vi.mock('@etendo-ai/app-shell-core/components/ui/button', () => ({
   Button: ({ children, ...props }) => <button {...props}>{children}</button>,
 }));
-vi.mock('@etendosoftware/app-shell-core/components/ui/input', () => ({
+vi.mock('@etendo-ai/app-shell-core/components/ui/input', () => ({
   Input: (props) => <input {...props} />,
 }));
-vi.mock('@etendosoftware/app-shell-core/components/ui/label', () => ({
+vi.mock('@etendo-ai/app-shell-core/components/ui/label', () => ({
   Label: ({ children, ...props }) => <label {...props}>{children}</label>,
 }));
 
@@ -200,8 +200,8 @@ import {
   requestPasswordReset,
   runOnboardingStream,
   saveOnboardingDraft,
-} from '@etendosoftware/etendo-go-core/onboarding/api';
-import { renderSsoProviderButton } from '@etendosoftware/etendo-go-core/onboarding/sso';
+} from '@etendo-ai/etendo-go-core/onboarding/api';
+import { renderSsoProviderButton } from '@etendo-ai/etendo-go-core/onboarding/sso';
 import { checkSalesInvoiceReadiness } from '../onboarding/onboardingReadiness.js';
 import { track } from '../../lib/observability.js';
 
@@ -1890,6 +1890,8 @@ describe('OnboardingPage', () => {
       const { container } = await renderAtRegister();
       // ETP-6082: the business sector is required too; choose it so only the email is left.
       fireEvent.change(container.querySelector('#reg-sector'), { target: { value: 'servicios' } });
+      // ETP-6363: the country is required too.
+      fireEvent.change(screen.getByTestId('country-select'), { target: { value: 'ES' } });
 
       expect(screen.getByTestId('action-register-submit')).toBeDisabled();
       ['ada', 'ada@', 'ada@example'].forEach((value) => {

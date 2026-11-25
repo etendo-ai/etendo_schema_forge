@@ -13,6 +13,7 @@ import {useUI} from '@/i18n';
 import {toast} from 'sonner';
 import {SquareCheckbox} from './SquareCheckbox';
 import RequiredMark from '@/components/ui/required-mark.jsx';
+import LimitedTextField from './LimitedTextField.jsx';
 import {CopyButton} from '@/components/ui/copy-button.jsx';
 import {
     DEFAULT_COUNTRY_LIMIT,
@@ -30,7 +31,7 @@ import {
     STREET_NAME_MAX_LENGTH,
     composeAddressLines,
     effectiveBuildingNumber,
-} from '@etendosoftware/app-shell-core/lib/locationAddress.js';
+} from '@etendo-ai/app-shell-core/lib/locationAddress.js';
 const EMPTY_FORM = {
     address: '',
     address2: '',
@@ -47,6 +48,25 @@ const EMPTY_FORM = {
     invoiceToAddress: true
 };
 const SELECTOR_PAGE_SIZE = 120;
+
+// ETP-5806 follow-up round 3 (Ruben) — measures the actual pixel width of a string against the
+// same font the preview pills render with, so the modal's width can track real pill content
+// instead of always reserving space for the 60-char zero-space worst case (see the modal
+// maxWidth comment further down for that budget's own derivation). Font string and size must
+// stay identical to what the pill text inherits, or the measurement drifts from the render.
+// Canvas is created lazily and cached at module scope — the font never changes, so there is no
+// reason to pay `document.createElement` on every keystroke.
+const PREVIEW_PILL_FONT = "12px Inter, -apple-system, 'system-ui', 'Segoe UI', Roboto, sans-serif";
+let _measureCanvas = null;
+function measurePreviewTextWidth(text) {
+    if (!text) return 0;
+    if (typeof document === 'undefined') return 0;
+    if (!_measureCanvas) _measureCanvas = document.createElement('canvas');
+    const ctx = _measureCanvas.getContext('2d');
+    if (!ctx) return 0;
+    ctx.font = PREVIEW_PILL_FONT;
+    return ctx.measureText(text).width;
+}
 
 // ETP-5806 — the address constants and the composer come from core `lib/locationAddress.js`, shared
 // with the Contacts import (ETP-6206) so the two payload builders cannot drift. The *_MAX_LENGTH
@@ -96,7 +116,7 @@ const ADDRESS_PREVIEW_BADGE_BY_STATE = {
  *
  * CP-7 (ETP-5806 QA, Isa) — the copy button stays icon-only, matching the shared `CopyButton`
  * primitive's only other call site in the codebase (`CopyBlock` in
- * `@etendosoftware/app-shell-core/components/ui/copy-button.jsx`), which never passes a `label`.
+ * `@etendo-ai/app-shell-core/components/ui/copy-button.jsx`), which never passes a `label`.
  * An earlier round added `label={ui('copy')}` here on a misread of the Figma "Pop Up Alert"
  * reference; Isa confirmed the icon-only button was fine as-is.
  */
@@ -319,10 +339,15 @@ async function resolveCountryOption({apiFetch, selectorBase, buildParams, prefer
  * as "s/n" (see `composeAddressLines`/`buildSavePayload`) rather than blocking Save. A save in
  * flight or an in-progress initial load blocks too.
  *
+ * ETP-5806 CP-13 widened it once more: a value longer than its own cap blocks the save for all
+ * three structured fields, not only for Calle, so the modal never offers a save the backend's
+ * `fieldsExceedingMaxLength` would refuse with an opaque 400.
+ *
  * Module-level so the modal body stays flat — a chain of `||` inside the component
  * counts against its cognitive complexity, which is already at its budget.
  */
-function isSaveBlocked({saving, initialLoading, structuredAddressEnabled, address, streetName, city, country}) {
+function isSaveBlocked({saving, initialLoading, structuredAddressEnabled, address, streetName,
+    buildingNumber, buildingName, city, country}) {
     if (saving || initialLoading) return true;
     // ETP-5806 — `structured-address-for-sepa` (backend-only flag, TTL 2026-11-15) off: legacy mandatory
     // fields are just the free-text address line and country, matching pre-ETP-5806 behavior.
@@ -331,6 +356,21 @@ function isSaveBlocked({saving, initialLoading, structuredAddressEnabled, addres
         return country === '';
     }
     if (streetName.trim() === '') return true;
+    // ETP-5806 CP-6 (QA finding) — a street LONGER than the cap can only have arrived from the
+    // server: the input's own `maxLength` stops anyone typing past it. Records created before the
+    // cap existed (and Classic, where EM_OBSEPA_StrtNm is still VARCHAR(70)) hold streets of
+    // 61-70 chars, and the backend's `fieldsExceedingMaxLength` rejects the whole save with an
+    // opaque 400 toast — even when the user only came to change the city. Blocking Save here is
+    // what lets the field explain why, before the round-trip, instead of after it.
+    if (streetName.length > STREET_NAME_MAX_LENGTH) return true;
+    // ETP-5806 CP-13 — same guard for Número and Edificio. Unlike Calle, whose composer cap (60) is
+    // narrower than its column (VARCHAR(70)), these two caps ARE their column widths, so no stored
+    // record can exceed them and this is unreachable today. It is here anyway because the field now
+    // RENDERS that state (LimitedTextField), and a visible over-limit error next to an enabled Save
+    // is the contradiction CP-6 existed to remove — if the caps and the columns ever diverge the
+    // way Calle's did, the modal already behaves correctly instead of deferring to a backend 400.
+    if (buildingNumber.length > BUILDING_NUMBER_MAX_LENGTH) return true;
+    if (buildingName.length > BUILDING_NAME_MAX_LENGTH) return true;
     if (city.trim() === '') return true;
     return country === '';
 }
@@ -667,6 +707,8 @@ export default function LocationEditorModal({
         structuredAddressEnabled,
         address: form.address,
         streetName: form.streetName,
+        buildingNumber: form.buildingNumber,
+        buildingName: form.buildingName,
         city: form.city,
         country: form.country,
     });
@@ -681,6 +723,53 @@ export default function LocationEditorModal({
         () => composeAddressLines(form.streetName, form.buildingNumber, form.buildingName),
         [form.streetName, form.buildingNumber, form.buildingName]
     );
+
+    // ETP-5806 follow-up round 2/3 — what the resulting-address preview actually shows: the
+    // composed lines, or (while a legacy record's composed Primera línea isn't ready yet) the
+    // old free-text lines instead. Lifted out of the render IIFE below so both the JSX and the
+    // width computation share one source instead of recomputing the same 3-way state twice.
+    const previewLines = useMemo(() => {
+        const showingLegacyPreview = isLegacyAddress && !composedAddress.address1;
+        const line1 = showingLegacyPreview ? (form.address || '') : composedAddress.address1;
+        const line2 = showingLegacyPreview ? (form.address2 || '') : composedAddress.address2;
+        let addressPreviewState;
+        if (showingLegacyPreview) addressPreviewState = 'legacy';
+        else if (composedAddress.address1) addressPreviewState = 'complete';
+        else addressPreviewState = 'auto';
+        return { showingLegacyPreview, line1, line2, addressPreviewState };
+    }, [isLegacyAddress, composedAddress, form.address, form.address2]);
+
+    // ETP-5806 follow-up round 3 (Ruben) — the modal's maxWidth tracks the actual rendered width
+    // of the wider of the two preview pills (Primera línea / Segunda línea) instead of always
+    // paying for the 900px worst-case budget derived in the comment on the modal card below. A
+    // short/typical address no longer leaves a large empty gap after the pill.
+    //
+    // MIN (560) — the modal's own width before the CP-6 widening to 680/900 (see this file's git
+    // history on the "maxWidth raised from 680 to 900" comment trail). Floor, not a target: keeps
+    // Calle/Número/Nombre del edificio/Ciudad/País/Región laid out sanely even for an empty or
+    // very short address, instead of letting the modal shrink to fit a tiny pill.
+    // MAX (900) — unchanged worst-case budget (60×'W' zero-space line + pill chrome + card
+    // padding); both preview lines are capped at ADDRESS_LINE_MAX_LENGTH (60 in
+    // `locationAddress.js`) server-side, so a legitimate value can still reach it and must still
+    // render without overflow or wrap (`whiteSpace: 'nowrap'` stays — only the width is dynamic).
+    // A +5% buffer is kept on the measured text, same margin the original budget used, to absorb
+    // font-metric drift across OS/browser (Segoe UI on Windows, Roboto fallback on Linux).
+    const MODAL_MIN_WIDTH = 560;
+    const MODAL_MAX_WIDTH = 900;
+    const modalMaxWidth = useMemo(() => {
+        if (!structuredAddressEnabled) return MODAL_MIN_WIDTH;
+        const widestTextPx = Math.max(
+            measurePreviewTextWidth(previewLines.line1 || '—'),
+            measurePreviewTextWidth(previewLines.line2 || '—')
+        );
+        // Pill chrome: Lock icon 12 + icon/text gap 6 + horizontal padding 2*10=20 + border 2*1=2
+        // = 40px. Modal chrome: body padding '16px 20px' both sides (40) + preview box padding
+        // '8px 12px' both sides (24) = 64px. Same arithmetic as the original 900 derivation.
+        const PILL_CHROME = 40;
+        const MODAL_CHROME = 64;
+        const needed = Math.ceil(widestTextPx * 1.05) + PILL_CHROME + MODAL_CHROME;
+        return Math.min(MODAL_MAX_WIDTH, Math.max(MODAL_MIN_WIDTH, needed));
+    }, [structuredAddressEnabled, previewLines.line1, previewLines.line2]);
 
     // Reset and load data on open
     useEffect(() => {
@@ -1299,6 +1388,21 @@ export default function LocationEditorModal({
     // once the user has attempted to save with it still empty.
     const FIELD_ERROR = { fontSize: 12, color: 'hsl(var(--destructive))', marginTop: 4 };
 
+    // ETP-5806 CP-6 — the Calle character counter and its "you have reached the limit" note. The
+    // counter is informational (muted) until the value is over the cap, which only a pre-existing
+    // record can be, and then reads as an error alongside the message below the input.
+    const FIELD_COUNTER = { fontSize: 12, color: 'hsl(var(--muted-foreground))', fontWeight: 400, fontVariantNumeric: 'tabular-nums' };
+    const FIELD_COUNTER_OVER = { ...FIELD_COUNTER, color: 'hsl(var(--destructive))' };
+    const FIELD_HINT = { fontSize: 12, color: 'hsl(var(--muted-foreground))', marginTop: 4 };
+
+    // ETP-5806 CP-13 — the look LimitedTextField renders with. The component owns the structure
+    // (counter, messages, aria wiring); this modal keeps owning how they look, so nothing about
+    // the field's appearance moves out of the file that defines every other field here.
+    const LIMITED_FIELD_STYLES = {
+        label: FIELD_LABEL, input: INPUT, error: FIELD_ERROR,
+        counter: FIELD_COUNTER, counterOver: FIELD_COUNTER_OVER, hint: FIELD_HINT,
+    };
+
     const PICKER_BTN = {
         ...INPUT, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         cursor: 'pointer', gap: 8, background: 'hsl(var(--card))',
@@ -1324,14 +1428,40 @@ export default function LocationEditorModal({
         // modal dims it from above and the user cannot type. It is also simply
         // correct a11y for a focus-trapping overlay.
         <div role="dialog" aria-modal="true" data-testid="location-modal" onKeyDown={handleDialogKeyDown} style={{ position: 'fixed', inset: 0, zIndex: 150, background: 'hsl(var(--foreground) / .35)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            {/* ETP-5806 CP-6 (Isa) — maxWidth raised from 560 to 680 so the "Primera línea"
-                preview pill (location-resulting-address1) always fits on one line, even at
-                the real worst case: Address1 is capped at 60 chars
-                (ADDRESS_LINE_MAX_LENGTH in schema_forge_core's locationAddress.js). At 560
-                the available text width (~372px after padding/label/icon/border) was a few
-                px short of a 60-char line at this font size; 680 clears it with margin.
-                Verified visually at localhost:3100 with a synthetic 60-char Primera línea. */}
-            <div style={{ background: 'hsl(var(--card))', borderRadius: 16, boxShadow: '0 8px 40px hsl(var(--foreground) / .18)', width: '100%', maxWidth: 680, margin: 16, display: 'flex', flexDirection: 'column', maxHeight: 'calc(100vh - 64px)', animation: 'fm-modal-in .2s cubic-bezier(.4,0,.2,1)' }}>
+            {/* ETP-5806 CP-6 (Isa) follow-up, then round 3 (Ruben) — maxWidth is now DYNAMIC
+                (`modalMaxWidth`, computed above), not a fixed 900. The fixed-900 budget below is
+                kept only as the cap's derivation and as the ceiling `modalMaxWidth` clamps to —
+                it is no longer what every modal pays regardless of content.
+
+                The CP-6 round verified 680 only against a non-adversarial (spaced, mixed-case)
+                synthetic address, which happened to fit — but Address1/Address2
+                (location-resulting-address1/2) are both capped at 60 chars
+                (ADDRESS_LINE_MAX_LENGTH in locationAddress.js) and, since the composer only
+                inserts separators between Street/Number/Name, a single 60-char token with ZERO
+                spaces is a legal value the composer can produce (e.g. Street alone when
+                Street+Number+Name together overflow 60 — see composeAddressLines' last branch)
+                and CANNOT wrap. The pill must fit it with `whiteSpace: 'nowrap'`, so the cap has
+                to be proven, not eyeballed — `modalMaxWidth` clamps to it via `MODAL_MAX_WIDTH`.
+
+                Measured live at localhost:3100 (canvas.measureText against this app's actual
+                computed body font: "Inter, -apple-system, 'system-ui', 'Segoe UI', Roboto,
+                sans-serif" @ 12px — the font the pill text inherits): the widest glyph in that
+                stack is 'W' at 11.82px, and 60×'W' (the true worst case) measures 726.7px.
+                Add ~5% margin for font-metric drift across OS/browser (Segoe UI on Windows,
+                Roboto fallback on Linux) → ~765px of text width to provision for.
+
+                Pill chrome on top of the text: Lock icon 12 + icon/text gap 6 + horizontal
+                padding 2*10=20 + border 2*1=2 = 40px → pill needs ~805px, rounded to 810.
+
+                The label ("Primera línea" / "Segunda línea") no longer shares the row with the
+                pill (see the stacked layout below) — label and pill, inline, cost 100
+                (minWidth) + 8 (gap) = 108px that a vertical layout gives back to the pill
+                instead. Available width for the pill = modal maxWidth − 40 (body padding
+                '16px 20px', both sides) − 24 (preview box padding '8px 12px', both sides).
+                Solving 810 <= maxWidth − 64 → maxWidth >= 874; 900 clears it with margin
+                without making the modal absurdly wide — this is `modalMaxWidth`'s own
+                `PILL_CHROME`/`MODAL_CHROME`/`MODAL_MAX_WIDTH` above, same numbers. */}
+            <div style={{ background: 'hsl(var(--card))', borderRadius: 16, boxShadow: '0 8px 40px hsl(var(--foreground) / .18)', width: '100%', maxWidth: modalMaxWidth, margin: 16, display: 'flex', flexDirection: 'column', maxHeight: 'calc(100vh - 64px)', animation: 'fm-modal-in .2s cubic-bezier(.4,0,.2,1)' }}>
 
                 {/* Header */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '20px 20px 0', gap: 12 }}>
@@ -1449,25 +1579,49 @@ export default function LocationEditorModal({
                                 Address Line 1/2 editor below renders instead. */}
                             {structuredAddressEnabled ? (
                             <>
-                            {/* Calle */}
-                            <div>
-                                <div style={FIELD_LABEL}>{ui('streetNameLabel')}<RequiredMark data-testid="RequiredMark__927831" /></div>
-                                <input autoFocus type="text" maxLength={STREET_NAME_MAX_LENGTH} value={form.streetName} onChange={e => setField('streetName', e.target.value)} data-testid="location-field-streetName" style={INPUT} />
-                                {attemptedSave && form.streetName.trim() === '' && (
-                                    <div style={FIELD_ERROR}>{ui('fieldRequiredMessage')}</div>
-                                )}
-                            </div>
+                            {/* Calle / Número / Nombre del edificio — ETP-5806 CP-6, widened by
+                                CP-13 (QA findings). All three enforced their cap through the
+                                input's own `maxLength` alone, which drops the extra characters with
+                                no feedback at all: the user pasted a long value, watched it stop
+                                mid-word, and had no way to know why. CP-6 fixed Calle by hand and
+                                QA found the other two still doing it, in this same modal — so the
+                                three elements (counter, "limit reached" note, over-limit error)
+                                now live in one component instead of being copied per field. See
+                                LimitedTextField.jsx for the two states and the a11y wiring. */}
+                            <LimitedTextField
+                                id="location-field-streetName"
+                                label={ui('streetNameLabel')}
+                                required
+                                autoFocus
+                                value={form.streetName}
+                                max={STREET_NAME_MAX_LENGTH}
+                                onChange={e => setField('streetName', e.target.value)}
+                                error={attemptedSave && form.streetName.trim() === '' ? ui('fieldRequiredMessage') : null}
+                                testId="location-field-streetName"
+                                styles={LIMITED_FIELD_STYLES}
+                                data-testid="LimitedTextField__927831" />
 
                             {/* Número + Nombre del edificio en grid */}
                             <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 12 }}>
-                                <div>
-                                    <div style={FIELD_LABEL}>{ui('buildingNumberLabel')}</div>
-                                    <input type="text" maxLength={BUILDING_NUMBER_MAX_LENGTH} value={form.buildingNumber} onChange={e => setField('buildingNumber', e.target.value)} placeholder={ui('buildingNumberEmptyPlaceholder')} data-testid="location-field-buildingNumber" style={INPUT} />
-                                </div>
-                                <div>
-                                    <div style={FIELD_LABEL}>{ui('buildingNameLabel')}</div>
-                                    <input type="text" maxLength={BUILDING_NAME_MAX_LENGTH} value={form.buildingName} onChange={e => setField('buildingName', e.target.value)} data-testid="location-field-buildingName" style={INPUT} />
-                                </div>
+                                <LimitedTextField
+                                    id="location-field-buildingNumber"
+                                    label={ui('buildingNumberLabel')}
+                                    value={form.buildingNumber}
+                                    max={BUILDING_NUMBER_MAX_LENGTH}
+                                    onChange={e => setField('buildingNumber', e.target.value)}
+                                    placeholder={ui('buildingNumberEmptyPlaceholder')}
+                                    testId="location-field-buildingNumber"
+                                    styles={LIMITED_FIELD_STYLES}
+                                    data-testid="LimitedTextField__927831" />
+                                <LimitedTextField
+                                    id="location-field-buildingName"
+                                    label={ui('buildingNameLabel')}
+                                    value={form.buildingName}
+                                    max={BUILDING_NAME_MAX_LENGTH}
+                                    onChange={e => setField('buildingName', e.target.value)}
+                                    testId="location-field-buildingName"
+                                    styles={LIMITED_FIELD_STYLES}
+                                    data-testid="LimitedTextField__927831" />
                             </div>
 
                             {/* ETP-5806 — Address Line 1/2 are no longer user-editable: they are
@@ -1495,13 +1649,11 @@ export default function LocationEditorModal({
                                 bug — the old second line disappeared from here the instant the user
                                 pasted the old first line into Calle, before they could copy it. */}
                             {(() => {
-                                const showingLegacyPreview = isLegacyAddress && !composedAddress.address1;
-                                const line1 = showingLegacyPreview ? (form.address || '') : composedAddress.address1;
-                                const line2 = showingLegacyPreview ? (form.address2 || '') : composedAddress.address2;
-                                let addressPreviewState;
-                                if (showingLegacyPreview) addressPreviewState = 'legacy';
-                                else if (composedAddress.address1) addressPreviewState = 'complete';
-                                else addressPreviewState = 'auto';
+                                // ETP-5806 follow-up round 3 — `showingLegacyPreview`/`line1`/`line2`/
+                                // `addressPreviewState` now come from the `previewLines` memo above
+                                // (shared with the dynamic modal-width computation) instead of being
+                                // recomputed here.
+                                const { showingLegacyPreview, line1, line2, addressPreviewState } = previewLines;
                                 const {
                                     key: badgeKey,
                                     color: badgeColor,
@@ -1539,21 +1691,26 @@ export default function LocationEditorModal({
                                             {ui(badgeKey)}
                                         </span>
                                     </div>
-                                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                                        <span style={{ fontSize: 12, minWidth: 100, flexShrink: 0, color: 'hsl(var(--muted-foreground))' }}>{ui('addressLine1Label')}</span>
+                                    {/* ETP-5806 follow-up — label stacked ABOVE the pill rather than
+                                        inline with it. An inline label column (minWidth 100 + 8 gap)
+                                        is 108px the pill cannot have, and the pill must fit a 60-char,
+                                        zero-space worst case without wrapping or truncation (see the
+                                        modal maxWidth comment above for the full pixel budget). */}
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                        <span style={{ fontSize: 12, color: 'hsl(var(--muted-foreground))' }}>{ui('addressLine1Label')}</span>
                                         <span
                                             data-testid="location-resulting-address1"
-                                            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '2px 10px', borderRadius: 9999, border: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--card))', fontSize: 12, color: 'hsl(var(--foreground))' }}
+                                            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '2px 10px', borderRadius: 9999, border: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--card))', fontSize: 12, color: 'hsl(var(--foreground))', whiteSpace: 'nowrap', width: 'fit-content', maxWidth: '100%' }}
                                         >
                                             <LockIcon size={12} style={{ color: 'hsl(var(--muted-foreground))', flexShrink: 0 }} data-testid="Lock__927831" />
                                             {line1 || '—'}
                                         </span>
                                     </div>
-                                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                                        <span style={{ fontSize: 12, minWidth: 100, flexShrink: 0, color: 'hsl(var(--muted-foreground))' }}>{ui('addressLine2Label')}</span>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                        <span style={{ fontSize: 12, color: 'hsl(var(--muted-foreground))' }}>{ui('addressLine2Label')}</span>
                                         <span
                                             data-testid="location-resulting-address2"
-                                            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '2px 10px', borderRadius: 9999, border: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--card))', fontSize: 12, color: 'hsl(var(--foreground))' }}
+                                            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '2px 10px', borderRadius: 9999, border: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--card))', fontSize: 12, color: 'hsl(var(--foreground))', whiteSpace: 'nowrap', width: 'fit-content', maxWidth: '100%' }}
                                         >
                                             <LockIcon size={12} style={{ color: 'hsl(var(--muted-foreground))', flexShrink: 0 }} data-testid="Lock__927831" />
                                             {line2 || '—'}

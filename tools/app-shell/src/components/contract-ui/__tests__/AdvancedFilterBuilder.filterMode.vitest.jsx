@@ -15,7 +15,7 @@
  * are the ones a user actually sees when opening the dropdown.
  *
  * Mocking note (post-ETP-4705): the local AdvancedFilterBuilder.jsx is now a
- * 2-line shim re-exporting the component from `@etendosoftware/app-shell-core`,
+ * 2-line shim re-exporting the component from `@etendo-ai/app-shell-core`,
  * so the component that renders is the CORE one and its internal imports are
  * relative to the core package (`../../i18n/index.js`,
  * `../../hooks/useDistinctValues.js`). Vitest matches mocks by RESOLVED module
@@ -66,8 +66,8 @@ vi.mock('@/i18n', uiMocks);
 vi.mock('@/hooks/useDistinctValues.js', distinctValuesMock);
 
 // Core-path mocks: these are the ones the rendered component actually resolves.
-vi.mock('@etendosoftware/app-shell-core/i18n', uiMocks);
-vi.mock('@etendosoftware/app-shell-core/hooks/useDistinctValues.js', distinctValuesMock);
+vi.mock('@etendo-ai/app-shell-core/i18n', uiMocks);
+vi.mock('@etendo-ai/app-shell-core/hooks/useDistinctValues.js', distinctValuesMock);
 
 import { AdvancedFilterBuilder } from '../AdvancedFilterBuilder.jsx';
 

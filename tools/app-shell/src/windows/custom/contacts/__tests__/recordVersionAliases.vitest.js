@@ -7,7 +7,7 @@
 //
 // ## Why core is doubled rather than imported for real
 //
-// This repo resolves `@etendosoftware/app-shell-core` from the PUBLISHED package unless the
+// This repo resolves `@etendo-ai/app-shell-core` from the PUBLISHED package unless the
 // LOCAL_CORE dev profile is active (docs/repo-topology.md), and `registerEntityAliases` is newer
 // than the published version CI installs — which is exactly why the module under test guards its
 // call with a `typeof` check. Importing the real module would make this suite pass or fail on
@@ -18,7 +18,7 @@
 // window's policy, asserted through observable token sharing rather than through the shape of the
 // declaration.
 
-const CORE_MODULE = '@etendosoftware/app-shell-core/lib/recordVersions.js';
+const CORE_MODULE = '@etendo-ai/app-shell-core/lib/recordVersions.js';
 const POLICY_MODULE = '../recordVersionAliases.js';
 
 /**

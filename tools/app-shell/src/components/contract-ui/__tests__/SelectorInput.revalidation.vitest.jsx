@@ -34,12 +34,12 @@ vi.mock('@/components/ui/select', () => ({
   SelectContent: React.forwardRef(({ children }, ref) => (harness.open ? <div ref={ref}>{children}</div> : null)),
   SelectItem: ({ children, value }) => <div data-value={value}>{children}</div>,
 }));
-vi.mock('@etendosoftware/app-shell-core/data', async (importOriginal) => ({
+vi.mock('@etendo-ai/app-shell-core/data', async (importOriginal) => ({
   ...(await importOriginal()),
   useOptionalDataCache: () => harness.dataCache,
 }));
 
-import { createQueryCache } from '@etendosoftware/app-shell-core/data';
+import { createQueryCache } from '@etendo-ai/app-shell-core/data';
 import { SELECTOR_REVALIDATE_AFTER_MS, needsSelectorRevalidation } from '@/lib/selectorRevalidation.js';
 import { SelectorInput } from '../SelectorInput.jsx';
 

@@ -14,7 +14,7 @@
  *     const { wrapUseApiFetchModule } = await import('@/test/recordApiFetch.js');
  *     return wrapUseApiFetchModule(await importOriginal());
  *   });
- *   vi.mock('@etendosoftware/app-shell-core/auth/api', async (importOriginal) => {
+ *   vi.mock('@etendo-ai/app-shell-core/auth/api', async (importOriginal) => {
  *     const { wrapApiFetchModule } = await import('@/test/recordApiFetch.js');
  *     return wrapApiFetchModule(await importOriginal());
  *   });

@@ -21,17 +21,17 @@ Schema Forge is split across three repos. Know which one a change belongs to bef
 
 | Repo | Remote | Role |
 |------|--------|------|
-| `etendo_schema_forge` (this repo) | `etendosoftware/etendo_schema_forge` | Functional: windows, artifacts, decisions, app-shell, per-client config |
-| `schema_forge_core` | `etendosoftware/schema_forge_core` | Tooling/platform: generators, extractors, pipeline, shared React runtime (`app-shell-core`) |
-| `com.etendoerp.go` | `etendosoftware/com.etendoerp.go` | Runtime (NEO Headless, Java), lives in `modules/` of Etendo Core |
+| `etendo_schema_forge` (this repo) | `etendo-ai/etendo_schema_forge` | Functional: windows, artifacts, decisions, app-shell, per-client config |
+| `schema_forge_core` | `etendo-ai/schema_forge_core` | Tooling/platform: generators, extractors, pipeline, shared React runtime (`app-shell-core`) |
+| `com.etendoerp.go` | `etendo-ai/com.etendoerp.go` | Runtime (NEO Headless, Java), lives in `modules/` of Etendo Core |
 
-Most developers only work in `schema_forge` and consume the published `@etendosoftware/*` packages. Clone `schema_forge_core` only if you also change the tooling.
+Most developers only work in `schema_forge` and consume the published `@etendo-ai/*` packages. Clone `schema_forge_core` only if you also change the tooling.
 
 ## Prerequisites
 
 - **Node.js >= 22** and npm — [download](https://nodejs.org/)
 - **GitHub CLI (`gh`)** — window locks and PR workflow (`brew install gh && gh auth login`)
-- **GitHub Packages token** — the `@etendosoftware/*` packages are private. Add to `~/.npmrc` a token with `read:packages`:
+- **GitHub Packages token** — the `@etendo-ai/*` packages are private. Add to `~/.npmrc` a token with `read:packages`:
   ```
   //npm.pkg.github.com/:_authToken=<GITHUB_TOKEN_WITH_read:packages>
   ```
@@ -52,7 +52,7 @@ Two ways to get a working setup. Use **local-env** unless you already maintain y
 
 ### Option A: local-env (isolated environment, recommended)
 
-[`local-env`](https://github.com/etendosoftware/etendo-localenv) builds an Etendo checkout with its own cached PostgreSQL, build and Tomcat, and can create one parallel environment per branch (git worktrees) so you never touch your main checkout. Schema Forge ships a plugin (`local-env.d/plugins/etendo-go`) that local-env discovers automatically and that adds everything Etendo GO needs.
+[`local-env`](https://github.com/etendo-ai/etendo-localenv) builds an Etendo checkout with its own cached PostgreSQL, build and Tomcat, and can create one parallel environment per branch (git worktrees) so you never touch your main checkout. Schema Forge ships a plugin (`local-env.d/plugins/etendo-go`) that local-env discovers automatically and that adds everything Etendo GO needs.
 
 Per hook, the plugin:
 
@@ -63,7 +63,7 @@ Per hook, the plugin:
 **Step 0: install the tool (once per machine).** `etendo-localenv` is a separate repo and a tool, not part of the Etendo checkout. Clone it **outside** `etendo_develop`/`etendo_core`, anywhere (e.g. next to it) and run its installer, which symlinks `local-env` and `tomcat-fast` into `~/.local/bin` and the agent skills into `~/.claude/skills`:
 
 ```bash
-git clone git@github.com:etendosoftware/etendo-localenv.git ~/Workspace/etendo-localenv
+git clone git@github.com:etendo-ai/etendo-localenv.git ~/Workspace/etendo-localenv
 cd ~/Workspace/etendo-localenv && ./install.sh
 # make sure ~/.local/bin is on your PATH (install.sh prints a NOTE if not)
 ```
@@ -113,7 +113,7 @@ Things to know:
 - Pushing NEO config (`sf-push-neo`) lives only in the environment's DB until `local-env export`.
 - The bundled PostgreSQL has **no pgvector**: vector search in the CommandPalette does not work there.
 - Skip the SPA for one run: `local-env up --skip-plugin=etendo-go`.
-- Install the progress mod in Claude Code for phase/gradle/elapsed above the prompt: `/plugin install local-env-progress --marketplace etendosoftware/etendo-localenv`.
+- Install the progress mod in Claude Code for phase/gradle/elapsed above the prompt: `/plugin install local-env-progress --marketplace etendo-ai/etendo-localenv`.
 
 Full reference: [`docs/local-env-plugin.md`](docs/local-env-plugin.md) (plugin hooks, allowed origins, MCP/OAuth URLs, ports) and the project skill [`.claude/skills/local-env/SKILL.md`](.claude/skills/local-env/SKILL.md) (rules, failure table).
 
@@ -137,10 +137,10 @@ git checkout epic/ETP-3504
 
 | Repo (remote) | Target branch | Notes (as of 2026-10-21, after `git fetch`) |
 |---|---|---|
-| `etendosoftware/etendo_core` | — | **Not a base repo for now: fixed on epic** (see the module table below) |
-| `etendosoftware/etendo_schema_forge` | `main` / `develop` | epic has 0 commits ahead: nothing is epic-only |
-| `etendosoftware/schema_forge_core` | `main` / `develop` | epic is 36 commits ahead of `develop` |
-| `etendosoftware/com.etendoerp.go` (in `modules/`) | `main` / `develop` | epic has 0 commits ahead; use `develop`, or `feature/ETP-XXXX` cut from `origin/develop` |
+| `etendo-ai/etendo_core` | — | **Not a base repo for now: fixed on epic** (see the module table below) |
+| `etendo-ai/etendo_schema_forge` | `main` / `develop` | epic has 0 commits ahead: nothing is epic-only |
+| `etendo-ai/schema_forge_core` | `main` / `develop` | epic is 36 commits ahead of `develop` |
+| `etendo-ai/com.etendoerp.go` (in `modules/`) | `main` / `develop` | epic has 0 commits ahead; use `develop`, or `feature/ETP-XXXX` cut from `origin/develop` |
 
 > **Naming:** clone each repo with its remote name (`etendo_core`, `etendo_schema_forge`, `schema_forge_core`, …) and do not rename the directory. `schema_forge_core` is the only base repo whose remote has no `etendo_` prefix. Some tooling and docs still reference the old directory names `../schema_forge` / `../schema_forge_core` (the `local-env` plugin, `SCHEMA_FORGE_CORE`, `docs/repo-topology.md`); those need updating together with the rename.
 
@@ -150,7 +150,7 @@ Branch state of every module repo on the remote. **Fixed on epic** = the module'
 
 | Module | Remote | `main` | `develop` | Epic ahead of `develop` | CI list | Policy |
 |---|---|---|---|---|---|---|
-| `etendo_core` (Etendo Core) | GitHub etendosoftware | yes | yes | +118 (vs `main`: +124) | pipeline pin (`pipelines/Jenkinsfile`, `TODO: Remove this block`) | fixed on epic |
+| `etendo_core` (Etendo Core) | GitHub etendo-ai | yes | yes | +118 (vs `main`: +124) | pipeline pin (`pipelines/Jenkinsfile`, `TODO: Remove this block`) | fixed on epic |
 | `com.etendoerp.sif.general` | Bitbucket koodu_software | yes | yes | +43 | SF+GO | fixed on epic |
 | `com.smf.ticketbai` | Bitbucket koodu_software | no | yes | +71 | SF+GO | fixed on epic |
 | `com.etendoerp.verifactu` | Bitbucket koodu_software | no | yes | +84 | SF+GO | fixed on epic |
@@ -167,13 +167,13 @@ Branch state of every module repo on the remote. **Fixed on epic** = the module'
 | `com.etendoerp.psd2.bank.integration` | Bitbucket koodu_software | no | yes | +186 | GO | fixed on epic |
 | `com.etendoerp.copilot` | GitHub etendosoftware | no | yes | +31 | GO | fixed on epic |
 | `com.etendoerp.db.extended` | GitHub etendosoftware | yes | yes | +107 | GO | fixed on epic |
-| `com.etendoerp.go.template` | GitHub etendosoftware | yes | yes | +3 | GO | fixed on epic |
+| `com.etendoerp.go.template` | GitHub etendo-ai | yes | yes | +3 | GO | fixed on epic |
 | `com.etendoerp.go.localization.es.data` | GitHub etendosoftware | yes | yes | 0 | GO | fixed on epic |
 | `org.openbravo.sepa.iso20022` | Bitbucket koodu_software | no (`master`) | yes | +8 | GO | fixed on epic |
 | `org.openbravo.sepa.iso20022.template` | GitHub etendosoftware | yes | yes | +3 | GO | fixed on epic |
 | `org.openbravo.sepa.iso20022.credittransfer.customertobank` | Bitbucket koodu_software | no (`master`) | yes | +8 | GO | fixed on epic |
 | `org.openbravo.sepa.iso20022.coredirectdebit.customertobank` | Bitbucket koodu_software | no (`master`) | yes | +7 | GO | fixed on epic |
-| `org.openbravo.module.remittance` | Bitbucket koodu_software | no (`master`) | yes (= `master`) | 0 (epic cut at `master` 5.2.0; ETP-6148 adds +3 once its PR merges) | GO | fixed on epic: ETP-6148 adds `REM_REMITTANCE.REMITTANCE_STATUS` (reference `REM_RemittanceStatus`), which `com.etendoerp.go` reads before any published remittance JAR carries it. The REM `feature/ETP-6148` PR targets `epic/ETP-3504`, and CI clones the module from source (GO's `jenkinsExtraModules.txt`: the PR branch when it exists, else the epic). Its version is bumped when the module is published, and `com.etendoerp.go`'s `module.remittance` floor is raised to that version in the same release |
+| `org.openbravo.module.remittance` | Bitbucket koodu_software | no (`master`) | yes (= `master`) | +4 (ETP-6148 merged; ETP-6247 adds its commits once its PR merges) | GO | fixed on epic: ETP-6148 adds `REM_REMITTANCE.REMITTANCE_STATUS` (reference `REM_RemittanceStatus`). ETP-6247 adds the SEPA settings of a remittance: `REM_REMITTANCE.IBAN`, `DD_SCHEME` (AD list `REM_DirectDebitScheme`: `CORE`/`B2B`), `ISFINANCED` and `CREDITOR_IDENTIFIER`; `FIN_FINANCIAL_ACCOUNT.EM_REM_CREDITOR_IDENTIFIER`; the status `SB` (Sent to bank) in `REM_RemittanceStatus`; `REM_REMITTANCE_TRG` freezing those SEPA values once the remittance is processed; and the Classic callout `RemittanceSepaDefaultsCallout` (proposes the IBAN and creditor identifier from the financial account). `com.etendoerp.go` reads all of them before any published remittance JAR carries them. Each REM PR (`feature/ETP-6148`, merged; `feature/ETP-6247`) targets `epic/ETP-3504`, and CI clones the module from source (GO's `jenkinsExtraModules.txt`: the PR branch when it exists, else the epic). Its version is bumped when the module is published, and `com.etendoerp.go`'s `module.remittance` floor (`[5.1.1,)`) is raised to that version in the same release |
 | `com.etendoerp.service.integration.amazon.s3` | Bitbucket koodu_software | no (`master`) | no | no `develop`; `epic` = `master`, 0 ahead | GO | fixed on epic |
 | `com.etendoerp.tomcat` | GitHub etendosoftware | yes | yes | 0 | none | usual model (epic exists, nothing ahead) |
 | `com.etendoerp.docker`, `com.etendoerp.copilot.devassistant` | GitHub etendosoftware | yes | yes | no epic | none | usual model; not tied to the DB model GO depends on |
@@ -181,7 +181,7 @@ Branch state of every module repo on the remote. **Fixed on epic** = the module'
 | `org.openbravo.utility.hqlquerytool` | GitHub etendosoftware | yes | no | no epic | none | usual model |
 | `com.etendoerp.openapi` | GitHub etendosoftware | — | — | — | none | only if the build asks for it; `main` |
 | `org.openbravo.module.remittance.template` | Bitbucket koodu_software | no (`master`) | yes (= `master`) | no epic | none | usual model; dependency of `org.openbravo.module.remittance` (`build.gradle`, 3.2.0), not modified by the epic, so CI resolves it as the published JAR even when the remittance module is built from source |
-| `com.etendoerp.automated.remittance` | Bitbucket koodu_software | yes | yes (= `main`) | no epic | none | usual model; published JAR in CI (`com.etendoerp:automated.remittance:3.2.0` in `com.etendoerp.go`'s `build.gradle`). A dependency of `com.etendoerp.go` because ETP-6148 references its `EM_Etar_*` columns from the `remittance` spec (`ETGO_SF_FIELD` rows on `REM_Remittance` / the settled lines); the automated-remittance work in GO is planned. Optional checkout: without one, the build resolves the JAR |
+| `com.etendoerp.automated.remittance` | Bitbucket koodu_software | yes | yes (= `main`) | 0 (epic cut at `d441d3b`, 3.2.0; ETP-6247 adds +1 once its PR merges) | GO | fixed on epic, **checkout required**: ETP-6247 adds the public method `RemittanceProcessHookImpl.settleOnDueDate(Remittance)` (settles a processed remittance's payments on its due date) and the remittance type parameter `ETAR_SETTLE_ON_DUEDATE`. `com.etendoerp.go` calls that method from the remittance `markCollected` step (`RemittanceStatusAction`), so **GO does not compile against the published 3.2.0 JAR**: the method exists only on the module's `feature/ETP-6247` branch, and on `epic/ETP-3504` once its PR merges. The `feature/ETP-6247` PR targets `epic/ETP-3504`, and CI must build the module from source (GO's `jenkinsExtraModules.txt` already lists it: the PR branch when it exists, else the epic). The checkout stays required until a version containing the method is published and `com.etendoerp.go`'s `build.gradle` floor `com.etendoerp:automated.remittance:[3.2.0,)` is raised to it. Its version is not bumped by ETP-6247; it is bumped when the module is published. Already a dependency because ETP-6148 references its `EM_Etar_*` columns from the `remittance` spec |
 
 Rule: **"fixed on epic" modules must be on the epic branch, pulled to its latest commit** (or on a branch cut from it). If one lags, `update.database` fails on a missing `AD_COLUMN` that an `ETGO_SF_FIELD` row references, or smartbuild fails on a missing getter. This table is a snapshot: when a module's epic work merges into `develop`/`main`, it leaves the "fixed on epic" group.
 
@@ -232,10 +232,10 @@ Clone the modules into `modules/`:
 cd /path/to/etendo_core/modules
 
 # Runtime (develop)
-git clone -b develop git@github.com:etendosoftware/com.etendoerp.go.git
+git clone -b develop git@github.com:etendo-ai/com.etendoerp.go.git
 
 # GitHub modules on the epic
-git clone -b epic/ETP-3504 git@github.com:etendosoftware/com.etendoerp.go.template.git
+git clone -b epic/ETP-3504 git@github.com:etendo-ai/com.etendoerp.go.template.git
 git clone -b epic/ETP-3504 git@github.com:etendosoftware/com.etendoerp.go.localization.es.data.git
 git clone -b epic/ETP-3504 git@github.com:etendosoftware/com.etendoerp.db.extended.git
 git clone -b epic/ETP-3504 git@github.com:etendosoftware/com.etendoerp.copilot.git
@@ -269,15 +269,23 @@ for m in org.openbravo.sepa.iso20022 \
   git clone -b epic/ETP-3504 git@ssh.bitbucket.org:koodu_software/$m.git
 done
 
-# Bitbucket module on the epic: SEPA remittances (ETP-6148 adds REM_REMITTANCE.REMITTANCE_STATUS)
+# Bitbucket module on the epic: SEPA remittances (ETP-6148 adds REM_REMITTANCE.REMITTANCE_STATUS;
+# ETP-6247 adds the remittance SEPA settings IBAN / DD_SCHEME / ISFINANCED / CREDITOR_IDENTIFIER,
+# FIN_FINANCIAL_ACCOUNT.EM_REM_CREDITOR_IDENTIFIER and the 'SB' (Sent to bank) status)
 git clone -b epic/ETP-3504 git@ssh.bitbucket.org:koodu_software/org.openbravo.module.remittance.git
 # Already cloned on develop? Switch it to the epic:
 #   git -C org.openbravo.module.remittance fetch origin && git -C org.openbravo.module.remittance checkout epic/ETP-3504
 
-# Bitbucket modules on the usual model (no epic branch). Optional: without a checkout, the build
-# resolves them as published JARs.
+# Bitbucket module on the epic, checkout REQUIRED: automated remittances (ETP-6247 adds
+# RemittanceProcessHookImpl.settleOnDueDate(Remittance), which com.etendoerp.go calls, so GO does
+# not compile against the published 3.2.0 JAR until a version with the method is published)
+git clone -b epic/ETP-3504 git@ssh.bitbucket.org:koodu_software/com.etendoerp.automated.remittance.git
+# Already cloned on main? Switch it to the epic:
+#   git -C com.etendoerp.automated.remittance fetch origin && git -C com.etendoerp.automated.remittance checkout epic/ETP-3504
+
+# Bitbucket module on the usual model (no epic branch). Optional: without a checkout, the build
+# resolves it as a published JAR.
 git clone -b develop git@ssh.bitbucket.org:koodu_software/org.openbravo.module.remittance.template.git
-git clone -b main git@ssh.bitbucket.org:koodu_software/com.etendoerp.automated.remittance.git
 ```
 
 Check at any time which modules are missing, off-branch, behind or on the retired Bitbucket host.
@@ -300,11 +308,11 @@ Clone **inside** the Etendo project directory, sibling of `modules/`:
 
 ```bash
 cd /path/to/etendo_core
-git clone git@github.com:etendosoftware/etendo_schema_forge.git
+git clone git@github.com:etendo-ai/etendo_schema_forge.git
 git -C etendo_schema_forge checkout develop
 
 # Only if you also change the tooling (core developer profile)
-git clone git@github.com:etendosoftware/schema_forge_core.git schema_forge_core
+git clone git@github.com:etendo-ai/schema_forge_core.git schema_forge_core
 (cd schema_forge_core && npm install)
 ```
 
@@ -358,7 +366,7 @@ etendo_core/                     ← branch: epic/ETP-3504
 ### Running the UI against the published core or your local core
 
 ```bash
-make dev              # published @etendosoftware/app-shell-core
+make dev              # published @etendo-ai/app-shell-core
 make dev-local-core   # hot reload from ../schema_forge_core (requires the sibling clone)
 ```
 

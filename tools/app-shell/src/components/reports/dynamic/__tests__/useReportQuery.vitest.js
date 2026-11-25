@@ -1,6 +1,6 @@
 // @covers tools/app-shell/src/components/reports/dynamic/useReportQuery.js
 import { act, renderHook } from '@testing-library/react';
-import { NetworkError } from '@etendosoftware/app-shell-core/auth';
+import { NetworkError } from '@etendo-ai/app-shell-core/auth';
 
 const apiFetchMock = vi.fn();
 vi.mock('@/auth/useApiFetch.js', () => ({ useApiFetch: () => apiFetchMock }));
@@ -129,6 +129,13 @@ describe('useReportQuery', () => {
     expect(result.current).toMatchObject({
       loading: false, errorCode: 'org_access_denied', error: 'ORG_ACCESS_DENIED', data: { rows: [{ node_id: 'FIRST' }] },
     });
+  });
+
+  it('a statement timeout is classed report_timeout (ETP-6146)', async () => {
+    apiFetchMock.mockResolvedValueOnce(json({ error: 'REPORT_TIMEOUT', code: 'REPORT_TIMEOUT' }, { ok: false, status: 504 }));
+    const { result } = render(READY);
+    await flushDebounce();
+    expect(result.current).toMatchObject({ loading: false, errorCode: 'report_timeout' });
   });
 
   it('an error body without a code is classed by status', async () => {

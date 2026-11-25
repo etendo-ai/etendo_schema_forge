@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { isNetworkError } from '@etendosoftware/app-shell-core/auth';
+import { isNetworkError } from '@etendo-ai/app-shell-core/auth';
 import { useApiFetch } from '@/auth/useApiFetch.js';
 
 export const QUERY_DEBOUNCE_MS = 300;

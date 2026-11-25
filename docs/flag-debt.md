@@ -188,7 +188,7 @@ make flag-debt LOCAL_CORE=1         # run the core CLI from sibling source
 ```
 
 The scorer is **code owned by `schema_forge_core`** and published in
-`@etendosoftware/schema-forge-cli` as the `sf-flag-debt` bin; the registry it reads is
+`@etendo-ai/schema-forge-cli` as the `sf-flag-debt` bin; the registry it reads is
 **data owned by this repo**. `make` bridges the two with `SF_ROOT`, which is why the
 CLI scores this working tree rather than core's. That split is deliberate: the scale
 belongs to one place, the flags belong to whoever declares them. See

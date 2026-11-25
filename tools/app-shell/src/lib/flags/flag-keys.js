@@ -17,18 +17,8 @@
 /** Reveals the internal Proof of Concept section in the side menu. */
 export const PROOF_OF_CONCEPT_MENU = 'proof-of-concept-menu';
 
-/** Enables the AI SDK Copilot agent integration; native browser WebMCP is deferred. */
-export const WEBMCP_AGENT_CHAT = 'webmcp-agent-chat';
-
 /** Enables proactive DOM-based page-help suggestions next to the Copilot. */
 export const PAGE_HELP_SUGGESTIONS = 'page-help-suggestions';
-
-/**
- * Reveals the admin-only accounting server process monitor in the Settings menu (ETP-5269).
- * Visual gating only: the route is registered unconditionally and the backend
- * (`SFAcctProcessMonitor`) enforces admin/client-admin access on both its read and its trigger.
- */
-export const ACCT_PROCESS_MONITOR = 'acct-process-monitor';
 
 /** Enables the admin-only public API key management entry point (ETP-5345). */
 export const PUBLIC_API_KEYS = 'public-api-keys';
@@ -91,6 +81,13 @@ export const DOC_TEMPLATE_SELECTION = 'doc-template-selection';
 export const DYNAMIC_REPORTS = 'dynamic-reports';
 
 /**
+ * ETP-6083 — interactive Balance Sheet and Trial Balance (Sumas y Saldos), rolled out apart from the
+ * Profit & Loss (`dynamic-reports`). On: those two open the dynamic view. Off: today's viewer. Visual
+ * gating only, like `dynamic-reports`.
+ */
+export const DYNAMIC_BALANCE_REPORTS = 'dynamic-balance-reports';
+
+/**
  * ETP-6151 — PSD2 statement import settings. On: connecting a bank account asks for "Importar
  * desde" and the statement grouping (both required, sent with the link), the edit panel enforces
  * them with help text, and statements of a bank-connected account can be deleted (processed ones
@@ -123,9 +120,7 @@ export const NO_EXPOSURE_FLAGS = Object.freeze(
 
 export const FLAG_DEFAULTS = Object.freeze({
   [PROOF_OF_CONCEPT_MENU]: false,
-  [WEBMCP_AGENT_CHAT]: false,
   [PAGE_HELP_SUGGESTIONS]: false,
-  [ACCT_PROCESS_MONITOR]: false,
   [PUBLIC_API_KEYS]: false,
   [UNIFIED_CALENDAR_POC]: false,
   [IMPORT_BATCH_SIZE]: 0,
@@ -134,6 +129,7 @@ export const FLAG_DEFAULTS = Object.freeze({
   [CONTACT_CATEGORY_TYPE]: false,
   [DOC_TEMPLATE_SELECTION]: false,
   [DYNAMIC_REPORTS]: false,
+  [DYNAMIC_BALANCE_REPORTS]: false,
   [PSD2_STATEMENT_IMPORT_SETTINGS]: false,
   [TELEMETRY_KILL_ALL]: false,
   ...Object.fromEntries(Object.values(TELEMETRY_KILL_PROVIDER_FLAGS).map((key) => [key, false])),

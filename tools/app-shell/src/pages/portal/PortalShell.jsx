@@ -1,9 +1,7 @@
 import {
-  MagnifyingGlassIcon,
   SquaresFourIcon,
   ArrowLineLeftIcon,
   ArrowLineRightIcon,
-  CaretDownIcon,
   CaretRightIcon,
   FilesIcon,
   FileTextIcon,
@@ -26,17 +24,10 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { LanguageMenuSection } from '@/components/LanguageMenuSection.jsx';
-import { PortalTag } from './PortalBits.jsx';
+import { PortalTag, usePortalClientId, usePortalEtendoClick } from './PortalBits.jsx';
+import { etendoLinkFor } from './portalMarketingLinks.js';
 import { PORTAL_HIGHLIGHTS, PORTAL_KIND_META } from './portalPresentation.js';
 
-/** The product's site (no shared constant exists for it): the rail's etendo.ai brand. */
-export const ETENDO_AI_URL = 'https://etendo.ai';
-
-/**
- * Where the promo card's "Empieza gratis" sends the visitor to create an account (PO answer): the
- * app's own public sign-up route, `/onboarding` (`runtime-routes.jsx`), on app.etendo.ai.
- */
-export const ETENDO_SIGNUP_URL = 'https://app.etendo.ai/onboarding';
 
 /**
  * Icon per destination: the design's Phosphor glyphs, the same everywhere a kind is drawn (rail,
@@ -81,9 +72,10 @@ function initialsOf(name) {
  * The company's logo in the design's fixed rounded-square tile (32×32; 40×40 on the mobile bar):
  * the logo is contained in it on a neutral card background, so a wide logotype is shrunk to fit
  * instead of being squeezed into a strip; with no logo the tile shows the company's initials, the
- * way the app's avatars fall back.
+ * way the app's avatars fall back. `round`: the rail header's round avatar (40×40, fully rounded).
+ * `decorative`: the company's name is already written beside it, so the image stays silent.
  */
-export function PortalLogoTile({ identity, logoUrl, size = 'sm' }) {
+export function PortalLogoTile({ identity, logoUrl, size = 'sm', round = false, decorative = false }) {
   const large = size === 'lg';
   const sizes = {
     xs: 'h-6 w-6 rounded-md',
@@ -95,6 +87,7 @@ export function PortalLogoTile({ identity, logoUrl, size = 'sm' }) {
       className={cn(
         'flex shrink-0 items-center justify-center overflow-hidden border border-border bg-card',
         sizes[size] ?? sizes.sm,
+        round ? 'rounded-full' : '',
       )}
       data-testid="portal-logo-tile"
     >
@@ -103,7 +96,7 @@ export function PortalLogoTile({ identity, logoUrl, size = 'sm' }) {
           src={logoUrl}
           // The tenant name, not "logo": a screen reader should say the company; with no name the
           // empty alt correctly marks the image as decorative.
-          alt={identity?.tenantName ?? ''}
+          alt={decorative ? '' : (identity?.tenantName ?? '')}
           className="h-full w-full object-contain p-0.5"
           data-testid="portal-logo"
         />
@@ -113,37 +106,6 @@ export function PortalLogoTile({ identity, logoUrl, size = 'sm' }) {
         </span>
       )}
     </span>
-  );
-}
-
-/**
- * The tenant's brand block: the logo tile beside the company name and "Portal del cliente"
- * (story item 8). Either text line degrades on its own without breaking the layout.
- */
-export function PortalBrand({ identity, logoUrl, size = 'sm' }) {
-  const ui = useUI();
-  const large = size === 'lg';
-  return (
-    <div className={cn('flex min-w-0 items-center', large ? 'gap-3' : 'gap-2.5')} data-testid="portal-brand">
-      <PortalLogoTile
-        identity={identity}
-        logoUrl={logoUrl}
-        size={size}
-        data-testid="PortalLogoTile__a5d12f" />
-      <div className="flex min-w-0 flex-col">
-        {identity?.tenantName ? (
-          <span
-            className={cn('truncate font-semibold text-foreground', large ? 'text-base' : 'text-sm')}
-            data-testid="portal-tenant-name"
-          >
-            {identity.tenantName}
-          </span>
-        ) : null}
-        <span className={cn('truncate whitespace-nowrap text-muted-foreground', large ? 'text-[13px] leading-[18px]' : 'text-xs leading-4')}>
-          {ui('portalPageTitle')}
-        </span>
-      </div>
-    </div>
   );
 }
 
@@ -189,90 +151,16 @@ function PortalUserMenu({ identity, align = 'end', side = 'bottom', children }) 
 }
 
 /**
- * The customer the link belongs to (`/me`'s `businessPartnerName`), shown where the design puts
- * its user (Main: the sidebar's user row; Movil-*: the avatar on the top bar's right). It is
- * the trigger of the user menu ({@link PortalUserMenu}: name, email and language). Nothing
- * renders without a name.
- *
- * The app has no shared initials helper — `UserAvatarButton` takes the first letter inline and
- * `OrgLogoField` keeps its own private function — so the initials come from this file's
- * `initialsOf` (the logo tile's fallback), and the styles from `UserAvatarButton`: its sidebar row
- * (person icon on a muted circle, then the name) and its round initials avatar.
- *
- * @param {'row'|'avatar'} variant the sidebar row (desktop) or the round avatar (mobile)
+ * The sidebar's count chip: quotations to answer (info), overdue invoices (destructive). It is
+ * NOT the kind's number of documents (QA 24/11 f: "87" beside a list of 140 read as a
+ * contradiction), so it carries what it counts as its tooltip and accessible name.
  */
-export function PortalCustomer({ identity, variant = 'row' }) {
-  const name = identity?.businessPartnerName;
-  if (!name) return null;
-  if (variant === 'avatar') {
-    return (
-      <PortalUserMenu identity={identity} data-testid="PortalUserMenu__a5d12f">
-        <button
-          type="button"
-          aria-label={name}
-          title={name}
-          // ≈40 px on a phone (360), the board's 48 px from 640 up (the 720 board).
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-foreground text-sm font-semibold text-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:h-12 sm:w-12"
-          data-testid="portal-customer-avatar"
-        >
-          {initialsOf(name)}
-        </button>
-      </PortalUserMenu>
-    );
-  }
-  return (
-    <div className="flex min-w-0 items-center gap-2.5" title={name} data-testid="portal-customer">
-      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
-        <UserIcon size={16} aria-hidden="true" data-testid="User__a5d12f" />
-      </span>
-      <span className="min-w-0 flex-1 truncate" data-testid="portal-customer-name">{name}</span>
-    </div>
-  );
-}
-
-/**
- * The mobile top bar of Inicio (design Movil-Inicio): the brand, a search button and the customer's
- * avatar, which opens the user menu (the language).
- */
-export function PortalMobileBrandBar({ identity, logoUrl, onSearch }) {
-  const ui = useUI();
-  return (
-    <header
-      className="flex h-20 shrink-0 items-center justify-between gap-3 border-b border-border bg-card px-4 sm:gap-4 sm:px-6 md:hidden"
-      data-testid="portal-mobile-topbar"
-    >
-      {/* The brand takes the room left by the controls and truncates only a very long name. */}
-      <div className="min-w-0 flex-1">
-        <PortalBrand
-          identity={identity}
-          logoUrl={logoUrl}
-          size="lg"
-          data-testid="PortalBrand__a5d12f" />
-      </div>
-      <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-        {onSearch ? (
-          <button
-            type="button"
-            aria-label={ui('portalSearch')}
-            onClick={onSearch}
-            className="flex h-10 w-10 items-center justify-center rounded-[10px] border border-border bg-card sm:h-12 sm:w-12"
-            data-testid="portal-mobile-search"
-          >
-            <MagnifyingGlassIcon className="h-5 w-5" aria-hidden="true" data-testid="Search__a5d12f" />
-          </button>
-        ) : null}
-        <PortalCustomer identity={identity} variant="avatar" data-testid="PortalCustomer__a5d12f" />
-      </div>
-    </header>
-  );
-}
-
-/** The sidebar's count chip: quotations to answer (info), overdue invoices (destructive). */
 function navBadgeOf(tiles, kind) {
   const highlight = tiles?.[kind]?.highlight;
   if (!highlight?.count) return null;
   if (highlight.code === 'awaitingAnswer' || highlight.code === 'overdue') {
-    return { count: highlight.count, tone: PORTAL_HIGHLIGHTS[highlight.code].tone };
+    const meta = PORTAL_HIGHLIGHTS[highlight.code];
+    return { count: highlight.count, tone: meta.tone, labelKey: meta.labelKey };
   }
   return null;
 }
@@ -293,22 +181,34 @@ const RAIL_ITEM = 'flex h-8 w-full items-center rounded-lg border border-transpa
 /** A group heading ("General", "Mis documentos"). */
 const RAIL_HEADING = 'px-4 py-1 text-xs leading-6 tracking-[-0.005em] text-[#6B7280]';
 
-/** The rail's header (62px): the etendo.ai brand and, expanded, the button that collapses it. */
-function RailHeader({ collapsed, onToggle }) {
+/**
+ * The rail's header (62px, padding 0 8px): the issuing company's round logo (40×40; its initials
+ * without a logo) and, expanded, its name and the button that collapses the rail. The company is
+ * shown only here (Figma, 2026-11-20): neither rail state repeats it in the menu below.
+ */
+function RailHeader({ identity, logoUrl, collapsed, onToggle }) {
   const ui = useUI();
+  const tenantName = identity?.tenantName;
   return (
-    <div className={cn('flex h-[62px] shrink-0 items-center px-2', collapsed ? 'justify-center' : 'justify-between')}>
-      <a
-        href={ETENDO_AI_URL}
-        target="_blank"
-        rel="noopener noreferrer"
-        aria-label={ui('portalCreatedWith')}
-        className="flex items-center gap-2 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        data-testid="portal-created-with"
+    <div className={cn('flex h-[62px] shrink-0 items-center px-2', collapsed ? 'justify-center' : 'justify-between gap-2')}>
+      <div
+        className="flex min-w-0 items-center gap-2"
+        title={collapsed ? (tenantName ?? undefined) : undefined}
+        data-testid="portal-rail-company"
       >
-        <img src="/logo-etendo-ai.png" alt="" className="h-10 w-10 shrink-0 rounded-lg" />
-        {collapsed ? null : <span className="text-lg font-semibold leading-7 tracking-[-0.01em] text-[#1B1A1F]">{ui('portalBrandName')}</span>}
-      </a>
+        <PortalLogoTile
+          identity={identity}
+          logoUrl={logoUrl}
+          size="lg"
+          round
+          decorative={!collapsed && Boolean(tenantName)}
+          data-testid="PortalLogoTile__a5d12f" />
+        {!collapsed && tenantName ? (
+          <span className="min-w-0 truncate text-sm font-semibold leading-6 text-[#1B1A1F]" data-testid="portal-tenant-name">
+            {tenantName}
+          </span>
+        ) : null}
+      </div>
       {collapsed ? null : (
         <button
           type="button"
@@ -325,9 +225,12 @@ function RailHeader({ collapsed, onToggle }) {
   );
 }
 
-/** The collapsed rail's icons: expand, the company, Inicio and "Mis documentos" with its total. */
+/**
+ * The collapsed rail's icons: expand, Inicio and "Mis documentos" with its total. The company is
+ * not an item here: it is the header's avatar.
+ */
 function RailCollapsedMenu({
-  identity, logoUrl, isActive, documentsActive, totalBadge, onToggle, onNavigate,
+  isActive, documentsActive, totalBadge, onToggle, onNavigate,
 }) {
   const ui = useUI();
   return (
@@ -342,7 +245,6 @@ function RailCollapsedMenu({
       >
         <ArrowLineRightIcon size={20} aria-hidden="true" data-testid="ArrowLineRight__a5d12f" />
       </button>
-      <PortalCompany identity={identity} logoUrl={logoUrl} collapsed data-testid="PortalCompany__a5d12f" />
       <button
         type="button"
         aria-label={ui('portalNavHome')}
@@ -396,19 +298,23 @@ function RailKindItem({ kind, badge, active, onNavigate }) {
           className="h-6 rounded-full px-[9px] py-0 font-normal"
           testId="portal-nav-count"
           data-testid="PortalTag__a5d12f">
-          {badge.count}
+          <span title={`${badge.count} · ${ui(badge.labelKey)}`} aria-label={`${badge.count} · ${ui(badge.labelKey)}`}>
+            {badge.count}
+          </span>
         </PortalTag>
       ) : null}
     </button>
   );
 }
 
-/** The expanded rail's menu: the company, "General", "Mis documentos" and the promo card. */
-function RailExpandedMenu({ identity, logoUrl, kinds, tiles, isActive, onNavigate }) {
+/**
+ * The expanded rail's menu: "General", "Mis documentos" and the promo card. The company is the
+ * header's (logo and name), so it is not repeated here.
+ */
+function RailExpandedMenu({ kinds, tiles, isActive, onNavigate }) {
   const ui = useUI();
   return (
     <div className="flex flex-1 flex-col gap-2 pb-2">
-      <PortalCompany identity={identity} logoUrl={logoUrl} data-testid="PortalCompany__a5d12f" />
       <div className="flex flex-col gap-1">
         <span className={RAIL_HEADING}>{ui('portalNavGeneral')}</span>
         <button
@@ -453,11 +359,12 @@ function RailExpandedMenu({ identity, logoUrl, kinds, tiles, isActive, onNavigat
  * the designer's spec of 2026-11-17).
  *
  * Desktop: the design's left rail beside the view's own column. Expanded (the default): the
- * etendo.ai brand with the collapse button, the company the portal belongs to, "General · Inicio",
+ * issuing company (round logo and name) with the collapse button, "General · Inicio",
  * "Mis documentos" with one entry per kind and its count chip, the promo card ("Lleva tu negocio más
  * lejos" — only while expanded), and at the bottom the help link and the customer, which opens the
  * user menu (the language). Collapsed
- * (56 px): icons only — Inicio, and "Mis documentos" with the total count, which expands the rail
+ * (56 px): the company's round logo, then icons only — Inicio, and "Mis documentos" with the total
+ * count, which expands the rail
  * to choose a kind. The choice is remembered per browser. Mobile: the view's own top bar (each
  * view draws it) and the bottom navigation (Inicio, Presupuestos, Facturas, Más). The user menu
  * holds only the language: the portal has no login.
@@ -496,6 +403,8 @@ export default function PortalShell({ identity, logoUrl, current, tiles, onNavig
       >
         {/* Cabecera: 62px */}
         <RailHeader
+          identity={identity}
+          logoUrl={logoUrl}
           collapsed={collapsed}
           onToggle={toggleRail}
           data-testid="RailHeader__a5d12f" />
@@ -504,8 +413,6 @@ export default function PortalShell({ identity, logoUrl, current, tiles, onNavig
         <div className={cn('flex min-h-0 flex-1 flex-col overflow-y-auto', collapsed ? 'pl-2' : 'px-2')}>
           {collapsed ? (
             <RailCollapsedMenu
-              identity={identity}
-              logoUrl={logoUrl}
               isActive={isActive}
               documentsActive={documentsActive}
               totalBadge={totalBadge}
@@ -514,8 +421,6 @@ export default function PortalShell({ identity, logoUrl, current, tiles, onNavig
               data-testid="RailCollapsedMenu__a5d12f" />
           ) : (
             <RailExpandedMenu
-              identity={identity}
-              logoUrl={logoUrl}
               kinds={kinds}
               tiles={tiles}
               isActive={isActive}
@@ -532,6 +437,7 @@ export default function PortalShell({ identity, logoUrl, current, tiles, onNavig
       </div>
 
       <PortalBottomNav
+        identity={identity}
         current={current}
         onNavigate={onNavigate}
         isActive={isActive}
@@ -546,45 +452,6 @@ function RailUserAvatar() {
     <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#F3F5F9]">
       <UserIcon size={13} weight="fill" className="text-[#C7CBD3]" aria-hidden="true" data-testid="User__a5d12f" />
     </span>
-  );
-}
-
-/**
- * The company the portal belongs to, where the design draws its company selector (224×32,
- * white, shadow-xs): the tenant's 20px round logo, its name in grey and a decorative CaretDown —
- * a portal link belongs to one company, so nothing opens. Collapsed: a 36×36 grey button with the
- * logo, named by its tooltip. Without a logo the initials tile stands in.
- */
-function PortalCompany({ identity, logoUrl, collapsed = false }) {
-  const mark = logoUrl ? (
-    <img src={logoUrl} alt="" className="h-5 w-5 shrink-0 rounded-full object-contain" data-testid="portal-logo" />
-  ) : (
-    <PortalLogoTile identity={identity} logoUrl={null} size="xs" data-testid="PortalLogoTile__a5d12f" />
-  );
-  if (collapsed) {
-    return (
-      <span
-        role="img"
-        aria-label={identity?.tenantName ?? ''}
-        title={identity?.tenantName ?? undefined}
-        className={RAIL_ICON_BUTTON}
-        data-testid="portal-company"
-      >
-        {mark}
-      </span>
-    );
-  }
-  return (
-    <div
-      className={`flex h-8 w-full min-w-0 items-center rounded-lg border border-[#E3E7EC] bg-white px-2 py-1 ${RAIL_SHADOW}`}
-      data-testid="portal-company"
-    >
-      {mark}
-      <span className="min-w-0 flex-1 truncate px-1 text-sm font-medium leading-6 text-[#9A9CA8]" data-testid="portal-tenant-name">
-        {identity?.tenantName ?? ''}
-      </span>
-      <CaretDownIcon size={20} className="shrink-0 text-[#C7CBD3]" aria-hidden="true" data-testid="CaretDown__a5d12f" />
-    </div>
   );
 }
 
@@ -629,10 +496,13 @@ function PortalRailFooter({ identity, collapsed }) {
 
 /**
  * The expanded rail's banner ("Lleva tu negocio más lejos"), at the bottom of the menu list.
- * "Empieza gratis" opens the app's sign-up (`ETENDO_SIGNUP_URL`) in a new tab (PO answer).
+ * "Empieza gratis" opens marketing's pricing page (`etendoLinkFor('startFree')`, with the portal's
+ * `portal_ref`) in a new tab.
  */
 function PortalPromo() {
   const ui = useUI();
+  const href = etendoLinkFor('startFree', usePortalClientId());
+  const countClick = usePortalEtendoClick();
   return (
     <aside className="flex w-full flex-col gap-3 rounded-lg border border-[#E3E7EC] bg-white p-3" data-testid="portal-promo">
       <div className="flex flex-col gap-1">
@@ -643,7 +513,8 @@ function PortalPromo() {
         <span className="text-xs leading-4 text-[#6B7280]">{ui('portalPromoDescription')}</span>
       </div>
       <a
-        href={ETENDO_SIGNUP_URL}
+        href={href}
+        onClick={() => countClick('startFree', 'rail')}
         target="_blank"
         rel="noopener noreferrer"
         className="flex h-8 w-full items-center justify-center rounded-lg bg-[#325CFF] px-2 py-1 text-sm font-medium leading-6 text-white hover:bg-[#2849CC]"
@@ -655,8 +526,42 @@ function PortalPromo() {
   );
 }
 
-/** The mobile bottom navigation: Inicio, Presupuestos, Facturas, and "Más" for the rest. */
-function PortalBottomNav({ onNavigate, isActive }) {
+/**
+ * The customer's entry in the mobile "Más" sheet: the user popup's content (name, email and the
+ * language) shown inline. The redesign (2026-11-25) dropped the header avatar that opened it, and
+ * the language must stay reachable (PO decision), so it lives here.
+ */
+function MoreMenuUser({ identity }) {
+  const { locale, setLocale } = useLocaleSwitch();
+  const name = identity?.businessPartnerName;
+  const email = identity?.email;
+  return (
+    <div className="border-t border-border" data-testid="portal-more-user">
+      {name || email ? (
+        <div className="px-4 py-3" data-testid="portal-user-menu-header">
+          <p className="truncate text-sm font-semibold" title={name ?? undefined}>{name || '—'}</p>
+          {email ? (
+            <p className="mt-1 truncate text-xs text-muted-foreground" title={email} data-testid="portal-user-menu-email">{email}</p>
+          ) : null}
+        </div>
+      ) : null}
+      {setLocale ? (
+        <LanguageMenuSection
+          locale={locale}
+          setLocale={setLocale}
+          testIdFor={(code) => `portal-language-${code.slice(0, 2).toLowerCase()}`}
+          data-testid="LanguageMenuSection__a5d12f" />
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * The mobile bottom navigation (redesign, 2026-11-25): Inicio, Presupuestos, Facturas, and "Más"
+ * for the other kinds and the customer's menu (name, email, language). The active item is #325CFF
+ * with a 4px dot under its label.
+ */
+function PortalBottomNav({ identity, onNavigate, isActive }) {
   const ui = useUI();
   const [moreOpen, setMoreOpen] = useState(false);
   const moreRef = useRef(null);
@@ -696,12 +601,12 @@ function PortalBottomNav({ onNavigate, isActive }) {
     <nav
       ref={moreRef}
       aria-label={ui('portalMainNavigation')}
-      className="fixed inset-x-0 bottom-0 z-20 grid h-[88px] grid-cols-4 border-t border-border bg-card px-3 py-2 md:hidden"
+      className="fixed inset-x-0 bottom-0 z-20 grid h-[72px] grid-cols-4 border-t border-[#E3E7EC] bg-white px-3 py-2 md:hidden"
       data-testid="portal-bottom-nav"
     >
       {moreOpen ? (
         <div
-          className="absolute bottom-full right-3 mb-2 flex min-w-48 flex-col rounded-xl border border-border bg-card py-1.5 shadow-lg"
+          className="absolute bottom-full right-3 mb-2 flex max-h-[70vh] min-w-56 flex-col overflow-y-auto rounded-xl border border-border bg-card py-1.5 shadow-lg"
           data-testid="portal-more-menu"
         >
           {secondary.map((kind) => {
@@ -719,6 +624,7 @@ function PortalBottomNav({ onNavigate, isActive }) {
               </button>
             );
           })}
+          <MoreMenuUser identity={identity} data-testid="MoreMenuUser__a5d12f" />
         </div>
       ) : null}
       {items.map(({ key, Icon, label, active, onClick, expanded }) => (
@@ -729,20 +635,18 @@ function PortalBottomNav({ onNavigate, isActive }) {
           aria-expanded={expanded}
           onClick={onClick}
           className={cn(
-            'flex flex-col items-center justify-center gap-1 text-[13px]',
-            active ? 'font-semibold text-foreground' : 'text-muted-foreground',
+            'flex flex-col items-center justify-center gap-0.5 text-xs leading-4',
+            active ? 'font-medium text-[#325CFF]' : 'text-[#6B7280]',
           )}
           data-testid={`portal-bottom-nav-${key}`}
         >
-          <span
-            className={cn(
-              'flex h-8 w-14 items-center justify-center rounded-full',
-              active ? 'bg-[hsl(var(--accent-highlight))] text-[hsl(var(--accent-highlight-foreground))]' : '',
-            )}
-          >
-            <Icon size={20} aria-hidden="true" data-testid="Icon__a5d12f" />
-          </span>
+          <Icon size={20} weight={active ? 'fill' : 'regular'} aria-hidden="true" data-testid="Icon__a5d12f" />
           {label}
+          <span
+            className={cn('h-1 w-1 rounded-full', active ? 'bg-[#325CFF]' : 'bg-transparent')}
+            aria-hidden="true"
+            data-testid={active ? 'portal-bottom-nav-active-dot' : undefined}
+          />
         </button>
       ))}
     </nav>

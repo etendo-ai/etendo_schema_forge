@@ -1,6 +1,6 @@
-import { registerFkResolver } from '@etendosoftware/app-shell-core/lib/import/fkResolvers.js';
-import { simSearchEveryLanguage } from '@etendosoftware/app-shell-core/lib/simSearch.js';
-import { classifyCandidates } from '@etendosoftware/app-shell-core/lib/import/resolveForeignKeys.js';
+import { registerFkResolver } from '@etendo-ai/app-shell-core/lib/import/fkResolvers.js';
+import { simSearchEveryLanguage } from '@etendo-ai/app-shell-core/lib/simSearch.js';
+import { classifyCandidates } from '@etendo-ai/app-shell-core/lib/import/resolveForeignKeys.js';
 
 // ETP-5350 — same defect as the product UoM, unreported: C_COUNTRY holds "Spain" on the
 // base row and "España" only in its es_ES translation, so the country resolved for a

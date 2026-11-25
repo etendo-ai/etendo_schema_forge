@@ -3,7 +3,7 @@
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import type { PublicApiSchema } from '@etendosoftware/api-gateway-core';
+import type { PublicApiSchema } from '@etendo-ai/api-gateway-core';
 import { buildPerEntityOpenApiPaths } from '../src/openapi/build-per-entity-paths.ts';
 import { PublicApiController, toEtag } from '../src/public-api/public-api.controller.ts';
 
