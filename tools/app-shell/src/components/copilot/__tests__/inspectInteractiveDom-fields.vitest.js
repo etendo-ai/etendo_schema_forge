@@ -149,4 +149,38 @@ describe('inspectInteractiveDom — field indexing', () => {
     const { elements } = inspectInteractiveDom(document, new Map());
     expect(elements.find(element => element.name === 'Plain').elementId).toBe('dom-2');
   });
+
+  it('withholds a fieldKey that repeats on the page, so the model uses the elementId', () => {
+    // A line grid stamps `field-<column>` on every row: resolving that key
+    // would always land on the first row, whichever row the model meant.
+    document.body.innerHTML = `
+      <div data-testid="field-documentNo">SO-0001</div>
+      <div data-testid="field-product">Row 1</div>
+      <div data-testid="field-product">Row 2</div>`;
+    layoutEverything();
+    const registry = new Map();
+    const { elements } = inspectInteractiveDom(document, registry);
+    expect(elements.map(element => element.fieldKey)).toEqual(['documentNo', undefined, undefined]);
+    // Still listed as fields, each with its own handle.
+    expect(elements.map(element => [element.elementId, element.kind])).toEqual([
+      ['dom-1', 'field'],
+      ['dom-2', 'field'],
+      ['dom-3', 'field'],
+    ]);
+    expect(registry.get('dom-3').textContent).toBe('Row 2');
+    expect(JSON.stringify(elements)).not.toContain('"fieldKey":"product"');
+  });
+
+  it('keeps the fieldKey when its only twin is hidden', () => {
+    // Uniqueness is judged on what is painted, matching the resolver, which
+    // picks the first VISIBLE match.
+    document.body.innerHTML = `
+      <div id="hidden" data-testid="field-description">collapsed</div>
+      <div id="shown" data-testid="field-description">on screen</div>`;
+    layoutEverything();
+    document.getElementById('hidden').getBoundingClientRect = () => ({ width: 0, height: 0, top: 0, left: 0 });
+    const { elements } = inspectInteractiveDom(document, new Map());
+    expect(elements).toHaveLength(1);
+    expect(elements[0]).toMatchObject({ elementId: 'dom-1', fieldKey: 'description', name: 'on screen' });
+  });
 });

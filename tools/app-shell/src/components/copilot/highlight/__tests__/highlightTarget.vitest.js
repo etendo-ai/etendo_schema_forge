@@ -81,6 +81,36 @@ describe('resolveHighlightTarget', () => {
       .toThrow('That element is no longer visible; inspect the page again');
   });
 
+  it('skips a hidden twin earlier in the DOM and points at the visible field', () => {
+    // A key can repeat (a collapsed section, a hidden tab): the first match in
+    // document order is not necessarily the one on screen.
+    document.body.insertAdjacentHTML('afterbegin',
+      '<div id="hidden-twin" data-testid="field-description">collapsed</div>');
+    document.body.insertAdjacentHTML('beforeend',
+      '<div id="shown-twin" data-testid="field-description">on screen</div>');
+    makeVisible(document.getElementById('shown-twin'));
+    expect(resolveHighlightTarget({ fieldKey: 'description' }, registry))
+      .toBe(document.getElementById('shown-twin'));
+  });
+
+  it('picks the first visible match when a key repeats on screen', () => {
+    document.body.insertAdjacentHTML('beforeend', `
+      <div id="row-1" data-testid="field-product">Row 1</div>
+      <div id="row-2" data-testid="field-product">Row 2</div>`);
+    makeVisible(document.getElementById('row-1'));
+    makeVisible(document.getElementById('row-2'));
+    expect(resolveHighlightTarget({ fieldKey: 'product' }, registry))
+      .toBe(document.getElementById('row-1'));
+  });
+
+  it('still reports "no longer visible" when every match of a repeated key is hidden', () => {
+    document.body.insertAdjacentHTML('beforeend', `
+      <div data-testid="field-amount">1</div>
+      <div data-testid="field-amount">2</div>`);
+    expect(() => resolveHighlightTarget({ fieldKey: 'amount' }, registry))
+      .toThrow('That element is no longer visible; inspect the page again');
+  });
+
   it('tells the model to re-inspect for an unknown elementId', () => {
     expect(() => resolveHighlightTarget({ elementId: 'dom-99' }, registry))
       .toThrow('The elementId is unknown or the element is no longer visible; inspect the page again');

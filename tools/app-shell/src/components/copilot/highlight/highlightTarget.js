@@ -34,10 +34,15 @@ function resolveByFieldKey(fieldKey, root) {
   } catch {
     throw new Error(`The fieldKey "${fieldKey}" is not a valid field key; call inspect_page_dom and use a fieldKey it reports`);
   }
-  const element = root?.querySelector?.(selector);
-  if (!element) {
+  const matches = [...(root?.querySelectorAll?.(selector) ?? [])];
+  if (!matches.length) {
     throw new Error(`No field named "${fieldKey}" is rendered on this page; call inspect_page_dom and use a fieldKey it reports`);
   }
+  // A key can repeat in the DOM (a collapsed section, a hidden tab, one anchor
+  // per grid row). The visible node is the one the user sees and the one
+  // inspect_page_dom reported, so a hidden twin earlier in the DOM must not
+  // shadow it. With no visible match, assertHighlightable says so.
+  const element = matches.find(isVisibleElement) ?? matches[0];
   assertHighlightable(element);
   return element;
 }

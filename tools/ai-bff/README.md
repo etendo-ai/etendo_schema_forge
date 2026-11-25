@@ -70,8 +70,12 @@ JavaScript execution, password values, or a second authorization mechanism.
 around one element and shows the model's explanation next to it, and nothing
 else — it never clicks, focuses, types, or changes a value, and it refuses
 password fields. `inspect_page_dom` reports a stable `fieldKey` for every form
-field (read-only fields included), which the model should prefer over the
-positional `dom-N` id because it survives a re-render. One element is
+field (read-only fields included) whose key is unique among the visible fields,
+which the model should prefer over the positional `dom-N` id because it
+survives a re-render. A key that repeats (one per grid row, or a header field
+sharing its key with a line column) is withheld, so the model addresses that
+field by its `dom-N` id instead; resolving a `fieldKey` always picks its first
+visible match, never a hidden twin. One element is
 highlighted at a time: a second call replaces the first, which is how a
 sequence of atomic calls reads as a guided tour.
 

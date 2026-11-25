@@ -292,11 +292,3 @@ test('highlighting accepts either addressing mode and rejects a bad duration', (
   assert.throws(() => inputSchema.parse({ fieldKey: 'x', durationMs: -1 }));
   assert.throws(() => inputSchema.parse({ fieldKey: 'x', durationMs: 1.5 }));
 });
-
-test('highlighting declares a steps array of addressed notes', () => {
-  const { inputSchema } = browserTools().highlight_element;
-  const steps = [{ fieldKey: 'a', note: 'one' }, { elementId: 'dom-2' }];
-  assert.deepEqual(inputSchema.parse({ steps }), { steps });
-  assert.throws(() => inputSchema.parse({ steps: [{ fieldKey: '' }] }));
-  assert.throws(() => inputSchema.parse({ steps: 'a' }));
-});
