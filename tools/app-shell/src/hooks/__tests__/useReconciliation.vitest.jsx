@@ -282,6 +282,35 @@ describe('useAutoMatch (GET)', () => {
     });
   });
 
+  // ETP-6359: the AI layer of the bounce suggestions rides on the same answer.
+  it('keeps bounceAiAssessments from the raw answer', async () => {
+    const ai = { B3: { probabilities: { C1: 10, C2: 85 }, none: 5, recommendedLineId: 'C2' } };
+    globalThis.fetch.mockResolvedValue(getResponse({ groups: [{ id: 'g1' }], bounceAiAssessments: ai }));
+
+    const { result } = renderHook(() => useAutoMatch('acc-1'));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.bounceAiAssessments).toEqual(ai);
+    expect(result.current.groups).toEqual([{ id: 'g1' }]);
+  });
+
+  it('exposes bounceAiAssessments as null when the answer has none, or a malformed one', async () => {
+    globalThis.fetch.mockResolvedValue(getResponse({ groups: [] }));
+    const absent = renderHook(() => useAutoMatch('acc-1'));
+    await waitFor(() => expect(absent.result.current.loading).toBe(false));
+    expect(absent.result.current.bounceAiAssessments).toBeNull();
+
+    globalThis.fetch.mockResolvedValue(getResponse({ groups: [], bounceAiAssessments: 'nope' }));
+    const malformed = renderHook(() => useAutoMatch('acc-2'));
+    await waitFor(() => expect(malformed.result.current.loading).toBe(false));
+    expect(malformed.result.current.bounceAiAssessments).toBeNull();
+  });
+
+  it('exposes bounceAiAssessments as null while idle', async () => {
+    const { result } = renderHook(() => useAutoMatch(null));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(result.current.bounceAiAssessments).toBeNull();
+  });
+
   it('reload() re-issues the autoMatch request', async () => {
     globalThis.fetch.mockResolvedValue(getResponse({ groups: [] }));
 

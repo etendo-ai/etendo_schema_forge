@@ -584,6 +584,19 @@ describe('ReconciliationSplitPanel — bounce panel under the read-only tier', (
     expect(dismissPairMock).not.toHaveBeenCalled();
   });
 
+  it('with an AI assessment the percentages and the badge show, but Descartar par is disabled and nothing is POSTed', async () => {
+    renderPanel({ windowReadOnly: true, bounceReview: aiReview(AI_85_10) });
+    await selectLineRow('B3');
+    expect(screen.getByTestId('recon-bounce-ai-pct-C2')).toHaveTextContent(pctText(85));
+    expect(screen.getByTestId('recon-bounce-ai-badge-C2')).toBeInTheDocument();
+    expect(screen.getByTestId('recon-bounce-discard')).toBeDisabled();
+    fireEvent.click(screen.getByTestId('recon-bounce-discard'));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(discardPairMock).not.toHaveBeenCalled();
+    expect(restorePairMock).not.toHaveBeenCalled();
+  });
+
   it('disables Restaurar par', async () => {
     renderPanel({ windowReadOnly: true });
     await screen.findByTestId('recon-line-row-B3');
@@ -945,5 +958,330 @@ describe('ReconciliationSplitPanel — buttons and radios of the bounce panel', 
     expect(screen.getByTestId('recon-line-radio-P1')).toHaveClass('accent-primary');
     expect(screen.getByTestId('recon-line-radio-B3')).toHaveClass('accent-primary');
     expect(screen.getByTestId('recon-bounce-radio-C1')).toHaveClass('accent-primary');
+  });
+});
+
+// ── AI second layer: the bounceAiAssessments of the autoMatch answer ──────────
+
+const pctText = (pct) => `financeReconcileBounceAiProbability:${JSON.stringify({ pct: String(pct) })}`;
+const badgeText = (pct) => `financeReconcileBounceAiBadge:${JSON.stringify({ pct: String(pct) })}`;
+const noticeAiText = (pct) => `financeReconcileBounceNoticeAi:${JSON.stringify({ pct: String(pct) })}`;
+
+/** The host's review bundle (`useAutoMatchReview().panel`) carrying the AI layer. */
+function aiReview(aiAssessments) {
+  return {
+    focus: null, onFocusConsumed: vi.fn(), dismissedKeys: new Set(), onDismiss: vi.fn(), aiAssessments,
+  };
+}
+
+// B3 is the ambiguous bounce over [C1, C2] (backend order).
+const AI_85_10 = { B3: { probabilities: { C1: 10, C2: 85 }, none: 5, recommendedLineId: 'C2' } };
+const AI_60_40 = { B3: { probabilities: { C1: 40, C2: 60 }, none: 0, recommendedLineId: null } };
+
+const orderedOptionRows = () => screen.queryAllByTestId(/^recon-bounce-row-/).map((el) => el.dataset.testid);
+
+describe('ReconciliationSplitPanel — AI suggestion on an ambiguous pair', () => {
+  it('85/10: sorts the options, shows the percentages, pre-checks the recommended with badge and notice', async () => {
+    renderPanel({ bounceReview: aiReview(AI_85_10) });
+    await selectLineRow('B3');
+    expect(orderedOptionRows()).toEqual(['recon-bounce-row-C2', 'recon-bounce-row-C1']);
+    expect(screen.getByTestId('recon-bounce-ai-pct-C2')).toHaveTextContent(pctText(85));
+    expect(screen.getByTestId('recon-bounce-ai-pct-C1')).toHaveTextContent(pctText(10));
+    expect(screen.getByTestId('recon-bounce-radio-C2')).toBeChecked();
+    expect(screen.getByTestId('recon-bounce-radio-C1')).not.toBeChecked();
+    expect(screen.getByTestId('recon-bounce-ai-badge-C2')).toHaveTextContent(badgeText(85));
+    expect(screen.queryByTestId('recon-bounce-ai-badge-C1')).toBeNull();
+    const notice = screen.getByTestId('recon-bounce-notice');
+    expect(notice).toHaveTextContent(noticeAiText(85));
+    expect(notice).not.toHaveTextContent('financeReconcileBounceNoticeChoose');
+    expect(screen.getByTestId('recon-bounce-discard')).toBeEnabled();
+  });
+
+  it('60/40 without a recommendation: percentages shown, nothing checked, discard disabled, "choose" notice', async () => {
+    renderPanel({ bounceReview: aiReview(AI_60_40) });
+    await selectLineRow('B3');
+    expect(orderedOptionRows()).toEqual(['recon-bounce-row-C2', 'recon-bounce-row-C1']);
+    expect(screen.getByTestId('recon-bounce-ai-pct-C2')).toHaveTextContent(pctText(60));
+    expect(screen.getByTestId('recon-bounce-ai-pct-C1')).toHaveTextContent(pctText(40));
+    expect(screen.getByTestId('recon-bounce-radio-C1')).not.toBeChecked();
+    expect(screen.getByTestId('recon-bounce-radio-C2')).not.toBeChecked();
+    expect(screen.queryByTestId('recon-bounce-ai-badge-C2')).toBeNull();
+    expect(screen.getByTestId('recon-bounce-notice')).toHaveTextContent('financeReconcileBounceNoticeChoose');
+    expect(screen.getByTestId('recon-bounce-discard')).toBeDisabled();
+  });
+
+  it('a recommended id that is not among the rendered rows preselects nothing', async () => {
+    renderPanel({ bounceReview: aiReview({
+      B3: { probabilities: { C1: 10, C2: 85 }, none: 5, recommendedLineId: 'NOT-SHOWN' } } ) });
+    await selectLineRow('B3');
+    expect(screen.getByTestId('recon-bounce-radio-C1')).not.toBeChecked();
+    expect(screen.getByTestId('recon-bounce-radio-C2')).not.toBeChecked();
+    expect(screen.queryByTestId('recon-bounce-ai-badge-C2')).toBeNull();
+    expect(screen.getByTestId('recon-bounce-discard')).toBeDisabled();
+  });
+
+  it('no assessment at all: same as before (no percentages, no badge, no AI notice)', async () => {
+    renderPanel({ bounceReview: aiReview(null) });
+    await selectLineRow('B3');
+    expect(orderedOptionRows()).toEqual(['recon-bounce-row-C1', 'recon-bounce-row-C2']);
+    expect(screen.queryByTestId('recon-bounce-ai-pct-C1')).toBeNull();
+    expect(screen.queryByTestId('recon-bounce-ai-badge-C2')).toBeNull();
+    expect(screen.getByTestId('recon-bounce-radio-C2')).not.toBeChecked();
+    expect(screen.getByTestId('recon-bounce-notice')).toHaveTextContent('financeReconcileBounceNoticeChoose');
+  });
+
+  it('two rejections sharing an outflow: only the pair whose recommendation names it preselects it', async () => {
+    pending.answer = sharedAnswer;
+    renderPanel({ bounceReview: aiReview({
+      'R-B1': { probabilities: { 'R-C1': 5, 'R-C2': 90 }, none: 5, recommendedLineId: 'R-C2' },
+      'R-B2': { probabilities: { 'R-C2': 50, 'R-C3': 50 }, none: 0, recommendedLineId: null },
+    }) });
+    await selectLineRow('R-B1');
+    expect(screen.getByTestId('recon-bounce-radio-R-C2')).toBeChecked();
+    fireEvent.click(screen.getByTestId('recon-line-radio-R-B2'));
+    expect(screen.getByTestId('recon-bounce-radio-R-C2')).not.toBeChecked();
+    expect(screen.getByTestId('recon-bounce-radio-R-C3')).not.toBeChecked();
+    expect(screen.getByTestId('recon-bounce-discard')).toBeDisabled();
+  });
+
+  it('an explicit radio pick wins over the AI default and loses the AI badge on the notice', async () => {
+    renderPanel({ bounceReview: aiReview(AI_85_10) });
+    await selectLineRow('B3');
+    fireEvent.click(screen.getByTestId('recon-bounce-radio-C1'));
+    expect(screen.getByTestId('recon-bounce-radio-C1')).toBeChecked();
+    expect(screen.getByTestId('recon-bounce-radio-C2')).not.toBeChecked();
+    expect(screen.getByTestId('recon-bounce-notice')).not.toHaveTextContent('financeReconcileBounceNoticeAi');
+  });
+
+  it('keeps the accessible name of the radio and adds the percentage through aria-describedby', async () => {
+    renderPanel({ bounceReview: aiReview(AI_85_10) });
+    await selectLineRow('B3');
+    const radio = screen.getByTestId('recon-bounce-radio-C2');
+    const amount = formatSigned(-80, 'EUR');
+    expect(radio).toHaveAttribute('aria-label',
+      `financeReconcileBounceChooseOriginalLine:${JSON.stringify({ date: formatDate('2026-10-03', 'es-ES'), amount })}`);
+    const describedBy = radio.getAttribute('aria-describedby');
+    expect(describedBy).toBe('recon-bounce-ai-pct-C2');
+    expect(document.getElementById(describedBy)).toHaveTextContent(pctText(85));
+  });
+
+  it('without an assessment the radio has no aria-describedby', async () => {
+    renderPanel();
+    await selectLineRow('B3');
+    expect(screen.getByTestId('recon-bounce-radio-C2')).not.toHaveAttribute('aria-describedby');
+  });
+});
+
+describe('ReconciliationSplitPanel — discarding with the AI suggestion', () => {
+  it('following the AI default POSTs discardPair with choiceSource "ai"', async () => {
+    renderPanel({ bounceReview: aiReview(AI_85_10) });
+    await selectLineRow('B3');
+    fireEvent.click(screen.getByTestId('recon-bounce-discard'));
+    await waitFor(() => expect(discardPairMock).toHaveBeenCalledWith({
+      financialAccountId: 'ACC-1', statementLineId: 'C2', counterpartLineId: 'B3', choiceSource: 'ai',
+    }));
+  });
+
+  it('an explicit pick on an AI-rated pair sends choiceSource "user"', async () => {
+    renderPanel({ bounceReview: aiReview(AI_85_10) });
+    await selectLineRow('B3');
+    fireEvent.click(screen.getByTestId('recon-bounce-radio-C1'));
+    fireEvent.click(screen.getByTestId('recon-bounce-discard'));
+    await waitFor(() => expect(discardPairMock).toHaveBeenCalledWith({
+      financialAccountId: 'ACC-1', statementLineId: 'C1', counterpartLineId: 'B3', choiceSource: 'user',
+    }));
+  });
+
+  it('clicking the row of the recommended original counts as an explicit user choice', async () => {
+    renderPanel({ bounceReview: aiReview(AI_85_10) });
+    await selectLineRow('B3');
+    fireEvent.click(screen.getByTestId('recon-bounce-row-C2'));
+    fireEvent.click(screen.getByTestId('recon-bounce-discard'));
+    await waitFor(() => expect(discardPairMock).toHaveBeenCalledWith({
+      financialAccountId: 'ACC-1', statementLineId: 'C2', counterpartLineId: 'B3', choiceSource: 'user',
+    }));
+  });
+
+  it('a pair the AI did not rate POSTs the body exactly as before, with no choiceSource key', async () => {
+    renderPanel({ bounceReview: aiReview(AI_85_10) });
+    await selectLineRow('O1');
+    fireEvent.click(screen.getByTestId('recon-bounce-discard'));
+    await waitFor(() => expect(discardPairMock).toHaveBeenCalledTimes(1));
+    expect(Object.keys(discardPairMock.mock.calls[0][0]).sort())
+      .toEqual(['counterpartLineId', 'financialAccountId', 'statementLineId']);
+  });
+
+  it('no assessment on an ambiguous pair: explicit pick POSTs without choiceSource', async () => {
+    renderPanel({ bounceReview: aiReview(null) });
+    await selectLineRow('B3');
+    fireEvent.click(screen.getByTestId('recon-bounce-radio-C2'));
+    fireEvent.click(screen.getByTestId('recon-bounce-discard'));
+    await waitFor(() => expect(discardPairMock).toHaveBeenCalledTimes(1));
+    expect('choiceSource' in discardPairMock.mock.calls[0][0]).toBe(false);
+  });
+
+  it('a successful AI-sourced discard offers "Deshacer", which restores the pair', async () => {
+    renderPanel({ bounceReview: aiReview(AI_85_10) });
+    await selectLineRow('B3');
+    fireEvent.click(screen.getByTestId('recon-bounce-discard'));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith(
+      'financeReconcileBounceToastDiscarded',
+      expect.objectContaining({ action: expect.objectContaining({ label: 'financeReconcileBounceAiUndo' }) }),
+    ));
+    const { action } = toast.success.mock.calls[0][1];
+    toast.success.mockClear();
+    pending.reload.mockClear();
+    action.onClick();
+    await waitFor(() => expect(restorePairMock).toHaveBeenCalledWith({
+      financialAccountId: 'ACC-1', lineId: 'B3',
+    }));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('financeReconcileBounceToastRestored'));
+    expect(pending.reload).toHaveBeenCalled();
+  });
+
+  it('after "Deshacer" the pair is back, the AI preselects it again and nothing is discarded twice', async () => {
+    renderPanel({ bounceReview: aiReview(AI_85_10) });
+    await selectLineRow('B3');
+    fireEvent.click(screen.getByTestId('recon-bounce-discard'));
+    await waitFor(() => expect(toast.success).toHaveBeenCalled());
+    toast.success.mock.calls[0][1].action.onClick();
+    await waitFor(() => expect(restorePairMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('financeReconcileBounceToastRestored'));
+    await selectLineRow('B3');
+    expect(screen.getByTestId('recon-bounce-radio-C2')).toBeChecked();
+    expect(screen.getByTestId('recon-bounce-ai-badge-C2')).toBeInTheDocument();
+    expect(discardPairMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('a "Deshacer" the backend refuses shows the translated refusal and does not discard again', async () => {
+    restorePairMock.mockRejectedValue(Object.assign(new Error('expired'), {
+      status: 409, body: { error: { messageKeys: ['ETGO_BounceAiSuggestionStale'] } },
+    }));
+    renderPanel({ bounceReview: aiReview(AI_85_10) });
+    await selectLineRow('B3');
+    fireEvent.click(screen.getByTestId('recon-bounce-discard'));
+    await waitFor(() => expect(toast.success).toHaveBeenCalled());
+    toast.success.mock.calls[0][1].action.onClick();
+    await waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1));
+    expect(toast.error.mock.calls[0][0]).toMatch(/bounceAiSuggestionStale|RestoreError/);
+    expect(discardPairMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('a failed "Deshacer" shows the translated refusal', async () => {
+    restorePairMock.mockRejectedValue(new Error('boom'));
+    renderPanel({ bounceReview: aiReview(AI_85_10) });
+    await selectLineRow('B3');
+    fireEvent.click(screen.getByTestId('recon-bounce-discard'));
+    await waitFor(() => expect(toast.success).toHaveBeenCalled());
+    toast.success.mock.calls[0][1].action.onClick();
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('financeReconcileBounceToastRestoreError'));
+  });
+
+  it('an explicit (user) discard shows the plain success toast, with no "Deshacer"', async () => {
+    renderPanel({ bounceReview: aiReview(AI_85_10) });
+    await selectLineRow('B3');
+    fireEvent.click(screen.getByTestId('recon-bounce-radio-C1'));
+    fireEvent.click(screen.getByTestId('recon-bounce-discard'));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('financeReconcileBounceToastDiscarded'));
+    expect(toast.success.mock.calls[0]).toHaveLength(1);
+  });
+
+  it('a 409 stale answer shows the translated stale toast and reloads the panel', async () => {
+    discardPairMock.mockRejectedValue(Object.assign(new Error('stale'), {
+      status: 409,
+      code: 'BOUNCE_AI_SUGGESTION_STALE',
+      body: { code: 'BOUNCE_AI_SUGGESTION_STALE', error: { messageKeys: ['ETGO_BounceAiSuggestionStale'] } },
+    }));
+    renderPanel({ bounceReview: aiReview(AI_85_10) });
+    await selectLineRow('B3');
+    fireEvent.click(screen.getByTestId('recon-bounce-discard'));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('T(backendError.bounceAiSuggestionStale)'));
+    expect(pending.reload).toHaveBeenCalled();
+    expect(toast.success).not.toHaveBeenCalled();
+    // The panel stays usable: the discard button is still there.
+    expect(screen.getByTestId('recon-bounce-panel')).toBeInTheDocument();
+    // The stale AI default is dropped for this rejection: no preselection, badge or AI notice.
+    await waitFor(() => expect(screen.getByTestId('recon-bounce-radio-C2')).not.toBeChecked());
+    expect(screen.queryByTestId('recon-bounce-ai-badge-C2')).toBeNull();
+    expect(screen.getByTestId('recon-bounce-notice')).toHaveTextContent('financeReconcileBounceNoticeChoose');
+    expect(screen.getByTestId('recon-bounce-notice')).not.toHaveTextContent(noticeAiText(85));
+    expect(screen.getByTestId('recon-bounce-discard')).toBeDisabled();
+    // The percentages stay.
+    expect(screen.getByTestId('recon-bounce-ai-pct-C2')).toHaveTextContent(pctText(85));
+  });
+
+  describe('after a 409 stale answer', () => {
+    const stale = () => Object.assign(new Error('stale'), {
+      status: 409,
+      code: 'BOUNCE_AI_SUGGESTION_STALE',
+      body: { code: 'BOUNCE_AI_SUGGESTION_STALE', error: { messageKeys: ['ETGO_BounceAiSuggestionStale'] } },
+    });
+
+    async function discardStale(props) {
+      discardPairMock.mockRejectedValueOnce(stale());
+      const utils = renderPanel(props);
+      await selectLineRow('B3');
+      fireEvent.click(screen.getByTestId('recon-bounce-discard'));
+      await waitFor(() => expect(toast.error).toHaveBeenCalled());
+      await waitFor(() => expect(screen.getByTestId('recon-bounce-radio-C2')).not.toBeChecked());
+      return utils;
+    }
+
+    it('the next discard after an explicit pick sends choiceSource "user", never "ai"', async () => {
+      await discardStale({ bounceReview: aiReview(AI_85_10) });
+      fireEvent.click(screen.getByTestId('recon-bounce-radio-C2'));
+      expect(screen.getByTestId('recon-bounce-discard')).toBeEnabled();
+      fireEvent.click(screen.getByTestId('recon-bounce-discard'));
+      await waitFor(() => expect(discardPairMock).toHaveBeenCalledTimes(2));
+      expect(discardPairMock.mock.calls[1][0]).toEqual({
+        financialAccountId: 'ACC-1', statementLineId: 'C2', counterpartLineId: 'B3', choiceSource: 'user',
+      });
+      expect(discardPairMock.mock.calls.every(([b], i) => i === 0 || b.choiceSource !== 'ai')).toBe(true);
+    });
+
+    it('a fresh automatch (new assessments identity) brings the AI default back', async () => {
+      const { rerender } = await discardStale({ bounceReview: aiReview(AI_85_10) });
+      rerender(
+        <ReconciliationSplitPanel
+          accountId="ACC-1"
+          currency="EUR"
+          amountTolerance={5}
+          onReconcileSuccess={vi.fn()}
+          bounceReview={aiReview({ B3: { ...AI_85_10.B3 } })} />,
+      );
+      await waitFor(() => expect(screen.getByTestId('recon-bounce-radio-C2')).toBeChecked());
+      expect(screen.getByTestId('recon-bounce-ai-badge-C2')).toBeInTheDocument();
+      expect(screen.getByTestId('recon-bounce-discard')).toBeEnabled();
+    });
+  });
+
+  it('a stale code without translatable text falls back to the i18n stale message', async () => {
+    discardPairMock.mockRejectedValue(Object.assign(new Error('stale'), {
+      status: 409, code: 'BOUNCE_AI_SUGGESTION_STALE', body: { code: 'BOUNCE_AI_SUGGESTION_STALE' },
+    }));
+    renderPanel({ bounceReview: aiReview(AI_85_10) });
+    await selectLineRow('B3');
+    fireEvent.click(screen.getByTestId('recon-bounce-discard'));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1));
+    expect(toast.error.mock.calls[0][0]).toMatch(/BounceAiStale|bounceAiSuggestionStale/);
+    expect(pending.reload).toHaveBeenCalled();
+  });
+
+  it('"No es un rechazo" after an AI preselection reports no counterpartLineId', async () => {
+    renderPanel({ bounceReview: aiReview(AI_85_10) });
+    await selectLineRow('B3');
+    expect(screen.getByTestId('recon-bounce-radio-C2')).toBeChecked();
+    fireEvent.click(screen.getByTestId('recon-bounce-dismiss'));
+    expect(dismissPairMock).toHaveBeenCalledWith({ financialAccountId: 'ACC-1', statementLineId: 'B3' });
+  });
+
+  it('"No es un rechazo" after an explicit pick still reports it', async () => {
+    renderPanel({ bounceReview: aiReview(AI_85_10) });
+    await selectLineRow('B3');
+    fireEvent.click(screen.getByTestId('recon-bounce-radio-C1'));
+    fireEvent.click(screen.getByTestId('recon-bounce-dismiss'));
+    expect(dismissPairMock).toHaveBeenCalledWith({
+      financialAccountId: 'ACC-1', statementLineId: 'B3', counterpartLineId: 'C1',
+    });
   });
 });

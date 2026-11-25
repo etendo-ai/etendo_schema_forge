@@ -11,6 +11,7 @@ import {
   pendingLinesStatusParam,
   withDismissedPairs,
 } from './bouncePairs.js';
+import { CHOICE_SOURCE_AI, CHOICE_SOURCE_USER, isAiStaleError } from './bounceAi.js';
 import { visibleStatusCodes } from './reconciliationStatusFilter.js';
 import { BouncePairPanel } from './BouncePairPanel.jsx';
 
@@ -23,6 +24,8 @@ import { BouncePairPanel } from './BouncePairPanel.jsx';
  */
 
 const EMPTY_COUNTS = {};
+/** i18n key of the stale-AI-suggestion toast, when the refusal carries no translatable text. */
+const AI_STALE_I18N_KEY = 'financeReconcileBounceAiStale';
 
 /**
  * The toast text of a failed discard / restore: the coded refusal translated (its `AD_MESSAGE` key
@@ -33,6 +36,15 @@ function failureText(err, ui, fallbackKey) {
   return translateBackendErrorBody(err?.body, ui, null)
     || (isNetworkError(err) ? err.message : null)
     || ui(fallbackKey);
+}
+
+/**
+ * The `choiceSource` of a discard (ETP-6359): 'ai' while the AI's preselection stands, 'user' for
+ * an explicit pick on a pair the AI rated, null (the field is left out) everywhere else.
+ */
+function discardChoiceSource(model) {
+  if (model.aiPreselected) return CHOICE_SOURCE_AI;
+  return model.percents && model.selectable ? CHOICE_SOURCE_USER : null;
 }
 
 /**
@@ -223,6 +235,24 @@ export function useBouncePairPanel({
   const { discardPair, loading: discarding } = useDiscardPair();
   const { restorePair, loading: restoring } = useRestorePair();
   const { dismissPair } = useDismissPair();
+  // ETP-6359 — what the last automatch brought: the AI's percentage per candidate (null without AI).
+  const freshAssessments = review?.aiAssessments ?? null;
+  // BUG-1 — bounce lines whose AI recommendation the backend refused as stale (409): their default
+  // is ignored locally (no preselection, badge or AI notice; the percentages stay) until a fresh
+  // automatch brings new assessments. Without it the radio would stay pre-checked and every retry
+  // would send choiceSource 'ai' and get the same 409.
+  const [aiInvalidated, setAiInvalidated] = useState(() => new Set());
+  useEffect(() => {
+    setAiInvalidated((prev) => (prev.size === 0 ? prev : new Set()));
+  }, [freshAssessments]);
+  const aiAssessments = useMemo(() => {
+    if (!freshAssessments || aiInvalidated.size === 0) return freshAssessments;
+    const out = { ...freshAssessments };
+    for (const id of aiInvalidated) {
+      if (out[id]) out[id] = { ...out[id], recommendedLineId: null };
+    }
+    return out;
+  }, [freshAssessments, aiInvalidated]);
   // The original chosen for an ambiguous pair, remembered per bounce line.
   const [chosen, setChosen] = useState({ lineId: null, originalId: null });
 
@@ -235,7 +265,8 @@ export function useBouncePairPanel({
   const model = useMemo(() => bouncePanelModel(selectedLine, {
     discardedLines,
     chosenOriginalId: chosen.lineId === selectedLine?.id ? chosen.originalId : null,
-  }), [selectedLine, discardedLines, chosen]);
+    aiAssessments,
+  }), [selectedLine, discardedLines, chosen, aiAssessments]);
 
   const refresh = useCallback(() => {
     reloadLines?.();
@@ -263,16 +294,55 @@ export function useBouncePairPanel({
     }
   }, [selectedLine, dismiss, ui, windowReadOnly, accountId, model, dismissPair]);
 
-  const onDiscard = useCallback(async () => {
-    if (windowReadOnly || !model?.discard) return;
+  // ETP-6359 — "Deshacer" on the success notice of a discard that followed the AI's preselection:
+  // restores the pair through the same call as "Restaurar par".
+  const undoDiscard = useCallback(async (lineId) => {
     try {
-      await discardPair({ financialAccountId: accountId, ...model.discard });
-      toast.success(ui('financeReconcileBounceToastDiscarded'));
+      await restorePair({ financialAccountId: accountId, lineId });
+      toast.success(ui('financeReconcileBounceToastRestored'));
       refresh();
     } catch (err) {
+      toast.error(failureText(err, ui, 'financeReconcileBounceToastRestoreError'));
+    }
+  }, [restorePair, accountId, ui, refresh]);
+
+  const onDiscard = useCallback(async () => {
+    if (windowReadOnly || !model?.discard) return;
+    // `choiceSource` travels only when the AI rated this pair: 'ai' while its preselection stands,
+    // 'user' for an explicit pick. Without AI data the body is exactly what it always was.
+    const choiceSource = discardChoiceSource(model);
+    const aiDiscard = model.aiPreselected;
+    const bounceLineId = model.discard.counterpartLineId;
+    try {
+      await discardPair({
+        financialAccountId: accountId,
+        ...model.discard,
+        ...(choiceSource ? { choiceSource } : {}),
+      });
+      if (aiDiscard) {
+        toast.success(ui('financeReconcileBounceToastDiscarded'), {
+          action: {
+            label: ui('financeReconcileBounceAiUndo'),
+            onClick: () => { undoDiscard(bounceLineId); },
+          },
+        });
+      } else {
+        toast.success(ui('financeReconcileBounceToastDiscarded'));
+      }
+      refresh();
+    } catch (err) {
+      if (isAiStaleError(err)) {
+        // The suggestion no longer holds (the statement changed since it was shown): say so and
+        // reload, so the panel shows the current proposal, and the AI default of this rejection
+        // is dropped for good (until a fresh automatch).
+        setAiInvalidated((prev) => new Set(prev).add(bounceLineId));
+        toast.error(translateBackendErrorBody(err?.body, ui, null) || ui(AI_STALE_I18N_KEY));
+        refresh();
+        return;
+      }
       toast.error(failureText(err, ui, 'financeReconcileBounceToastDiscardError'));
     }
-  }, [windowReadOnly, model, discardPair, accountId, ui, refresh]);
+  }, [windowReadOnly, model, discardPair, accountId, ui, refresh, undoDiscard]);
 
   const onRestore = useCallback(async () => {
     if (windowReadOnly || !selectedLine?.id) return;

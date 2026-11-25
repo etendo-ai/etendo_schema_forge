@@ -1065,3 +1065,125 @@ describe('AutoMatchSuggestionModal — the close confirmation and the modal life
     expect(screen.queryByTestId('automatch-close-confirm')).toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------
+// AI second layer: `bounceAiAssessments` of the autoMatch answer. DISPLAY only — the checks, the
+// payloads and the order of the pairs never read it.
+
+const aiPctText = (pct) => `financeReconcileAutomatchBounceAiMatch:${JSON.stringify({ pct: String(pct) })}`;
+const AI_AMB = { B3: { probabilities: { C1: 10, C2: 85 }, none: 5, recommendedLineId: 'C2' } };
+const AI_REVIEW = { B2: { probabilities: { O2: 72 }, none: 28, recommendedLineId: 'O2' } };
+
+describe('AutoMatchSuggestionModal — the AI percentage of a pair (display only)', () => {
+  it('an ambiguous pair shows the most probable candidate and its percentage, still not selectable', () => {
+    const { props } = renderModal({ bounceAiAssessments: AI_AMB, onReviewPair: vi.fn() });
+    const original = screen.getByTestId('automatch-bounce-original-bp-amb');
+    expect(original).toHaveTextContent('Pago ACME 2');
+    expect(original).not.toHaveTextContent('Pago ACME 1');
+    expect(screen.getByTestId('automatch-bounce-ai-pct-bp-amb')).toHaveTextContent(aiPctText(85));
+    expect(checkInput('bp-amb')).toBeDisabled();
+    expect(checkInput('bp-amb')).toHaveAttribute('aria-checked', 'false');
+    expect(check('bp-amb')).toHaveAttribute('aria-label', 'financeReconcileAutomatchBounceAmbiguousCheck');
+    expect(screen.getByTestId('automatch-bounce-review-bp-amb')).toBeInTheDocument();
+    expect(props.onClose).not.toHaveBeenCalled();
+  });
+
+  it('hides the percentage when "none of these" outweighs the best candidate (none 55 > best 40)', () => {
+    renderModal({ bounceAiAssessments: { B3: { probabilities: { C1: 40, C2: 30 }, none: 55, recommendedLineId: null } } });
+    expect(screen.queryByTestId('automatch-bounce-ai-pct-bp-amb')).toBeNull();
+    expect(checkInput('bp-amb')).toBeDisabled();
+  });
+
+  it('shows the percentage when "none" is lower than the best candidate (none 5, best 85)', () => {
+    renderModal({ bounceAiAssessments: AI_AMB });
+    expect(screen.getByTestId('automatch-bounce-ai-pct-bp-amb')).toHaveTextContent(aiPctText(85));
+  });
+
+  it('shows the percentage when "none" equals the best candidate (not strictly higher)', () => {
+    renderModal({ bounceAiAssessments: { B3: { probabilities: { C1: 10, C2: 40 }, none: 40, recommendedLineId: null } } });
+    expect(screen.getByTestId('automatch-bounce-ai-pct-bp-amb')).toHaveTextContent(aiPctText(40));
+  });
+
+  it('an assessment without "none" shows the percentage as before', () => {
+    renderModal({ bounceAiAssessments: { B3: { probabilities: { C1: 10, C2: 85 }, recommendedLineId: 'C2' } } });
+    expect(screen.getByTestId('automatch-bounce-ai-pct-bp-amb')).toHaveTextContent(aiPctText(85));
+  });
+
+  it('keeps the candidate dates in backend order while the most probable candidate is shown first', () => {
+    renderModal({ bounceAiAssessments: AI_AMB });
+    expect(screen.getByTestId('automatch-bounce-original-bp-amb')).toHaveTextContent('Pago ACME 2');
+    expect(meta('original', 'bp-amb').textContent).toBe('01/05/2026 · 03/05/2026');
+  });
+
+  it('a single-candidate review pair loses its percentage when "none" wins, and keeps being unchecked', () => {
+    renderModal({ bounceAiAssessments: { B2: { probabilities: { O2: 30 }, none: 70, recommendedLineId: null } } });
+    expect(screen.queryByTestId('automatch-bounce-ai-pct-bp-review')).toBeNull();
+    expect(screen.getByTestId('automatch-bounce-reason-bp-review')).toBeInTheDocument();
+    expect(checkInput('bp-review')).toHaveAttribute('aria-checked', 'false');
+  });
+
+  it('puts the percentage in its own span next to the badge, not inside it nor inside the reason', () => {
+    renderModal({ bounceAiAssessments: AI_AMB });
+    const pct = screen.getByTestId('automatch-bounce-ai-pct-bp-amb');
+    const badge = screen.getByTestId('automatch-bounce-tag-review-bp-amb');
+    const reason = screen.getByTestId('automatch-bounce-reason-bp-amb');
+    expect(badge).toHaveTextContent(/^financeReconcileBounceTagReviewPlain$/);
+    expect(reason).toHaveTextContent(/^financeReconcileBounceReasonAmbiguousShort/);
+    expect(reason).not.toHaveTextContent('financeReconcileAutomatchBounceAiMatch');
+    expect(pct.contains(badge)).toBe(false);
+    expect(pct.contains(reason)).toBe(false);
+    expect(badge.contains(pct)).toBe(false);
+    expect(pct.parentElement).toBe(reason.parentElement);
+  });
+
+  it('a single-candidate pair to review shows only the percentage and stays unchecked', () => {
+    renderModal({ bounceAiAssessments: AI_REVIEW });
+    expect(screen.getByTestId('automatch-bounce-ai-pct-bp-review')).toHaveTextContent(aiPctText(72));
+    expect(screen.getByTestId('automatch-bounce-original-bp-review')).toHaveTextContent('Recibo luz');
+    expect(checkInput('bp-review')).toHaveAttribute('aria-checked', 'false');
+    expect(checkInput('bp-review')).not.toBeDisabled();
+  });
+
+  it('rows without an assessment render exactly as before', () => {
+    renderModal({ bounceAiAssessments: AI_AMB });
+    expect(screen.queryByTestId('automatch-bounce-ai-pct-bp-review')).toBeNull();
+    expect(screen.queryByTestId('automatch-bounce-ai-pct-bp-high')).toBeNull();
+    expect(screen.getByTestId('automatch-bounce-reason-bp-review'))
+      .toHaveTextContent(/^financeReconcileBounceReasonLateShort.*days.*3/);
+  });
+
+  it('without any bounceAiAssessments no percentage is rendered and the candidates keep their order', () => {
+    renderModal();
+    expect(screen.queryAllByTestId(/^automatch-bounce-ai-pct-/)).toHaveLength(0);
+    expect(screen.getByTestId('automatch-bounce-original-bp-amb')).toHaveTextContent('Pago ACME 1');
+    expect(screen.getByTestId('automatch-bounce-original-bp-amb')).toHaveTextContent('01/05/2026 · 03/05/2026');
+  });
+
+  it('does not change the initial checks: high checked, review and ambiguous unchecked', () => {
+    renderModal({ bounceAiAssessments: { ...AI_AMB, ...AI_REVIEW } });
+    expect(checkInput('bp-high')).toHaveAttribute('aria-checked', 'true');
+    expect(checkInput('bp-review')).toHaveAttribute('aria-checked', 'false');
+    expect(checkInput('bp-amb')).toHaveAttribute('aria-checked', 'false');
+  });
+
+  it('"Excluir" sends the same body with and without the AI data', async () => {
+    applyMock.mockResolvedValue({
+      results: [{ kind: 'bouncePair', statementLineId: 'O1', counterpartLineId: 'B1', discarded: true }],
+    });
+    renderModal({ groups: [HIGH, TX, REVIEW, AMBIGUOUS], bounceAiAssessments: { ...AI_AMB, ...AI_REVIEW } });
+    fireEvent.click(excludeButton());
+    await vi.waitFor(() => expect(applyMock).toHaveBeenCalled());
+    expect(applyMock.mock.calls[0][0]).toEqual({
+      financialAccountId: 'acc-1',
+      groups: [{ kind: 'bouncePair', statementLineId: 'O1', counterpartLineId: 'B1' }],
+    });
+  });
+
+  it('"Conciliar seleccionadas" reports the same bounceDecisions with the AI data present', async () => {
+    renderModal({ bounceAiAssessments: { ...AI_AMB, ...AI_REVIEW } });
+    await clickApply();
+    const body = applyMock.mock.calls[0][0];
+    expect(body.groups.every((g) => g.kind !== 'bouncePair')).toBe(true);
+    expect(JSON.stringify(body)).not.toMatch(/choiceSource|bounceAiAssessments|probabilit/);
+  });
+});

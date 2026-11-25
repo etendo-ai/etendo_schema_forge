@@ -578,6 +578,103 @@ describe('bouncePanelModel — two ambiguous pairs sharing a candidate', () => {
   });
 });
 
+describe('bouncePanelModel — AI second layer (bounceAiAssessments)', () => {
+  const line = { id: 'L-IN3', date: '2026-03-04', amount: 80, state: BOUNCE_STATE,
+    bouncePair: { role: 'bounce', ambiguous: true, candidates: [{ line: CAND_A }, { line: CAND_B }] } };
+  const ai = { 'L-IN3': { probabilities: { 'L-OUT-A': 10, 'L-OUT-B': 85 }, none: 5, recommendedLineId: 'L-OUT-B' } };
+  const aiKeys = ['percents', 'aiRecommendedId', 'aiPreselected', 'aiPercent'];
+
+  it('sorts the options by percentage and preselects the recommendation, flagged and derived', () => {
+    const m = bouncePanelModel(line, { aiAssessments: ai });
+    assert.deepEqual(m.rows, [CAND_B, CAND_A]);
+    assert.equal(m.chosenId, 'L-OUT-B');
+    assert.equal(m.aiPreselected, true);
+    assert.equal(m.aiPercent, 85);
+    assert.equal(m.aiRecommendedId, 'L-OUT-B');
+    assert.deepEqual(m.percents, { 'L-OUT-B': 85, 'L-OUT-A': 10 });
+    assert.deepEqual(m.discard, { statementLineId: 'L-OUT-B', counterpartLineId: 'L-IN3' });
+  });
+
+  it('lets an explicit pick override the AI default, which then stops standing', () => {
+    const m = bouncePanelModel(line, { aiAssessments: ai, chosenOriginalId: 'L-OUT-A' });
+    assert.equal(m.chosenId, 'L-OUT-A');
+    assert.equal(m.aiPreselected, false);
+    assert.equal(m.aiPercent, null);
+    assert.equal(m.aiRecommendedId, 'L-OUT-B');
+    assert.deepEqual(m.discard, { statementLineId: 'L-OUT-A', counterpartLineId: 'L-IN3' });
+  });
+
+  it('keeps nothing preselected when there is no recommendation (60/40), but still shows the percentages', () => {
+    const tied = { 'L-IN3': { probabilities: { 'L-OUT-A': 40, 'L-OUT-B': 60 }, none: 0, recommendedLineId: null } };
+    const m = bouncePanelModel(line, { aiAssessments: tied });
+    assert.deepEqual(m.rows, [CAND_B, CAND_A]);
+    assert.equal(m.chosenId, null);
+    assert.equal(m.discard, null);
+    assert.equal(m.aiPreselected, false);
+    assert.equal(m.aiRecommendedId, null);
+    assert.deepEqual(m.percents, { 'L-OUT-B': 60, 'L-OUT-A': 40 });
+  });
+
+  it('does not preselect a recommendation that is not among the shown options', () => {
+    const stray = { 'L-IN3': { probabilities: { 'L-OUT-A': 10, 'L-OUT-B': 85 }, recommendedLineId: 'L-OUT-ZZZ' } };
+    const m = bouncePanelModel(line, { aiAssessments: stray });
+    assert.equal(m.chosenId, null);
+    assert.equal(m.discard, null);
+    assert.equal(m.aiPreselected, false);
+    assert.equal(m.aiRecommendedId, null);
+  });
+
+  it('keeps the order of the backend for ties and ignores assessments of other bounce lines', () => {
+    const other = { 'L-IN-OTHER': ai['L-IN3'] };
+    const m = bouncePanelModel(line, { aiAssessments: other });
+    assert.deepEqual(m.rows, [CAND_A, CAND_B]);
+    assert.equal(m.chosenId, null);
+    for (const key of aiKeys) assert.equal(key in m, false);
+  });
+
+  it('has no ai* keys at all without an assessment (identical to before)', () => {
+    for (const m of [bouncePanelModel(line), bouncePanelModel(line, { aiAssessments: null }),
+      bouncePanelModel(line, { aiAssessments: {} })]) {
+      for (const key of aiKeys) assert.equal(key in m, false);
+      assert.deepEqual(m.rows, [CAND_A, CAND_B]);
+      assert.equal(m.chosenId, null);
+      assert.equal(m.discard, null);
+    }
+  });
+
+  it('shows the percentage of a single-original pair but never preselects (already chosen as before)', () => {
+    const single = { ...BOUNCE, state: BOUNCE_STATE,
+      bouncePair: { role: 'bounce', confidence: 'review', counterpartLine: ORIGINAL } };
+    const m = bouncePanelModel(single, { aiAssessments: {
+      [BOUNCE.id]: { probabilities: { 'L-OUT': 72 }, none: 28, recommendedLineId: 'L-OUT' } } });
+    assert.deepEqual(m.percents, { 'L-OUT': 72 });
+    assert.equal(m.aiPreselected, false);
+    assert.equal(m.aiRecommendedId, null);
+    assert.equal(m.chosenId, 'L-OUT');
+  });
+
+  it('never sends the AI default as counterpartLineId on "No es un rechazo"; an explicit pick still goes', () => {
+    const preselected = bouncePanelModel(line, { aiAssessments: ai });
+    assert.deepEqual(dismissPairPayload('acc', line, preselected), {
+      financialAccountId: 'acc', statementLineId: 'L-IN3',
+    });
+    const explicit = bouncePanelModel(line, { aiAssessments: ai, chosenOriginalId: 'L-OUT-A' });
+    assert.deepEqual(dismissPairPayload('acc', line, explicit), {
+      financialAccountId: 'acc', statementLineId: 'L-IN3', counterpartLineId: 'L-OUT-A',
+    });
+  });
+
+  it('does not change what is selectable or checked in the autoMatch group', () => {
+    const ambiguous = pairGroup({ ambiguous: true, confidence: 'review', statementLine: null,
+      counterpartLine: { ...BOUNCE, id: 'L-IN3' }, candidates: [{ line: CAND_A }, { line: CAND_B }] });
+    assert.equal(isSelectableGroup(ambiguous), false);
+    assert.equal(defaultGroupChecked(ambiguous), false);
+    const single = pairGroup({ confidence: 'review' });
+    assert.equal(isSelectableGroup(single), true);
+    assert.equal(defaultGroupChecked(single), false);
+  });
+});
+
 describe('bouncePanelModel — discarded lines', () => {
   const partner = { id: 'L-IN', state: DISCARDED_STATE, amount: 120.5 };
 

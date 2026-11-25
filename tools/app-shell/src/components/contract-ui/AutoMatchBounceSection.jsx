@@ -3,11 +3,13 @@ import { useUI } from '@/i18n';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
+import { formatGroupedNumber } from '@/lib/formatCurrency.js';
 import { AutoMatchCard, AutoMatchCardHeader } from './AutoMatchCard.jsx';
 import { AutoMatchPairRow, AutoMatchPairSide } from './AutoMatchPairRow.jsx';
 import {
   bounceReason, isAmbiguousPair, isSelectableGroup, pairOriginalLines,
 } from './bouncePairs.js';
+import { aiAssessmentFor, aiPercent, sortOptionsByAi } from './bounceAi.js';
 
 const TAG_CLS = 'inline-flex h-6 shrink-0 items-center gap-0.5 rounded-full px-2 py-1 text-xs font-normal';
 /**
@@ -23,7 +25,7 @@ const REVIEW_BTN = 'h-8 flex-none gap-1 rounded-full border-[hsl(var(--border-co
  *
  * @returns {{ badge: import('react').ReactNode, reason: import('react').ReactNode }}
  */
-function pairBadgeAndReason(ui, group, original) {
+function pairBadgeAndReason(ui, group, original, aiPct = null) {
   const reason = bounceReason(group, original, group.counterpartLine);
   const reasonCls = 'text-xs leading-4 text-[hsl(var(--muted-foreground))]';
   if (reason.high) {
@@ -43,6 +45,14 @@ function pairBadgeAndReason(ui, group, original) {
       ) : null,
     };
   }
+  // ETP-6359 — the AI's probability, next to (never inside) the badge: its own element after the reason.
+  const aiText = aiPct == null ? null : (
+    <span className={reasonCls} data-testid={`automatch-bounce-ai-pct-${group.groupKey}`}>
+      {ui('financeReconcileAutomatchBounceAiMatch', {
+        pct: formatGroupedNumber(aiPct, { maximumFractionDigits: 0 }),
+      })}
+    </span>
+  );
   return {
     badge: (
       <span
@@ -52,7 +62,14 @@ function pairBadgeAndReason(ui, group, original) {
         {ui('financeReconcileBounceTagReviewPlain')}
       </span>
     ),
-    reason: (
+    reason: aiText ? (
+      <>
+        <span className={reasonCls} data-testid={`automatch-bounce-reason-${group.groupKey}`}>
+          {ui(reason.shortKey, reason.params)}
+        </span>
+        {aiText}
+      </>
+    ) : (
       <span className={reasonCls} data-testid={`automatch-bounce-reason-${group.groupKey}`}>
         {ui(reason.shortKey, reason.params)}
       </span>
@@ -69,22 +86,33 @@ function sideMeta(ui, dates, line) {
   return [dates, ref ? ui('financeReconcileBounceRef', { ref }) : null].filter(Boolean).join(' · ');
 }
 
-function BouncePairRow({ group, checked, onToggle, onReview, currency, formatDate }) {
+function BouncePairRow({
+  group, checked, onToggle, onReview, currency, formatDate, aiAssessments = null,
+}) {
   const ui = useUI();
   const ambiguous = isAmbiguousPair(group);
-  const originals = pairOriginalLines(group);
+  // ETP-6359 — DISPLAY only: with an AI assessment the pair shows its most probable candidate and
+  // that candidate's percentage. Which pairs exist, their checks and their order do not change.
+  const assessment = aiAssessmentFor(aiAssessments, group.counterpartLine?.id);
+  const listed = pairOriginalLines(group);
+  const originals = sortOptionsByAi(listed, assessment);
   // An ambiguous pair shows its first candidate (they all carry the same amount) and every
   // candidate's date, but no reference: which one it is gets decided in the panel.
   const original = ambiguous ? null : originals[0] ?? null;
   const shownOriginal = originals[0] ?? {};
-  const originalDates = originals.map((l) => formatDate(l.date)).filter(Boolean).join(' · ');
+  const originalDates = listed.map((l) => formatDate(l.date)).filter(Boolean).join(' · ');
   const bounce = group.counterpartLine ?? {};
   const review = group.confidence !== 'high' || ambiguous;
   const selectable = isSelectableGroup(group);
   const ariaLabel = ui(selectable
     ? 'financeReconcileAutomatchBounceCheck'
     : 'financeReconcileAutomatchBounceAmbiguousCheck');
-  const { badge, reason } = pairBadgeAndReason(ui, group, original);
+  // GAP-9: when "none of these" outweighs the best candidate the percentage would mislead, so the
+  // modal drops it (the panel still lists the per-candidate figures). No `none` = shown as before.
+  const bestPct = assessment ? aiPercent(assessment, shownOriginal.id) : null;
+  const noneWins = bestPct != null && Number(assessment.none) > bestPct;
+  const aiPct = noneWins ? null : bestPct;
+  const { badge, reason } = pairBadgeAndReason(ui, group, original, aiPct);
   return (
     <AutoMatchPairRow
       checked={checked}
@@ -148,11 +176,13 @@ function BouncePairRow({ group, checked, onToggle, onReview, currency, formatDat
  * @param {{ pairs: Array<object>, isChecked: (group: object) => boolean,
  *   onToggle: (group: object) => void, onToggleAll: (checked: boolean) => void,
  *   onExclude: () => void, excluding?: boolean, onReview?: (group: object) => void,
- *   currency: string, formatDate: (raw: string) => string }} props
+ *   currency: string, formatDate: (raw: string) => string,
+ *   aiAssessments?: Record<string, object>|null }} props `aiAssessments` (ETP-6359): the automatch's
+ *   `bounceAiAssessments`; display only, absent = the rows render as before
  */
 export function AutoMatchBounceSection({
   pairs, isChecked, onToggle, onToggleAll, onExclude, excluding = false, onReview, currency,
-  formatDate,
+  formatDate, aiAssessments = null,
 }) {
   const ui = useUI();
   if (!pairs?.length) return null;
@@ -198,6 +228,7 @@ export function AutoMatchBounceSection({
           onReview={onReview}
           currency={currency}
           formatDate={formatDate}
+          aiAssessments={aiAssessments}
           data-testid="BouncePairRow__automatch" />
       ))}
     </AutoMatchCard>

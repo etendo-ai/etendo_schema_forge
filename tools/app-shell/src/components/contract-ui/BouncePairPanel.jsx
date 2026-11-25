@@ -1,4 +1,6 @@
-import { ProhibitIcon, EyeSlashIcon, ArrowCounterClockwiseIcon } from '@phosphor-icons/react';
+import {
+  ProhibitIcon, EyeSlashIcon, ArrowCounterClockwiseIcon, SparkleIcon,
+} from '@phosphor-icons/react';
 import { useUI } from '@/i18n';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -7,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { MoneyAmount } from '@/components/ui/money-amount';
 import { TruncatedText } from '@/components/ui/truncated-text';
 import { formatDate, formatSigned } from '@/lib/formatSigned';
+import { formatGroupedNumber } from '@/lib/formatCurrency.js';
 import { cn } from '@/lib/utils';
 import { StatusBadge } from './reconciliationBadges.jsx';
 import { DISCARDED_STATE } from './bouncePairs.js';
@@ -24,6 +27,11 @@ function noticeClass(model) {
   return model.reason.high
     ? 'bg-[var(--status-success-bg)] text-[var(--status-success-fg)]'
     : 'bg-[var(--status-warning-bg)] text-[var(--status-warning-fg)]';
+}
+
+/** The percentage as the i18n sentences take it: a whole number, grouped like every figure. */
+function pctParam(pct) {
+  return formatGroupedNumber(pct, { maximumFractionDigits: 0 });
 }
 
 /** The sentences of the notice, already translated. */
@@ -46,6 +54,10 @@ function noticeText(ui, model, bcpLocale) {
   }
   return [
     headline,
+    // ETP-6359 — with the AI's preselection standing, the notice says so instead of asking to choose.
+    model.aiPreselected
+      ? ui('financeReconcileBounceNoticeAi', { pct: pctParam(model.aiPercent) })
+      : null,
     model.selectable && !model.chosenId ? ui('financeReconcileBounceNoticeChoose') : null,
     ui('financeReconcileBounceNoticeEffect'),
   ].filter(Boolean).join(' ');
@@ -124,6 +136,11 @@ function PairRow({ row, model, onChoose, currency, bcpLocale }) {
   const chosen = row.id === model.chosenId;
   const amount = Number(row.amount) || 0;
   const ref = String(row.referenceNo ?? '').trim();
+  // ETP-6359 — the AI's percentage for this original (absent without AI) and, on the row it
+  // recommends, a text badge: the percentage is spoken through aria-describedby, not by colour.
+  const pct = model.percents?.[row.id] ?? null;
+  const aiRecommended = model.aiRecommendedId != null && model.aiRecommendedId === row.id;
+  const pctId = `recon-bounce-ai-pct-${row.id}`;
   return (
     <TableRow
       data-testid={`recon-bounce-row-${row.id}`}
@@ -140,6 +157,7 @@ function PairRow({ row, model, onChoose, currency, bcpLocale }) {
             type="radio"
             name="recon-bounce-original"
             aria-label={chooseLabel(ui, row, currency, bcpLocale)}
+            aria-describedby={pct == null ? undefined : pctId}
             checked={chosen}
             onChange={() => onChoose(row.id)}
             onClick={(e) => e.stopPropagation()}
@@ -159,7 +177,7 @@ function PairRow({ row, model, onChoose, currency, bcpLocale }) {
             text={row.description || row.partnerName || row.referenceNo || '—'}
             className="leading-5"
             data-testid={`recon-bounce-desc-${row.id}`} />
-          <div className="flex w-full min-w-0 items-center gap-1.5">
+          <div className="flex w-full min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1">
             <StatusBadge kind={model.rowBadge} data-testid={`recon-bounce-badge-${row.id}`} />
             {/* The bank reference, muted: two outgoing lines with the same text and amount are
                 told apart by it without a column of their own. */}
@@ -168,6 +186,24 @@ function PairRow({ row, model, onChoose, currency, bcpLocale }) {
                 text={ui('financeReconcileBounceRef', { ref })}
                 className="w-auto min-w-0 text-xs font-normal leading-4 text-[hsl(var(--muted-foreground))]"
                 data-testid={`recon-bounce-ref-${row.id}`} />
+            ) : null}
+            {pct == null ? null : (
+              <span
+                id={pctId}
+                className="shrink-0 text-xs font-medium leading-4 text-[hsl(var(--muted-foreground))]"
+                data-testid={`recon-bounce-ai-pct-${row.id}`}>
+                {ui('financeReconcileBounceAiProbability', { pct: pctParam(pct) })}
+              </span>
+            )}
+            {aiRecommended ? (
+              <span
+                className="inline-flex min-h-5 min-w-0 max-w-full items-center gap-0.5 rounded-full bg-[var(--status-info-bg)] px-2 py-0.5 text-xs font-medium leading-4 text-[var(--status-info-fg)]"
+                data-testid={`recon-bounce-ai-badge-${row.id}`}>
+                <SparkleIcon className="size-3 shrink-0" weight="fill" aria-hidden="true" />
+                <span className="min-w-0 break-words">
+                  {ui('financeReconcileBounceAiBadge', { pct: pctParam(pct ?? 0) })}
+                </span>
+              </span>
             ) : null}
           </div>
         </div>
@@ -204,6 +240,9 @@ function netTone(net) {
  *   reference (`referenceNo`) muted next to its badge, the full description on hover, and the
  *   footer opens with the selected line itself ("Rechazo seleccionado" / "Salida seleccionada" /
  *   "Línea seleccionada") with its date and reference, above the counterpart and the net.
+ *
+ * AI preselection (ETP-6359): re-clicking the already-checked recommended radio fires no change
+ * event, so the discard keeps `choiceSource: 'ai'`; picking another radio makes it 'user'.
  *
  * Discard and restore are writes: disabled under the window's read-only tier (the caller's handlers
  * are guarded too). "No es un rechazo" changes no data and stays available.

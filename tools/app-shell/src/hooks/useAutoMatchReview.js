@@ -81,10 +81,15 @@ export function useAutoMatchSelection(groups) {
  * `panel` bundles what the reconciliation panel needs, as one stable prop.
  *
  * @param {Array<object>} groups the autoMatch groups
- * @param {{ active?: boolean }} [options] `active`: the reconciliation is on screen
+ * `bounceAiAssessments` (ETP-6359) is the last automatch answer's AI layer (null when it carried
+ * none); it is exposed as `aiAssessments` and inside `panel`, so the reconciliation panel reads what
+ * the automatch brought and never calls the AI itself.
+ *
+ * @param {{ active?: boolean, bounceAiAssessments?: object|null }} [options] `active`: the
+ *   reconciliation is on screen
  * @returns {object}
  */
-export function useAutoMatchReview(groups, { active = true } = {}) {
+export function useAutoMatchReview(groups, { active = true, bounceAiAssessments = null } = {}) {
   const [focus, setFocus] = useState(null);
   const [dismissedKeys, setDismissedKeys] = useState(() => new Set());
   const [sentToPanelKeys, setSentToPanelKeys] = useState(() => new Set());
@@ -160,9 +165,12 @@ export function useAutoMatchReview(groups, { active = true } = {}) {
     setDismissedKeys((prev) => (prev.size === 0 ? prev : new Set()));
   }, []);
 
+  const aiAssessments = bounceAiAssessments ?? null;
   const panel = useMemo(() => ({
     focus, onFocusConsumed: consumeFocus, dismissedKeys, onDismiss: dismiss,
-  }), [focus, consumeFocus, dismissedKeys, dismiss]);
+    // Only when the automatch brought an AI layer: without it the bundle is what it always was.
+    ...(aiAssessments ? { aiAssessments } : {}),
+  }), [focus, consumeFocus, dismissedKeys, dismiss, aiAssessments]);
 
   return {
     selection,
@@ -173,6 +181,7 @@ export function useAutoMatchReview(groups, { active = true } = {}) {
     dismiss,
     clearDismissed,
     sentToPanelKeys,
+    aiAssessments,
     panel,
   };
 }

@@ -16,6 +16,9 @@
  */
 
 import { parseCalendarDate } from '../../lib/dateOnly.js';
+import {
+  aiAssessmentFor, aiDefaultChoice, aiPercent, sortOptionsByAi,
+} from './bounceAi.js';
 
 /** `kind` of an autoMatch group that is a bounce pair. */
 export const BOUNCE_PAIR_KIND = 'bouncePair';
@@ -199,7 +202,9 @@ export function withBounceDecisions(payload, pairs, isChecked, sentToPanelKeys =
  */
 export function dismissPairPayload(financialAccountId, line, model) {
   if (!line?.id) return null;
-  const counterpartLineId = model?.other?.id ?? null;
+  // ETP-6359 — only an EXPLICIT pick travels: the original the AI preselected is not a user choice,
+  // so "No es un rechazo" keeps its KPI meaning (the user rejected the pair, not a counterpart).
+  const counterpartLineId = (model?.aiPreselected ? null : model?.other?.id) ?? null;
   return {
     financialAccountId,
     statementLineId: line.id,
@@ -383,16 +388,22 @@ export function countsWithDismissedPairs(counts, lines, dismissedKeys) {
  * `discard` is the `discardPair` body (original as `statementLineId`, bounce as
  * `counterpartLineId`, the same shape as the autoMatch group), null while no original is chosen.
  *
+ * ETP-6359: `aiAssessments` is the autoMatch answer's `bounceAiAssessments` (absent = no AI). Only
+ * the bounce role uses it, see {@link bounceRoleModel}.
+ *
  * @param {object|null} line the selected row
- * @param {{ discardedLines?: Array<object>, chosenOriginalId?: string|null }} [options]
+ * @param {{ discardedLines?: Array<object>, chosenOriginalId?: string|null,
+ *   aiAssessments?: Record<string, object>|null }} [options]
  * @returns {object|null}
  */
-export function bouncePanelModel(line, { discardedLines = [], chosenOriginalId = null } = {}) {
+export function bouncePanelModel(
+  line, { discardedLines = [], chosenOriginalId = null, aiAssessments = null } = {},
+) {
   if (!line) return null;
   if (line.state === DISCARDED_STATE) return discardedModel(line, discardedLines);
   const pair = line.state === BOUNCE_STATE ? line.bouncePair : null;
   if (!pair) return null;
-  if (pair.role === 'bounce') return bounceRoleModel(line, pair, chosenOriginalId);
+  if (pair.role === 'bounce') return bounceRoleModel(line, pair, chosenOriginalId, aiAssessments);
   const bounce = pair.counterpartLine ?? null;
   return {
     mode: BOUNCE_STATE,
@@ -409,16 +420,35 @@ export function bouncePanelModel(line, { discardedLines = [], chosenOriginalId =
   };
 }
 
-/** {@link bouncePanelModel} for the bounce line of a pair. */
-function bounceRoleModel(line, pair, chosenOriginalId) {
+/**
+ * {@link bouncePanelModel} for the bounce line of a pair.
+ *
+ * With an AI assessment (ETP-6359) the options are sorted by percentage for display, each row's
+ * percentage is exposed in `percents`, and an ambiguous pair with no explicit pick defaults to the
+ * AI's recommendation: `chosen = explicit pick ?? AI default ?? null`, DERIVED here (never stored),
+ * flagged by `aiPreselected`. A single-original pair shows its percentage but is never
+ * preselected. Without an assessment the model is exactly what it was.
+ */
+function bounceRoleModel(line, pair, chosenOriginalId, aiAssessments = null) {
   const ambiguous = isAmbiguousPair(pair);
-  const options = ambiguous
+  const assessment = aiAssessmentFor(aiAssessments, line.id);
+  const baseOptions = ambiguous
     ? (pair.candidates ?? []).map((c) => c?.line).filter(Boolean)
     : [pair.counterpartLine].filter(Boolean);
+  const options = ambiguous ? sortOptionsByAi(baseOptions, assessment) : baseOptions;
   let chosen = null;
-  if (ambiguous) chosen = options.find((o) => o.id === chosenOriginalId) ?? null;
-  else chosen = options[0] ?? null;
-  return {
+  let aiPreselected = false;
+  if (ambiguous) {
+    chosen = options.find((o) => o.id === chosenOriginalId) ?? null;
+    if (!chosen) {
+      const aiId = aiDefaultChoice(assessment, options);
+      chosen = options.find((o) => o.id === aiId) ?? null;
+      aiPreselected = chosen != null;
+    }
+  } else {
+    chosen = options[0] ?? null;
+  }
+  const model = {
     mode: BOUNCE_STATE,
     role: 'bounce',
     pair,
@@ -430,6 +460,17 @@ function bounceRoleModel(line, pair, chosenOriginalId) {
     reason: bounceReason(pair, chosen, line),
     discard: chosen ? { statementLineId: chosen.id, counterpartLineId: line.id } : null,
     net: pairNet(line, chosen),
+  };
+  if (!assessment) return model;
+  const percents = {};
+  for (const option of options) percents[option.id] = aiPercent(assessment, option.id);
+  const recommendedId = aiDefaultChoice(assessment, options);
+  return {
+    ...model,
+    percents,
+    aiRecommendedId: ambiguous ? recommendedId : null,
+    aiPreselected,
+    aiPercent: aiPreselected ? percents[chosen.id] : null,
   };
 }
 

@@ -410,3 +410,82 @@ describe('financeReconcileAutomatch* — the two-card redesign', () => {
   });
 });
 
+
+// ETP-6359 — the AI second layer of the bank-rejection suggestions: seven new keys.
+describe('locale parity — AI suggestion of the bank-rejection review', () => {
+  const AI_KEYS = [
+    'financeReconcileAutomatchBounceAiMatch',
+    'financeReconcileBounceNoticeAi',
+    'financeReconcileBounceAiProbability',
+    'financeReconcileBounceAiBadge',
+    'financeReconcileBounceAiUndo',
+    'financeReconcileBounceAiStale',
+    'backendError.bounceAiSuggestionStale',
+  ];
+  const LOCALE_SET = { en_US: enUS, es_ES: esES, es_AR: esAR };
+  const placeholders = (text) => (text.match(/\{[A-Za-z]+\}/g) ?? []).sort();
+
+  it('ships every key, non-blank, in en_US, es_ES and es_AR', () => {
+    for (const key of AI_KEYS) {
+      for (const [name, dictionary] of Object.entries(LOCALE_SET)) {
+        const value = dictionary.genericLabels?.[key];
+        expect(typeof value, `${name}.${key}`).toBe('string');
+        expect(value.trim(), `${name}.${key}`).not.toBe('');
+      }
+    }
+  });
+
+  it('keeps the same placeholders in every locale', () => {
+    for (const key of AI_KEYS) {
+      const expected = placeholders(enUS.genericLabels[key]);
+      for (const [name, dictionary] of Object.entries(LOCALE_SET)) {
+        expect(placeholders(dictionary.genericLabels[key]), `${name}.${key}`).toEqual(expected);
+      }
+    }
+  });
+
+  it('the sentences that show a percentage take {pct} and carry the "%" sign', () => {
+    for (const key of [
+      'financeReconcileAutomatchBounceAiMatch',
+      'financeReconcileBounceNoticeAi',
+      'financeReconcileBounceAiProbability',
+      'financeReconcileBounceAiBadge',
+    ]) {
+      for (const [name, dictionary] of Object.entries(LOCALE_SET)) {
+        const value = dictionary.genericLabels[key];
+        expect(value, `${name}.${key}`).toContain('{pct}');
+        expect(value, `${name}.${key}`).toContain('%');
+      }
+    }
+  });
+
+  it('writes the percent sign as each language does: "85 %" in Spanish, "85%" in English', () => {
+    const render = (dictionary, key) => dictionary.genericLabels[key].replace('{pct}', '85');
+    for (const key of ['financeReconcileAutomatchBounceAiMatch', 'financeReconcileBounceAiProbability',
+      'financeReconcileBounceAiBadge', 'financeReconcileBounceNoticeAi']) {
+      expect(render(enUS, key), `en_US.${key}`).toMatch(/85%/);
+      expect(render(enUS, key), `en_US.${key}`).not.toMatch(/85 %/);
+      for (const [name, dictionary] of Object.entries({ es_ES: esES, es_AR: esAR })) {
+        expect(render(dictionary, key), `${name}.${key}`).toMatch(/85 %/);
+      }
+    }
+  });
+
+  it('Spanish says "rechazo" where it names the rejection and never "rebote" nor "devolución"', () => {
+    for (const [name, dictionary] of Object.entries({ es_ES: esES, es_AR: esAR })) {
+      expect(dictionary.genericLabels.financeReconcileBounceAiStale, `${name} stale`).toMatch(/rechazo/i);
+      expect(dictionary.genericLabels['backendError.bounceAiSuggestionStale'], `${name} backend`).toMatch(/rechazo/i);
+      for (const key of AI_KEYS) {
+        expect(dictionary.genericLabels[key], `${name}.${key}`).not.toMatch(/rebote|devoluci/i);
+      }
+    }
+  });
+
+  it('every Spanish string is localized, not a copy of the English source (except the bare "{pct} %")', () => {
+    for (const [name, dictionary] of Object.entries({ es_ES: esES, es_AR: esAR })) {
+      for (const key of AI_KEYS.filter((k) => k !== 'financeReconcileBounceAiProbability')) {
+        expect(dictionary.genericLabels[key], `${name}.${key}`).not.toBe(enUS.genericLabels[key]);
+      }
+    }
+  });
+});

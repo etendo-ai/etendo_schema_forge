@@ -249,3 +249,32 @@ describe('useAutoMatchReview', () => {
     expect(result.current.sentToPanelKeys.size).toBe(0);
   });
 });
+
+// ETP-6359 — the AI layer of the last automatch answer, handed to the reconciliation panel.
+describe('useAutoMatchReview — aiAssessments', () => {
+  const AI = { B3: { probabilities: { C1: 10, C2: 85 }, none: 5, recommendedLineId: 'C2' } };
+
+  it('exposes aiAssessments on the hook and inside the panel bundle', () => {
+    const { result } = renderHook(() => useAutoMatchReview(GROUPS, { bounceAiAssessments: AI }));
+    expect(result.current.aiAssessments).toBe(AI);
+    expect(result.current.panel.aiAssessments).toBe(AI);
+  });
+
+  it('without an AI layer: aiAssessments is null and the panel bundle carries no such key', () => {
+    for (const options of [undefined, {}, { bounceAiAssessments: null }]) {
+      const { result } = renderHook(() => useAutoMatchReview(GROUPS, options));
+      expect(result.current.aiAssessments).toBeNull();
+      expect('aiAssessments' in result.current.panel).toBe(false);
+    }
+  });
+
+  it('follows a new automatch answer', () => {
+    const { result, rerender } = renderHook(
+      ({ ai }) => useAutoMatchReview(GROUPS, { bounceAiAssessments: ai }),
+      { initialProps: { ai: null } },
+    );
+    expect('aiAssessments' in result.current.panel).toBe(false);
+    rerender({ ai: AI });
+    expect(result.current.panel.aiAssessments).toBe(AI);
+  });
+});

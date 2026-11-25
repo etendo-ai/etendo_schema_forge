@@ -369,7 +369,8 @@ export function FinancialAccountDetail({ recordId }) {
   // the Reconciliation tab is active (not just while the modal is open) so the ETP-4922 "armed"
   // effect below can decide whether to open it as soon as a fresh response lands.
   const {
-    groups: autoMatchGroups, kpis: autoMatchKpis, loading: autoMatchLoading, reload: reloadAutoMatch,
+    groups: autoMatchGroups, kpis: autoMatchKpis, bounceAiAssessments: autoMatchAi,
+    loading: autoMatchLoading, reload: reloadAutoMatch,
   } = useAutoMatch(activeTab === 'reconciliation' && !isCashAccount ? recordId : null);
   // ETP-4922: opens the modal only once a FRESH autoMatch response (not last visit's stale data —
   // `useNeoResource` doesn't clear `data` when `path` goes back to null) confirms there is at least
@@ -397,6 +398,7 @@ export function FinancialAccountDetail({ recordId }) {
   // "No es un rechazo". Inert while the backend sends no bounce pair.
   const autoMatchReview = useAutoMatchReview(autoMatchGroups, {
     active: activeTab === 'reconciliation' && !isCashAccount,
+    bounceAiAssessments: autoMatchAi,
   });
   // "Revisar en el panel": close the modal and show the pair's bounce line. There is no return
   // path: the Automatch button reopens the modal, on the same suggestions (and so the same checks)
@@ -697,6 +699,7 @@ export function FinancialAccountDetail({ recordId }) {
         accountName={account?.name ?? ''}
         groups={autoMatchGroups}
         kpis={autoMatchKpis}
+        bounceAiAssessments={autoMatchAi}
         currency={account?.currencyIso ?? 'EUR'}
         open={autoMatchOpen && !isCashAccount && !windowReadOnly}
         onClose={closeAutoMatch}

@@ -800,6 +800,23 @@ describe('bank bounce-pair refusals (ETP-5581)', () => {
     });
   }
 
+  // ETP-6359 — discardPair with choiceSource "ai": the cached recommendation no longer matches (409).
+  it('routes ETGO_BounceAiSuggestionStale (BOUNCE_AI_SUGGESTION_STALE) to backendError.bounceAiSuggestionStale', () => {
+    const body = { error: { code: 'BOUNCE_AI_SUGGESTION_STALE', message: 'x', messageKeys: ['ETGO_BounceAiSuggestionStale'] } };
+    assert.equal(translateBackendErrorBody(body, (k) => `translated:${k}`, 'fallback'),
+      'translated:backendError.bounceAiSuggestionStale');
+  });
+
+  for (const locale of ['en_US', 'es_ES', 'es_AR']) {
+    it(`resolves the stale AI suggestion refusal to a non-empty ${locale} translation`, () => {
+      const json = JSON.parse(readFileSync(new URL(`../../locales/${locale}.json`, import.meta.url), 'utf8'));
+      const out = translateBackendErrorBody(
+        { error: { messageKeys: ['ETGO_BounceAiSuggestionStale'] } }, localeTranslator(locale), 'f');
+      assert.equal(out, json.genericLabels['backendError.bounceAiSuggestionStale']);
+      assert.ok(out.trim());
+    });
+  }
+
   it('routes each refusal to its own locale key', () => {
     const keys = KEYED.map(([code, messageKey]) => translateBackendErrorBody(
       { error: { code, message: 'x', messageKeys: [messageKey] } }, (k) => `translated:${k}`, 'f'));

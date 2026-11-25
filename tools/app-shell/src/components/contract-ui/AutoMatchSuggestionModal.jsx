@@ -302,6 +302,8 @@ function notifyExcludeResults(excluded, failures, ui) {
  *   `sentToPanelKeys` (ETP-5581) are the pairs sent to the panel during this modal session
  *   (`useAutoMatchReview().sentToPanelKeys`): "Conciliar seleccionadas" reports them as
  *   `sent_to_panel` in its `bounceDecisions`, every other pair still shown as `unchecked`.
+ *   `bounceAiAssessments` (ETP-6359) is the autoMatch answer's AI layer: DISPLAY only, the most
+ *   probable candidate and its percentage on a pair to review; the checks never read it.
  *   `autoOpened` says the modal opened by itself rather than from the Automatch button, for the
  *   `bounce_suggestions_*` events: `viewed` once per opening with at least one pair, `dismissed`
  *   when that opening is closed without applying (X, Esc, backdrop, "Ir a conciliación manual" —
@@ -323,6 +325,7 @@ export function AutoMatchSuggestionModal({
   onReviewPair = null,
   sentToPanelKeys = null,
   autoOpened = false,
+  bounceAiAssessments = null,
 }) {
   const ui = useUI();
   const { apply, loading } = useApplySuggestions();
@@ -520,6 +523,7 @@ export function AutoMatchSuggestionModal({
                 onExclude={handleExclude}
                 excluding={loading}
                 onReview={onReviewPair}
+                aiAssessments={bounceAiAssessments}
                 currency={currency}
                 formatDate={formatLineDate}
                 data-testid="AutoMatchBounceSection__a89979" />
