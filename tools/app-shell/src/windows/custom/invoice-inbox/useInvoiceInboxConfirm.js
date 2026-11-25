@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { isNetworkError } from '@etendosoftware/app-shell-core/auth';
+import { isNetworkError } from '@etendo-ai/app-shell-core/auth';
 import { isTotalMismatch } from './invoiceInboxConfirmModel.js';
 import { confirmInboxDocument } from './invoiceInboxApi.js';
 import { isConfirmableRow } from './invoiceInboxFilters.js';

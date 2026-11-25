@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { CheckIcon, CircleNotchIcon, MagnifyingGlassIcon } from '@phosphor-icons/react';
-import { useUI } from '@etendosoftware/app-shell-core';
+import { useUI } from '@etendo-ai/app-shell-core';
 
 // committed-selection-ok: a list-filter dropdown, not a field picker. It already marks the active
 // filter (aria-selected from activeCode), but does not walk to it or centre it when that value is

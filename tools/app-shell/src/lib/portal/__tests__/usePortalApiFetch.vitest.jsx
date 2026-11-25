@@ -3,7 +3,7 @@
 // The unit IS the request client, so the double sits one layer below it: `globalThis.fetch`.
 // Mocking `useApiFetch`/`apiFetch` here would replace the very thing under test.
 import { renderHook } from '@testing-library/react';
-import { registerApiSession, resetApiSessionForTests } from '@etendosoftware/app-shell-core/auth';
+import { registerApiSession, resetApiSessionForTests } from '@etendo-ai/app-shell-core/auth';
 import { usePortalApiFetch } from '../usePortalApiFetch.js';
 
 const realFetch = globalThis.fetch;

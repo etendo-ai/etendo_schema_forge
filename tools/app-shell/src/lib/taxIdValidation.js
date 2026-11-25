@@ -8,7 +8,7 @@
 // The user sets its own fiscal identifier at exactly two points, and both are covered:
 //   1. the signup wizard's "NIF" field, and
 //   2. the Organización window, where they come back to edit it.
-// (1) lives in the published `@etendosoftware/etendo-go-core` `CompanyStep`, which takes no
+// (1) lives in the published `@etendo-ai/etendo-go-core` `CompanyStep`, which takes no
 // validator from `config` — so in the browser only (2) is guarded here; the signup value is
 // refused server-side by `parseOnboardingRequest`. Adding a client-side check to the wizard
 // means a change to that package, not to this repo.

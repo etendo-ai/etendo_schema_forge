@@ -44,7 +44,7 @@ import { useStatementActions } from '@/hooks/useStatementActions.js';
 import {
   buildHeaders as jsonHeaders,
   buildWriteHeaders as writeHeaders,
-} from '@etendosoftware/app-shell-core/auth/api';
+} from '@etendo-ai/app-shell-core/auth/api';
 
 function okResponse(payload = {}) {
   return { ok: true, json: async () => ({ response: { data: payload } }) };

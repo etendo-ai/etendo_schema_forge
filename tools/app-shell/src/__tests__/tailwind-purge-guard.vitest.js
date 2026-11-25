@@ -76,8 +76,8 @@ function packageSrcGlob(pkgName) {
   const entryPath = require.resolve(pkgName);
   return resolve(dirname(entryPath), '**/*.{js,jsx}');
 }
-const EXPECTED_CORE_PACKAGE_GLOB = packageSrcGlob('@etendosoftware/app-shell-core');
-const EXPECTED_GO_PACKAGE_GLOB = packageSrcGlob('@etendosoftware/etendo-go-core');
+const EXPECTED_CORE_PACKAGE_GLOB = packageSrcGlob('@etendo-ai/app-shell-core');
+const EXPECTED_GO_PACKAGE_GLOB = packageSrcGlob('@etendo-ai/etendo-go-core');
 
 /**
  * The semantic utilities under guard. These are the EXACT classes that broke in

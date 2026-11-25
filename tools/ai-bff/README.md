@@ -313,7 +313,7 @@ pipeline itself is broken), run the same script on a Linux host with Docker
 update the service:
 
 ```bash
-export GH_TOKEN=<token with repo + read:packages>   # the build installs @etendosoftware packages
+export GH_TOKEN=<token with repo + read:packages>   # the build installs @etendo-ai packages
 bash $S build  production <forge_sha>              # prints DIGEST=sha256:…
 bash $S deploy production sha256:<digest>          # verifies, rolls back on failure
 ```

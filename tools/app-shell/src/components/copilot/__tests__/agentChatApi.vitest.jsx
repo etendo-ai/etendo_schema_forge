@@ -2,7 +2,7 @@
  * agentChatApi.js — the agent chat history client (/sws/agent-chat/*).
  * Runs the real apiFetch over a mocked fetch, with a registered session whose 401 handler is a spy.
  */
-import { registerApiSession, resetApiSessionForTests } from '@etendosoftware/app-shell-core/auth/api';
+import { registerApiSession, resetApiSessionForTests } from '@etendo-ai/app-shell-core/auth/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   appendAgentMessages,

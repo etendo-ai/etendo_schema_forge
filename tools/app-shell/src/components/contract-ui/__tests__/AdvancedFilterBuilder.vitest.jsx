@@ -90,7 +90,7 @@ vi.mock('../DistinctValuesList.jsx', () => ({
 // specifiers to the very files the core component imports relatively — so mocking
 // them here intercepts the core component's internal imports. The functional-path
 // mocks above no longer bind post-shim; these are the ones that take effect.
-vi.mock('@etendosoftware/app-shell-core/hooks/useDistinctValues.js', () => ({
+vi.mock('@etendo-ai/app-shell-core/hooks/useDistinctValues.js', () => ({
   useDistinctValues: () => ({
     values: distinctState.values,
     loading: false,
@@ -102,7 +102,7 @@ vi.mock('@etendosoftware/app-shell-core/hooks/useDistinctValues.js', () => ({
   }),
 }));
 
-vi.mock('@etendosoftware/app-shell-core/components/contract-ui/DistinctValuesList.jsx', () => ({
+vi.mock('@etendo-ai/app-shell-core/components/contract-ui/DistinctValuesList.jsx', () => ({
   DistinctValuesList: ({ codes = [], labelFor, onSelect }) => (
     <div data-testid="distinct-values-list">
       {codes.map((code, i) => (
@@ -122,7 +122,7 @@ vi.mock('@etendosoftware/app-shell-core/components/contract-ui/DistinctValuesLis
 // Same reasoning as above: the core component imports Select from its own
 // '../ui/select.jsx', which the exports map's './components/ui/*' wildcard
 // routes to this subpath specifier — mock it here, not at '@/components/ui/select.jsx'.
-vi.mock('@etendosoftware/app-shell-core/components/ui/select.jsx', () => ({
+vi.mock('@etendo-ai/app-shell-core/components/ui/select.jsx', () => ({
   Select: ({ children, value, onValueChange, disabled }) => (
     <select
       data-testid="select-control"
@@ -802,7 +802,7 @@ describe('custom-column exclusion from filterableColumns (ETP-4609)', () => {
 
 let corePickerSorts = false;
 try {
-  const mod = await import('@etendosoftware/app-shell-core/lib/statusBadge.js');
+  const mod = await import('@etendo-ai/app-shell-core/lib/statusBadge.js');
   corePickerSorts = !!(mod.STATUS_ORDER && mod.compareStatusCodes);
 } catch {
   // Subpath not resolvable (pre-publish) — suite is skipped.

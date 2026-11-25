@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useUI } from '@/i18n';
-import { createQueryKey, useOptionalDataCache } from '@etendosoftware/app-shell-core/data';
+import { createQueryKey, useOptionalDataCache } from '@etendo-ai/app-shell-core/data';
 import { newAttachmentsSource, notifyAttachmentsChanged, useAttachmentsChanged } from './attachmentsBus';
 
 import { useApiFetch } from '@/auth/useApiFetch.js';

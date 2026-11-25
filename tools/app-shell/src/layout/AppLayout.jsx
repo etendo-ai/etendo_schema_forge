@@ -15,7 +15,7 @@ import { useAccountIdentity } from '@/lib/flags/useAccountIdentity.js';
 import { useSessionStartTracking } from '@/lib/observability/useSessionStartTracking.js';
 import {
   announceSessionAccount, deleteCookieSession, readCookieSession, useAuthOptional,
-} from '@etendosoftware/app-shell-core/auth';
+} from '@etendo-ai/app-shell-core/auth';
 import { SessionConflictNotice } from '@/components/access/SessionConflictNotice.jsx';
 import { useCapabilitiesSafe, useWindowAccessSafe } from '@/hooks/useCapabilitiesSafe.js';
 import { SidebarProvider, useSidebar } from '@/components/layout/SidebarContext';
@@ -51,7 +51,7 @@ import { clearAccessLoadError, recordAccessLoadError } from '@/lib/accessLoadErr
 import { useUI } from '@/i18n';
 import { fetchCurrencyFormatConfig } from '@/lib/currencyFormatConfig.js';
 import { fetchMyReportAccess } from '@/lib/rolesApi.js';
-import { WalkthroughProvider } from '@etendosoftware/app-shell-core/walkthrough';
+import { WalkthroughProvider } from '@etendo-ai/app-shell-core/walkthrough';
 import { WALKTHROUGH_FLOWS, walkthroughFlowsForPlan } from '@/walkthrough/flows';
 import { handleWalkthroughFinish } from '@/lib/walkthrough/walkthrough-events.js';
 import { SupportSessionBanner } from '@/components/layout/SupportSessionBanner.jsx';

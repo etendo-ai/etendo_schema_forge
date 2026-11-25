@@ -126,11 +126,11 @@ describe('auth header policy (ETP-5022)', () => {
     // Guards the policy itself: if authHeaders/buildHeaders ever stop sending the locale,
     // every migrated call site regresses at once and the test above would still pass.
     const api = readFileSync(join(SRC, 'auth', 'api.js'), 'utf8');
-    assert.match(api, /export \* from '@etendosoftware\/app-shell-core\/auth'/,
+    assert.match(api, /export \* from '@etendo-ai\/app-shell-core\/auth'/,
       'src/auth/api.js is expected to re-export the core auth module');
 
     const core = readFileSync(
-      join(__dirname, '..', '..', '..', 'node_modules', '@etendosoftware', 'app-shell-core',
+      join(__dirname, '..', '..', '..', 'node_modules', '@etendo-ai', 'app-shell-core',
         'src', 'auth', 'api.js'),
       'utf8',
     );

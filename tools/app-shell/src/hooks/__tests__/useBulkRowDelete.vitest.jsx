@@ -75,7 +75,7 @@ vi.mock('@/components/copilot/ocr/ingest/useBatch.js', () => ({
 }));
 // ETP-6143 — a stand-in record cache, so the bulk path's cross-spec invalidation can be observed.
 const { cacheMock } = vi.hoisted(() => ({ cacheMock: { invalidate: vi.fn() } }));
-vi.mock('@etendosoftware/app-shell-core/data', async (importOriginal) => ({
+vi.mock('@etendo-ai/app-shell-core/data', async (importOriginal) => ({
   ...(await importOriginal()),
   useOptionalDataCache: () => ({ cache: cacheMock }),
 }));

@@ -103,7 +103,7 @@ vi.mock('@/components/copilot/copilotApi.js', async (importOriginal) => ({
 // bare object: this barrel also publishes `apiFetch` and the header builders, and replacing it
 // wholesale would take out every other module in the tree that reaches them.
 const useAuthOptionalMock = vi.fn(() => null);
-vi.mock('@etendosoftware/app-shell-core/auth', async (importOriginal) => ({
+vi.mock('@etendo-ai/app-shell-core/auth', async (importOriginal) => ({
   ...(await importOriginal()),
   useAuthOptional: () => useAuthOptionalMock(),
 }));

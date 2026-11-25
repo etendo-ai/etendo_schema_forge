@@ -57,7 +57,7 @@ vi.mock('@/components/ui/add-line-button', () => ({
   ),
 }));
 
-// Checkbox re-exports from @etendosoftware/app-shell-core which is not
+// Checkbox re-exports from @etendo-ai/app-shell-core which is not
 // available in this test environment. Mock it as a native button with
 // role="checkbox" preserving the aria-label and checked/onChange contract.
 vi.mock('@/components/ui/checkbox', () => ({

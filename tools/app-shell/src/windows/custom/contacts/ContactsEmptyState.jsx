@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { GraduationCapIcon, PlusIcon, SparkleIcon } from '@phosphor-icons/react';
-import { ImportDropzone } from '@etendosoftware/app-shell-core/components/import/ImportDropzone.jsx';
+import { ImportDropzone } from '@etendo-ai/app-shell-core/components/import/ImportDropzone.jsx';
 import { useUI } from '@/i18n';
 import { Button } from '@/components/ui/button.jsx';
 import { InfoBanner } from '@/components/InfoBanner.jsx';

@@ -9,7 +9,7 @@
 import { expect } from 'vitest';
 // The leaf, not the `./auth` barrel: the barrel re-exports AuthContext.jsx, which
 // makes this helper unusable from `node --test` (no JSX loader).
-import { CREDENTIAL_MODES, setSessionCredentials } from '@etendosoftware/app-shell-core/auth/sessionCredentials.js';
+import { CREDENTIAL_MODES, setSessionCredentials } from '@etendo-ai/app-shell-core/auth/sessionCredentials.js';
 
 /** The CSRF proof these suites assert on. Matches the shared useAuth mock. */
 export const TEST_CSRF_TOKEN = 'test-csrf';

@@ -22,10 +22,10 @@ describe('public-api-e2e-ci helpers', () => {
 
   describe('pinnedCoreVersion', () => {
     it('returns the exact pin', () => {
-      assert.equal(pinnedCoreVersion({ dependencies: { '@etendosoftware/api-gateway-core': '0.3.95' } }), '0.3.95');
+      assert.equal(pinnedCoreVersion({ dependencies: { '@etendo-ai/api-gateway-core': '0.3.95' } }), '0.3.95');
     });
     it('refuses a range or a missing published pin', () => {
-      assert.throws(() => pinnedCoreVersion({ dependencies: { '@etendosoftware/api-gateway-core': '^0.3.95' } }), /exact x\.y\.z/);
+      assert.throws(() => pinnedCoreVersion({ dependencies: { '@etendo-ai/api-gateway-core': '^0.3.95' } }), /exact x\.y\.z/);
       assert.throws(() => pinnedCoreVersion({}), /exact x\.y\.z/);
     });
   });
@@ -146,7 +146,7 @@ describe('public-api-e2e-ci helpers', () => {
   });
 
   describe('edge cases', () => {
-    const CORE = '@etendosoftware/api-gateway-core';
+    const CORE = '@etendo-ai/api-gateway-core';
 
     it('pinnedCoreVersion: falls back to devDependencies, accepts prerelease, refuses v prefix and null', () => {
       assert.equal(pinnedCoreVersion({ devDependencies: { [CORE]: '1.2.3' } }), '1.2.3');

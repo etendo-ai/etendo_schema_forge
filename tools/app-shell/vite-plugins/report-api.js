@@ -18,7 +18,7 @@ import { loadReportCli } from './report-cli.js';
 // loaded through loadReportCli() instead of a static import, so a
 // LOCAL_CORE=1 dev run consumes schema_forge_core's own source (report-auth.js
 // is new in this change and not yet published) while a normal run keeps
-// resolving the published @etendosoftware/schema-forge-cli package exactly as
+// resolving the published @etendo-ai/schema-forge-cli package exactly as
 // every static import here always has. See report-cli.js / design id 455
 // ("Local verification of the plugin") and tasks id 458 (WU3.1/WU3.2).
 const { REPORT_UI_STRINGS, pickLabel, buildContractLabels } = await loadReportCli('report-i18n');
@@ -96,7 +96,7 @@ function parseGradleProps(path) {
 }
 
 // ---------------------------------------------------------------------------
-// Rendered-report i18n (ETP-4898) now lives in @etendosoftware/schema-forge-cli
+// Rendered-report i18n (ETP-4898) now lives in @etendo-ai/schema-forge-cli
 // (cli/src/report-i18n.js) and is imported above. It used to be defined right
 // here, which is exactly why the production report-server never had it: code
 // written inline in this plugin does not reach the server, only shared modules
@@ -105,7 +105,7 @@ function parseGradleProps(path) {
 
 // ---------------------------------------------------------------------------
 // Row grouping, opening balances and account trees now live in
-// @etendosoftware/schema-forge-cli (cli/src/report-grouping.js) and are loaded
+// @etendo-ai/schema-forge-cli (cli/src/report-grouping.js) and are loaded
 // above via loadReportCli(). They used to be defined right here, which is
 // exactly why the production report-server never had them: code written
 // inline in this plugin does not reach the server, only shared modules do.

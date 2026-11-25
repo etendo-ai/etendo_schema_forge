@@ -48,12 +48,12 @@ vi.mock('@/i18n', () => ({
   useUI: () => (key) => LABELS[key] ?? key,
 }));
 
-vi.mock('@etendosoftware/app-shell-core/i18n', () => ({
+vi.mock('@etendo-ai/app-shell-core/i18n', () => ({
   useUI: () => (key) => LABELS[key] ?? key,
   useLocaleSwitch: () => ({ locale: 'es_ES', setLocale: null }),
 }));
 
-vi.mock('@etendosoftware/etendo-go-core/onboarding/sso', () => ({
+vi.mock('@etendo-ai/etendo-go-core/onboarding/sso', () => ({
   getConfiguredSsoProviders: () => [],
   renderSsoProviderButton: async () => {},
   loadGoogleIdentityScript: async () => {},

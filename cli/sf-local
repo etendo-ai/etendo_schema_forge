@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # sf-local — run a published `sf-*` CLI command from the sibling schema_forge_core
-# SOURCE instead of the installed @etendosoftware/schema-forge-cli package.
+# SOURCE instead of the installed @etendo-ai/schema-forge-cli package.
 #
 # This is used only by `make <target> LOCAL_CORE=1` (see the `SF` variable in the
 # Makefile). The DEFAULT path is `npx sf-*` against the published package — this
@@ -10,7 +10,7 @@
 #
 # Mechanism:
 #   1. Resolve the bin name -> script path using the PUBLISHED package's own bin
-#      map (node_modules/@etendosoftware/schema-forge-cli/package.json). That map
+#      map (node_modules/@etendo-ai/schema-forge-cli/package.json). That map
 #      is the single source of truth (e.g. sf-push-neo -> ./src/push-to-neo.js).
 #   2. Run that same script from ../schema_forge_core/cli/ so it executes the
 #      local core source.
@@ -31,7 +31,7 @@ shift
 # Functional repo root = parent of this script's directory (cli/).
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 core="${SCHEMA_FORGE_CORE:-$(cd "$repo_root/.." && pwd)/schema_forge_core}"
-map="$repo_root/node_modules/@etendosoftware/schema-forge-cli/package.json"
+map="$repo_root/node_modules/@etendo-ai/schema-forge-cli/package.json"
 
 if [ ! -d "$core/cli/src" ]; then
   echo "sf-local: schema_forge_core CLI source not found at $core/cli/src" >&2

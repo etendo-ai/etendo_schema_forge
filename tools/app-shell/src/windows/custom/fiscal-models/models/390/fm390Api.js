@@ -3,7 +3,7 @@
 //
 // A plain module: it uses the core `apiFetch` (never a bare `fetch`, see docs/request-policy.md),
 // with the explicit `token` the callers already hold as an override.
-import { apiFetch } from '@etendosoftware/app-shell-core/auth/api';
+import { apiFetch } from '@etendo-ai/app-shell-core/auth/api';
 import { base64ToBlob, incidentsFromRows, triggerDownload } from '../../fiscalModelsUtils.js';
 import { ANNUAL_PERIOD } from '../../fiscalPeriods.js';
 import { fileValidationOf } from './fileValidation390.js';

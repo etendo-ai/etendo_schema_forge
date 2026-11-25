@@ -147,7 +147,7 @@ vi.mock('../ListFilterBar.jsx', () => ({
 // The real ScrollPane wires onReachBottom to a scroll observer that jsdom cannot
 // drive; the stub exposes the callback so infinite scroll stays testable.
 let scrollPaneProps = null;
-vi.mock('@etendosoftware/app-shell-core/components/ui/scroll-pane.jsx', () => ({
+vi.mock('@etendo-ai/app-shell-core/components/ui/scroll-pane.jsx', () => ({
   ScrollPane: ({ children, onReachBottom }) => {
     scrollPaneProps = { onReachBottom };
     return <div data-testid="scroll-pane">{children}</div>;

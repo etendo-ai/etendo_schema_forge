@@ -2,7 +2,7 @@
 // @covers tools/app-shell/src/hooks/useReconciliationPost.js
 // @covers tools/app-shell/src/hooks/useBouncePairActions.js
 import { renderHook, waitFor, act } from '@testing-library/react';
-import { setSessionCredentials, CREDENTIAL_MODES } from '@etendosoftware/app-shell-core/auth/sessionCredentials.js';
+import { setSessionCredentials, CREDENTIAL_MODES } from '@etendo-ai/app-shell-core/auth/sessionCredentials.js';
 
 // The GET hooks below (usePendingStatementLines, useCandidateOperations, useAutoMatch) still
 // go through useNeoResource.js, which reads its token via the aliased `useAuth` — this mock
@@ -14,7 +14,7 @@ vi.mock('@/auth/AuthContext.jsx', () => ({
   useAuth: () => ({ token: 'test-token' }),
 }));
 
-import { AuthProvider } from '@etendosoftware/app-shell-core/auth';
+import { AuthProvider } from '@etendo-ai/app-shell-core/auth';
 import {
   usePendingStatementLines,
   useCandidateOperations,
