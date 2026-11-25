@@ -46,11 +46,13 @@ import {
 // Opt-in presets of the period filter: they map 1:1 to the side panel's 3M / 6M (12M is a default one).
 const MOVEMENTS_EXTRA_PRESETS = ['last3m', 'last6m'];
 
-// `min-w-[994px]` is the real width of the grid: the column minimums (150 + 220 + 140 + 100 + 150 + 130 = 890)
+// `min-w-[1014px]` is the real width of the grid: the column minimums (150 + 220 + 140 + 100 + 170 + 130 = 910)
 // + 5 gaps of `gap-x-4` (80) + the `px-3` of each row (24). It must stay equal to that sum: a smaller literal
 // lets the cells overflow the row box, so backgrounds and borders stop before the last column. Every row, the
 // sticky header and the period total use it, so they have the same width and align when the box scrolls sideways.
-const GRID = 'grid shrink-0 min-w-[994px] grid-cols-[150px_minmax(220px,1.6fr)_minmax(140px,1fr)_100px_150px_130px] items-center gap-x-4';
+// The cost column is 170, not 150: its sortable header (label 136 + arrow 12 + gap 2 = 150) overflowed a 150
+// column by a sub-pixel fraction and `truncate` showed an ellipsis.
+const GRID = 'grid shrink-0 min-w-[1014px] grid-cols-[150px_minmax(220px,1.6fr)_minmax(140px,1fr)_100px_170px_130px] items-center gap-x-4';
 const NEAR_BOTTOM_PX = 80;
 const SKELETON_ROWS = 6;
 
@@ -148,9 +150,10 @@ const TOTAL_ROW_RESERVE_PX = 48;
  * match (server side), under the Quantity column. `row` is what `resolveTotalRow` answers: hidden, or the
  * totals (null while loading, a skeleton).
  *
- * Alignment with the table, which scrolls on its own: the box keeps `scrollbar-gutter: stable` and this row
- * takes the same width as `scrollbarWidth` on its right, so both grids have the same width with or without
- * rows overflowing. The inner grid is as wide as the table's content (`gridWidth` = the box's `scrollWidth`,
+ * Alignment with the table, which scrolls on its own: the box has no reserved scrollbar gutter, and this row
+ * takes the live width of its vertical scrollbar (`scrollbarWidth`, 0 with overlay scrollbars or no overflow) on
+ * its right, so both grids have the same width with or without rows overflowing. The inner grid is as wide as
+ * the table's content (`gridWidth` = the box's `scrollWidth`,
  * NOT a literal: it also covers a window wider than the grid), so both have the same horizontal scroll
  * range; sideways, the table box drives this row's `scrollLeft` (this row is `overflow-hidden`).
  *
@@ -627,9 +630,10 @@ export default function ProductMovementsTab({ data, apiBaseUrl, isActive, onVisi
         // its static position to the content column's scrollable height (blank page after scrolling).
         // ETP-5889: the block that wraps this box bleeds to the card edges like the document lines of a standard
         // window (`-ml-2 -mr-4`: DetailView wraps a custom tab in `p-2` and Product's content column adds `pr-2`,
-        // index.jsx); the filter bar above keeps the 8px inset. `scrollbar-gutter: stable` keeps the grid width
-        // the same whether or not rows overflow, so the total row below can match it.
-        className="relative flex max-h-[calc(100vh-420px)] flex-col overflow-y-auto [scrollbar-gutter:stable]"
+        // index.jsx); the filter bar above keeps the 8px inset. There is no `scrollbar-gutter`: the total row below
+        // measures the live scrollbar width (`boxMetrics`) and reserves it, so it matches the grid either way, and
+        // without overflow the rows run to the box edge.
+        className="relative flex max-h-[calc(100vh-420px)] flex-col overflow-y-auto"
         onScroll={onScroll}
         data-testid="product-movements-scroll">
         <div role="row" className={`${GRID} sticky top-0 z-30 border-b border-border bg-card px-3 py-2 text-xs font-medium text-muted-foreground`}>

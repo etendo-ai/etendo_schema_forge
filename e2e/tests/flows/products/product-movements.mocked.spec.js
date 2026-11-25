@@ -236,6 +236,167 @@ test.describe('Product movements tab — layout and sort', () => {
   });
 });
 
+/**
+ * Horizontal edges of the numeric columns (Cantidad, Costo, Stock resultante) in the header, every data row and
+ * the period Total. The Total row has no cell per column: its Cantidad value is the 4th grid item and its
+ * trailing spacer spans Costo + Stock, so the spacer's left edge is Costo's left edge and its right edge is
+ * Stock's right edge.
+ */
+async function numericColumnEdges(page) {
+  return page.getByTestId('product-movements-scroll').evaluate((box) => {
+    const edge = (el) => { const r = el.getBoundingClientRect(); return { left: r.left, right: r.right }; };
+    const headerCells = [...box.querySelector('[role="row"]').querySelectorAll('[role="columnheader"]')];
+    const rows = [...box.querySelectorAll('[data-testid="product-movements-row"]')].map((row) => {
+      const cells = row.querySelectorAll('[role="cell"]');
+      return { quantity: edge(cells[3]), cost: edge(cells[4]), stock: edge(cells[5]), row: edge(row) };
+    });
+    const total = document.querySelector('[data-testid="product-movements-total"]');
+    const spacer = total.querySelector('[aria-hidden="true"]');
+    return {
+      header: { quantity: edge(headerCells[3]), cost: edge(headerCells[4]), stock: edge(headerCells[5]), row: edge(box.querySelector('[role="row"]')) },
+      rows,
+      total: {
+        quantity: edge(total.querySelector('[data-testid="product-movements-total-value"]')),
+        costLeft: edge(spacer).left,
+        stockRight: edge(spacer).right,
+        row: edge(total.firstElementChild),
+        outer: edge(total),
+      },
+    };
+  });
+}
+
+/** Header, every data row and the Total share the left and right edges of the three numeric columns (1 px). */
+function expectAlignedColumns(e) {
+  const near = (a, b) => expect(Math.abs(a - b)).toBeLessThanOrEqual(1);
+  expect(e.rows.length).toBeGreaterThan(0);
+  for (const r of e.rows) {
+    for (const col of ['quantity', 'cost', 'stock']) {
+      near(r[col].left, e.header[col].left);
+      near(r[col].right, e.header[col].right);
+    }
+  }
+  near(e.total.quantity.left, e.header.quantity.left);
+  near(e.total.quantity.right, e.header.quantity.right);
+  near(e.total.costLeft, e.header.cost.left);
+  near(e.total.stockRight, e.header.stock.right);
+}
+
+const NUMERIC_ROWS = (n) => Array.from({ length: n }, (_, i) => ({
+  ...MOVEMENT, id: `mov-num-${i}`, etgoDocLabel: `GR-${String(i).padStart(4, '0')}`, movementQuantity: 10 + i, transactionCost: 1234.5 + i, etgoStockAfter: 100 + i,
+}));
+
+test.describe('Product movements tab — column geometry', () => {
+  test('the cost header is 170 px wide and never truncates its label, with no sort and in both sort directions', async ({ page }) => {
+    await openMovementsWith(page, () => [200, page_([MOVEMENT, OUT_MOVEMENT], { netQuantity: -3, count: 2 })]);
+    await expect(page.getByTestId('product-movements-row').first()).toBeVisible({ timeout: 10_000 });
+
+    const costHeader = page.getByRole('columnheader').nth(4);
+    const sortButton = page.getByTestId('column-header-sort-cost');
+    const measure = () => costHeader.evaluate((el) => {
+      const label = el.querySelector('span.truncate');
+      return { width: el.getBoundingClientRect().width, scrollWidth: label.scrollWidth, clientWidth: label.clientWidth, text: label.textContent };
+    });
+
+    // Cycle the sort: none -> first direction -> the other direction, asserting each state once.
+    const seen = new Set();
+    for (let i = 0; i < 3; i++) {
+      const state = (await costHeader.getAttribute('aria-sort')) ?? 'none';
+      seen.add(state);
+      const m = await measure();
+      expect(Math.round(m.width), `cost column width (${state})`).toBe(170);
+      expect(m.text.length).toBeGreaterThan(0);
+      expect(m.scrollWidth, `cost label truncated (${state})`).toBeLessThanOrEqual(m.clientWidth);
+      await sortButton.click();
+      await expect(costHeader).not.toHaveAttribute('aria-sort', state === 'none' ? /^$/ : state);
+    }
+    expect(seen).toContain('ascending');
+    expect(seen).toContain('descending');
+    expect(seen).toContain('none');
+  });
+
+  test('header, rows and Total share the numeric columns edges at 1280x720, at both ends of the horizontal scroll', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    const ROWS = NUMERIC_ROWS(4);
+    await openMovementsWith(page, () => [200, page_(ROWS, { netQuantity: 46, count: ROWS.length })]);
+    await expect(page.getByTestId('product-movements-total')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId('product-movements-row')).toHaveCount(ROWS.length);
+
+    const box = page.getByTestId('product-movements-scroll');
+    const total = page.getByTestId('product-movements-total');
+    const metrics = await box.evaluate((el) => ({
+      gridMin: el.querySelector('[role="row"]').getBoundingClientRect().width,
+      scrollWidth: el.scrollWidth,
+      clientWidth: el.clientWidth,
+    }));
+    expect(metrics.gridMin).toBeGreaterThanOrEqual(1014);
+    expect(metrics.scrollWidth, 'the table box must scroll horizontally at 1280 px').toBeGreaterThan(metrics.clientWidth);
+
+    await box.evaluate((el) => { el.scrollLeft = 0; });
+    expectAlignedColumns(await numericColumnEdges(page));
+    expect(await total.evaluate((el) => el.scrollLeft)).toBe(0);
+
+    await box.evaluate((el) => { el.scrollLeft = el.scrollWidth; });
+    const maxScroll = await box.evaluate((el) => el.scrollLeft);
+    expect(maxScroll).toBeGreaterThan(0);
+    // The Total follows through the scroll event.
+    await expect.poll(() => total.evaluate((el) => el.scrollLeft)).toBeGreaterThanOrEqual(maxScroll - 1);
+    expect(await total.evaluate((el) => el.scrollLeft)).toBeLessThanOrEqual(maxScroll + 1);
+    expectAlignedColumns(await numericColumnEdges(page));
+  });
+
+  test('no scrollbar gutter is reserved: the Total padding is 0 without overflow and equals the live scrollbar with it', async ({ page }) => {
+    let dataset = NUMERIC_ROWS(4);
+    await openMovementsWith(page, () => [200, page_(dataset, { netQuantity: 1, count: dataset.length })]);
+    const box = page.getByTestId('product-movements-scroll');
+    const total = page.getByTestId('product-movements-total');
+    await expect(page.getByTestId('product-movements-row')).toHaveCount(4, { timeout: 10_000 });
+    await expect(total).toBeVisible();
+
+    const scrollbar = () => box.evaluate((el) => el.offsetWidth - el.clientWidth);
+    const paddingRight = () => total.evaluate((el) => Number.parseFloat(getComputedStyle(el).paddingRight));
+    const rightEdges = async () => {
+      const e = await numericColumnEdges(page);
+      return { header: e.header.row.right, row: e.rows[0].row.right, total: e.total.row.right, e };
+    };
+
+    // Short list: nothing overflows vertically.
+    expect(await box.evaluate((el) => el.scrollHeight <= el.clientHeight)).toBe(true);
+    expect(await scrollbar()).toBe(0);
+    expect(await paddingRight()).toBe(0);
+    let edges = await rightEdges();
+    expect(Math.abs(edges.header - edges.row)).toBeLessThanOrEqual(1);
+    expect(Math.abs(edges.header - edges.total)).toBeLessThanOrEqual(1);
+    expectAlignedColumns(edges.e);
+
+    // Long list: the box overflows, classic scrollbars of headless Chromium take 10 px.
+    dataset = NUMERIC_ROWS(20);
+    await page.getByTestId('product-movements-direction').getByRole('button').nth(1).click();
+    await expect(page.getByTestId('product-movements-row')).toHaveCount(20, { timeout: 10_000 });
+    // Classic scrollbars take width (10 px); overlay ones (headless Chromium) take none. The invariant holds for both:
+    // the Total reserves exactly what the box's live scrollbar takes.
+    const live = await scrollbar();
+    await expect.poll(paddingRight).toBe(live);
+    if (live === 0) {
+      test.info().annotations.push({ type: 'note', description: 'overlay scrollbars: the classic-scrollbar branch was not exercised' });
+    }
+    edges = await rightEdges();
+    expect(Math.abs(edges.header - edges.row)).toBeLessThanOrEqual(1);
+    expect(Math.abs(edges.header - edges.total)).toBeLessThanOrEqual(1);
+    expectAlignedColumns(edges.e);
+
+    // Back to a short list: the reserved width is released, never stale.
+    dataset = NUMERIC_ROWS(4);
+    await page.getByTestId('product-movements-direction').getByRole('button').nth(0).click();
+    await expect(page.getByTestId('product-movements-row')).toHaveCount(4, { timeout: 10_000 });
+    await expect.poll(scrollbar).toBe(0);
+    await expect.poll(paddingRight).toBe(0);
+    edges = await rightEdges();
+    expect(Math.abs(edges.header - edges.total)).toBeLessThanOrEqual(1);
+    expectAlignedColumns(edges.e);
+  });
+});
+
 test.describe('Product movements tab — period total row', () => {
   test('a sticky last row sums the period: count, net quantity in dark red with U+2212, bold 15 px', async ({ page }) => {
     const calls = await openMovementsWith(page, () => [200, page_([MOVEMENT, OUT_MOVEMENT], { netQuantity: -3, count: 2 })]);

@@ -524,7 +524,8 @@ describe('ProductMovementsTab (ETP-5889)', () => {
     render(<ProductMovementsTab data={storable} isActive />);
     const total = await screen.findByTestId('product-movements-total');
     const box = screen.getByTestId('product-movements-scroll');
-    expect(box.className.split(' ')).toEqual(expect.arrayContaining(['flex', 'flex-col', 'overflow-y-auto', '[scrollbar-gutter:stable]']));
+    expect(box.className.split(' ')).toEqual(expect.arrayContaining(['flex', 'flex-col', 'overflow-y-auto']));
+    expect(box.className).not.toContain('scrollbar-gutter');
     const tokens = total.className.split(' ');
     expect(tokens).toEqual(expect.arrayContaining(['sticky', '-bottom-2', 'z-40', 'overflow-hidden']));
     expect(tokens).not.toContain('mt-auto');
@@ -557,8 +558,8 @@ describe('ProductMovementsTab (ETP-5889)', () => {
     expect(header.className).toContain('sticky');
     expect(header.className).toContain('top-0');
     expect(header.className).toContain('bg-card');
-    expect(header.className).toContain('min-w-[994px]');
-    expect(line.className).toContain('min-w-[994px]');
+    expect(header.className).toContain('min-w-[1014px]');
+    expect(line.className).toContain('min-w-[1014px]');
   });
 
   it('derives the row minimum width from its own columns: min-w equals track minimums + gaps + horizontal padding', async () => {
