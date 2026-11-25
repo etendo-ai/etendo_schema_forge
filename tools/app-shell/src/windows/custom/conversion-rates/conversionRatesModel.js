@@ -10,6 +10,10 @@
  * written as TEXT here — never through `new Date(string)`, whose UTC/local reinterpretation
  * would shift the minute (or the day) by the viewer's offset. Ordering two such strings is a
  * plain string comparison: the format is fixed-width and big-endian.
+ *
+ * What the user SEES and TYPES is the browser's wall clock: {@link createZoneView} converts a
+ * server value for display and a typed value back before it is sent, from the server zone id
+ * `serverClock` answers (see "Time zones" below).
  */
 
 /** A validity end at or after this year means "no end date" (the open range, `9999-12-31`). */
@@ -123,27 +127,207 @@ export function isOpenEnded(validTo) {
 }
 
 /**
- * The "Válido hasta" text of a history row.
+ * The END of a history row's range, as the server's wall clock (`yyyy-MM-ddTHH:mm:ss`):
  *
  * - open range (or none) → `null` (the caller shows «—»);
  * - automatic (downloaded, `sMFCRSynced`) row whose end is stored at `00:00` of a day on or
  *   after its start → that day at `23:59`. The downloader stores each daily range closing at
  *   00:00 of the same day (`17/11 00:00 → 17/11 00:00`), which reads as a zero-length range;
- *   the range really covers the whole day, so it is shown as `17/11/2026 23:59`;
+ *   the range really covers the whole (server) day, so it ends at `17/11/2026 23:59`;
  * - anything else → the stored end as is (manual ranges are closed at `start − 1 minute` by
  *   the server, e.g. `18/11/2026 14:29`).
  *
  * @param {{validFromDate?: string, validToDate?: string, sMFCRSynced?: boolean}} row
  * @returns {string|null}
  */
-export function displayValidTo(row) {
+export function validToWallClock(row) {
   if (!row || isOpenEnded(row.validToDate)) return null;
   const to = parseWallClock(row.validToDate);
   if (row.sMFCRSynced === true && to.hour === 0 && to.minute === 0
       && wallClockDate(row.validToDate) >= wallClockDate(row.validFromDate)) {
-    return `${formatWallClockDate(row.validToDate)} 23:59`;
+    return `${wallClockDate(row.validToDate)}T23:59:00`;
   }
-  return formatWallClock(row.validToDate);
+  return row.validToDate;
+}
+
+/**
+ * The "Válido hasta" text of a history row (`dd/MM/yyyy HH:mm`, see {@link validToWallClock}),
+ * in the viewer's zone when `zone` (a {@link createZoneView}) is given; `null` for an open range.
+ *
+ * @param {{validFromDate?: string, validToDate?: string, sMFCRSynced?: boolean}} row
+ * @param {{show: (raw: string) => string}} [zone]
+ * @returns {string|null}
+ */
+export function displayValidTo(row, zone) {
+  const end = validToWallClock(row);
+  if (end == null) return null;
+  return formatWallClock(zone ? zone.show(end) : end);
+}
+
+// ── Time zones ───────────────────────────────────────────────────────────────
+//
+// Storage and the server keep the wall clock of the SERVER's zone (`serverClock.timeZone`, e.g.
+// `UTC` in production). The window shows and takes every datetime in the BROWSER's zone: a
+// value is converted server → browser to be shown and browser → server before it is sent. The
+// conversion goes through `Intl` with both zone ids, so it is DST-correct (never a fixed offset).
+// With an unknown or invalid server zone nothing is converted and no zone is labelled (the
+// behaviour before the zone was known).
+
+const PARTS_FORMATS = new Map();
+
+function partsFormat(zone) {
+  let format = PARTS_FORMATS.get(zone);
+  if (!format) {
+    format = new Intl.DateTimeFormat('en-US', {
+      timeZone: zone,
+      hourCycle: 'h23',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+    PARTS_FORMATS.set(zone, format);
+  }
+  return format;
+}
+
+/** Wall-clock parts of the instant `epoch` (ms) in `zone`. */
+function wallPartsAt(epoch, zone) {
+  const out = {};
+  for (const { type, value } of partsFormat(zone).formatToParts(epoch)) {
+    if (type !== 'literal') out[type] = Number(value);
+  }
+  return { year: out.year, month: out.month, day: out.day, hour: out.hour % 24, minute: out.minute, second: out.second };
+}
+
+/** Offset (ms) of `zone` from UTC at the instant `epoch`. */
+function offsetAt(epoch, zone) {
+  const p = wallPartsAt(epoch, zone);
+  const wholeSeconds = epoch - (((epoch % 1000) + 1000) % 1000);
+  return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - wholeSeconds;
+}
+
+/**
+ * The instant (epoch ms) a wall clock of `zone` stands for. Two passes, so a wall clock on the
+ * other side of a DST change than its first guess still lands on the right offset.
+ */
+function wallClockToEpoch(parts, zone) {
+  const asUtc = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute);
+  const guess = asUtc - offsetAt(asUtc, zone);
+  return asUtc - offsetAt(guess, zone);
+}
+
+/** Whether `zone` is a time zone id `Intl` knows. */
+export function isKnownTimeZone(zone) {
+  if (!zone || typeof zone !== 'string') return false;
+  try {
+    partsFormat(zone);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The browser's time zone id (`America/Argentina/Buenos_Aires`), or null. */
+export function browserTimeZone() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Wall clock `raw` of `fromZone` as the wall clock of `toZone` at the same instant
+ * (`yyyy-MM-ddTHH:mm:00`). Returned unchanged when the zones are equal or missing, when it does
+ * not parse, or when it is the open end (year ≥ {@link OPEN_END_YEAR}).
+ */
+export function convertWallClock(raw, fromZone, toZone) {
+  const p = parseWallClock(raw);
+  if (!p || p.year >= OPEN_END_YEAR || !fromZone || !toZone || fromZone === toZone) return raw;
+  try {
+    return toWallClock(wallPartsAt(wallClockToEpoch(p, fromZone), toZone));
+  } catch {
+    return raw;
+  }
+}
+
+/** Compact name of `zone`'s offset at `epoch`: `GMT-3`, `GMT+5:30`, `GMT` (UTC). */
+export function zoneOffsetLabel(zone, epoch = Date.now()) {
+  try {
+    const part = new Intl.DateTimeFormat('en-US', { timeZone: zone, timeZoneName: 'shortOffset' })
+      .formatToParts(epoch)
+      .find((p) => p.type === 'timeZoneName');
+    return part?.value || zone;
+  } catch {
+    return zone;
+  }
+}
+
+/**
+ * The zone view of the window: how a server wall clock is shown and how a typed one is sent.
+ *
+ * - `show(raw)` server → browser wall clock; `send(raw)` browser → server wall clock;
+ * - `label` the browser zone's offset now (`GMT-3`), for column headers and field labels;
+ * - `labelAt(shown)` the browser zone's offset at a shown (browser) wall clock — the same as
+ *   `label` except across a DST change — for a datetime inside a sentence.
+ *
+ * Inactive (identity, no labels) when either zone is unknown, e.g. `serverClock` failed.
+ *
+ * @param {string|null} serverZone `serverClock.timeZone`
+ * @param {string|null} [viewerZone] defaults to the browser's zone
+ * @param {Date} [reference] "now", for `label`
+ */
+export function createZoneView(serverZone, viewerZone = browserTimeZone(), reference = new Date()) {
+  const active = isKnownTimeZone(serverZone) && isKnownTimeZone(viewerZone);
+  if (!active) {
+    return { active: false, show: (raw) => raw, send: (raw) => raw, label: null, labelAt: () => null };
+  }
+  const label = zoneOffsetLabel(viewerZone, reference.getTime());
+  return {
+    active: true,
+    show: (raw) => convertWallClock(raw, serverZone, viewerZone),
+    send: (raw) => convertWallClock(raw, viewerZone, serverZone),
+    label,
+    labelAt: (shown) => {
+      const p = parseWallClock(shown);
+      return p ? zoneOffsetLabel(viewerZone, wallClockToEpoch(p, viewerZone)) : label;
+    },
+  };
+}
+
+/** The zone view that converts nothing (no server zone known). */
+export const NO_ZONE = createZoneView(null);
+
+/** `text (GMT-3)` through the i18n key `convRateWithZone`; `text` alone without a zone. */
+export function withZone(text, zoneLabel, ui) {
+  return text && zoneLabel ? ui('convRateWithZone', { text, zone: zoneLabel }) : text;
+}
+
+/**
+ * A server wall clock as the viewer reads it inside a sentence: `dd/MM/yyyy HH:mm (GMT-3)`
+ * (no zone suffix when the view is inactive); '' when unparseable.
+ */
+export function formatInZone(raw, zone, ui) {
+  const shown = zone.show(raw);
+  return withZone(formatWallClock(shown), zone.labelAt(shown), ui);
+}
+
+/**
+ * The two ends of a range inside a sentence: the zone is written once, after `to`, when both
+ * ends share it (`from 01/11/2026 09:00 to 05/11/2026 08:59 (GMT-3)`), else after each.
+ */
+export function formatRangeInZone(fromRaw, toRaw, zone, ui) {
+  const from = zone.show(fromRaw);
+  const to = zone.show(toRaw);
+  const fromLabel = zone.labelAt(from);
+  const toLabel = zone.labelAt(to);
+  return {
+    from: fromLabel === toLabel ? formatWallClock(from) : withZone(formatWallClock(from), fromLabel, ui),
+    to: withZone(formatWallClock(to), toLabel, ui),
+  };
 }
 
 function calendarISO(d) {

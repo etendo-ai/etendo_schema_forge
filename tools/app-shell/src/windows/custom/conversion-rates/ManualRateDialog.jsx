@@ -17,8 +17,9 @@ import {
   createManualCurrency, createManualRate, updateManualRate,
 } from './conversionRatesApi.js';
 import {
-  formatWallClock, nowWallClock,
-  isOpenEnded, displayValidTo, addMillisToWallClock, isAfterWallClock,
+  NO_ZONE, nowWallClock,
+  isOpenEnded, validToWallClock, addMillisToWallClock, isAfterWallClock,
+  withZone, formatInZone, formatRangeInZone,
 } from './conversionRatesModel.js';
 
 /** Debounce of the preview request while the user types. */
@@ -94,15 +95,18 @@ export function isEnterSubmitKey(event, form) {
   return target.getAttribute('aria-expanded') !== 'true';
 }
 
-function PreviewLine({ item, ui }) {
+function PreviewLine({ item, zone, ui }) {
   const range = isOpenEnded(item.validTo)
-    ? ui('convRatePreviewOpenRange', { from: formatWallClock(item.validFrom) })
-    : ui('convRatePreviewClosedRange', { from: formatWallClock(item.validFrom), to: formatWallClock(item.validTo) });
+    ? ui('convRatePreviewOpenRange', { from: formatInZone(item.validFrom, zone, ui) })
+    : ui('convRatePreviewClosedRange', formatRangeInZone(item.validFrom, item.validTo, zone, ui));
   return <div>{`${item.fromIso} → ${item.toIso} · ${formatRate(item.rate)} · ${range}`}</div>;
 }
 
-/** Summary box: the two rates that will be created and the open range they close. */
-function PreviewSummary({ preview, mode, destIso, orgIso, ui }) {
+/**
+ * Summary box: the two rates that will be created and the open range they close; datetimes in
+ * the viewer's zone.
+ */
+function PreviewSummary({ preview, mode, destIso, orgIso, zone, ui }) {
   if (!preview?.creates?.length) return null;
   const closes = preview.closes ?? [];
   const forwardClose = closes.find((c) => c.fromIso === orgIso) ?? closes[0];
@@ -117,6 +121,7 @@ function PreviewSummary({ preview, mode, destIso, orgIso, ui }) {
         <PreviewLine
           key={`${item.fromIso}-${item.toIso}`}
           item={item}
+          zone={zone}
           ui={ui}
           data-testid="PreviewLine__51f9a2" />
       ))}
@@ -124,8 +129,7 @@ function PreviewSummary({ preview, mode, destIso, orgIso, ui }) {
         <div className="text-muted-foreground" data-testid="convrate-dialog-summary-close">
           {ui('convRatePreviewCloses', {
             currency: destIso,
-            from: formatWallClock(forwardClose.validFrom),
-            to: formatWallClock(forwardClose.newValidTo),
+            ...formatRangeInZone(forwardClose.validFrom, forwardClose.newValidTo, zone, ui),
           })}
         </div>
       )}
@@ -134,31 +138,26 @@ function PreviewSummary({ preview, mode, destIso, orgIso, ui }) {
 }
 
 /**
- * Old → new of both directions, from the server's `updateManualRate` proposal (never computed in
- * the browser). While the proposal for the typed rate is loading, the forward line shows the
- * typed rate and the inverse an ellipsis.
+ * Old → new of the rate being modified (organization currency → the other one), from the server's
+ * `updateManualRate` proposal (never computed in the browser); while the proposal for the typed
+ * rate is loading, the typed rate. Only this direction is shown: the inverse row is still saved
+ * with it, by the server.
  */
 export function editLines(row, rate, proposal) {
   const forward = proposal?.forward;
-  const inverse = proposal?.inverse;
   return {
     forwardOld: formatRate(forward?.old ?? row.multipleRateBy),
     forwardNew: formatRate(forward?.new ?? rate ?? row.multipleRateBy),
-    inverseOld: formatRate(inverse?.old ?? row.divideRateBy),
-    inverseNew: inverse?.new != null ? formatRate(inverse.new) : '…',
   };
 }
 
-/** Edit summary: both directions, old value → new value. */
+/** Edit summary: the rate being modified, old value → new value. */
 function EditSummary({ lines, destIso, orgIso, ui }) {
   return (
     <div className="flex flex-col gap-1.5 rounded-[10px] bg-muted/60 px-3.5 py-3 text-[13px]" data-testid="convrate-dialog-summary">
       <div className="font-semibold">{ui('convRateEditSummaryTitle')}</div>
       <div data-testid="convrate-dialog-summary-forward">
         {`${orgIso} → ${destIso} · ${lines.forwardOld} → ${lines.forwardNew}`}
-      </div>
-      <div data-testid="convrate-dialog-summary-inverse">
-        {`${destIso} → ${orgIso} · ${lines.inverseOld} → ${lines.inverseNew}`}
       </div>
     </div>
   );
@@ -169,10 +168,10 @@ function EditSummary({ lines, destIso, orgIso, ui }) {
  * an alert dialog over the edit dialog. "Volver" returns to the edit dialog with its values;
  * "Confirmar cambio" is the only action that saves.
  */
-function ConfirmRateChangeDialog({ open, lines, row, destIso, orgIso, saving, onBack, onConfirm, ui }) {
+function ConfirmRateChangeDialog({ open, lines, row, destIso, orgIso, saving, onBack, onConfirm, zone, ui }) {
   const period = row && !isOpenEnded(row.validToDate)
-    ? ui('convRateConfirmPeriodClosed', { from: formatWallClock(row.validFromDate), to: displayValidTo(row) })
-    : ui('convRateConfirmPeriodOpen', { from: formatWallClock(row?.validFromDate) });
+    ? ui('convRateConfirmPeriodClosed', formatRangeInZone(row.validFromDate, validToWallClock(row), zone, ui))
+    : ui('convRateConfirmPeriodOpen', { from: formatInZone(row?.validFromDate, zone, ui) });
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!next && !saving) onBack(); }} data-testid="Dialog__convrate-confirm">
       <DialogContent
@@ -194,8 +193,7 @@ function ConfirmRateChangeDialog({ open, lines, row, destIso, orgIso, saving, on
             <DialogDescription asChild data-testid="DialogDescription__convrate-confirm">
               <div className="flex flex-col gap-2.5 leading-normal text-foreground/80">
                 <div className="rounded-[10px] bg-muted/60 px-3 py-2.5 text-[13px] text-foreground" data-testid="convrate-confirm-summary">
-                  <div>{`${orgIso} → ${destIso} · ${lines.forwardOld} → `}<b className="font-semibold">{lines.forwardNew}</b></div>
-                  <div>{`${destIso} → ${orgIso} · ${lines.inverseOld} → `}<b className="font-semibold">{lines.inverseNew}</b></div>
+                  <div data-testid="convrate-confirm-forward">{`${orgIso} → ${destIso} · ${lines.forwardOld} → `}<b className="font-semibold">{lines.forwardNew}</b></div>
                   <div className="mt-1 text-muted-foreground" data-testid="convrate-confirm-period">{period}</div>
                 </div>
                 <p className="m-0">{ui('convRateConfirmNewDocs')}</p>
@@ -341,10 +339,11 @@ function isUnchangedEdit(isEdit, rate, row) {
 
 /**
  * The server's "now" (`serverClock`), read when a create dialog opens: the default of Válido desde
- * and its upper bound. Answers the minute and the browser time of the read, so the bound can be
- * aged while the dialog stays open without trusting the browser's own clock.
+ * and its upper bound, both in the viewer's zone (`zone`), so the bound compares with what the
+ * user types. Answers the minute aged by the browser time since the read, so the bound moves while
+ * the dialog stays open without trusting the browser's own clock.
  */
-function useServerClock(open, mode, apiFetch, setForm) {
+function useServerClock(open, mode, apiFetch, setForm, zone) {
   const [serverNow, setServerNow] = useState(null);
   const readAt = useRef(0);
   useEffect(() => {
@@ -352,16 +351,17 @@ function useServerClock(open, mode, apiFetch, setForm) {
     const ctrl = new AbortController();
     setServerNow(null);
     fetchServerClock(apiFetch, ctrl.signal)
-      .then((now) => {
+      .then((clock) => {
+        const now = clock?.now;
         if (!now) return;
         readAt.current = Date.now();
         setServerNow(now);
-        setForm((f) => ({ ...f, validFrom: now }));
+        setForm((f) => ({ ...f, validFrom: zone.show(now) }));
       })
       .catch(() => {});
     return () => ctrl.abort();
-  }, [open, mode, apiFetch, setForm]);
-  return serverNow ? addMillisToWallClock(serverNow, Date.now() - readAt.current) : null;
+  }, [open, mode, apiFetch, setForm, zone]);
+  return serverNow ? zone.show(addMillisToWallClock(serverNow, Date.now() - readAt.current)) : null;
 }
 
 /** "Nueva divisa": the currencies that can still receive a first manual rate. */
@@ -425,10 +425,10 @@ async function proposeChange(ctx) {
   return undefined;
 }
 
-/** "Crear divisa" / "Crear tasa". */
+/** "Crear divisa" / "Crear tasa"; the start typed in the viewer's zone is sent as server wall clock. */
 async function createRate(ctx) {
   const create = ctx.isNewCurrency ? createManualCurrency : createManualRate;
-  const body = { toCurrency: ctx.dest.currencyId, multipleRateBy: ctx.rate, validFromDate: ctx.validFrom };
+  const body = { toCurrency: ctx.dest.currencyId, multipleRateBy: ctx.rate, validFromDate: ctx.zone.send(ctx.validFrom) };
   const out = await settle(create(ctx.apiFetch, body), ctx.ui);
   if (out.refusal) return ctx.showRefusal(out.refusal);
   ctx.onSaved();
@@ -578,7 +578,7 @@ function RateField({ value, onChange, onBlur, inError, error, orgIso, destIso, u
           aria-label={ui('convRateRate')}
           aria-invalid={inError ? true : undefined}
           aria-describedby={error ? 'convrate-rate-error' : undefined}
-          className="w-full min-w-0 border-0 bg-transparent p-0 outline-none focus-visible:ring-0 tabular-nums"
+          className="w-full min-w-0 border-0 bg-transparent p-0 outline-none hover:bg-transparent focus:bg-transparent focus-visible:ring-0 tabular-nums"
           data-testid="convrate-dialog-rate" />
         {destIso && <span className="shrink-0 whitespace-nowrap text-muted-foreground" data-testid="convrate-dialog-rate-suffix">{destIso}</span>}
       </div>
@@ -593,11 +593,13 @@ function RateField({ value, onChange, onBlur, inError, error, orgIso, destIso, u
 
 /**
  * Válido desde: in error (red border, aria-invalid) on a field error or on a server refusal of the
- * start (overlap, future); the hint stays under it, as in the error design.
+ * start (overlap, future); the hint stays under it, as in the error design. Typed in the viewer's
+ * zone, named in the label.
  */
-function ValidFromField({ value, onChange, onBlur, max, inError, error, ui }) {
+function ValidFromField({ value, onChange, onBlur, max, inError, error, zone, ui }) {
+  const label = withZone(ui('convRateValidFromDateTime'), zone.label, ui);
   return (
-    <Field label={ui('convRateValidFromDateTime')} required className="min-w-0" data-testid="Field__convrate-from">
+    <Field label={label} required className="min-w-0" data-testid="Field__convrate-from">
       <DateTimeField
         value={value}
         onChange={onChange}
@@ -605,7 +607,7 @@ function ValidFromField({ value, onChange, onBlur, max, inError, error, ui }) {
         max={max ?? undefined}
         invalid={inError}
         required
-        aria-label={ui('convRateValidFromDateTime')}
+        aria-label={label}
         data-testid="convrate-dialog-valid-from-input" />
       {error && (
         <span className="block text-xs font-normal text-destructive" data-testid="convrate-dialog-date-error">{error}</span>
@@ -615,25 +617,30 @@ function ValidFromField({ value, onChange, onBlur, max, inError, error, ui }) {
   );
 }
 
-/** Modificar: the range of the row, read-only, and the hint that only the rate can change. */
-function EditRangeFields({ rateField, row, ui }) {
+/**
+ * Modificar: the range of the row, read-only (in the viewer's zone, named in the labels), and the
+ * hint that only the rate can change.
+ */
+function EditRangeFields({ rateField, row, zone, ui }) {
+  const fromLabel = withZone(ui('convRateValidFromDateTime'), zone.label, ui);
+  const toLabel = withZone(ui('convRateValidToDateTime'), zone.label, ui);
   return (
     <>
       <div className="max-w-[240px]">{rateField}</div>
       <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3">
-        <Field label={ui('convRateValidFromDateTime')} className="min-w-0" data-testid="Field__convrate-from">
+        <Field label={fromLabel} className="min-w-0" data-testid="Field__convrate-from">
           <DateTimeField
-            value={row?.validFromDate}
+            value={row?.validFromDate ? zone.show(row.validFromDate) : row?.validFromDate}
             readOnly
-            aria-label={ui('convRateValidFromDateTime')}
+            aria-label={fromLabel}
             data-testid="convrate-dialog-valid-from" />
         </Field>
-        <Field label={ui('convRateValidToDateTime')} className="min-w-0" data-testid="Field__convrate-to">
+        <Field label={toLabel} className="min-w-0" data-testid="Field__convrate-to">
           <DateTimeField
-            value={isOpenEnded(row?.validToDate) ? null : row.validToDate}
+            value={isOpenEnded(row?.validToDate) ? null : zone.show(row.validToDate)}
             readOnly
             placeholder={ui('convRateOpenEnd')}
-            aria-label={ui('convRateValidToDateTime')}
+            aria-label={toLabel}
             data-testid="convrate-dialog-valid-to" />
         </Field>
       </div>
@@ -681,7 +688,7 @@ function DestinationField({ isNewCurrency, dest, destId, setDestId, options, opt
 }
 
 /** The line under the currencies: the Nueva divisa hint, or the rate in force of Nueva tasa. */
-function ModeHint({ mode, noneAvailable, currency, orgIso, destIso, ui }) {
+function ModeHint({ mode, noneAvailable, currency, orgIso, destIso, zone, ui }) {
   if (mode === DIALOG_MODES.NEW_CURRENCY) {
     return (
       <div className="-mt-1.5 text-xs text-muted-foreground" data-testid="convrate-dialog-hint">
@@ -696,14 +703,14 @@ function ModeHint({ mode, noneAvailable, currency, orgIso, destIso, ui }) {
         org: orgIso,
         rate: formatRate(currency.rate),
         currency: destIso,
-        from: formatWallClock(currency.validFrom),
+        from: formatInZone(currency.validFrom, zone, ui),
       })}
     </div>
   );
 }
 
-/** Modificar: old → new of both directions and the note; a create: the preview, unless refused. */
-function DialogSummary({ isEdit, row, lines, preview, previewError, mode, destIso, orgIso, ui }) {
+/** Modificar: old → new of the modified rate and the note; a create: the preview, unless refused. */
+function DialogSummary({ isEdit, row, lines, preview, previewError, mode, destIso, orgIso, zone, ui }) {
   if (isEdit) {
     if (!row) return null;
     return (
@@ -715,7 +722,7 @@ function DialogSummary({ isEdit, row, lines, preview, previewError, mode, destIs
   }
   if (previewError) return null;
   return (
-    <PreviewSummary preview={preview} mode={mode} destIso={destIso} orgIso={orgIso} ui={ui} data-testid="PreviewSummary__51f9a2" />
+    <PreviewSummary preview={preview} mode={mode} destIso={destIso} orgIso={orgIso} zone={zone} ui={ui} data-testid="PreviewSummary__51f9a2" />
   );
 }
 
@@ -748,12 +755,14 @@ function useDestination(isNewCurrency, currency, options, destId) {
  *   the fixed destination (newRate / edit)
  * @param {object} [props.row] the history row being edited (edit)
  * @param {Function} props.apiFetch
+ * @param {object} [props.zone] the zone view (`createZoneView`): datetimes are shown and typed in
+ *   the viewer's zone and sent as the server's wall clock; absent, nothing is converted
  * @param {() => void} props.onClose
  * @param {() => void} props.onSaved called after a successful write (the dialog then closes)
  * @param {(key: string, params?: object) => string} props.ui
  */
 export function ManualRateDialog({
-  open, mode, orgIso, orgName, currency, row, apiFetch, onClose, onSaved, ui,
+  open, mode, orgIso, orgName, currency, row, apiFetch, onClose, onSaved, ui, zone = NO_ZONE,
 }) {
   const isEdit = mode === DIALOG_MODES.EDIT;
   const isNewCurrency = mode === DIALOG_MODES.NEW_CURRENCY;
@@ -762,7 +771,7 @@ export function ManualRateDialog({
   const [destId, setDestId] = useState(null);
   const [touched, setTouched] = useState({ rate: false, date: false });
   const formRef = useRef(null);
-  const nowBound = useServerClock(open, mode, apiFetch, setForm);
+  const nowBound = useServerClock(open, mode, apiFetch, setForm, zone);
   const { options, optionsLoaded } = useManualCurrencyOptions(open, isNewCurrency, apiFetch);
   const dest = useDestination(isNewCurrency, currency, options, destId);
   const destIso = dest?.isoCode ?? '';
@@ -771,10 +780,12 @@ export function ManualRateDialog({
 
   // Debounced preview of what creating the rate would do; stale answers are aborted.
   const [preview] = useDebouncedAnswer(open && !isEdit && inputsValid,
-    (signal) => previewManualRate(apiFetch, { mode, toCurrency: destCurrencyId, multipleRateBy: rate, validFromDate: validFrom }, signal),
-    [mode, apiFetch, destCurrencyId, rate, validFrom]);
+    (signal) => previewManualRate(apiFetch, {
+      mode, toCurrency: destCurrencyId, multipleRateBy: rate, validFromDate: zone.send(validFrom),
+    }, signal),
+    [mode, apiFetch, destCurrencyId, rate, validFrom, zone]);
   // Modificar: debounced proposal (`updateManualRate` without `confirm`) for the typed rate — the
-  // summary and the confirmation show the server's old → new of both directions.
+  // summary and the confirmation show the server's old → new of the modified rate.
   const rowId = row?.id ?? null;
   const [proposal, setProposal] = useDebouncedAnswer(open && isEdit && Boolean(rowId) && rate != null,
     (signal) => updateManualRate(apiFetch, { id: rowId, multipleRateBy: rate }, signal)
@@ -783,7 +794,7 @@ export function ManualRateDialog({
   const lines = editLinesFor(isEdit, row, rate, proposal);
 
   const writes = useRateWrites({
-    apiFetch, ui, isEdit, isNewCurrency, row, rate, validFrom, dest, onSaved, onClose, setProposal,
+    apiFetch, ui, isEdit, isNewCurrency, row, rate, validFrom, dest, onSaved, onClose, setProposal, zone,
   });
 
   // Reset every time the dialog opens (a new target or a new row).
@@ -879,12 +890,14 @@ export function ManualRateDialog({
               currency={currency}
               orgIso={orgIso}
               destIso={destIso}
+              zone={zone}
               ui={ui}
               data-testid="ModeHint__51f9a2" />
 
             {isEdit ? <EditRangeFields
               rateField={rateField}
               row={row}
+              zone={zone}
               ui={ui}
               data-testid="EditRangeFields__51f9a2" /> : (
               <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3">
@@ -899,6 +912,7 @@ export function ManualRateDialog({
                   max={nowBound}
                   inError={startInError}
                   error={dateError}
+                  zone={zone}
                   ui={ui}
                   data-testid="ValidFromField__51f9a2" />
               </div>
@@ -913,6 +927,7 @@ export function ManualRateDialog({
               mode={mode}
               destIso={destIso}
               orgIso={orgIso}
+              zone={zone}
               ui={ui}
               data-testid="DialogSummary__51f9a2" />
             <ErrorBox message={writes.submitError ?? previewError} data-testid="ErrorBox__51f9a2" />
@@ -937,6 +952,7 @@ export function ManualRateDialog({
           saving={writes.submitting}
           onBack={() => writes.setConfirmOpen(false)}
           onConfirm={writes.confirmChange}
+          zone={zone}
           ui={ui}
           data-testid="ConfirmRateChangeDialog__51f9a2" />
       )}

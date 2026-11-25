@@ -50,6 +50,7 @@ const api = vi.hoisted(() => ({
   fetchCurrentRates: vi.fn(),
   fetchHistory: vi.fn(),
   deleteManualRate: vi.fn(),
+  fetchServerClock: vi.fn(),
 }));
 vi.mock('../conversionRatesApi.js', () => api);
 
@@ -61,6 +62,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   api.fetchCurrentRates.mockResolvedValue([]);
   api.fetchHistory.mockResolvedValue([]);
+  api.fetchServerClock.mockResolvedValue({ now: '2026-11-20T10:00:00', timeZone: 'UTC' });
 });
 
 describe('ConversionRatesPage — delete confirmation', () => {

@@ -80,6 +80,27 @@ describe('DateTimeField', () => {
     expect(screen.getByTestId(T)).toHaveValue('');
   });
 
+  it('the popover time box is 24h text: typing 1745 commits 17:45, a half time reverts on blur', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<Controlled initial="2026-11-19T09:05:00" onChange={onChange} />);
+    await user.click(screen.getByTestId(`${T}-trigger`));
+    const time = await screen.findByTestId(`${T}-time`);
+    expect(time).toHaveAttribute('type', 'text');
+    expect(time).toHaveValue('09:05');
+
+    await user.clear(time);
+    await user.type(time, '1745');
+    expect(time).toHaveValue('17:45');
+    expect(onChange).toHaveBeenLastCalledWith('2026-11-19T17:45:00');
+
+    await user.clear(time);
+    await user.type(time, '8');
+    await user.tab();
+    expect(time).toHaveValue('17:45');
+    expect(onChange).toHaveBeenCalledTimes(1);
+  });
+
   it('flags a value later than max without changing it', () => {
     const onChange = vi.fn();
     render(<Controlled initial="2026-11-20T10:06:00" max="2026-11-20T10:05:00" onChange={onChange} />);

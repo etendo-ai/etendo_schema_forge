@@ -45,6 +45,7 @@ vi.mock('../conversionRatesApi.js', () => api);
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ManualRateDialog, DIALOG_MODES, isEnterSubmitKey } from '../ManualRateDialog.jsx';
+import { createZoneView } from '../conversionRatesModel.js';
 
 const SERVER_NOW = '2026-11-20T10:00:00';
 const USD = { currencyId: 'usd-id', isoCode: 'USD', name: 'US Dollar', rate: 1.1, validFrom: '2026-11-01T00:00:00' };
@@ -130,7 +131,7 @@ const WRITE_BY_MODE = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  api.fetchServerClock.mockResolvedValue(SERVER_NOW);
+  api.fetchServerClock.mockResolvedValue({ now: SERVER_NOW, timeZone: null });
   api.fetchManualCurrencyOptions.mockResolvedValue([{ id: 'gbp-id', isoCode: 'GBP', name: 'Pound' }]);
   api.previewManualRate.mockResolvedValue({ creates: [] });
   api.createManualCurrency.mockResolvedValue(OK);
@@ -262,5 +263,56 @@ describe('ManualRateDialog — Modificar tasa confirmation', () => {
     expect(screen.getByTestId('convrate-dialog')).toBeInTheDocument();
     expect(confirmCalls()).toHaveLength(0);
     expect(onSaved).not.toHaveBeenCalled();
+  });
+});
+
+describe('ManualRateDialog — times in the viewer zone', () => {
+  // Server in UTC, browser in Buenos Aires (GMT-3): the server's 10:00 is the viewer's 07:00.
+  const zone = createZoneView('UTC', 'America/Argentina/Buenos_Aires');
+
+  it('starts at the server minute shown in the viewer zone and sends it back as server wall clock', async () => {
+    const user = userEvent.setup();
+    const { onSaved } = renderDialog(DIALOG_MODES.NEW_RATE, { zone });
+    const start = screen.getByTestId('convrate-dialog-valid-from-input');
+    await waitFor(() => expect(start).toHaveValue('2026-11-20T07:00:00'));
+    await typeRate(user, '1,3');
+    // The debounced preview asks the server with its own wall clock.
+    await waitFor(() => expect(api.previewManualRate).toHaveBeenCalled());
+    expect(api.previewManualRate.mock.calls.at(-1)[1]).toMatchObject({ validFromDate: '2026-11-20T10:00:00' });
+
+    await user.click(screen.getByTestId('convrate-dialog-submit'));
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+    expect(api.createManualRate.mock.calls[0][1]).toMatchObject({ validFromDate: '2026-11-20T10:00:00' });
+  });
+
+  it('a start after the server minute in the viewer zone is refused, though earlier than its server wall clock', async () => {
+    const user = userEvent.setup();
+    renderDialog(DIALOG_MODES.NEW_RATE, { zone });
+    const start = screen.getByTestId('convrate-dialog-valid-from-input');
+    await waitFor(() => expect(start).toHaveValue('2026-11-20T07:00:00'));
+    await typeRate(user, '1,3');
+
+    fireEvent.change(start, { target: { value: '2026-11-20T08:00:00' } });
+
+    expect(await screen.findByTestId('convrate-dialog-date-error')).toHaveTextContent('convRateValidFromFuture');
+    expect(screen.getByTestId('convrate-dialog-submit')).toBeDisabled();
+  });
+});
+
+describe('ManualRateDialog — Modificar tasa shows only the modified rate', () => {
+  it('the summary and the confirmation list EUR → USD only', async () => {
+    const user = userEvent.setup();
+    renderDialog(DIALOG_MODES.EDIT);
+    await fillValid(user, DIALOG_MODES.EDIT);
+    const summary = screen.getByTestId('convrate-dialog-summary');
+    expect(summary).toHaveTextContent('EUR → USD');
+    expect(summary).not.toHaveTextContent('USD → EUR');
+
+    await user.click(screen.getByTestId('convrate-dialog-submit'));
+
+    const confirm = await screen.findByTestId('convrate-confirm-summary');
+    expect(confirm).toHaveTextContent('EUR → USD');
+    expect(confirm).not.toHaveTextContent('USD → EUR');
   });
 });

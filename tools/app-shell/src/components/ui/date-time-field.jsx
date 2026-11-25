@@ -13,11 +13,59 @@ import { useLocaleSwitch, useUI } from '@/i18n';
 import { cn } from '@/lib/utils';
 import {
   splitWallClock, joinWallClock, formatDateTimeText, maskDateTimeInput, parseDateTimeText,
-  isAfterMax, localNowWallClock, buildDateTimePlaceholder,
+  isAfterMax, localNowWallClock, buildDateTimePlaceholder, maskTimeInput, parseTimeText,
 } from './date-time-field-model.js';
 
 function intlLocale(appLocale) {
   return (appLocale || 'en-GB').replace('_', '-');
+}
+
+/**
+ * The popover's time box: always 24h `HH:mm` (a native `<input type="time">` follows the OS /
+ * browser locale and can show a.m./p.m.). Digits only, the colon is inserted; a complete valid
+ * time is applied as it is typed, and on blur or Enter anything else returns to `value`.
+ */
+function TimeInput({ value, onCommit, label, 'data-testid': testId }) {
+  const [text, setText] = React.useState(value);
+  const [editing, setEditing] = React.useState(false);
+  React.useEffect(() => {
+    if (!editing) setText(value);
+  }, [value, editing]);
+
+  const settle = () => {
+    const time = parseTimeText(text);
+    if (time) onCommit(time);
+    else setText(value);
+  };
+
+  return (
+    <Input
+      type="text"
+      inputMode="numeric"
+      autoComplete="off"
+      placeholder="hh:mm"
+      maxLength={5}
+      value={text}
+      onFocus={() => setEditing(true)}
+      onChange={(e) => {
+        const next = maskTimeInput(e.target.value);
+        setText(next);
+        const time = parseTimeText(next);
+        if (time) onCommit(time);
+      }}
+      onBlur={() => {
+        setEditing(false);
+        settle();
+      }}
+      onKeyDown={(e) => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        settle();
+      }}
+      aria-label={label}
+      className="w-[110px] bg-card tabular-nums"
+      data-testid={testId} />
+  );
 }
 
 /**
@@ -35,7 +83,8 @@ function intlLocale(appLocale) {
  *   empty field commits `''`; text that is not a real day and a 24h time keeps the field in error
  *   (`aria-invalid`) and commits `null`. Esc restores the committed text.
  * - Popover (calendar icon): the calendar picks the day and keeps the current time; the time
- *   input in the popover sets the time; "Ahora" sets `max` (or the browser's minute) and "Limpiar"
+ *   box in the popover sets the time — 24h `HH:mm` typed text, never the native time input (it
+ *   shows a.m./p.m. under a 12h OS / browser locale); "Ahora" sets `max` (or the browser's minute) and "Limpiar"
  *   empties it. Esc closes it.
  * - `max`: days after it are disabled in the calendar, and a value later than it is flagged
  *   (`aria-invalid`) — never clamped; the host decides what to say.
@@ -246,12 +295,10 @@ export function DateTimeField({
               data-testid={`${testId}-calendar`} />
             <label className="mt-2 flex items-center justify-between gap-2 px-2 text-sm text-text-primary">
               <span>{ui('dateTimeFieldTime')}</span>
-              <Input
-                type="time"
+              <TimeInput
                 value={currentTime}
-                onChange={(e) => setTime(e.target.value)}
-                aria-label={ui('dateTimeFieldTime')}
-                className="w-[110px] bg-card"
+                onCommit={setTime}
+                label={ui('dateTimeFieldTime')}
                 data-testid={`${testId}-time`} />
             </label>
           </div>

@@ -16506,6 +16506,7 @@
     "convRatePreviewNewRateTitle": "Two rates will be created",
     "convRatePreviewOpenRange": "from {from}, no end date",
     "convRatePreviewClosedRange": "from {from} to {to}",
+    "convRateWithZone": "{text} ({zone})",
     "convRateCreateCurrency": "Create currency",
     "convRateCreateRate": "Create rate",
     "convRateSaved": "Rate saved",

@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   splitWallClock, joinWallClock, formatDateTimeText, maskDateTimeInput, parseDateTimeText, isAfterMax,
+  maskTimeInput, parseTimeText,
 } from '../date-time-field-model.js';
 
 const DMY = { order: ['day', 'month', 'year'], sep: '/' };
@@ -61,6 +62,24 @@ describe('isAfterMax', () => {
   ]) {
     it(`${value} after ${max} → ${expected}`, () => {
       assert.equal(isAfterMax(value, max), expected);
+    });
+  }
+});
+
+describe('24h time box', () => {
+  for (const [typed, masked, parsed] of [
+    ['1430', '14:30', '14:30'],
+    ['14:3', '14:3', null],
+    ['2359', '23:59', '23:59'],
+    ['2400', '24:00', null],
+    ['1260', '12:60', null],
+    ['2:30 pm', '23:0', null],
+    ['091512', '09:15', '09:15'],
+  ]) {
+    it(`${JSON.stringify(typed)} masks to ${masked} and parses to ${parsed}`, () => {
+      const text = maskTimeInput(typed);
+      assert.equal(text, masked);
+      assert.equal(parseTimeText(text), parsed);
     });
   }
 });

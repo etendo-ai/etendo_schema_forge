@@ -16742,6 +16742,7 @@
     "convRatePreviewNewRateTitle": "Se crearán dos tasas",
     "convRatePreviewOpenRange": "desde {from}, sin fecha de fin",
     "convRatePreviewClosedRange": "desde {from} hasta {to}",
+    "convRateWithZone": "{text} ({zone})",
     "convRateCreateCurrency": "Crear divisa",
     "convRateCreateRate": "Crear tasa",
     "convRateSaved": "Tasa guardada",
