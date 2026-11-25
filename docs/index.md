@@ -108,6 +108,7 @@ General findings about how the Etendo Application Dictionary works. Not window-s
 | Path | Description |
 |------|-------------|
 | [i18n-guide.md](i18n-guide.md) | **i18n reference**: hooks (`useUI`, `useLabel`, `useMenuLabel`), locale JSON structure, rules for adding translations, decision tree |
+| [customer-portal-link-token.md](customer-portal-link-token.md) | ETP-6209 CP-43 — how the customer portal removes its link token from the address bar (link formats, sessionStorage, referrer policy), why portal pages have no tracking (no GTM, Google Analytics, HubSpot, Datadog RUM or Mixpanel), and the access-log caveat of the first request |
 | [request-policy.md](request-policy.md) | **Request reference**: the single authenticated-`fetch` helper (`useApiFetch` / `apiFetch`), its options (`on401`, `baseUrl`, `token`), 401-to-logout wiring, how to give a test a session, and the two guardrails that keep raw `fetch` out |
 | [unsaved-changes-guard.md](unsaved-changes-guard.md) | **Unsaved-changes reference**: the single dirty-state registry, how to register a form (and give it a saver), the five consumers (unload, locale, navigation, clone, confirm), `GuardedNavLink` / `useGuardedNavigate`, and why react-router's `useBlocker` is not usable here |
 

@@ -654,7 +654,7 @@ export default function AeatSubmitFlow({ decl, orgIdent, identChecks, liveBoxes,
                     onClick={() => navigate('/fiscal-config')}
                   >
                     <BankIcon size={14} data-testid="Landmark__aeatGoToCertConfig" />
-                    {t('fm.aeat.action.go_to_cert_config') ?? 'Go to Fiscal configuration'}
+                    {t('fm.aeat.action.go_to_cert_config') ?? 'Go to Fiscal Configuration'}
                   </button>
                 )}
               </>

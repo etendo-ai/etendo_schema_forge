@@ -1,18 +1,48 @@
+import { createContext, useContext } from 'react';
 import { CaretRightIcon } from '@phosphor-icons/react';
 import { SearchBar } from '@/components/layout/SearchBar.jsx';
 import { useLocale, useLocaleSwitch, useUI } from '@/i18n';
 import { cn } from '@/lib/utils';
 import { getStatusTone, statusLabel } from '@/lib/statusBadge.js';
 import { formatCurrency } from '@/lib/formatCurrency.js';
+import { AmountText } from '@/components/currency-summary';
 import { formatCalendarDate } from '@/lib/dateOnly.js';
 import { getDueDateDotStyle, getDueDateState } from '@/lib/invoiceDueDate.js';
 import { invoicePaymentState, quotationValidity } from './portalPresentation.js';
+import { etendoLinkFor } from './portalMarketingLinks.js';
 
 /**
- * Where the top bar's "Creado con Etendo" pill sends the visitor: Etendo's pricing page.
- * PROVISIONAL: marketing will send the final pricing URL (with its UTM); replace it here only.
+ * The portal's tenant id (`AD_Client_ID`), provided by `PortalPage` for the etendo.ai links'
+ * `portal_ref` (see `portalMarketingLinks.js`). `null` when the portal does not know it yet.
  */
-export const ETENDO_PRICING_URL = 'https://etendo.ai';
+export const PortalClientContext = createContext(null);
+
+/** The portal's tenant id, for its etendo.ai links. */
+export function usePortalClientId() {
+  return useContext(PortalClientContext);
+}
+
+/**
+ * Counts a click on an etendo.ai link (ETP-6209 KPIs): `(reference, location) => void`, provided
+ * by `PortalPage` (`sendPortalEtendoClick`, fire-and-forget). A no-op outside the portal.
+ */
+export const PortalEtendoClickContext = createContext(() => {});
+
+/** The click counter of the etendo.ai links. */
+export function usePortalEtendoClick() {
+  return useContext(PortalEtendoClickContext);
+}
+
+/**
+ * Where the "Creado con etendo.ai" pill (desktop) and the compact Etendo tile (mobile) send the
+ * visitor: marketing's `learnMore` link with the portal's `portal_ref` (`etendoLinkFor`). Each opens
+ * with `rel="noopener noreferrer"`, and portal pages carry `<meta name="referrer"
+ * content="same-origin">` (`lib/portal/portalLinkSession.js`), so etendo.ai never receives the
+ * portal URL as a referrer.
+ */
+function useEtendoLearnMoreLink() {
+  return etendoLinkFor('learnMore', usePortalClientId());
+}
 
 /**
  * Etendo's mark as the Figma draws it on the "Creado con Etendo" link: a 32×32 lime (#B8FA50)
@@ -28,37 +58,55 @@ function EtendoMark() {
   );
 }
 
+/** The product's brand name, shown as-is in every language (not a translatable label). */
+const ETENDO_WORDMARK_TEXT = 'etendo.ai';
+
 /**
- * The top bar's "Creado con Etendo / Conoce más" pill, with the Figma's exact values (2026-11-20):
- * 216×44, padding 4px, gap 8px, #1B1A1F, radius 200px; Etendo's 32px lime circle, a 128px text
- * block (12/16 500 white title, 11/16 60%-white subtitle) and a 32px 10%-white round arrow with a
- * 50%-white CaretRight. It opens the pricing page ({@link ETENDO_PRICING_URL}) in a new tab; the
- * arrow is part of the link, not a button.
+ * The etendo.ai horizontal logo of the desktop pill (designer's redesign, 2026-11-25): a 28px lime
+ * (#B8FA50) tile with radius 9 holding Etendo's mark, then the white "etendo.ai" wordmark (about
+ * 102×28 in all). The tile reuses `/logo-etendo-ai.png`, the same lime tile as {@link EtendoMark}.
+ */
+function EtendoWordmark() {
+  return (
+    <span className="flex h-7 shrink-0 items-center gap-1.5" aria-hidden="true" data-testid="portal-etendo-wordmark">
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-[9px] bg-[#B8FA50]">
+        <img src="/logo-etendo-ai.png" alt="" className="h-7 w-7 max-w-none" />
+      </span>
+      <span className="text-base font-semibold leading-6 tracking-[-0.01em] text-white">{ETENDO_WORDMARK_TEXT}</span>
+    </span>
+  );
+}
+
+/**
+ * The desktop top bar's "Creado con etendo.ai" pill (designer's redesign, 2026-11-25; it replaced
+ * "Creado con Etendo · Conoce más"): 40px tall, padding 4px 4px 4px 16px, gap 8px, #1B1A1F, radius
+ * 200px; "Creado con" (Inter 500 12/16, -0.005em, white), the etendo.ai horizontal logo and a 32px
+ * 10%-white round arrow with a 50%-white CaretRight. It opens marketing's page
+ * (`etendoLinkFor('learnMore')`) in a new tab; the arrow is part of the link, not a button.
  */
 export function PortalCreatedWithPill({ className }) {
   const ui = useUI();
+  const href = useEtendoLearnMoreLink();
+  const countClick = usePortalEtendoClick();
   return (
     <a
-      href={ETENDO_PRICING_URL}
+      href={href}
+      // Counted, never delayed: the beacon is fire-and-forget and the link opens as usual.
+      onClick={() => countClick('learnMore', 'header')}
       target="_blank"
       rel="noopener noreferrer"
       aria-label={ui('portalCreatedWithLinkLabel')}
       className={cn(
-        'flex h-11 w-[216px] min-w-0 max-w-full items-center gap-2 rounded-[200px] bg-[#1B1A1F] p-1 text-left',
+        'flex h-10 min-w-0 max-w-full items-center gap-2 rounded-[200px] bg-[#1B1A1F] py-1 pl-4 pr-1 text-left',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
         className,
       )}
       data-testid="portal-created-with"
     >
-      <EtendoMark data-testid="EtendoMark__7a317e" />
-      <span className="flex w-[128px] min-w-0 shrink flex-col items-start justify-center pr-1">
-        <span className="-my-[3px] max-w-full truncate text-xs font-medium leading-4 tracking-[-0.005em] text-white">
-          {ui('portalCreatedWith')}
-        </span>
-        <span className="max-w-full truncate text-[11px] font-normal leading-4 tracking-[-0.005em] text-white/60">
-          {ui('portalLearnMore')}
-        </span>
+      <span className="shrink-0 whitespace-nowrap text-xs font-medium leading-4 tracking-[-0.005em] text-white">
+        {ui('portalCreatedWithShort')}
       </span>
+      <EtendoWordmark data-testid="EtendoWordmark__7a317e" />
       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[360px] bg-white/10 text-white/50" aria-hidden="true">
         <CaretRightIcon size={20} data-testid="CaretRight__7a317e" />
       </span>
@@ -72,12 +120,15 @@ export function PortalCreatedWithPill({ className }) {
  * desktop headers. PROVISIONAL placement (user decision, 2026-11-20) until the designer sends the
  * mobile design.
  */
-export function PortalCreatedWithTile({ testId = 'portal-created-with-mobile' }) {
+export function PortalCreatedWithTile({ testId = 'portal-created-with-mobile', clickLocation = 'mobile' }) {
   const ui = useUI();
   const label = ui('portalCreatedWithLinkLabel');
+  const href = useEtendoLearnMoreLink();
+  const countClick = usePortalEtendoClick();
   return (
     <a
-      href={ETENDO_PRICING_URL}
+      href={href}
+      onClick={() => countClick('learnMore', clickLocation)}
       target="_blank"
       rel="noopener noreferrer"
       aria-label={label}
@@ -91,8 +142,8 @@ export function PortalCreatedWithTile({ testId = 'portal-created-with-mobile' })
 }
 
 /**
- * The Etendo link of a desktop header's right side: the exact-Figma pill from lg up (inside the
- * Figma's 224×44 wrapper, whose 8px right padding keeps it off the window's edge) and, between md
+ * The Etendo link of a desktop header's right side: the "Creado con etendo.ai" pill from lg up
+ * (its wrapper's 8px right padding keeps it off the window's edge) and, between md
  * and lg, where the pill does not fit beside the search, the compact lime circle with the same
  * right spacing. Never both. The md–lg tile is PROVISIONAL until the mobile/medium design arrives.
  */
@@ -100,9 +151,9 @@ export function PortalCreatedWithHeaderLink() {
   return (
     <>
       <span className="flex shrink-0 pr-2 lg:hidden">
-        <PortalCreatedWithTile testId="portal-created-with-compact" data-testid="PortalCreatedWithTile__7a317e" />
+        <PortalCreatedWithTile testId="portal-created-with-compact" clickLocation="header" data-testid="PortalCreatedWithTile__7a317e" />
       </span>
-      <div className="hidden h-11 w-[224px] min-w-0 max-w-full items-center pr-2 lg:flex">
+      <div className="hidden h-11 min-w-0 max-w-full items-center pr-2 lg:flex">
         <PortalCreatedWithPill data-testid="PortalCreatedWithPill__7a317e" />
       </div>
     </>
@@ -128,6 +179,46 @@ export function PortalMoney({ currency, value, className, testId }) {
       {value == null ? '—' : formatCurrency(currency, value)}
     </span>
   );
+}
+
+/**
+ * A total over several currencies, converted to the company currency (ETP-6209, QA CP-47): the
+ * app's own `AmountText` (the list footer of `DataTable`, the Cuentas "Saldo"), "≈ " muted in
+ * front when a conversion was applied. One figure, never a sum per currency.
+ */
+export function PortalConvertedAmount({ converted, className, testId }) {
+  if (!converted) return null;
+  return (
+    <span className={className} data-testid={testId ? `${testId}-wrapper` : undefined}>
+      <AmountText
+        iso={converted.currency}
+        amount={converted.amount}
+        approximate={converted.approximate === true}
+        testId={testId}
+        data-testid="AmountText__7a317e" />
+    </span>
+  );
+}
+
+/**
+ * Whether a set of per-currency figures must be shown as ONE converted amount (CP-47): it spans
+ * more than one currency and the backend sent the converted figure. A single-currency set keeps
+ * its own figure (the backend's converted one then adds nothing).
+ */
+export function portalShowsConverted(perCurrency, converted) {
+  const currencies = new Set((perCurrency ?? []).map((entry) => entry?.currency ?? ''));
+  return Boolean(converted) && currencies.size > 1;
+}
+
+/**
+ * The label of a list tab (a customer-facing status group): the app's own status name when the
+ * group stands for one status (`statusCode` — "Bajo evaluación", "Anulada"…, the same
+ * `statusLabel` the badges use; QA 24/11 CP-16), else its portal key.
+ */
+export function usePortalTabLabel() {
+  const ui = useUI();
+  const dictionary = useLocale();
+  return (tab) => (tab?.statusCode ? statusLabel(tab.statusCode, dictionary, ui) : ui(tab.labelKey));
 }
 
 /**
@@ -159,21 +250,40 @@ const FIGMA_TAG_TONES = Object.freeze({
 });
 
 /**
+ * The mobile redesign's status as coloured TEXT with no background (2026-11-25: recent documents,
+ * related documents): 12/16 500 in the tone's colour.
+ */
+const TEXT_TAG_TONES = Object.freeze({
+  info: 'text-[#2F55E8]',
+  success: 'text-[#1E874C]',
+  warning: 'text-[#C28800]',
+  caution: 'text-[#C28800]',
+  destructive: 'text-[#D50B3E]',
+  neutral: 'text-[#6B7280]',
+});
+
+/**
  * Where the Figma colours a status differently from the app's tone (the label stays the app's):
  * a quotation waiting for the customer (`UE`) is blue, an invoice still to pay is yellow.
  */
 const FIGMA_STATUS_TONES = Object.freeze({ UE: 'info' });
 const FIGMA_PAYMENT_TONES = Object.freeze({ pending: 'warning' });
 
-/** The design's badge. `palette="figma"`: the main screen's Figma colours. */
+/**
+ * The design's badge. `palette="figma"`: the main screen's Figma colours; `palette="text"`: the
+ * mobile redesign's coloured text without a badge.
+ */
 export function PortalTag({
   tone = 'neutral', palette, children, className, testId, ...rest
 }) {
-  const tones = palette === 'figma' ? FIGMA_TAG_TONES : TAG_TONES;
+  const textOnly = palette === 'text';
+  const tones = { figma: FIGMA_TAG_TONES, text: TEXT_TAG_TONES }[palette] ?? TAG_TONES;
   return (
     <span
       className={cn(
-        'inline-flex items-center whitespace-nowrap rounded-lg border px-2.5 py-0.5 text-xs font-medium leading-4',
+        textOnly
+          ? 'inline-flex items-center whitespace-nowrap text-xs font-medium leading-4'
+          : 'inline-flex items-center whitespace-nowrap rounded-lg border px-2.5 py-0.5 text-xs font-medium leading-4',
         tones[tone] ?? tones.neutral,
         className,
       )}
@@ -191,7 +301,7 @@ export function PortalDocumentStatus({ status, className, palette }) {
   const ui = useUI();
   const dictionary = useLocale();
   if (!status) return null;
-  const tone = (palette === 'figma' && FIGMA_STATUS_TONES[status]) || getStatusTone(status);
+  const tone = (palette && palette !== 'default' && FIGMA_STATUS_TONES[status]) || getStatusTone(status);
   return (
     <PortalTag
       tone={tone}
@@ -207,12 +317,12 @@ export function PortalDocumentStatus({ status, className, palette }) {
 
 /** An invoice's payment state, as the app shows it (see `invoicePaymentState`). */
 export function PortalPaymentStatus({
-  document, installments = null, useServerOverdue = false, className, palette,
+  document, installments = null, useServerOverdue = true, className, palette,
 }) {
   const ui = useUI();
   const state = invoicePaymentState(document, installments, { useServerOverdue });
   if (!state) return null;
-  const tone = (palette === 'figma' && FIGMA_PAYMENT_TONES[state.id]) || state.tone;
+  const tone = (palette && palette !== 'default' && FIGMA_PAYMENT_TONES[state.id]) || state.tone;
   return (
     <PortalTag
       tone={tone}
@@ -227,7 +337,7 @@ export function PortalPaymentStatus({
 }
 
 /** The badge a row shows: an invoice's payment state, any other document's status. */
-export function PortalRowBadge({ document, className, useServerOverdue = false, palette }) {
+export function PortalRowBadge({ document, className, useServerOverdue = true, palette }) {
   return document?.kind === 'INVOICE'
     ? <PortalPaymentStatus
     document={document}
@@ -357,18 +467,23 @@ export const PORTAL_DASHBOARD_SECTION_TITLE = `${PORTAL_SECTION_TITLE} md:[font-
  * (spec of 2026-11-17): a 40px band with 8/12 padding and the Space Mono title, on desktop only;
  * the other views keep the default until their own spec arrives.
  */
-export function PortalSection({ title, action, children, className = '', testId, variant }) {
+export function PortalSection({
+  title, action, children, className = '', headerClassName = '', titleClassName = '', testId, variant,
+}) {
   const dashboard = variant === 'dashboard';
   return (
     <section
-      className={`min-w-0 overflow-hidden rounded-lg border border-border bg-card md:rounded-lg ${className}`}
+      // cn (tailwind-merge): a caller's override (e.g. the mobile "Documentos recientes":
+      // overflow-visible, rounded-none, border-0, bg-transparent) wins over these defaults.
+      className={cn('min-w-0 overflow-hidden rounded-lg border border-border bg-card md:rounded-lg', className)}
       data-testid={testId}
     >
       <div className={cn(
         'flex h-14 items-center justify-between border-b border-border bg-muted px-5',
         dashboard ? 'md:h-10 md:px-3 md:py-2' : 'md:h-12 md:px-3',
+        headerClassName,
       )}>
-        <h2 className={dashboard ? PORTAL_DASHBOARD_SECTION_TITLE : PORTAL_SECTION_TITLE}>{title}</h2>
+        <h2 className={cn(dashboard ? PORTAL_DASHBOARD_SECTION_TITLE : PORTAL_SECTION_TITLE, titleClassName)}>{title}</h2>
         {action}
       </div>
       {children}
