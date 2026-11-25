@@ -1,5 +1,5 @@
-import { registerErrorTranslator } from '@etendosoftware/app-shell-core/auth';
-import { resolveUI } from '@etendosoftware/app-shell-core/i18n';
+import { registerErrorTranslator } from '@etendo-ai/app-shell-core/auth';
+import { resolveUI } from '@etendo-ai/app-shell-core/i18n';
 
 /**
  * ETP-5424 — registers the app's translator for the errors core builds outside React, most

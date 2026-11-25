@@ -1,1 +1,1 @@
-export * from '@etendosoftware/app-shell-core/components/ui/status-tag-tokens.js';
+export * from '@etendo-ai/app-shell-core/components/ui/status-tag-tokens.js';

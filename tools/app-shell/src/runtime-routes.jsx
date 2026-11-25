@@ -1,6 +1,6 @@
 import { Suspense, lazy } from 'react';
 import { Navigate } from 'react-router-dom';
-import { LogoutRoute } from '@etendosoftware/app-shell-core/auth';
+import { LogoutRoute } from '@etendo-ai/app-shell-core/auth';
 import { useLogout } from './auth/useLogout.js';
 import WindowLoader from './windows/WindowLoader.jsx';
 import PreviewPage from './preview/PreviewPage.jsx';
@@ -140,8 +140,8 @@ export function buildRuntimeRoutes({ windowMap, apiBaseUrl }) {
     // and the backend authorizes every read and write.
     lazyRoute('document-templates', DocumentTemplatesPage),
     lazyRoute('roles', RolesOverviewPage),
-    // ETP-5269. Registered unconditionally, like 'upgrade' below: the `acct-process-monitor` flag
-    // gates the menu entry, not the route, and SFAcctProcessMonitor enforces admin access itself.
+    // ETP-5269. Registered unconditionally, like 'upgrade' below. The menu entry is gated by the
+    // isAdminOrClientAdmin capability and SFAcctProcessMonitor enforces admin access itself.
     lazyRoute('acct-process-monitor', AcctProcessMonitorPage),
     lazyRoute('authorize', AuthorizePage),
     lazyRoute('quick-sales-order', QuickSalesOrderPage, { apiBaseUrl }),

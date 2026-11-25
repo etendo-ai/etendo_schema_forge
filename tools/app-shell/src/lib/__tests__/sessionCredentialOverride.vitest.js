@@ -1,11 +1,11 @@
 import {
   registerApiSession,
   resetApiSessionForTests,
-} from '@etendosoftware/app-shell-core/auth/api';
+} from '@etendo-ai/app-shell-core/auth/api';
 import {
   resetSessionCredentials,
   setSessionCredentials,
-} from '@etendosoftware/app-shell-core/auth/sessionCredentials.js';
+} from '@etendo-ai/app-shell-core/auth/sessionCredentials.js';
 
 import { fetchMenuTree } from '../menuTree.js';
 import { fetchNeoWebhookJson } from '../neoWebhookClient.js';

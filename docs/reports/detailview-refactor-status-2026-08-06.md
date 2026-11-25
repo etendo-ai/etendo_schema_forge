@@ -109,7 +109,7 @@ developer-1 and did not produce a report before this file was written directly i
 
 - **Line-count ratchet pre-commit hook for `DetailView.jsx`** (originally queued as
   Task #3). Should mirror the existing `sf-method-budget` / `sf-window-leak-budget`
-  pattern (both published from `@etendosoftware/schema-forge-core`, baseline JSON,
+  pattern (both published from `@etendo-ai/schema-forge-core`, baseline JSON,
   fail-only-if-grows, `--update` to lower). Before writing one from scratch, check
   whether `feature/ETP-4708`'s ratchet commit (`6107bdcb0`, "Wire the file-lines ratchet
   on DetailView and DataTable") is cleanly recoverable from `backup/ETP-4708-pre-reseal`

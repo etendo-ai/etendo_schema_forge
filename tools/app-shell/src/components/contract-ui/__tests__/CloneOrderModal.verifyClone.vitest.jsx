@@ -15,7 +15,7 @@ const { mockNavigate, SESSION } = vi.hoisted(() => ({
   SESSION: { token: 'test-token' },
 }));
 
-vi.mock('@etendosoftware/app-shell-core/auth', async (importOriginal) => ({
+vi.mock('@etendo-ai/app-shell-core/auth', async (importOriginal) => ({
   ...(await importOriginal()),
   useAuthOptional: () => SESSION,
 }));

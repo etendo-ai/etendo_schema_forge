@@ -29,7 +29,7 @@ vi.mock('@/i18n', () => ({ useUI: () => mocks.ui, useLabel: () => mocks.label })
 vi.mock('@/auth/useApiFetch.js', () => ({ useApiFetch: () => mocks.apiFetch }));
 vi.mock('sonner', () => ({ toast: { error: mocks.toastError } }));
 vi.mock('@/hooks/useEntity.js', () => ({ extractErrorMessage: async () => 'patch-refused' }));
-vi.mock('@etendosoftware/app-shell-core/lib/recordVersions.js', () => ({ rememberRecordVersion: vi.fn() }));
+vi.mock('@etendo-ai/app-shell-core/lib/recordVersions.js', () => ({ rememberRecordVersion: vi.fn() }));
 vi.mock('@generated/business-partner-category/custom/useAssociatedContactsNotice.js', () => ({
   useAssociatedContactsNotice: () => mocks.notify,
 }));

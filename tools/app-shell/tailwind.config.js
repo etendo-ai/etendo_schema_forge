@@ -1,11 +1,11 @@
 import { resolve, dirname } from 'node:path';
 import { createRequire } from 'node:module';
-import appShellCorePreset from '@etendosoftware/app-shell-core/tailwind-preset';
+import appShellCorePreset from '@etendo-ai/app-shell-core/tailwind-preset';
 
 // Resolve a published package's src/ glob via its own export map instead of a
 // hardcoded '../../node_modules/<pkg>/src/**/*.{js,jsx}' relative path. npm
 // workspace hoisting is NOT guaranteed to place a package at the repo root's
-// node_modules — observed live: @etendosoftware/etendo-go-core landed under
+// node_modules — observed live: @etendo-ai/etendo-go-core landed under
 // tools/app-shell/node_modules instead after a plain `npm install`, which
 // silently purged every onboarding/auth utility below (ETP-5031 QA round).
 // `require.resolve` follows the real resolution algorithm, so it finds the
@@ -18,8 +18,8 @@ function packageSrcGlob(pkgName) {
   return resolve(dirname(entryPath), '**/*.{js,jsx}');
 }
 
-const APP_SHELL_CORE_SRC_GLOB = packageSrcGlob('@etendosoftware/app-shell-core');
-const ETENDO_GO_CORE_SRC_GLOB = packageSrcGlob('@etendosoftware/etendo-go-core');
+const APP_SHELL_CORE_SRC_GLOB = packageSrcGlob('@etendo-ai/app-shell-core');
+const ETENDO_GO_CORE_SRC_GLOB = packageSrcGlob('@etendo-ai/etendo-go-core');
 
 // LOCAL_CORE dev mode (`make dev-local-core`): app-shell-core resolves to the
 // sibling ../schema_forge_core source (see vite.config.js/vitest.config.js),
@@ -43,7 +43,7 @@ export default {
     // @generated alias. Scan them so their semantic utilities are retained.
     '../../artifacts/**/custom/**/*.{js,jsx}',
     '../../artifacts/**/generated/**/*.{js,jsx}',
-    // UI components live in the installed @etendosoftware/app-shell-core package
+    // UI components live in the installed @etendo-ai/app-shell-core package
     // and carry classes like `bg-popover` that exist nowhere in this app's own
     // files — without scanning them Tailwind purges those utilities and the
     // popover/calendar surfaces render with a transparent background (ETP-4083).

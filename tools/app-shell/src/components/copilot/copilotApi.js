@@ -1,4 +1,4 @@
-import { apiFetch } from '@etendosoftware/app-shell-core/auth/api';
+import { apiFetch } from '@etendo-ai/app-shell-core/auth/api';
 /**
  * copilotApi.js — HTTP client layer for the Copilot service.
  * All endpoints are relative to /sws/copilot/*.

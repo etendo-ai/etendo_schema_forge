@@ -1,4 +1,4 @@
-import { resolveTemplateHeaders } from '@etendosoftware/app-shell-core/lib/import/buildTemplateCsv.js';
+import { resolveTemplateHeaders } from '@etendo-ai/app-shell-core/lib/import/buildTemplateCsv.js';
 
 /**
  * Derive a CSV **export** column spec from a window's `window.import.fields` (ETP-4997).

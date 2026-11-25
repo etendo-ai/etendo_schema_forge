@@ -1,4 +1,4 @@
-import { apiFetch } from '@etendosoftware/app-shell-core/auth/api';
+import { apiFetch } from '@etendo-ai/app-shell-core/auth/api';
 
 // ETP-5375 — reserved key `fetchMenuAccess()`/`useRoleMenu()` (App.jsx) use to flag a
 // menuAccess map that could NOT be resolved (SFListMenu unreachable, malformed response, or

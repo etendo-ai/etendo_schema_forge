@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
  * while in fact it contributes no credential at all — the request silently rides on whatever
  * `apiFetch` attaches, which is the right cookie. If that indirection is ever needed for real,
  * the guard below forces the change to be made deliberately in the canonical place
- * (`@etendosoftware/app-shell-core/auth`) rather than smuggled in through a storage key.
+ * (`@etendo-ai/app-shell-core/auth`) rather than smuggled in through a storage key.
  *
  * The sibling control `auth-header-policy.test.js` covers the OTHER half of the same migration
  * (no hand-rolled `Authorization` header). Its allowance list is deliberately left untouched by
@@ -114,7 +114,7 @@ describe('legacy browser token keys are never read (ETP-5454)', () => {
       + 'cookie session, so the read always yields null/undefined and contributes no credential:\n'
       + offenders.map((f) => `  - ${f}`).join('\n')
       + '\n\nSend the request with apiFetch/useApiFetch and let it attach the active scheme:\n'
-      + "  import { apiFetch } from '@etendosoftware/app-shell-core/auth/api';\n"
+      + "  import { apiFetch } from '@etendo-ai/app-shell-core/auth/api';\n"
       + '  // the X-Go-CSRF proof comes from getSessionCsrfToken() when a call needs it\n',
     );
   });

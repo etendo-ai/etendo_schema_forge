@@ -1,4 +1,4 @@
-import { createRumAdapter } from '@etendosoftware/app-shell-core/observability/adapters/rum';
+import { createRumAdapter } from '@etendo-ai/app-shell-core/observability/adapters/rum';
 import { AwsRum } from './observability/sdk.js';
 
 /**

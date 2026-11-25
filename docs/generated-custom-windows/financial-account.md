@@ -2696,7 +2696,7 @@ names, the **column mapping** that the Contacts bulk import has, and **Excel** s
 are now in the same wizard, and none of the machinery behind them is new code.
 
 **The whole import engine is reused, not reimplemented.** The Contacts bulk import is not Contacts
-code — it lives in `@etendosoftware/app-shell-core`, is entity-agnostic, and was already driving two
+code — it lives in `@etendo-ai/app-shell-core`, is entity-agnostic, and was already driving two
 windows. Statements now drive it too:
 
 | Reused from the core | What it does here |
@@ -3068,7 +3068,7 @@ exactly the rows that visibly show "—". Deliberately **not** set on `lineCount
 Estado filter column is the derived `statusFamily`, which no raw row carries, so the builder's enum
 picker had no in-memory values to seed its option list from.
 
-Companion fixes live in the shared builder (`@etendosoftware/app-shell-core`): the enum value picker
+Companion fixes live in the shared builder (`@etendo-ai/app-shell-core`): the enum value picker
 is now multi-select and always offers the column's full declared `enumLabels` catalogue (it used to
 show only the already-selected option when re-editing), the `inSet` ("Es cualquiera de") operator is
 retired for enum columns in favour of that multi-select, and numeric inputs accept a locale decimal

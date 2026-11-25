@@ -4,7 +4,7 @@
 // ETP-5073 made the backend require the token of the record AS IT WAS READ; only
 // `useEntity` remembered one, so every panel that reads with `apiFetch` directly — this one
 // — wrote without it and got 400 `missing_updated`. The fix is central, in
-// `@etendosoftware/app-shell-core` (`auth/api.js` harvests the token from every GET, keyed
+// `@etendo-ai/app-shell-core` (`auth/api.js` harvests the token from every GET, keyed
 // by entity AND id, and injects it into the write that follows), so nothing in this screen
 // changed. What is pinned here is the screen's half: the discount record is read as a
 // collection (`/basicDiscount?parentId=…`) and written by id (`/basicDiscount/{id}`), two

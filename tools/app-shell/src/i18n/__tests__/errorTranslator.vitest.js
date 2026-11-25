@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   NETWORK_ERROR_FALLBACK, NetworkError, resetErrorTranslatorForTests,
-} from '@etendosoftware/app-shell-core/auth';
+} from '@etendo-ai/app-shell-core/auth';
 import esES from '../../locales/es_ES.json';
 
 /**

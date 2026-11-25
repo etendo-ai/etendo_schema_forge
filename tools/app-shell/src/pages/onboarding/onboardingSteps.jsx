@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { coreSteps } from '@etendosoftware/etendo-go-core/onboarding';
-import { useUI } from '@etendosoftware/app-shell-core/i18n';
+import { coreSteps } from '@etendo-ai/etendo-go-core/onboarding';
+import { useUI } from '@etendo-ai/app-shell-core/i18n';
 import { toast } from 'sonner';
 import { getTaxIdError } from '@/lib/taxIdValidation.js';
 
@@ -16,7 +16,7 @@ import { getTaxIdError } from '@/lib/taxIdValidation.js';
  * late to be useful feedback.
  *
  * `coreSteps` is a plain array of `{ id, component }` and `onNext` is a prop, so the step can be
- * guarded from this repo without touching the published `@etendosoftware/etendo-go-core`
+ * guarded from this repo without touching the published `@etendo-ai/etendo-go-core`
  * package. Validation runs on blur, while correcting a reported value, and before advancing:
  *
  *   - **on blur** of the NIF field, so the user is told while still looking at it;

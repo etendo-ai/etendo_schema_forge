@@ -16,10 +16,10 @@ vi.mock('@/lib/flags/useFeatureFlag.js', async (importOriginal) => ({
   ...(await importOriginal()),
   readFeatureFlag: (key) => flagState.values[key] ?? false,
 }));
-import { buildOperations } from '@etendosoftware/app-shell-core/lib/import/buildOperations.js';
-import { runImportRowValidator } from '@etendosoftware/app-shell-core/lib/import/rowValidators.js';
-import { runImport, SEND_STATUS } from '@etendosoftware/app-shell-core/lib/import/importEngine.js';
-import { resetImportRun } from '@etendosoftware/app-shell-core/lib/import/importRunState.js';
+import { buildOperations } from '@etendo-ai/app-shell-core/lib/import/buildOperations.js';
+import { runImportRowValidator } from '@etendo-ai/app-shell-core/lib/import/rowValidators.js';
+import { runImport, SEND_STATUS } from '@etendo-ai/app-shell-core/lib/import/importEngine.js';
+import { resetImportRun } from '@etendo-ai/app-shell-core/lib/import/importRunState.js';
 import '../contactsFkResolvers.js'; // registers the 'contacts-country' resolver the send path looks up
 import '../contactsImportDescriptor.js';
 import { CONTACT_CATEGORY_TYPE } from '@/lib/flags/flag-keys.js';
