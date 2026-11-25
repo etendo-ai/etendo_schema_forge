@@ -16,6 +16,11 @@ export const IMPORT_DUA_TYPE_KEYS = Object.freeze(['F5', 'LC']);
 /** The SII invoice type the SIF tab sets on an import with DUA that has another one. */
 export const IMPORT_DUA_DEFAULT_TYPE = 'F5';
 
+/** Whether a Y/N header value reads as yes: a boolean `true` or the stored `'Y'`. */
+export function isYes(value) {
+  return value === true || value === 'Y';
+}
+
 /** Whether the SII invoice type is F5 / LC: such an invoice is an import whatever the check says. */
 export function isImportDuaTypeKey(record) {
   return IMPORT_DUA_TYPE_KEYS.includes(record?.aeatsiiClaveTipoFc);
@@ -32,8 +37,7 @@ export function isImportDuaChecked(record) {
 
 /** The stored check alone (boolean or 'Y'), ignoring the SII invoice type. */
 export function isImportDuaStoredOn(record) {
-  const value = record?.etgoImportDua;
-  return value === true || value === 'Y';
+  return isYes(record?.etgoImportDua);
 }
 
 /**
@@ -77,7 +81,7 @@ export function importDuaUncheckPatch({ record, isDraft, siiLocked, showSii }) {
  * (`hasManualTaxLines`), which stay on the invoice when the check goes off.
  */
 export function needsUncheckConfirmation(record) {
-  return record?.hasManualTaxLines === true || record?.hasManualTaxLines === 'Y';
+  return isYes(record?.hasManualTaxLines);
 }
 
 /**

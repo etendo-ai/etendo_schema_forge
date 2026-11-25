@@ -15,7 +15,7 @@ import SiiImportTaxesSection, { useSiiDeferredVat } from '@/windows/custom/share
 import { getInvoiceFiscalTargets, isSifEligibleByDate } from '@/windows/custom/shared/fiscalTargets.js';
 import { resolveInvoiceOrgId } from '@/windows/custom/shared/resolveInvoiceOrgId.js';
 import {
-  importDuaUncheckPatch, isImportDuaChecked, isImportDuaLockedOn, isImportDuaTypeKey,
+  importDuaUncheckPatch, isImportDuaChecked, isImportDuaLockedOn, isImportDuaTypeKey, isYes,
   needsUncheckConfirmation, shouldShowImportDuaCards,
 } from '@/windows/custom/shared/importDua.js';
 
@@ -23,18 +23,15 @@ import {
 
 const FIELD = 'etgoImportDua';
 
-function isYes(value) {
-  return value === true || value === 'Y';
-}
-
 /**
  * Whether the organization of the invoice files SII, read only while `active` (the block is shown,
  * or the type is F5 / LC) so other invoices cost no fiscal-config requests. The same criterion as
  * the SIF tab (`useSifFieldPatcher`):
  *   - `showSii`: SII applies to the organization (`getInvoiceFiscalTargets`) — drives the uncheck
  *     patch (Tipo factura back to F1);
- *   - `adopted`: plus the invoice's accounting date on or after the organization's SII adoption
- *     (`isSifEligibleByDate`) — the invoice is filed to SII, so DUA and Fecha DUA are required.
+ *   - `adopted`: plus the invoice's accounting date (else its invoice date) on or after the
+ *     organization's SII adoption (`isSifEligibleByDate`) — the invoice is filed to SII, so DUA and
+ *     Fecha DUA are required.
  * Both read false while the configuration loads.
  */
 function useOrgSii(data, apiBaseUrl, active) {
@@ -43,7 +40,9 @@ function useOrgSii(data, apiBaseUrl, active) {
   const { profile, tbaiRecord, earliestSiiCutoverDate } = useFiscalConfig(orgId, apiBaseUrl);
   const territory = tbaiRecord?.etsgSifTerritory ?? null;
   const showSii = active && getInvoiceFiscalTargets('purchase-invoice', profile, territory).showSii;
-  const adopted = showSii && isSifEligibleByDate(data?.accountingDate, earliestSiiCutoverDate);
+  // Accounting date, else invoice date: the same fallback as com.etendoerp.go `orgFilesSii`.
+  const invoiceDate = data?.accountingDate || data?.invoiceDate;
+  const adopted = showSii && isSifEligibleByDate(invoiceDate, earliestSiiCutoverDate);
   return { showSii, adopted };
 }
 

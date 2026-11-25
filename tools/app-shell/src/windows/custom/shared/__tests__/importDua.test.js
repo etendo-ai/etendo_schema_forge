@@ -6,8 +6,16 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   isImportDuaChecked, shouldShowImportDuaCards, importDuaInvoiceTypeToSet, needsUncheckConfirmation,
-  isImportDuaLockedOn, importDuaUncheckPatch,
+  isImportDuaLockedOn, importDuaUncheckPatch, isYes,
 } from '../importDua.js';
+
+describe('isYes — a Y/N header value', () => {
+  it('reads true and Y as yes, anything else as no', () => {
+    assert.equal(isYes(true), true);
+    assert.equal(isYes('Y'), true);
+    for (const v of [false, 'N', null, undefined, 'true', 1]) assert.equal(isYes(v), false);
+  });
+});
 
 describe('isImportDuaLockedOn — only a legacy F5 / LC locks the switch', () => {
   it('locks F5 / LC while the stored check is off (false, N or null)', () => {

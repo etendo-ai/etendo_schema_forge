@@ -192,6 +192,13 @@ describe('ImportDuaLinesSection — DUA required boundaries', () => {
     expect(screen.getByTestId('stub-import-taxes')).toHaveAttribute('data-required', 'true');
   });
 
+  it('without an accounting date, judges by the invoice date (required on or after adoption)', () => {
+    fiscal.earliestSiiCutoverDate = '2026-11-01';
+    renderSection({ ...draft, etgoImportDua: true, accountingDate: null, invoiceDate: '2026-11-01' });
+    expect(screen.getByTestId('stub-dua-block')).toHaveAttribute('data-required', 'true');
+    expect(screen.getByTestId('stub-import-taxes')).toHaveAttribute('data-required', 'true');
+  });
+
   it('keeps the DUA optional while the fiscal config is still loading', () => {
     fiscal.profile = undefined;
     fiscal.earliestSiiCutoverDate = undefined;
