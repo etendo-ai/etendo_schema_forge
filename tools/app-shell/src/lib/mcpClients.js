@@ -1,1 +1,1 @@
-export * from '@etendosoftware/app-shell-core/lib/mcpClients.js';
+export * from '@etendo-ai/app-shell-core/lib/mcpClients.js';

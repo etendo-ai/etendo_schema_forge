@@ -30,7 +30,7 @@ vi.mock('@/auth/AuthContext.jsx', () => ({
 // ETP-5022 — the logout path runs through `useLogout`, which now reads the session with the
 // core's `useAuthOptional` (so it does not throw without an AuthProvider). The rest of the
 // core auth module is kept intact, since other modules in this render tree import from it.
-vi.mock('@etendosoftware/app-shell-core/auth', async (importOriginal) => ({
+vi.mock('@etendo-ai/app-shell-core/auth', async (importOriginal) => ({
   ...(await importOriginal()),
   useAuthOptional: () => ({ logout: logoutMock, ...authOverrides }),
 }));

@@ -30,7 +30,7 @@ import {
   type PublicApiField,
   filterOutboundRecord,
   type PublicApiSchema,
-} from '@etendosoftware/api-gateway-core';
+} from '@etendo-ai/api-gateway-core';
 
 import { PublicApiThrottlerGuard } from './public-api-throttler.guard.ts';
 import {

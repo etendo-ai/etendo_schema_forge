@@ -10,7 +10,7 @@
  * The date part follows the locale pattern of DateField (`getDatePattern`, `formatDateInput`,
  * `parseDateInput` from app-shell-core `lib/dateMask.js`), so `es-ES` reads `19/11/2026 14:20`.
  */
-import { formatDateInput, parseDateInput } from '@etendosoftware/app-shell-core/lib/dateMask.js';
+import { formatDateInput, parseDateInput } from '@etendo-ai/app-shell-core/lib/dateMask.js';
 
 const WALL_CLOCK_RE = /^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})/;
 const TIME_RE = /^([01]?\d|2[0-3]):([0-5]\d)$/;

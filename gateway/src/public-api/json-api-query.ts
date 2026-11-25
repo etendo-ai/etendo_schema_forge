@@ -1,4 +1,4 @@
-import type { PublicApiEntity } from '@etendosoftware/api-gateway-core';
+import type { PublicApiEntity } from '@etendo-ai/api-gateway-core';
 import { invalidQueryParameter, isRecord } from './json-api-http.ts';
 
 // The query contract of a list read: JSON:API pagination (`page[number]`,

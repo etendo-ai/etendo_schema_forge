@@ -366,7 +366,7 @@ test.describe('Amortization lines — single-flight per record (ETP-5255)', () =
    * `--workers=1` but was observed to pass once in ~30 executions under heavy parallel load, so
    * the 409 appeared and disappeared with no pattern a user could describe.
    *
-   * Closed in `@etendosoftware/app-shell-core` (`auth/api.js`): `harvestWrittenVersion` now
+   * Closed in `@etendo-ai/app-shell-core` (`auth/api.js`): `harvestWrittenVersion` now
    * returns its promise instead of leaving it floating, and `createApiFetch` serialises versioned
    * writes per record — keyed by the same (canonical entity, id) pair the version cache uses —
    * awaiting the harvest before releasing the next write. So this assertion is about a guarantee

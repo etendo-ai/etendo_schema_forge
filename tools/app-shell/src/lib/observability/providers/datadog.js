@@ -1,4 +1,4 @@
-import { createDatadogAdapter } from '@etendosoftware/app-shell-core/observability/adapters/datadog';
+import { createDatadogAdapter } from '@etendo-ai/app-shell-core/observability/adapters/datadog';
 import { loadDatadog } from '../sdk.js';
 import { SAFE_EVENT_PROPERTY_KEYS } from '../payload.js';
 import { TRUSTED_CONTEXT_KEYS } from '../core.js';

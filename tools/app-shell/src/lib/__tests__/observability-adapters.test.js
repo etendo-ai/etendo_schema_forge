@@ -16,7 +16,7 @@ import {
   resolveRumSessionSampleRate,
 } from '../rum.js';
 import { createDatadogProvider } from '../observability/providers/datadog.js';
-import { resolveTracingUrls } from '@etendosoftware/app-shell-core/observability/adapters/datadog';
+import { resolveTracingUrls } from '@etendo-ai/app-shell-core/observability/adapters/datadog';
 
 const datadogEnv = {
   VITE_DATADOG_ENABLED: 'true', VITE_DATADOG_APPLICATION_ID: 'test-app',

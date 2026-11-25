@@ -2,7 +2,7 @@
 // New file justification: no existing test covers the review read hook; useInvoiceInboxList.vitest.jsx
 // is about the paged list (a different hook) and invoiceInboxApi.vitest.js about the request shape.
 import { renderHook, act, waitFor } from '@testing-library/react';
-import { isNetworkError } from '@etendosoftware/app-shell-core/auth';
+import { isNetworkError } from '@etendo-ai/app-shell-core/auth';
 
 const mockFetchReview = vi.fn();
 vi.mock('../invoiceInboxApi.js', () => ({ fetchReview: (...args) => mockFetchReview(...args) }));

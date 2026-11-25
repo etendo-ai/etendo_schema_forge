@@ -21,7 +21,7 @@ vi.mock('sonner', () => ({
 const fetchAccount = vi.fn();
 // Only the network call is replaced. The rest of the module stays intact because authMethodsApi
 // resolves unmapped codes through the core's own AUTH_ERROR_UI_KEYS table.
-vi.mock('@etendosoftware/etendo-go-core/onboarding/api', async (importOriginal) => ({
+vi.mock('@etendo-ai/etendo-go-core/onboarding/api', async (importOriginal) => ({
   ...(await importOriginal()),
   fetchAccount: (...a) => fetchAccount(...a),
 }));
@@ -114,7 +114,7 @@ function lastDialogProps() {
   return calls[calls.length - 1][0];
 }
 
-import { AUTH_ERROR_UI_KEYS } from '@etendosoftware/etendo-go-core/onboarding/api';
+import { AUTH_ERROR_UI_KEYS } from '@etendo-ai/etendo-go-core/onboarding/api';
 import AccountSettingsPage from '../AccountSettingsPage.jsx';
 
 const BOTH_METHODS = {

@@ -2,7 +2,7 @@
 // @covers tools/app-shell/src/lib/observability/payload.js
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { sanitizeValue } from '@etendosoftware/app-shell-core/observability/sanitize';
+import { sanitizeValue } from '@etendo-ai/app-shell-core/observability/sanitize';
 
 import { createObservability } from '../observability/core.js';
 import { SAFE_EVENT_PROPERTY_KEYS } from '../observability/payload.js';

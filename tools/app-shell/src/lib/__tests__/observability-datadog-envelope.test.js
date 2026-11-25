@@ -96,7 +96,7 @@ before(async () => {
 
   const { loadDatadog } = await import('../observability/sdk.js');
   const { createDatadogProvider } = await import('../observability/providers/datadog.js');
-  const { createTelemetryGateway } = await import('@etendosoftware/app-shell-core/observability/gateway');
+  const { createTelemetryGateway } = await import('@etendo-ai/app-shell-core/observability/gateway');
   const { SAFE_EVENT_PROPERTY_KEYS } = await import('../observability/payload.js');
   ({ datadogRum } = await loadDatadog());
 

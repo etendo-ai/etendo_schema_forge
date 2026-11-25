@@ -49,7 +49,7 @@
 // resolves that package from the PUBLISHED version unless the LOCAL_CORE dev profile is active
 // (see docs/repo-topology.md). A named import of a not-yet-published export would fail the build;
 // a namespace import degrades to the pre-alias behaviour, which is the behaviour shipped today.
-import * as recordVersions from '@etendosoftware/app-shell-core/lib/recordVersions.js';
+import * as recordVersions from '@etendo-ai/app-shell-core/lib/recordVersions.js';
 
 const ALIAS_GROUPS = [
   // [canonical, ...aliases] — canonical is the entity the window actually writes through.
@@ -68,6 +68,6 @@ if (typeof recordVersions.registerEntityAliases === 'function') {
   console.warn(
     '[ETP-5263] app-shell-core has no registerEntityAliases; Contacts entity aliases are not '
     + 'registered. Saving one C_BPartner row through two tabs in a sitting can return 409 '
-    + 'stale_record. Bump @etendosoftware/app-shell-core to a version that exports it.',
+    + 'stale_record. Bump @etendo-ai/app-shell-core to a version that exports it.',
   );
 }

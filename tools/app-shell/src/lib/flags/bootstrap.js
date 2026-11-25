@@ -4,7 +4,7 @@ import { createFlagExposureHook, resetExposureCache } from './flag-exposure.js';
 
 import { reset, identify, group } from '../observability.js';
 import { loadDatadogFlags } from '../observability/sdk.js';
-import { authHeaders, apiFetch } from '@etendosoftware/app-shell-core/auth/api';
+import { authHeaders, apiFetch } from '@etendo-ai/app-shell-core/auth/api';
 import { clearSessionIdentity, getSessionIdentity, setSessionIdentity } from '../sessionIdentity.js';
 import { reportFlagDiagnostic } from './diagnostics.js';
 /**

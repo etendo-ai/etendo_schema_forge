@@ -1,7 +1,7 @@
 export SF_ROOT := $(CURDIR)
 
 # --- CLI source resolution -------------------------------------------------
-# By default the pipeline runs the PUBLISHED CLI (@etendosoftware/schema-forge-cli)
+# By default the pipeline runs the PUBLISHED CLI (@etendo-ai/schema-forge-cli)
 # via `npx`. Set LOCAL_CORE=1 to run the CLI from the sibling schema_forge_core
 # SOURCE instead (for developers who also work on the core tooling). Requires
 # schema_forge_core cloned as a sibling AND its deps installed (`npm install`
@@ -396,7 +396,7 @@ generate-base-public-api-manifest: ## Generate public-api/base.v1.json, the mani
 	node scripts/generate-base-public-api-manifest.mjs artifacts public-api/base.v1.json
 	node scripts/validate-base-public-api-manifest.mjs public-api/base.v1.json
 
-# gateway/'s package.json declares @etendosoftware/api-gateway-core as a real npm
+# gateway/'s package.json declares @etendo-ai/api-gateway-core as a real npm
 # dependency (not a CLI bin, not bundler-resolved React source) — neither of the two
 # mechanisms above fits, so LOCAL_CORE consumption here uses `npm link`, gated the
 # same way: opt-in, never touches the default (published) install. Requires
@@ -416,7 +416,7 @@ gateway-link-local-core: ## Build api-gateway-core in the sibling core repo and 
 		exit 1; \
 	fi
 	cd $(GATEWAY_CORE_PKG) && npm run build && npm link
-	cd gateway && npm link @etendosoftware/api-gateway-core
+	cd gateway && npm link @etendo-ai/api-gateway-core
 
 # `npm link` resolves a linked package against its REAL (symlink-target) path, not
 # the symlink's location in gateway/node_modules — so api-gateway-core would still
@@ -800,7 +800,7 @@ ai-bff-install:
 	@test -d tools/ai-bff/node_modules || npm install --prefix tools/ai-bff
 
 .PHONY: dev-local-core
-dev-local-core: ensure-locale ## Start dev server resolving @etendosoftware/app-shell-core from local ../schema_forge_core source (hot-reload; requires it cloned as sibling; frees only SPA_PORT/BFF_PORT first)
+dev-local-core: ensure-locale ## Start dev server resolving @etendo-ai/app-shell-core from local ../schema_forge_core source (hot-reload; requires it cloned as sibling; frees only SPA_PORT/BFF_PORT first)
 	@core="$${SCHEMA_FORGE_CORE:-../schema_forge_core}"; test -d "$$core/packages/app-shell-core/src" || { echo "ERROR: $$core/packages/app-shell-core/src not found."; echo "Clone schema_forge_core as a sibling of this repo (or point SCHEMA_FORGE_CORE at it), or use 'make dev' to run against the published package."; exit 1; }
 	@echo ">> LOCAL_CORE dev mode: app-shell-core resolves to ../schema_forge_core (published package bypassed)"
 	@for port in $(SPA_PORT) $(BFF_PORT); do \

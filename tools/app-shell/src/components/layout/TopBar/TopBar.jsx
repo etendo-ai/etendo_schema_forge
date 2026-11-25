@@ -7,7 +7,7 @@ import { useSupportSession } from '@/hooks/useSupportSession.js';
 import { useGuardedNavigate } from '@/hooks/useGuardedNavigate.js';
 import { demoTrialStatus, environmentTrialDaysKey } from '@/lib/environmentPresentation.js';
 import { useCopilot } from '@/components/CopilotContext';
-import { WalkthroughLauncher } from '@etendosoftware/app-shell-core/walkthrough';
+import { WalkthroughLauncher } from '@etendo-ai/app-shell-core/walkthrough';
 import { cn } from '@/lib/utils.js';
 import { useGlobalSearch } from '@/components/global-search/GlobalSearchContext.jsx';
 import { SearchBar } from '@/components/layout/SearchBar.jsx';

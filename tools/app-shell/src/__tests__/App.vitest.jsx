@@ -27,7 +27,7 @@ vi.mock('sonner', () => ({
 // The real AppShellRuntime wraps everything in a <BrowserRouter>; the mock must
 // provide an equivalent Router context so App's children (ServiceWorkerManager,
 // AppStoreKeyWatcher, ObservabilityRouteTracker) can call useLocation/useNavigate.
-vi.mock('@etendosoftware/app-shell-core/runtime', async () => {
+vi.mock('@etendo-ai/app-shell-core/runtime', async () => {
   const { MemoryRouter } = await import('react-router-dom');
   return {
     AppShellRuntime: ({ children, layout: Layout, menuGroups, auth }) => {
