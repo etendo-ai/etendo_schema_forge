@@ -97,7 +97,7 @@
             ]
           }
         ],
-        "_note": "ETP-6247 — «Confirmar» (was ETP-6148's «Procesar»): RemittanceHeaderHandler action `confirm`, atomic: it checks fileReadiness, processes the remittance with REM's REMRemittanceProcess, leaves the payments in Remesado and the invoices uncollected (the remittance ends Pendiente de envío PR and can be reactivated until «Marcar como cobrada»), generates the SEPA file and stores it as the main attachment. `confirmModal` routes the click to customComponents.processConfirmModal (RemittanceProcessConfirmModal), which re-checks fileReadiness, asks the grouping from `params` (default P «Sin agrupar», GGP «Agrupar por cliente» — one payment per business partner whatever the due date —, GGPD «Agrupar por cliente y vencimiento», posted as fieldValues.grouping), warns that the payments stay in Remesado until it is marked collected, posts the action itself and offers the file in its success step. Only while unprocessed and with lines."
+        "_note": "ETP-6247 — «Confirmar» (was ETP-6148's «Procesar»): RemittanceHeaderHandler action `confirm`, atomic: it checks fileReadiness, processes the remittance with REM's REMRemittanceProcess, leaves the payments in Remesado and the invoices uncollected (the remittance ends Pendiente de envío PR and can be reactivated until «Marcar como cobrada»), and attaches nothing: the SEPA file is generated on the fly by the read-only `downloadFile` action at every download, like Classic. `confirmModal` routes the click to customComponents.processConfirmModal (RemittanceProcessConfirmModal), which re-checks fileReadiness, asks the grouping from `params` (default P «Sin agrupar», GGP «Agrupar por cliente» — one payment per business partner whatever the due date —, GGPD «Agrupar por cliente y vencimiento», posted as fieldValues.grouping), warns that the payments stay in Remesado until it is marked collected, posts the action itself and offers «Descargar fichero» (downloadFile) in its success step. Only while unprocessed and with lines."
       },
       "markSent": {
         "add": true,
@@ -191,6 +191,8 @@
     "remittance": {
       "fields": {
         "transactionDate": {
+          "dot": false,
+          "_note": "ETP-6247: a remittance date is not a due date; no overdue dot",
           "visibility": "readOnly",
           "grid": true,
           "gridOrder": 5,
@@ -243,6 +245,8 @@
           "reason": "ETP-6148 — 'Cuenta' (FIN_Financial_Account_ID). The selector is served by the remittance handler, which decides what it offers: Bank accounts with the remittance payment methods, including those WITHOUT a valid IBAN, whose items carry `ibanValid: false` and show a «Sin IBAN» badge (optionBadge); their IBAN is entered in the «Datos para el fichero SEPA» block, and the header refuses the save (422 ETGO_RemittanceAccountIbanRequired) until it is valid. There is no per-account «Admite remesas» switch any more; Bank accounts get the remittance payment methods when they are created. Placed first in the form because remittanceType depends on it. List: columnWidth 290 fits a typical account name («Cuenta Remesa ETP-6148 - EUR»); `name` absorbs the leftover width (grow), not the account or the type (user decision 2026-11-06)."
         },
         "dueDate": {
+          "dot": false,
+          "_note": "ETP-6247: a remittance date is not a due date; no overdue dot",
           "visibility": "editable",
           "grid": true,
           "gridOrder": 6,
@@ -381,6 +385,8 @@
       "_rowEditNote": "ETP-6148 round 3 — no row edit mode, as in Classic: no Edit (pencil) action and a click does not turn the row into inputs. The only editable value is «A remesar» (amount.editInPlace), an always-visible input committed by PATCH (methods above; RemittanceLinesHandler writes only amount and refuses with 422 ETGO_RemittanceLineAmountInvalid outside 0 < |amount| <= |due outstanding|). The trash icon (line delete) and «Seleccionar desde factura» stay.",
       "fields": {
         "invoiceDate": {
+          "dot": false,
+          "_note": "ETP-6247: a remittance date is not a due date; no overdue dot",
           "propertyPath": "paymentScheduleDetail.invoicePaymentSchedule.invoice.invoiceDate",
           "type": "date",
           "label": "Invoice Date",
@@ -474,6 +480,8 @@
           "reason": "ETP-6148 — 'Cliente': the due item's business partner (the one «Seleccionar desde factura» shows), read through a property path; an FK, served with businessPartner$_identifier."
         },
         "dueDate": {
+          "dot": false,
+          "_note": "ETP-6247: a remittance date is not a due date; no overdue dot",
           "propertyPath": "paymentScheduleDetail.invoicePaymentSchedule.expectedDate",
           "type": "date",
           "label": "Due Date",

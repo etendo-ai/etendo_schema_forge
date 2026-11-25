@@ -1,8 +1,8 @@
 {
-  "version": "0.37.0",
+  "version": "0.38.0",
   "generatedAt": "2026-11-05T18:53:39.346Z",
-  "updatedAt": "2026-11-25T15:48:23.765Z",
-  "checksum": "2c3989a2e20c2892",
+  "updatedAt": "2026-11-25T16:36:04.423Z",
+  "checksum": "0796547231a774c7",
   "frontendContract": {
     "window": {
       "id": "FF8080812E71F7C7012E71FD0499001B",
@@ -63,7 +63,7 @@
               ]
             }
           ],
-          "_note": "ETP-6247 — «Confirmar» (was ETP-6148's «Procesar»): RemittanceHeaderHandler action `confirm`, atomic: it checks fileReadiness, processes the remittance with REM's REMRemittanceProcess, leaves the payments in Remesado and the invoices uncollected (the remittance ends Pendiente de envío PR and can be reactivated until «Marcar como cobrada»), generates the SEPA file and stores it as the main attachment. `confirmModal` routes the click to customComponents.processConfirmModal (RemittanceProcessConfirmModal), which re-checks fileReadiness, asks the grouping from `params` (default P «Sin agrupar», GGP «Agrupar por cliente» — one payment per business partner whatever the due date —, GGPD «Agrupar por cliente y vencimiento», posted as fieldValues.grouping), warns that the payments stay in Remesado until it is marked collected, posts the action itself and offers the file in its success step. Only while unprocessed and with lines."
+          "_note": "ETP-6247 — «Confirmar» (was ETP-6148's «Procesar»): RemittanceHeaderHandler action `confirm`, atomic: it checks fileReadiness, processes the remittance with REM's REMRemittanceProcess, leaves the payments in Remesado and the invoices uncollected (the remittance ends Pendiente de envío PR and can be reactivated until «Marcar como cobrada»), and attaches nothing: the SEPA file is generated on the fly by the read-only `downloadFile` action at every download, like Classic. `confirmModal` routes the click to customComponents.processConfirmModal (RemittanceProcessConfirmModal), which re-checks fileReadiness, asks the grouping from `params` (default P «Sin agrupar», GGP «Agrupar por cliente» — one payment per business partner whatever the due date —, GGPD «Agrupar por cliente y vencimiento», posted as fieldValues.grouping), warns that the payments stay in Remesado until it is marked collected, posts the action itself and offers «Descargar fichero» (downloadFile) in its success step. Only while unprocessed and with lines."
         },
         "markSent": {
           "add": true,
@@ -286,6 +286,7 @@
             "section": "principal",
             "seq": 50,
             "gridOrder": 5,
+            "dot": false,
             "validation": {
               "required": true,
               "maxLength": 19
@@ -316,6 +317,7 @@
             "section": "principal",
             "seq": 30,
             "gridOrder": 6,
+            "dot": false,
             "minDate": "today",
             "validation": {
               "required": true,
@@ -867,7 +869,8 @@
               "es_AR": "Vencimiento",
               "en_US": "Due date"
             },
-            "gridOrder": 3
+            "gridOrder": 3,
+            "dot": false
           },
           {
             "name": "invoiceDocumentNo",
@@ -916,7 +919,8 @@
               "es_AR": "Fecha factura",
               "en_US": "Invoice date"
             },
-            "gridOrder": 2
+            "gridOrder": 2,
+            "dot": false
           },
           {
             "name": "invoiceGrandTotal",
@@ -1066,7 +1070,7 @@
               ]
             }
           ],
-          "_note": "ETP-6247 — «Confirmar» (was ETP-6148's «Procesar»): RemittanceHeaderHandler action `confirm`, atomic: it checks fileReadiness, processes the remittance with REM's REMRemittanceProcess, leaves the payments in Remesado and the invoices uncollected (the remittance ends Pendiente de envío PR and can be reactivated until «Marcar como cobrada»), generates the SEPA file and stores it as the main attachment. `confirmModal` routes the click to customComponents.processConfirmModal (RemittanceProcessConfirmModal), which re-checks fileReadiness, asks the grouping from `params` (default P «Sin agrupar», GGP «Agrupar por cliente» — one payment per business partner whatever the due date —, GGPD «Agrupar por cliente y vencimiento», posted as fieldValues.grouping), warns that the payments stay in Remesado until it is marked collected, posts the action itself and offers the file in its success step. Only while unprocessed and with lines."
+          "_note": "ETP-6247 — «Confirmar» (was ETP-6148's «Procesar»): RemittanceHeaderHandler action `confirm`, atomic: it checks fileReadiness, processes the remittance with REM's REMRemittanceProcess, leaves the payments in Remesado and the invoices uncollected (the remittance ends Pendiente de envío PR and can be reactivated until «Marcar como cobrada»), and attaches nothing: the SEPA file is generated on the fly by the read-only `downloadFile` action at every download, like Classic. `confirmModal` routes the click to customComponents.processConfirmModal (RemittanceProcessConfirmModal), which re-checks fileReadiness, asks the grouping from `params` (default P «Sin agrupar», GGP «Agrupar por cliente» — one payment per business partner whatever the due date —, GGPD «Agrupar por cliente y vencimiento», posted as fieldValues.grouping), warns that the payments stay in Remesado until it is marked collected, posts the action itself and offers «Descargar fichero» (downloadFile) in its success step. Only while unprocessed and with lines."
         },
         "markSent": {
           "add": true,

@@ -1,5 +1,6 @@
-// ETP-6247 — the SEPA file of a remittance: «Antes de confirmar», «Confirmar», «Descargar fichero»
-// and «Regenerar fichero». Pure functions over injected `apiFetch` helpers (docs/request-policy.md),
+// ETP-6247 — the SEPA file of a remittance: «Antes de confirmar», «Confirmar» and «Descargar fichero».
+// The file is NOT stored on the remittance: like Classic, it is generated on the fly at every download.
+// Pure functions over injected `apiFetch` helpers (docs/request-policy.md),
 // so the components stay thin and these can be unit-tested without React.
 //
 // Contract (RemittanceHeaderHandler, com.etendoerp.go; NEO action envelope read defensively):
@@ -11,23 +12,22 @@
 //          A contact problem (no IBAN, mandate, address, tax ID, invalid BIC...) comes ONCE per contact
 //          and code, `lineIds` listing every line it affects (lineId/documentNo = the first one); the
 //          amount problem stays per line. On a processed remittance the amount check is skipped, so
-//          `ready` there means «generateFile can run».
+//          `ready` there means «downloadFile can run».
 //          summary: { invoiceCount, lineCount, totalAmount, currency (ISO), dueDate (yyyy-MM-dd|null) },
-//          latestFile: { attachmentId, fileName } | null }   (the main .xml attachment)
+//          returnedCount: number of returned receipts the file still carries (it is the file sent to the bank) }
 //     `message` is ALREADY localized server-side (request language, params substituted) and is what
 //     the block shows; `code` (ETGO_RemittanceFile*) + positional `params` are only the fallback.
 //   POST <spec>/remittance/{id}/action/confirm          { fieldValues: { grouping: 'P'|'GGP'|'GGPD' } }
-//     atomic: readiness, process (REM), settle every payment (automated remittance: Cobrada/Pagada,
-//     not reversible), generate the SEPA file and store it as the main attachment.
-//     → { status, attachmentId, fileName, downloadUrl (signed public link for MCP; the SPA downloads
-//          through /sws/neo/attachments with attachmentId) }
+//     atomic: readiness, process (REM), leave the payments Remitted (Pendiente de envío).
+//     → { status, fileName }   (nothing is attached: the file is downloaded with `downloadFile`)
 //     Refusals: 422 `error: { message (localized, params substituted), messageKeys: [key] }`, plus
 //     `error.problems` for ETGO_RemittanceFileNotReady only; everything is rolled back.
-//   POST <spec>/remittance/{id}/action/generateFile      {}
-//     processed remittances only; a NEW main attachment (previous files kept) → same shape as confirm.
-//   GET  /sws/neo/attachments/file/{attachmentId}        the file bytes (shared attachments API)
-//   GET  /sws/neo/attachments/REM_Remittance/{id}        { items: [{ id, name, dataType, uploadedAt }] }
-//     fallback only, when fileReadiness carries no `latestFile` (or refuses): the newest .xml wins.
+//   POST <spec>/remittance/{id}/action/downloadFile      {}   (read-only, processed remittances)
+//     → { fileName (e.g. 1000016_Cobros_nandu_enero.xml), contentType: 'application/xml', content (the XML,
+//          UTF-8 text), returnedCount }   A file with returns is never refused (it is the one sent to the bank).
+//     Refusals: 422 ETGO_RemittanceFileNotProcessed, ETGO_RemittanceFileNotReady (with `error.problems`), and
+//     the generator / XSD / EPC ones (ETGO_RemittanceFileGenerationFailed / …Invalid / …SchemaMissing), whose
+//     localized sentence is shown as is.
 
 import {
   translateBackendError,
@@ -49,13 +49,6 @@ export function isCreditorIdProblem(problem) {
 /** A remittance that was confirmed has a SEPA file to download: PR, SB, CT, PT, CP, PP (not PE, not voided AN). */
 export const FILE_STATUSES = new Set(['PR', 'SB', 'CT', 'PT', 'CP', 'PP']);
 
-/**
- * «Regenerar / Generar fichero» is offered only while the remittance is Pendiente de envío (PR) or
- * Enviada al banco (SB): once it is collected the file already went to the bank.
- */
-export const REGENERATE_STATUSES = new Set(['PR', 'SB']);
-const ATTACHMENTS_PATH = '/sws/neo/attachments';
-const REMITTANCE_TABLE = 'REM_Remittance';
 
 const actionPath = (remittanceId, action) =>
   `/remittance/${encodeURIComponent(remittanceId)}/action/${action}`;
@@ -117,9 +110,10 @@ function normalizeSummary(raw) {
   };
 }
 
-function normalizeFileRef(raw) {
-  const id = textOrNull(raw?.attachmentId ?? raw?.id);
-  return id ? { attachmentId: id, fileName: textOrNull(raw?.fileName ?? raw?.name) } : null;
+/** A non-negative whole count, 0 when absent or not a number. */
+function countOrZero(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? Math.trunc(n) : 0;
 }
 
 /** The read model of `fileReadiness`, every key defaulted. `ready` is false whenever there is a problem. */
@@ -131,18 +125,27 @@ export function normalizeFileReadiness(raw) {
     scheme: data.scheme === 'CORE' || data.scheme === 'SCT' ? data.scheme : null,
     problems,
     summary: normalizeSummary(data.summary),
-    latestFile: normalizeFileRef(data.latestFile),
+    returnedCount: countOrZero(data.returnedCount),
   };
 }
 
-/** The result of `confirm` / `generateFile`. */
+/** The result of `confirm`. */
 export function normalizeFileResult(raw) {
   const data = raw ?? {};
   return {
     status: textOrNull(data.status),
-    attachmentId: textOrNull(data.attachmentId),
     fileName: textOrNull(data.fileName),
-    downloadUrl: textOrNull(data.downloadUrl),
+  };
+}
+
+/** The result of `downloadFile`: the XML generated on the fly, its name and how many returned receipts it carries. */
+export function normalizeDownloadedFile(raw) {
+  const data = raw ?? {};
+  return {
+    fileName: textOrNull(data.fileName),
+    contentType: textOrNull(data.contentType) ?? 'application/xml',
+    content: typeof data.content === 'string' ? data.content : '',
+    returnedCount: countOrZero(data.returnedCount),
   };
 }
 
@@ -164,7 +167,7 @@ export async function fetchFileReadiness(apiFetch, remittanceId) {
 }
 
 /**
- * Confirms the remittance (atomic: process, settle, generate and attach the file).
+ * Confirms the remittance (atomic: readiness, process). The file is not stored: see downloadRemittanceFile.
  *
  * @param {Function} apiFetch - `useApiFetch(apiBaseUrl)` of the remittance spec
  * @param {string} remittanceId
@@ -179,21 +182,6 @@ export async function confirmRemittance(apiFetch, remittanceId, grouping = GROUP
     body: JSON.stringify({ fieldValues: { grouping: grouping || GROUPING_NONE } }),
   });
   if (!res.ok) throw await httpError(res, 'confirm');
-  return normalizeFileResult(unwrap(await res.json()));
-}
-
-/**
- * Regenerates the SEPA file of a processed remittance as a new main attachment.
- *
- * @returns {Promise<ReturnType<typeof normalizeFileResult>>}
- * @throws {Error} with `status` and `body` when the backend refuses
- */
-export async function regenerateRemittanceFile(apiFetch, remittanceId) {
-  const res = await apiFetch(actionPath(remittanceId, 'generateFile'), {
-    method: 'POST',
-    body: JSON.stringify({}),
-  });
-  if (!res.ok) throw await httpError(res, 'generateFile');
   return normalizeFileResult(unwrap(await res.json()));
 }
 
@@ -298,64 +286,50 @@ export function returnProblemsFromError(err) {
     : [];
 }
 
-function uploadedAtMillis(item) {
-  const time = Date.parse(item?.uploadedAt ?? item?.createdAt ?? '');
-  return Number.isFinite(time) ? time : 0;
-}
-
-function isXmlAttachment(item) {
-  const name = String(item?.name ?? '').toLowerCase();
-  const type = String(item?.dataType ?? '').toLowerCase();
-  return name.endsWith('.xml') || type.includes('xml');
-}
-
 /**
- * The newest SEPA file attached to the remittance, or null. Used only when `fileReadiness` does
- * not name it (`latestFile`): the attachments list carries no main flag, so the newest .xml wins.
- *
- * @param {Function} rootApiFetch - `useApiFetch(getApiBase())` (absolute NEO paths)
- * @param {string} remittanceId
- * @returns {Promise<{ attachmentId: string, fileName: string|null }|null>}
- */
-export async function findLatestRemittanceFile(rootApiFetch, remittanceId) {
-  const res = await rootApiFetch(`${ATTACHMENTS_PATH}/${REMITTANCE_TABLE}/${encodeURIComponent(remittanceId)}`);
-  if (!res.ok) return null;
-  const json = await readJsonSafely(res);
-  const items = json?.items ?? json?.response?.data ?? json?.data ?? [];
-  if (!Array.isArray(items)) return null;
-  const newest = items
-    .filter((item) => item?.id && isXmlAttachment(item))
-    .reduce((best, item) => (best && uploadedAtMillis(best) >= uploadedAtMillis(item) ? best : item), null);
-  return newest ? { attachmentId: String(newest.id), fileName: textOrNull(newest.name) } : null;
-}
-
-/**
- * Downloads an attachment through the shared attachments endpoint and saves it as a file.
- *
- * @param {Function} rootApiFetch - `useApiFetch(getApiBase())` (absolute NEO paths)
- * @param {{ attachmentId: string, fileName?: string|null }} file
- * @throws {Error} with `status` and `body` when the download is refused
- */
-export async function downloadRemittanceFile(rootApiFetch, { attachmentId, fileName }) {
-  const res = await rootApiFetch(`${ATTACHMENTS_PATH}/file/${encodeURIComponent(attachmentId)}`);
-  if (!res.ok) throw await httpError(res, 'download');
-  const blob = await res.blob();
-  downloadBlobAsFile(blob, fileName || `remittance-${attachmentId}.xml`);
-}
-
-/**
- * The remittance's main SEPA file, however the caller got there: `fileReadiness` names it
- * (`latestFile`); the attachments list is only the fallback, for a backend that refuses the read on a
- * processed remittance or omits the key. Shared by «Fichero SEPA» and the grid's row menu. Resolves
- * to `{ attachmentId, fileName }` or null when there is none; it never throws.
+ * Downloads the remittance's SEPA file. It is generated on the fly by the read-only `downloadFile` action
+ * (nothing is attached to the remittance, like Classic) and saved with the shared `downloadBlobAsFile`.
  *
  * @param {Function} apiFetch - `useApiFetch(apiBaseUrl)` of the remittance spec
- * @param {Function} rootApiFetch - `useApiFetch(getApiBase())` (absolute NEO paths)
+ * @param {string} remittanceId
+ * @returns {Promise<{ fileName: string, returnedCount: number }>} what was saved, and how many returned
+ *   receipts the file still carries (it is the file that was sent to the bank)
+ * @throws {Error} with `status` and `body` (messageKeys, problems) when the backend refuses
  */
-export function resolveLatestRemittanceFile(apiFetch, rootApiFetch, remittanceId) {
-  return fetchFileReadiness(apiFetch, remittanceId)
-    .then((readiness) => readiness.latestFile ?? findLatestRemittanceFile(rootApiFetch, remittanceId))
-    .catch(() => findLatestRemittanceFile(rootApiFetch, remittanceId).catch(() => null));
+export async function downloadRemittanceFile(apiFetch, remittanceId) {
+  const res = await apiFetch(actionPath(remittanceId, 'downloadFile'), { method: 'POST', body: JSON.stringify({}) });
+  if (!res.ok) throw await httpError(res, 'downloadFile');
+  const file = normalizeDownloadedFile(unwrap(await res.json()));
+  const fileName = file.fileName || `remittance-${remittanceId}.xml`;
+  downloadBlobAsFile(new Blob([file.content], { type: file.contentType }), fileName);
+  return { fileName, returnedCount: file.returnedCount };
+}
+
+/** «Este fichero incluye {count} recibo(s) devuelto(s); es el que se envió al banco.» — singular for one. */
+export function returnedReceiptsNotice(returnedCount, ui) {
+  return ui(returnedCount === 1 ? 'remittanceFileIncludesReturnedOne' : 'remittanceFileIncludesReturned', { count: returnedCount });
+}
+
+/**
+ * The download every entry point offers (detail button, row menu, the confirm dialog's success step):
+ * saves the file, then an informative, non-blocking toast when it still carries returned receipts; a
+ * refusal toasts its translated message. Never throws.
+ *
+ * @param {Function} apiFetch - `useApiFetch(apiBaseUrl)` of the remittance spec
+ * @param {string} remittanceId
+ * @param {Function} ui - the `useUI()` translator
+ * @param {{ info: Function, error: Function }} notify - the toast API (`sonner`'s `toast`)
+ * @returns {Promise<{ fileName: string, returnedCount: number }|null>} null when refused
+ */
+export async function downloadRemittanceFileNotifying(apiFetch, remittanceId, ui, notify) {
+  try {
+    const result = await downloadRemittanceFile(apiFetch, remittanceId);
+    if (result.returnedCount > 0) notify.info(returnedReceiptsNotice(result.returnedCount, ui));
+    return result;
+  } catch (err) {
+    notify.error(fileActionErrorMessage(err, ui, 'remittanceFileDownloadError'));
+    return null;
+  }
 }
 
 /** A translated message for a refused file action: `messageKeys` first, its text second, then the fallback. */

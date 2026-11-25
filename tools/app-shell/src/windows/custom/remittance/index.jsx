@@ -1,10 +1,9 @@
 import { useCallback, useMemo, useState } from 'react';
-import { ClockIcon, DownloadSimpleIcon, ArrowsClockwiseIcon } from '@phosphor-icons/react';
+import { ClockIcon, DownloadSimpleIcon } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { evalRowVisibleWhen } from '@/utils/recordActions.js';
 import { useAuthOptional } from '@etendosoftware/app-shell-core/auth';
 import { useApiFetch } from '@/auth/useApiFetch.js';
-import { getApiBase } from '@/hooks/useNeoResource.js';
 import { useUI } from '@/i18n';
 import { useWindowAccess } from '@/auth/AuthContext.jsx';
 import { ListProgressBar } from '@/components/contract-ui/ListProgressBar.jsx';
@@ -15,9 +14,8 @@ import decisions from '@generated/remittance/decisions.json';
 import RemittanceSentDialog from '@generated/remittance/custom/RemittanceSentDialog.jsx';
 import RemittanceCollectDialog from '@generated/remittance/custom/RemittanceCollectDialog.jsx';
 import { RemittanceStatusChip } from '@generated/remittance/custom/RemittanceStatusChange.jsx';
-import { FILE_STATUSES, REGENERATE_STATUSES, downloadRemittanceFile, fileActionErrorMessage, resolveLatestRemittanceFile } from '@generated/remittance/custom/remittanceFileApi.js';
+import { FILE_STATUSES, downloadRemittanceFileNotifying } from '@generated/remittance/custom/remittanceFileApi.js';
 import RemittanceDownloadButton from '@generated/remittance/custom/RemittanceDownloadButton.jsx';
-import RemittanceRegenerateDialog from '@generated/remittance/custom/RemittanceRegenerateDialog.jsx';
 import { REMITTANCE_CONFIRM_EVENT } from '@generated/remittance/custom/RemittanceStatusSelector.jsx';
 import RemittanceApp from '@generated/remittance/generated/web/remittance/index.jsx';
 
@@ -128,27 +126,12 @@ export default function RemittanceRoute(props) {
   // replace the generated page's `rowQuickActions` object as a whole.
   const ui = useUI();
   const apiFetch = useApiFetch(props.apiBaseUrl);
-  const rootApiFetch = useApiFetch(useMemo(() => getApiBase(), []));
-  // «Descargar fichero» of the row menu: the same resolution and download as the «Fichero SEPA» card
-  // (resolveLatestRemittanceFile / downloadRemittanceFile), nothing else is opened.
-  const downloadRowFile = useCallback(async (row) => {
-    try {
-      const file = await resolveLatestRemittanceFile(apiFetch, rootApiFetch, row.id);
-      if (!file) {
-        toast.error(ui('remittanceFileNone'));
-        return;
-      }
-      await downloadRemittanceFile(rootApiFetch, file);
-    } catch (err) {
-      toast.error(fileActionErrorMessage(err, ui, 'remittanceFileDownloadError'));
-    }
-  }, [apiFetch, rootApiFetch, ui]);
-  // «Regenerar fichero» of the DETAIL kebab (`menuActions` as a function of the record, an entry's
-  // `onClick` opens the host-owned confirmation), only on PR and SB.
-  const [regenerateRecord, setRegenerateRecord] = useState(null);
-  const detailMenuActions = useCallback(({ data }) => (REGENERATE_STATUSES.has(data?.remittanceStatus)
-    ? [{ key: 'regenerateFile', labelKey: 'remittanceFileRegenerate', icon: ArrowsClockwiseIcon, onClick: () => setRegenerateRecord(data) }]
-    : []), []);
+  // «Descargar fichero» of the row menu: the same on-the-fly download as the detail button
+  // (`downloadFile`, nothing is stored on the remittance), nothing else is opened.
+  const downloadRowFile = useCallback(
+    (row) => downloadRemittanceFileNotifying(apiFetch, row.id, ui, toast),
+    [apiFetch, ui],
+  );
   const rowQuickActions = useMemo(() => ({
     ...(decisions.window.rowQuickActions ?? {}),
     menuActions: ({ row }) => buildRowMenuActions(row, setRowStep, downloadRowFile),
@@ -179,19 +162,10 @@ export default function RemittanceRoute(props) {
         draftMode={REMITTANCE_DRAFT_MODE}
         rowQuickActions={rowQuickActions}
         topbarSecondary={RemittanceDownloadButton}
-        menuActions={detailMenuActions}
         {...props}
         refreshTrigger={(props.refreshTrigger ?? 0) + refreshKey}
         saveActionsFirst
         data-testid="RemittanceApp__6148a1" />
-      {regenerateRecord && (
-        <RemittanceRegenerateDialog
-          record={regenerateRecord}
-          apiBaseUrl={props.apiBaseUrl}
-          onRefresh={() => setRefreshKey((k) => k + 1)}
-          onClose={() => setRegenerateRecord(null)}
-          data-testid="RemittanceRegenerateDialog__route" />
-      )}
       {StepDialog && (
         <StepDialog
           record={rowStep.row}

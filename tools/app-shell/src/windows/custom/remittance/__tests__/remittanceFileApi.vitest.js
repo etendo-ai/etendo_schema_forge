@@ -1,7 +1,7 @@
 // @covers artifacts/remittance/custom/remittanceFileApi.js
 //
-// The SEPA file of a remittance: fileReadiness / confirm / generateFile, the attachment lookup and
-// download, and the helpers that turn a readiness answer or a refusal into what the UI lists.
+// The SEPA file of a remittance: fileReadiness / confirm / downloadFile (generated on the fly, nothing
+// attached), and the helpers that turn a readiness answer or a refusal into what the UI lists.
 // `apiFetch` is the injected boundary (docs/request-policy.md); the browser download is stubbed.
 const mockDownloadBlobAsFile = vi.fn();
 vi.mock('@/windows/custom/shared/pdfUtils.js', async (importOriginal) => ({
@@ -16,14 +16,15 @@ import {
   fetchFileReadiness,
   fetchRemittanceLines,
   fetchReturnState,
+  downloadRemittanceFileNotifying,
   fileActionErrorMessage,
-  findLatestRemittanceFile,
   groupReadinessProblems,
+  normalizeDownloadedFile,
   normalizeFileReadiness,
   normalizeFileResult,
   problemsFromError,
   readinessProblemText,
-  regenerateRemittanceFile,
+  returnedReceiptsNotice,
   returnProblemsFromError,
   returnRemittanceLines,
 } from '@generated/remittance/custom/remittanceFileApi.js';
@@ -44,7 +45,7 @@ beforeEach(() => {
 
 describe('normalizeFileReadiness', () => {
   it('defaults every key for an empty payload', () => {
-    const empty = { ready: false, scheme: null, problems: [], summary: null, latestFile: null };
+    const empty = { ready: false, scheme: null, problems: [], summary: null, returnedCount: 0 };
     expect(normalizeFileReadiness(undefined)).toEqual(empty);
     expect(normalizeFileReadiness({})).toEqual(empty);
   });
@@ -94,18 +95,28 @@ describe('normalizeFileReadiness', () => {
     expect(normalizeFileReadiness({ summary: 'x' }).summary).toBeNull();
   });
 
-  it('reads latestFile from attachmentId/fileName or id/name, and null without an id', () => {
-    expect(normalizeFileReadiness({ latestFile: { attachmentId: 'att-1', fileName: 'r.xml' } }).latestFile).toEqual({ attachmentId: 'att-1', fileName: 'r.xml' });
-    expect(normalizeFileReadiness({ latestFile: { id: 'att-2', name: 's.xml' } }).latestFile).toEqual({ attachmentId: 'att-2', fileName: 's.xml' });
-    expect(normalizeFileReadiness({ latestFile: { fileName: 'x.xml' } }).latestFile).toBeNull();
+  it('reads returnedCount as a non-negative whole number (0 when absent or not a number), and no latestFile', () => {
+    expect(normalizeFileReadiness({ returnedCount: 3 }).returnedCount).toBe(3);
+    expect(normalizeFileReadiness({ returnedCount: '2' }).returnedCount).toBe(2);
+    expect(normalizeFileReadiness({ returnedCount: -1 }).returnedCount).toBe(0);
+    expect(normalizeFileReadiness({ returnedCount: 'x' }).returnedCount).toBe(0);
+    expect(normalizeFileReadiness({ latestFile: { attachmentId: 'a' } })).not.toHaveProperty('latestFile');
   });
 });
 
 describe('normalizeFileResult', () => {
-  it('keeps the four keys as text or null', () => {
-    expect(normalizeFileResult({ status: 'CT', attachmentId: 'a', fileName: 'f.xml', downloadUrl: 'u' }))
-      .toEqual({ status: 'CT', attachmentId: 'a', fileName: 'f.xml', downloadUrl: 'u' });
-    expect(normalizeFileResult(undefined)).toEqual({ status: null, attachmentId: null, fileName: null, downloadUrl: null });
+  it('keeps status and fileName as text or null (nothing is attached any more)', () => {
+    expect(normalizeFileResult({ status: 'PR', attachmentId: 'a', fileName: 'f.xml', downloadUrl: 'u' }))
+      .toEqual({ status: 'PR', fileName: 'f.xml' });
+    expect(normalizeFileResult(undefined)).toEqual({ status: null, fileName: null });
+  });
+});
+
+describe('normalizeDownloadedFile', () => {
+  it('defaults the content type to XML, the content to empty and the returned count to 0', () => {
+    expect(normalizeDownloadedFile(undefined)).toEqual({ fileName: null, contentType: 'application/xml', content: '', returnedCount: 0 });
+    expect(normalizeDownloadedFile({ fileName: '1000016_Cobros_nandu_enero.xml', contentType: 'application/xml', content: '<a/>', returnedCount: 2 }))
+      .toEqual({ fileName: '1000016_Cobros_nandu_enero.xml', contentType: 'application/xml', content: '<a/>', returnedCount: 2 });
   });
 });
 
@@ -122,9 +133,9 @@ describe('remittance file actions', () => {
   });
 
   it('confirm posts the grouping in fieldValues, P by default', async () => {
-    const apiFetch = vi.fn().mockResolvedValue(jsonResponse({ response: { data: { status: 'CT', attachmentId: 'att-1', fileName: 'r.xml' } } }));
+    const apiFetch = vi.fn().mockResolvedValue(jsonResponse({ response: { data: { status: 'PR', fileName: 'r.xml' } } }));
     expect(GROUPING_NONE).toBe('P');
-    expect(await confirmRemittance(apiFetch, 'rem-1')).toMatchObject({ status: 'CT', attachmentId: 'att-1', fileName: 'r.xml' });
+    expect(await confirmRemittance(apiFetch, 'rem-1')).toEqual({ status: 'PR', fileName: 'r.xml' });
     await confirmRemittance(apiFetch, 'rem-1', 'GGPD');
     await confirmRemittance(apiFetch, 'rem-1', '');
     expect(apiFetch.mock.calls[0][0]).toBe('/remittance/rem-1/action/confirm');
@@ -133,17 +144,10 @@ describe('remittance file actions', () => {
     expect(bodyOf(apiFetch, 2)).toEqual({ fieldValues: { grouping: 'P' } });
   });
 
-  it('generateFile posts {} and returns the new file', async () => {
-    const apiFetch = vi.fn().mockResolvedValue(jsonResponse({ response: { data: { attachmentId: 'att-2', fileName: 'r2.xml' } } }));
-    expect(await regenerateRemittanceFile(apiFetch, 'rem-1')).toMatchObject({ attachmentId: 'att-2', fileName: 'r2.xml' });
-    expect(apiFetch.mock.calls[0][0]).toBe('/remittance/rem-1/action/generateFile');
-    expect(bodyOf(apiFetch)).toEqual({});
-  });
-
   it.each([
     ['fileReadiness', (f) => fetchFileReadiness(f, 'rem-1')],
     ['confirm', (f) => confirmRemittance(f, 'rem-1')],
-    ['generateFile', (f) => regenerateRemittanceFile(f, 'rem-1')],
+    ['downloadFile', (f) => downloadRemittanceFile(f, 'rem-1')],
   ])('%s throws with status and body on a refusal, and a label without JSON', async (label, call) => {
     const body = { error: { message: 'No listo', messageKeys: ['ETGO_RemittanceFileNotReady'], problems: [] } };
     await expect(call(vi.fn().mockResolvedValue(jsonResponse(body, { ok: false, status: 422 }))))
@@ -153,49 +157,64 @@ describe('remittance file actions', () => {
   });
 });
 
-describe('findLatestRemittanceFile', () => {
-  it('lists the remittance attachments and picks the newest .xml', async () => {
-    const apiFetch = vi.fn().mockResolvedValue(jsonResponse({ items: [
-      { id: 'a1', name: 'old.xml', uploadedAt: '2026-11-01T10:00:00Z' },
-      { id: 'a2', name: 'newer.pdf', uploadedAt: '2026-11-12T10:00:00Z' },
-      { id: 'a3', name: 'new.XML', uploadedAt: '2026-11-10T10:00:00Z' },
-      { id: 'a4', name: 'typed', dataType: 'application/xml', uploadedAt: '2026-11-05T10:00:00Z' },
-    ] }));
-    expect(await findLatestRemittanceFile(apiFetch, 'rem/1')).toEqual({ attachmentId: 'a3', fileName: 'new.XML' });
-    expect(apiFetch.mock.calls[0][0]).toBe('/sws/neo/attachments/REM_Remittance/rem%2F1');
+describe('downloadRemittanceFile', () => {
+  // The file is not attached to the remittance: the read-only `downloadFile` action generates it on the fly.
+  it('posts {} to <spec>/remittance/{id}/action/downloadFile and saves the XML under its file name, with no attachment', async () => {
+    const apiFetch = vi.fn().mockResolvedValue(jsonResponse({ response: { data: {
+      fileName: 'remesa.xml', contentType: 'application/xml', content: '<Document/>', returnedCount: 0,
+    } } }));
+    expect(await downloadRemittanceFile(apiFetch, 'rem/1')).toEqual({ fileName: 'remesa.xml', returnedCount: 0 });
+    expect(apiFetch).toHaveBeenCalledTimes(1);
+    expect(apiFetch.mock.calls[0][0]).toBe('/remittance/rem%2F1/action/downloadFile');
+    expect(apiFetch.mock.calls[0][1].method).toBe('POST');
+    expect(bodyOf(apiFetch)).toEqual({});
+    const [blob, name] = mockDownloadBlobAsFile.mock.calls[0];
+    expect(name).toBe('remesa.xml');
+    expect(blob.type).toBe('application/xml');
+    expect(await blob.text()).toBe('<Document/>');
   });
 
-  it('recognises an xml by its data type', async () => {
-    const apiFetch = vi.fn().mockResolvedValue(jsonResponse({ response: { data: [{ id: 'a4', name: 'sepa', dataType: 'text/xml' }] } }));
-    expect(await findLatestRemittanceFile(apiFetch, 'rem-1')).toEqual({ attachmentId: 'a4', fileName: 'sepa' });
+  it('names the file after the remittance when the answer has no name (a bare payload works too)', async () => {
+    const apiFetch = vi.fn().mockResolvedValue(jsonResponse({ fileName: null, content: '<a/>', returnedCount: 2 }));
+    expect(await downloadRemittanceFile(apiFetch, 'rem-2')).toEqual({ fileName: 'remittance-rem-2.xml', returnedCount: 2 });
+    const [blob, name] = mockDownloadBlobAsFile.mock.calls[0];
+    expect(name).toBe('remittance-rem-2.xml');
+    expect(await blob.text()).toBe('<a/>');
   });
 
-  it('is null with no xml, a refused list or a payload that is not a list', async () => {
-    expect(await findLatestRemittanceFile(vi.fn().mockResolvedValue(jsonResponse({ items: [{ id: 'a', name: 'x.pdf' }] })), 'r')).toBeNull();
-    expect(await findLatestRemittanceFile(vi.fn().mockResolvedValue(jsonResponse({}, { ok: false, status: 404 })), 'r')).toBeNull();
-    expect(await findLatestRemittanceFile(vi.fn().mockResolvedValue(jsonResponse({ items: 'x' })), 'r')).toBeNull();
+  it('throws on a refused download (422 not ready, with its problems) without saving anything', async () => {
+    const body = { error: { message: 'No listo', messageKeys: ['ETGO_RemittanceFileNotReady'], problems: [{ scope: 'org', code: 'X' }] } };
+    const apiFetch = vi.fn().mockResolvedValue(jsonResponse(body, { ok: false, status: 422 }));
+    await expect(downloadRemittanceFile(apiFetch, 'a')).rejects.toMatchObject({ status: 422, body });
+    expect(mockDownloadBlobAsFile).not.toHaveBeenCalled();
   });
 });
 
-describe('downloadRemittanceFile', () => {
-  it('fetches /sws/neo/attachments/file/{id} and saves the blob under its file name', async () => {
-    const blob = new Blob(['<xml/>']);
-    const apiFetch = vi.fn().mockResolvedValue({ ok: true, status: 200, blob: async () => blob });
-    await downloadRemittanceFile(apiFetch, { attachmentId: 'att/1', fileName: 'remesa.xml' });
-    expect(apiFetch).toHaveBeenCalledWith('/sws/neo/attachments/file/att%2F1');
-    expect(mockDownloadBlobAsFile).toHaveBeenCalledWith(blob, 'remesa.xml');
+describe('downloadRemittanceFileNotifying / returnedReceiptsNotice', () => {
+  const ui = (key, params) => (params ? `${key}:${JSON.stringify(params)}` : key);
+  const notify = () => ({ info: vi.fn(), error: vi.fn() });
+
+  it('words the notice in the singular for one returned receipt and the plural otherwise', () => {
+    expect(returnedReceiptsNotice(1, ui)).toBe('remittanceFileIncludesReturnedOne:{"count":1}');
+    expect(returnedReceiptsNotice(3, ui)).toBe('remittanceFileIncludesReturned:{"count":3}');
   });
 
-  it('names the file after the attachment when it has no name', async () => {
-    const apiFetch = vi.fn().mockResolvedValue({ ok: true, status: 200, blob: async () => new Blob([]) });
-    await downloadRemittanceFile(apiFetch, { attachmentId: 'att-2', fileName: null });
-    expect(mockDownloadBlobAsFile.mock.calls[0][1]).toBe('remittance-att-2.xml');
+  it('downloads, and adds an informative toast only when the file carries returned receipts', async () => {
+    const quiet = notify();
+    await downloadRemittanceFileNotifying(vi.fn().mockResolvedValue(jsonResponse({ fileName: 'r.xml', content: '<a/>', returnedCount: 0 })), 'r', ui, quiet);
+    expect(quiet.info).not.toHaveBeenCalled();
+    const loud = notify();
+    expect(await downloadRemittanceFileNotifying(vi.fn().mockResolvedValue(jsonResponse({ fileName: 'r.xml', content: '<a/>', returnedCount: 2 })), 'r', ui, loud))
+      .toEqual({ fileName: 'r.xml', returnedCount: 2 });
+    expect(loud.info).toHaveBeenCalledWith('remittanceFileIncludesReturned:{"count":2}');
+    expect(loud.error).not.toHaveBeenCalled();
+    expect(mockDownloadBlobAsFile).toHaveBeenCalledTimes(2);
   });
 
-  it('throws on a refused download without saving anything', async () => {
-    const apiFetch = vi.fn().mockResolvedValue(jsonResponse({ error: { message: 'gone' } }, { ok: false, status: 404 }));
-    await expect(downloadRemittanceFile(apiFetch, { attachmentId: 'a' })).rejects.toMatchObject({ status: 404 });
-    expect(mockDownloadBlobAsFile).not.toHaveBeenCalled();
+  it('toasts a refusal with the translated fallback and resolves to null', async () => {
+    const n = notify();
+    expect(await downloadRemittanceFileNotifying(vi.fn().mockResolvedValue(jsonResponse({}, { ok: false, status: 500 })), 'r', ui, n)).toBeNull();
+    expect(n.error).toHaveBeenCalledWith('remittanceFileDownloadError');
   });
 });
 
@@ -370,7 +389,10 @@ describe('fileActionErrorMessage — return and file refusals', () => {
     'ETGO_RemittanceReturnLineNotFound',
     'ETGO_RemittanceReturnDateInvalid',
     'ETGO_RemittanceReturnFailed',
-    'ETGO_RemittanceFileHasReturns',
+    // downloadFile's generator / XSD / EPC refusals.
+    'ETGO_RemittanceFileGenerationFailed',
+    'ETGO_RemittanceFileInvalid',
+    'ETGO_RemittanceFileSchemaMissing',
   ])('%s shows the backend sentence (already localized in the request language)', (key) => {
     expect(fileActionErrorMessage(refusal(key, 'Frase del servidor'), ui, 'remittanceReturnError')).toBe('Frase del servidor');
   });

@@ -602,7 +602,7 @@ const BACKEND_ERROR_KEY_MAP = {
   ETGO_RemittanceCreditorIdNeedsAccount: 'backendError.remittanceCreditorIdNeedsAccount',
   ETGO_RemittanceFileAccountNoCreditorId: 'backendError.remittanceFileAccountNoCreditorId',
   ETGO_RemittanceFileAccountInvalidCreditorId: 'backendError.remittanceFileAccountInvalidCreditorId',
-  // ETP-6247 — the SEPA file actions (confirm / generateFile / fileReadiness, RemittanceHeaderHandler).
+  // ETP-6247 — the SEPA file actions (confirm / downloadFile / fileReadiness, RemittanceHeaderHandler).
   // The backend localizes every ETGO_RemittanceFile* text in the request language with its
   // positional params substituted, and the 422s carry no messageParams, so only the parameter-free
   // key is mapped here: a mapped parametric key would leave `{0}` unfilled, and translateByMessageKey
