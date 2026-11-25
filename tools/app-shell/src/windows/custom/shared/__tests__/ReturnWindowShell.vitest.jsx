@@ -90,7 +90,7 @@ function FakeRowConfirmModal(props) {
 }
 
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { setSessionCredentials, CREDENTIAL_MODES } from '@etendosoftware/app-shell-core/auth/sessionCredentials.js';
+import { setSessionCredentials, CREDENTIAL_MODES } from '@etendo-ai/app-shell-core/auth/sessionCredentials.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ReturnWindowShell from '../ReturnWindowShell.jsx';
 

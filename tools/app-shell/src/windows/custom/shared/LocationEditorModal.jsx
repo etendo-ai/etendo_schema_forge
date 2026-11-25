@@ -31,7 +31,7 @@ import {
     STREET_NAME_MAX_LENGTH,
     composeAddressLines,
     effectiveBuildingNumber,
-} from '@etendosoftware/app-shell-core/lib/locationAddress.js';
+} from '@etendo-ai/app-shell-core/lib/locationAddress.js';
 const EMPTY_FORM = {
     address: '',
     address2: '',
@@ -116,7 +116,7 @@ const ADDRESS_PREVIEW_BADGE_BY_STATE = {
  *
  * CP-7 (ETP-5806 QA, Isa) — the copy button stays icon-only, matching the shared `CopyButton`
  * primitive's only other call site in the codebase (`CopyBlock` in
- * `@etendosoftware/app-shell-core/components/ui/copy-button.jsx`), which never passes a `label`.
+ * `@etendo-ai/app-shell-core/components/ui/copy-button.jsx`), which never passes a `label`.
  * An earlier round added `label={ui('copy')}` here on a misread of the Figma "Pop Up Alert"
  * reference; Isa confirmed the icon-only button was fine as-is.
  */

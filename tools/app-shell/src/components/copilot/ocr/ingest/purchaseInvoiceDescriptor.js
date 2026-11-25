@@ -1,8 +1,8 @@
-import { simSearch } from '@etendosoftware/app-shell-core/lib/simSearch.js';
+import { simSearch } from '@etendo-ai/app-shell-core/lib/simSearch.js';
 import { isBack } from '../ocrFlowSignals.js';
 import { buildSearchUrl, deriveSelectorUrl, deriveSpecBase, readSearchRows } from '../ocrQuery.js';
 
-import { apiFetch } from '@etendosoftware/app-shell-core/auth/api';
+import { apiFetch } from '@etendo-ai/app-shell-core/auth/api';
 import { isVoidedStatus } from '../../../../lib/docStatus.js';
 
 /**

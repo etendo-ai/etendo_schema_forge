@@ -28,12 +28,12 @@ Schema Forge is now **two sibling repos + one runtime module**:
 | **com.etendoerp.go** (runtime) | `{etendo_root}/modules/com.etendoerp.go` | NEO Headless engine (Java), ETGO_SF_* tables | runtime API |
 | shared bucket | duplicated in **both** SF repos | `cli/src/data-fixes/**`, `cli/src/db.js`, `cli/src/lib/**` | DB access from either side |
 
-**You are a tool USER — you work here in `etendo_schema_forge`.** The pipeline source (generators, extractors, `pipeline.js`, `push-to-neo.js`, `resolve-curated.js`, migrations) **no longer lives in this repo**; it ships as published npm packages (`@etendosoftware/schema-forge-cli`, `-core`, `app-shell-core`) resolved from `node_modules`. So:
+**You are a tool USER — you work here in `etendo_schema_forge`.** The pipeline source (generators, extractors, `pipeline.js`, `push-to-neo.js`, `resolve-curated.js`, migrations) **no longer lives in this repo**; it ships as published npm packages (`@etendo-ai/schema-forge-cli`, `-core`, `app-shell-core`) resolved from `node_modules`. So:
 
 - **Drive everything through `make` targets** — `make regen`, `make menu-cache`, `make uuid`, `make validate-pipeline`, `make data-fixes`. These wrap the published `sf-*` CLI, so they work regardless of the exact bin names.
 - Raw `node cli/src/<script>.js` calls only work from a **`schema_forge_core`** checkout (that's where the scripts live). Prefer the `make` target; drop to the core checkout only for flags no `make` target exposes.
 - **You never fix the generators/extractors yourself.** If the tool is broken (bad JSX, wrong contract), escalate to a **Schema Forge Developer** who fixes it in `schema_forge_core` and publishes — then you re-run `make regen`.
-- The exact `npx sf-*` bin names come from the installed `@etendosoftware/schema-forge-cli`; if one differs from a name below, check `node_modules/.bin/` or the matching `make` target.
+- The exact `npx sf-*` bin names come from the installed `@etendo-ai/schema-forge-cli`; if one differs from a name below, check `node_modules/.bin/` or the matching `make` target.
 
 > **Local-source dev mode (opt-in, env-gated — implemented):** the `LOCAL_CORE` flag pulls CLI + React from a local `../schema_forge_core` checkout — wired in the `Makefile` (`SF` var + `cli/sf-local`) and `tools/app-shell/vite.config.js`, strictly opt-in and never the default, so servers without a core checkout keep using the published packages. Run pipeline targets with `make regen ONLY=<spec> LOCAL_CORE=1` when validating an unreleased core change. See `docs/repo-topology.md`. The **published packages** remain the source of truth.
 </repo_topology>
@@ -163,7 +163,7 @@ After `PUSH_TO_NEO=1`: remind the user to run `./gradlew export.database` in Ete
 
 ### Lower-level: the published `sf-*` CLI (when `make regen` does not fit)
 
-For flags `make regen` does not expose — `--dry-run`, custom `--skip-to <phase>`, `--menu-id`, interactive translate-todos, etc. — use the published pipeline bin (`npx sf-pipeline`, resolved from `@etendosoftware/schema-forge-cli` in `node_modules`). These invoke the **same source that lives in `schema_forge_core`**; you do NOT have `cli/src/pipeline.js` locally.
+For flags `make regen` does not expose — `--dry-run`, custom `--skip-to <phase>`, `--menu-id`, interactive translate-todos, etc. — use the published pipeline bin (`npx sf-pipeline`, resolved from `@etendo-ai/schema-forge-cli` in `node_modules`). These invoke the **same source that lives in `schema_forge_core`**; you do NOT have `cli/src/pipeline.js` locally.
 
 ```bash
 # Full pipeline (extract + classify + contract + push + frontend)

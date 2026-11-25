@@ -18,7 +18,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const { apiFetchMock } = vi.hoisted(() => ({ apiFetchMock: vi.fn() }));
 
-vi.mock('@etendosoftware/app-shell-core/auth/api', () => ({ apiFetch: apiFetchMock }));
+vi.mock('@etendo-ai/app-shell-core/auth/api', () => ({ apiFetch: apiFetchMock }));
 
 import { renderDocumentPdf, buildOrderData } from '../documentPdf.js';
 import { buildInvoiceData, buildInvoicePdfLabels } from '../useInvoicePdf.js';

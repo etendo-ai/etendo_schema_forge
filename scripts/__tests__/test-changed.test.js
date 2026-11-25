@@ -24,11 +24,11 @@ describe('test-changed.sh before any test runs', () => {
   it('asks for npm ci at the root when the root dependencies are missing', () => {
     const out = run();
     assert.equal(out.status, 2);
-    assert.match(out.stderr, /node_modules\/@etendosoftware\/schema-forge-cli is missing\. Run 'npm ci' at the repository root/);
+    assert.match(out.stderr, /node_modules\/@etendo-ai\/schema-forge-cli is missing\. Run 'npm ci' at the repository root/);
   });
 
   it('names vitest when only the test runner is missing', () => {
-    mkdirSync(join(root, 'node_modules', '@etendosoftware', 'schema-forge-cli'), { recursive: true });
+    mkdirSync(join(root, 'node_modules', '@etendo-ai', 'schema-forge-cli'), { recursive: true });
     const out = run();
     assert.equal(out.status, 2);
     assert.match(out.stderr, /test-changed: vitest is missing/);

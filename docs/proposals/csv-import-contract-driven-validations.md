@@ -49,7 +49,7 @@ Verified against the code on `feature/ETP-4447` (2026-07-14).
 
 The actual CSV import engine and UI live in the sibling repo
 `schema_forge_core`, published as the npm package
-`@etendosoftware/app-shell-core` and consumed here as a dependency. This repo
+`@etendo-ai/app-shell-core` and consumed here as a dependency. This repo
 (`etendo_schema_forge`) only holds the Contacts window's `decisions.json` /
 `contract.json` artifacts and the window-specific composite descriptor
 (`tools/app-shell/src/windows/custom/contacts/contactsImportDescriptor.js`).
@@ -145,7 +145,7 @@ iteration — only the validation **messages** are new; no new input widgets.
 | 2 | `schema_forge_core` — generator | `generate-contract.js`: extend the import-field backfill (§2.3) to also copy `enumValues` (when `type === 'enum'`) and `maxLength` (new) onto each import field |
 | 3 | `schema_forge_core` — engine | `validateRows.js`: generic dispatch by `type` (enum / numeric / date / maxLength), plus two new pure, locale-tolerant parser helpers |
 | 4 | `schema_forge_core` — UI wiring | `ImportDialog.jsx`: derive the new option arrays from `config.fields` (mirrors the existing pattern at lines 64-78) and pass them to `validateRow` |
-| 5 | `etendo_schema_forge` — window | Bump the `@etendosoftware/app-shell-core` dependency, regenerate the Contacts artifact (`make regen ONLY=contacts`), verify the new metadata flows into `contract.json`, remove the now-redundant silent-truncation workaround |
+| 5 | `etendo_schema_forge` — window | Bump the `@etendo-ai/app-shell-core` dependency, regenerate the Contacts artifact (`make regen ONLY=contacts`), verify the new metadata flows into `contract.json`, remove the now-redundant silent-truncation workaround |
 
 No window-name conditionals anywhere — behavior differences come only from
 each field's `type`/`enumValues`/`maxLength` in the contract. `decisions.json`
@@ -237,7 +237,7 @@ Both parsers are pure, independently unit-testable functions.
 
 Once `schema_forge_core` publishes the new package version:
 
-1. Bump the `@etendosoftware/app-shell-core` dependency in this repo.
+1. Bump the `@etendo-ai/app-shell-core` dependency in this repo.
 2. Re-run extraction (the new `AD_Column.FieldLength` metadata requires a
    fresh DB extract, not just a decisions/contract regen) and
    `make regen ONLY=contacts`.
@@ -303,7 +303,7 @@ Once `schema_forge_core` publishes the new package version:
    locale-tolerant parsers) with unit tests.
 4. `schema_forge_core`: wire `ImportDialog.jsx` to derive and pass the new
    option arrays.
-5. Publish the new `@etendosoftware/app-shell-core` version.
+5. Publish the new `@etendo-ai/app-shell-core` version.
 6. `etendo_schema_forge`: bump the dependency, re-extract + regenerate the
    Contacts window, verify the contract backfill, remove the searchKey
    truncation workaround.

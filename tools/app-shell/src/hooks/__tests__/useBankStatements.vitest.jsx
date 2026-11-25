@@ -1,5 +1,5 @@
 import { renderHook, waitFor, act } from '@testing-library/react';
-import { setSessionCredentials, CREDENTIAL_MODES } from '@etendosoftware/app-shell-core/auth/sessionCredentials.js';
+import { setSessionCredentials, CREDENTIAL_MODES } from '@etendo-ai/app-shell-core/auth/sessionCredentials.js';
 
 vi.mock('@/auth/AuthContext.jsx', () => ({
   useAuth: () => ({ token: 'test-token' }),
@@ -8,7 +8,7 @@ vi.mock('@/auth/AuthContext.jsx', () => ({
 // with the core's `useAuthOptional`. Mocking only `@/auth/AuthContext.jsx` no longer reaches
 // it, so the core module is mocked too (spread from the original, since useApiFetch also
 // imports createApiFetch and getAmbientToken from there).
-vi.mock('@etendosoftware/app-shell-core/auth', async (importOriginal) => ({
+vi.mock('@etendo-ai/app-shell-core/auth', async (importOriginal) => ({
   ...(await importOriginal()),
   useAuthOptional: () => ({ token: 'test-token' }),
 }));

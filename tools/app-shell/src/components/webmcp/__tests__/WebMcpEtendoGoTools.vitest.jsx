@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
   agentProps: {},
 }));
 
-vi.mock('@etendosoftware/app-shell-core/webmcp', () => ({
+vi.mock('@etendo-ai/app-shell-core/webmcp', () => ({
   WebMcpMcpTools: (props) => <div data-testid="mcp-tools" data-enabled={String(props.enabled)} data-endpoint={props.endpoint} data-token={props.accessToken} />,
   WebMcpAgentTools: (props) => {
     mocks.agentProps.current = props;

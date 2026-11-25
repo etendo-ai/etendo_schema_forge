@@ -16,7 +16,7 @@
 
 | Superficie | Ruta / componente | Usada por |
 |---|---|---|
-| Onboarding (login/registro/perfil/empresa/setup) | `/onboarding` → `OnboardingPage.jsx` → `<OnboardingFlow>` (vendorizado en `@etendosoftware/etendo-go-core/src/onboarding/`) | Visitante anónimo, cuenta sin tenant |
+| Onboarding (login/registro/perfil/empresa/setup) | `/onboarding` → `OnboardingPage.jsx` → `<OnboardingFlow>` (vendorizado en `@etendo-ai/etendo-go-core/src/onboarding/`) | Visitante anónimo, cuenta sin tenant |
 | Selección de entorno (fallback manual) | `EnvSelectStep.jsx` (dentro del mismo flujo) | Cuenta con ≥1 tenant, solo si el auto-login falla |
 | Logout / reanudar onboarding | `/logout` → `LogoutRoute` (`runtime-routes.jsx:52`) | Cuenta con sesión activa |
 | Upgrade / checkout de pago | `/upgrade` → `UpgradePage.jsx` | Cuenta con ≥1 tenant, flag `tenant-upgrade` |

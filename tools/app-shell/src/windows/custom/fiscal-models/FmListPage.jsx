@@ -39,7 +39,7 @@ import { useFiscalModelsCatalog } from './useFiscalModelsCatalog.js';
 
 import { useApiFetch } from '@/auth/useApiFetch.js';
 import { neoBase } from '@/components/related-documents/helpers.js';
-import { isNetworkError } from '@etendosoftware/app-shell-core/auth';
+import { isNetworkError } from '@etendo-ai/app-shell-core/auth';
 import { parseBackendError, isDuplicateConflict } from '@/lib/backendErrors.js';
 
 // committed-selection-ok: short, fully rendered lists that already set aria-selected from their value; nothing to page or centre.
@@ -1360,7 +1360,7 @@ export default function FmListPage({ declarations: propDecls, onSelect, onComput
       {active && (
         <ListPageMeta
           title={windowTitle}
-          breadcrumb={`${ui('finance')} / ${windowTitle}`}
+          breadcrumb={`${ui('taxes')} / ${windowTitle}`}
           recordCount={decls.length}
           data-testid="ListPageMeta__cb728e" />
       )}

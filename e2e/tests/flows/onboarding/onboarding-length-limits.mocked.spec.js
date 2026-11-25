@@ -37,13 +37,13 @@ const LIMITS = {
   address: 60,
   // ETP-5806 — the free-text address field was replaced by structured Street/Number/Building
   // Name/City cells; streetName is the closest conceptual replacement for this length-limit
-  // check. The ENFORCED cap is `STREET_NAME_MAX_LENGTH` from `@etendosoftware/app-shell-core`
-  // (`lib/locationAddress.js`), deliberately 60 — the width of `C_LOCATION.ADDRESS1`, the column
-  // the composed address line lands in — and NOT the 70 of `EM_OBSEPA_StrtNm`. The INPUT accepts
-  // 70 (`STREET_NAME_INPUT_MAX_LENGTH`, ETP-5806 CP-13): typing headroom up to the real column, so
-  // an over-long street surfaces as an inline error instead of being silently truncated, exactly
-  // like clientName/clientNameInput above. e2e specs never import app code, so the values are
-  // mirrored here: when the constants move, these literals move with them.
+  // check. Its limit is `STREET_NAME_MAX_LENGTH` from `@etendo-ai/etendo-go-core`
+  // (`onboarding/fieldLimits.js`), which is deliberately 60 — the width of
+  // `C_LOCATION.ADDRESS1`, the column the composed address line lands in — and NOT the 70 of
+  // `EM_OBSEPA_StrtNm`. Like clientName, the input itself caps at a looser
+  // `STREET_NAME_INPUT_MAX_LENGTH` (70, ETP-5806 CP-13) so an overflow is kept and flagged
+  // instead of silently dropped. e2e specs never import app code, so the values are mirrored
+  // here: when the constants move, these literals move with them.
   streetName: 60,
   streetNameInput: 70,
 };
@@ -297,6 +297,7 @@ test.describe('ETP-4665 — Step 3 length limits', () => {
     // ETP-5638.
     await expect(streetName).toHaveValue('D'.repeat(LIMITS.streetNameInput));
     await expect(streetName).toHaveAttribute('aria-invalid', 'true');
+    await expect(page.getByText(new RegExp(`${LIMITS.streetName} (caracteres|characters)`))).toBeVisible();
     await expect(start).toBeDisabled();
 
     // Back inside the enforced cap: the flag clears and the street stops blocking Start.
@@ -304,6 +305,7 @@ test.describe('ETP-4665 — Step 3 length limits', () => {
     await expect(streetName).not.toHaveAttribute('aria-invalid', 'true');
 
     await clientName.fill('E'.repeat(LIMITS.clientName));
+    await page.locator('#streetName').fill('D'.repeat(LIMITS.streetName));
     await expect(clientName).not.toHaveAttribute('aria-invalid', 'true');
     // ETP-5806 — filling streetName starts the address block, which makes buildingNumber and
     // city mandatory together with it (isAddressBlockStarted/isCompanyStepValid); fill them too

@@ -4,8 +4,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { convertLogicToJs } from '@etendosoftware/schema-forge-cli/src/generate-contract.js';
-import { buildHeaderLogicMaps } from '@etendosoftware/schema-forge-cli/src/generate-frontend.js';
+import { convertLogicToJs } from '@etendo-ai/schema-forge-cli/src/generate-contract.js';
+import { buildHeaderLogicMaps } from '@etendo-ai/schema-forge-cli/src/generate-frontend.js';
 import { evalTabReadOnly } from '../src/components/contract-ui/evalTabReadOnly.js';
 
 describe('evalTabReadOnly', () => {

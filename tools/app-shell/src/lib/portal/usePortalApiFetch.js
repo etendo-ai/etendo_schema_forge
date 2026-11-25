@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { createApiFetch } from '@etendosoftware/app-shell-core/auth';
+import { createApiFetch } from '@etendo-ai/app-shell-core/auth';
 
 /** The portal holds no session credential of its own: its token rides `X-Portal-Token`. */
 const NO_SESSION_TOKEN = () => null;

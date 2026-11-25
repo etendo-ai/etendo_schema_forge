@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { useOptionalDataCache } from '@etendosoftware/app-shell-core/data';
+import { useOptionalDataCache } from '@etendo-ai/app-shell-core/data';
 
 /**
  * Entity name of the Cuentas list query. Must match `<ListView entity="account">` in the generated

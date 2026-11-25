@@ -4,7 +4,7 @@
 // ETP-5289 replaced the AttachFile-webhook `attachFile()` with `uploadAndMarkMainAttachment()`
 // (NEO /sws/neo/attachments), so the opt-out lives there now. The real core `apiFetch` performs
 // the request; only its options are recorded (see `@/test/recordApiFetch.js`).
-vi.mock('@etendosoftware/app-shell-core/auth/api', async (importOriginal) => {
+vi.mock('@etendo-ai/app-shell-core/auth/api', async (importOriginal) => {
   const { wrapApiFetchModule } = await import('@/test/recordApiFetch.js');
   return wrapApiFetchModule(await importOriginal());
 });

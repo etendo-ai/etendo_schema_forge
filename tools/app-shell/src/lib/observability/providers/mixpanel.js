@@ -1,4 +1,4 @@
-import { createMixpanelAdapter } from '@etendosoftware/app-shell-core/observability/adapters/mixpanel';
+import { createMixpanelAdapter } from '@etendo-ai/app-shell-core/observability/adapters/mixpanel';
 import { loadMixpanel } from '../sdk.js';
 import { SAFE_EVENT_PROPERTY_KEYS } from '../payload.js';
 import { TRUSTED_CONTEXT_KEYS } from '../core.js';

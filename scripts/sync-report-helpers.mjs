@@ -76,7 +76,7 @@ export const MIRROR_REPO = 'schema_forge_core';
  */
 export const IMPORT_LINE = {
   [CANONICAL_REPO]:
-    "import { RETURN_LABELS, DOC_TYPE_LABEL_OVERRIDES } from '@etendosoftware/schema-forge-cli/src/report-i18n.js';",
+    "import { RETURN_LABELS, DOC_TYPE_LABEL_OVERRIDES } from '@etendo-ai/schema-forge-cli/src/report-i18n.js';",
   [MIRROR_REPO]:
     "import { RETURN_LABELS, DOC_TYPE_LABEL_OVERRIDES } from '../../../cli/src/report-i18n.js';",
 };
