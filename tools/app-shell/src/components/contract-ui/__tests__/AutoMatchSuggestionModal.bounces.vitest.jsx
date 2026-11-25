@@ -1070,7 +1070,7 @@ describe('AutoMatchSuggestionModal — the close confirmation and the modal life
 // AI second layer: `bounceAiAssessments` of the autoMatch answer. DISPLAY only — the checks, the
 // payloads and the order of the pairs never read it.
 
-const aiPctText = (pct) => `financeReconcileAutomatchBounceAiMatch:${JSON.stringify({ pct: String(pct) })}`;
+const aiPctText = (pct) => `financeReconcileBounceAiProbability:${JSON.stringify({ pct: String(pct) })}`;
 const AI_AMB = { B3: { probabilities: { C1: 10, C2: 85 }, none: 5, recommendedLineId: 'C2' } };
 const AI_REVIEW = { B2: { probabilities: { O2: 72 }, none: 28, recommendedLineId: 'O2' } };
 
@@ -1129,7 +1129,7 @@ describe('AutoMatchSuggestionModal — the AI percentage of a pair (display only
     const reason = screen.getByTestId('automatch-bounce-reason-bp-amb');
     expect(badge).toHaveTextContent(/^financeReconcileBounceTagReviewPlain$/);
     expect(reason).toHaveTextContent(/^financeReconcileBounceReasonAmbiguousShort/);
-    expect(reason).not.toHaveTextContent('financeReconcileAutomatchBounceAiMatch');
+    expect(reason).not.toHaveTextContent('financeReconcileBounceAiProbability');
     expect(pct.contains(badge)).toBe(false);
     expect(pct.contains(reason)).toBe(false);
     expect(badge.contains(pct)).toBe(false);

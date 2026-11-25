@@ -239,16 +239,27 @@ describe('ReconciliationSplitPanel — bounce lines in the left panel', () => {
     expect(screen.getByText(/^financeReconcileFilterStatusPending \(6\)/)).toBeInTheDocument();
     expect(screen.queryAllByTestId(/^recon-line-row-/)).toHaveLength(6);
     openStatus('financeReconcileFilterStatusPending');
-    expect(screen.getByText(/^financeReconcileFilterStatusBounce \(5\)/)).toBeInTheDocument();
+    // Posibles rechazos counts PAIRS (g-high, g-amb), not the 5 lines of the backend's count.
+    expect(screen.getByText(/^financeReconcileFilterStatusBounce \(2\)/)).toBeInTheDocument();
     expect(screen.getByText(/^financeReconcileFilterStatusDiscarded \(3\)/)).toBeInTheDocument();
   });
 
-  it('the Posibles rechazos filter shows only the bounce lines, still without a status param', async () => {
+  it('the Posibles rechazos filter shows one row per pair, still without a status param', async () => {
     renderPanel();
     await screen.findByTestId('recon-line-row-B3');
     selectStatus('financeReconcileFilterStatusPending', 'financeReconcileFilterStatusBounce');
     expect(screen.queryByTestId('recon-line-row-P1')).toBeNull();
-    expect(screen.queryAllByTestId(/^recon-line-row-/)).toHaveLength(5);
+    // Nothing selected: the right side is the empty-state placeholder (no rejections table, no
+    // title) while the left table lists every outflow. Clicking an outflow brings the narrowed
+    // list of rejections it can be paired with (g-high -> B1 for O1).
+    expect(screen.getByTestId('recon-right-empty')).toHaveTextContent('financeReconcileBounceRightEmptyTitle');
+    expect(screen.queryAllByTestId(/^recon-line-row-/)).toHaveLength(0);
+    expect(screen.queryByTestId('recon-rejections-title')).toBeNull();
+    expect(screen.queryAllByTestId(/^recon-outflow-row-/)).toHaveLength(3);
+    fireEvent.click(screen.getByTestId('recon-outflow-row-O1'));
+    expect(screen.queryByTestId('recon-right-empty')).toBeNull();
+    expect(screen.queryAllByTestId(/^recon-line-row-/).map((el) => el.dataset.testid))
+      .toEqual(['recon-line-row-B1']);
     expect(lastCall().status).toBeUndefined();
   });
 });
@@ -310,6 +321,78 @@ describe('ReconciliationSplitPanel — the bounce-pair panel', () => {
     expect(onReconcileSuccess).toHaveBeenCalled();
   });
 
+  it('Posibles rechazos, two tables: the outflows are listed once, a rejection highlights its candidates, clicking one picks it', async () => {
+    renderPanel();
+    await screen.findByTestId('recon-line-row-B3');
+    selectStatus('financeReconcileFilterStatusPending', 'financeReconcileFilterStatusBounce');
+    // Outflows (left): O1 (original of g-high), C1 and C2 (candidates of g-amb); rejections (right): B1, B3.
+    expect(screen.queryAllByTestId(/^recon-outflow-row-/).map((el) => el.dataset.testid))
+      .toEqual(['recon-outflow-row-C1', 'recon-outflow-row-O1', 'recon-outflow-row-C2']);
+    expect(screen.queryByTestId('recon-bounce-radio-C1')).toBeNull();
+    // Clicking C1 selects B3 (the first rejection that lists it); C1 is the pick there.
+    fireEvent.click(screen.getByTestId('recon-outflow-row-C1'));
+    expect(screen.getByTestId('recon-line-radio-B3')).toBeChecked();
+    expect(screen.getByTestId('recon-bounce-radio-C1')).toBeChecked();
+    expect(screen.queryByTestId('recon-bounce-radio-O1')).toBeNull();
+    fireEvent.click(screen.getByTestId('recon-outflow-row-C2'));
+    expect(screen.getByTestId('recon-bounce-radio-C2')).toBeChecked();
+    fireEvent.click(screen.getByTestId('recon-bounce-discard'));
+    await waitFor(() => expect(discardPairMock).toHaveBeenCalledWith({
+      financialAccountId: 'ACC-1', statementLineId: 'C2', counterpartLineId: 'B3',
+    }));
+  });
+
+  it('Posibles rechazos: any outflow can be clicked (re-targeting), only the chosen one is selected, the right list follows it, no show-all toggle', async () => {
+    const X1_SHORT = { id: 'X1', amount: -80, date: '2026-10-02', description: 'Otra salida' };
+    const B4_SHORT = { id: 'B4', amount: 80, date: '2026-10-06', description: 'Abono otro' };
+    const X_PAIR = { groupKey: 'g-x', ambiguous: false, confidence: 'review', signal: 'counterparty', signals: ['counterparty'] };
+    const X1 = { ...X1_SHORT, state: 'bounce', status: 'pending', bouncePair: { ...X_PAIR, role: 'original', counterpartLine: B4_SHORT } };
+    const B4 = { ...B4_SHORT, state: 'bounce', status: 'pending', bouncePair: { ...X_PAIR, role: 'bounce', counterpartLine: X1_SHORT } };
+    pending.answer = () => ({ lines: [PLAIN, O1, B1, C1, C2, B3, X1, B4], counts: { ...BOUNCE_COUNTS, all: 8, bounce: 7 } });
+    renderPanel();
+    await screen.findByTestId('recon-line-row-B3');
+    selectStatus('financeReconcileFilterStatusPending', 'financeReconcileFilterStatusBounce');
+    // The detector's own outflows of the selected rejection keep `recon-bounce-radio-`.
+    const outflowRadio = (id) => screen.queryByTestId(`recon-bounce-radio-${id}`) ?? screen.getByTestId(`recon-outflow-radio-${id}`);
+    const rejections = () => screen.queryAllByTestId(/^recon-line-row-/).map((el) => el.dataset.testid);
+    // No rejection selected: every radio is enabled, the right list is whole. Clicking X1 selects
+    // the first rejection it can be paired with (B4) and X1 is the pick there.
+    expect(outflowRadio('X1')).toBeEnabled();
+    expect(screen.getByTestId('recon-right-empty')).toBeInTheDocument();
+    expect(rejections()).toEqual([]);
+    fireEvent.click(screen.getByTestId('recon-outflow-row-X1'));
+    expect(screen.getByTestId('recon-line-radio-B4')).toBeChecked();
+    expect(outflowRadio('X1')).toBeChecked();
+    // The right list now holds only the rejections X1 can be paired with, and says so.
+    expect(rejections()).toEqual(['recon-line-row-B3', 'recon-line-row-B4']);
+    expect(screen.getByTestId('recon-rejections-title')).toHaveTextContent('financeReconcileBounceViewRejections:{"count":2}');
+    // There is no "show all" control: the list always follows the chosen outflow.
+    expect(screen.queryByTestId('recon-rejections-toggle')).toBeNull();
+    // Select B3 (X1 stays pairable): X1 is the original of ANOTHER pair, picked as an explicit
+    // pick, and it alone has the selected background (the candidate C1 has none).
+    fireEvent.click(row('B3'));
+    fireEvent.click(screen.getByTestId('recon-outflow-row-X1'));
+    expect(outflowRadio('X1')).toBeChecked();
+    expect(screen.getByTestId('recon-outflow-row-C1').className).not.toMatch(/bg-\[hsl\(var\(--muted\)\)\]/);
+    expect(screen.getByTestId('recon-outflow-row-X1').querySelector('td').className).toMatch(/bg-\[hsl\(var\(--muted\)\)\]/);
+    // O1 (-120) cannot be paired with B3: the click re-targets to B1, the rejection that can.
+    fireEvent.click(screen.getByTestId('recon-outflow-row-O1'));
+    expect(screen.getByTestId('recon-line-radio-B1')).toBeChecked();
+    expect(outflowRadio('O1')).toBeChecked();
+    // The right list now holds only B1 (the rejection O1 can be paired with); another amount is
+    // reached by clicking an outflow: C1 re-targets to B3 (it lists it), then X1 is the explicit
+    // pick there and discard sends it with the rejection.
+    expect(rejections()).toEqual(['recon-line-row-B1']);
+    fireEvent.click(screen.getByTestId('recon-outflow-row-C1'));
+    expect(screen.getByTestId('recon-line-radio-B3')).toBeChecked();
+    fireEvent.click(screen.getByTestId('recon-outflow-row-X1'));
+    fireEvent.click(screen.getByTestId('recon-bounce-discard'));
+    await waitFor(() => expect(discardPairMock).toHaveBeenCalledWith({
+      financialAccountId: 'ACC-1', statementLineId: 'X1', counterpartLineId: 'B3',
+    }));
+    await waitFor(() => expect(pending.reload).toHaveBeenCalled());
+  });
+
   it('clicking a row of an ambiguous pair also chooses it', async () => {
     renderPanel();
     await selectLineRow('B3');
@@ -362,7 +445,7 @@ describe('ReconciliationSplitPanel — "No es un rechazo"', () => {
     // The two lines move from Posibles rechazos to plain pending; Pendientes is unchanged.
     expect(screen.getByText(/^financeReconcileFilterStatusPending \(6\)/)).toBeInTheDocument();
     openStatus('financeReconcileFilterStatusPending');
-    expect(screen.getByText(/^financeReconcileFilterStatusBounce \(3\)/)).toBeInTheDocument();
+    expect(screen.getByText(/^financeReconcileFilterStatusBounce \(1\)/)).toBeInTheDocument();
   });
 
   it('with a bounceReview prop: delegates to onDismiss with the pair key and reads its dismissed keys', async () => {
@@ -455,7 +538,7 @@ describe('ReconciliationSplitPanel — the Descartadas filter', () => {
     openStatus('financeReconcileFilterStatusDiscarded');
     expect(screen.getAllByText(/^financeReconcileFilterStatusDiscarded \(3\)/).length).toBeGreaterThan(0);
     expect(screen.getByText(/^financeReconcileFilterStatusPending \(6\)/)).toBeInTheDocument();
-    expect(screen.getByText(/^financeReconcileFilterStatusBounce \(5\)/)).toBeInTheDocument();
+    expect(screen.getByText(/^financeReconcileFilterStatusBounce \(2\)/)).toBeInTheDocument();
   });
 
   it('going back to Pendientes drops the status param', async () => {
@@ -584,11 +667,10 @@ describe('ReconciliationSplitPanel — bounce panel under the read-only tier', (
     expect(dismissPairMock).not.toHaveBeenCalled();
   });
 
-  it('with an AI assessment the percentages and the badge show, but Descartar par is disabled and nothing is POSTed', async () => {
+  it('with an AI assessment the percentages show, but Descartar par is disabled and nothing is POSTed', async () => {
     renderPanel({ windowReadOnly: true, bounceReview: aiReview(AI_85_10) });
     await selectLineRow('B3');
     expect(screen.getByTestId('recon-bounce-ai-pct-C2')).toHaveTextContent(pctText(85));
-    expect(screen.getByTestId('recon-bounce-ai-badge-C2')).toBeInTheDocument();
     expect(screen.getByTestId('recon-bounce-discard')).toBeDisabled();
     fireEvent.click(screen.getByTestId('recon-bounce-discard'));
     await Promise.resolve();
@@ -630,7 +712,7 @@ describe('ReconciliationSplitPanel — the "Revisar en el panel" focus request',
 
     await waitFor(() => expect(r.onFocusConsumed).toHaveBeenCalledTimes(1));
     expect(screen.getByTestId('recon-left-search')).toHaveValue('');
-    expect(screen.getByText(/^financeReconcileFilterStatusBounce \(5\)/)).toBeInTheDocument();
+    expect(screen.getByText(/^financeReconcileFilterStatusBounce \(2\)/)).toBeInTheDocument();
     expect(screen.queryByTestId('recon-line-row-P1')).toBeNull();
     expect(screen.getByTestId('recon-line-radio-B3')).toBeChecked();
     expect(screen.getByTestId('recon-bounce-panel')).toBeInTheDocument();
@@ -639,7 +721,8 @@ describe('ReconciliationSplitPanel — the "Revisar en el panel" focus request',
   });
 
   it('widens the date range to any date once when the line is outside it', async () => {
-    const FAR = { ...B3, id: 'BFAR', date: '2024-01-15' };
+    // Its own pair (own groupKey): the list has one row per pair, anchored on this bounce row.
+    const FAR = { ...B3, id: 'BFAR', date: '2024-01-15', bouncePair: { ...B3.bouncePair, groupKey: 'g-far' } };
     pending.answer = (filters) => (filters.dateFrom
       ? { lines: BOUNCE_LINES, counts: BOUNCE_COUNTS }
       : { lines: [...BOUNCE_LINES, FAR], counts: { ...BOUNCE_COUNTS, all: 7, bounce: 6 } });
@@ -753,11 +836,18 @@ describe('ReconciliationSplitPanel — ambiguous pairs sharing a candidate', () 
     await screen.findByTestId('recon-line-row-R-B2');
     selectStatus('financeReconcileFilterStatusPending', 'financeReconcileFilterStatusBounce');
     expect(screen.queryByTestId('recon-line-row-P1')).toBeNull();
-    expect(screen.queryAllByTestId(/^recon-line-row-R-/).map((el) => el.dataset.testid)).toEqual([
-      'recon-line-row-R-C1', 'recon-line-row-R-B1', 'recon-line-row-R-C2', 'recon-line-row-R-B2', 'recon-line-row-R-C3',
+    // The shared candidate R-C2 is listed once on the left; the right side is the placeholder until
+    // an outflow is clicked, then it lists one row per pair, anchored on each bounce.
+    expect(screen.queryAllByTestId(/^recon-outflow-row-R-/).map((el) => el.dataset.testid)).toEqual([
+      'recon-outflow-row-R-C1', 'recon-outflow-row-R-C2', 'recon-outflow-row-R-C3',
     ]);
-    for (const id of ['R-B1', 'R-B2']) {
-      expect(within(row(id)).getByText('financeReconcileBadgeBounce')).toBeInTheDocument();
+    expect(screen.getByTestId('recon-right-empty')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('recon-outflow-row-R-C2'));
+    expect(screen.queryAllByTestId(/^recon-line-row-R-/).map((el) => el.dataset.testid)).toEqual([
+      'recon-line-row-R-B1', 'recon-line-row-R-B2',
+    ]);
+    for (const key of ['g-shared-a', 'g-shared-b']) {
+      expect(screen.getByTestId(`automatch-bounce-tag-review-${key}`)).toBeInTheDocument();
     }
   });
 
@@ -768,7 +858,7 @@ describe('ReconciliationSplitPanel — ambiguous pairs sharing a candidate', () 
     expect(screen.queryAllByTestId(/^recon-bounce-row-/).map((el) => el.dataset.testid))
       .toEqual(['recon-bounce-row-R-C1', 'recon-bounce-row-R-C2']);
     expect(screen.getByTestId('recon-bounce-notice').textContent)
-      .toMatch(/^financeReconcileBounceNoticeReview:.*financeReconcileBounceReasonAmbiguous:.*count.*2/);
+      .toMatch(/^financeReconcileBounceNoticeLowConfidence:.*financeReconcileBounceReasonAmbiguous:.*count.*2/);
 
     fireEvent.click(screen.getByTestId('recon-line-radio-R-B2'));
     expect(screen.queryAllByTestId(/^recon-bounce-row-/).map((el) => el.dataset.testid))
@@ -964,7 +1054,6 @@ describe('ReconciliationSplitPanel — buttons and radios of the bounce panel', 
 // ── AI second layer: the bounceAiAssessments of the autoMatch answer ──────────
 
 const pctText = (pct) => `financeReconcileBounceAiProbability:${JSON.stringify({ pct: String(pct) })}`;
-const badgeText = (pct) => `financeReconcileBounceAiBadge:${JSON.stringify({ pct: String(pct) })}`;
 const noticeAiText = (pct) => `financeReconcileBounceNoticeAi:${JSON.stringify({ pct: String(pct) })}`;
 
 /** The host's review bundle (`useAutoMatchReview().panel`) carrying the AI layer. */
@@ -989,12 +1078,26 @@ describe('ReconciliationSplitPanel — AI suggestion on an ambiguous pair', () =
     expect(screen.getByTestId('recon-bounce-ai-pct-C1')).toHaveTextContent(pctText(10));
     expect(screen.getByTestId('recon-bounce-radio-C2')).toBeChecked();
     expect(screen.getByTestId('recon-bounce-radio-C1')).not.toBeChecked();
-    expect(screen.getByTestId('recon-bounce-ai-badge-C2')).toHaveTextContent(badgeText(85));
-    expect(screen.queryByTestId('recon-bounce-ai-badge-C1')).toBeNull();
     const notice = screen.getByTestId('recon-bounce-notice');
     expect(notice).toHaveTextContent(noticeAiText(85));
     expect(notice).not.toHaveTextContent('financeReconcileBounceNoticeChoose');
     expect(screen.getByTestId('recon-bounce-discard')).toBeEnabled();
+  });
+
+  it('"none" outweighing every candidate hides ALL percentages (the modal rule); a tie shows them', async () => {
+    const NONE_WINS = { B3: { probabilities: { C1: 49, C2: 10 }, none: 50, recommendedLineId: null } };
+    renderPanel({ bounceReview: aiReview(NONE_WINS) });
+    await selectLineRow('B3');
+    expect(screen.queryByTestId('recon-bounce-ai-pct-C1')).toBeNull();
+    expect(screen.queryByTestId('recon-bounce-ai-pct-C2')).toBeNull();
+    expect(screen.getByTestId('recon-bounce-radio-C1')).not.toHaveAttribute('aria-describedby');
+  });
+
+  it('"none" tying the best candidate still shows the percentages', async () => {
+    const TIE = { B3: { probabilities: { C1: 49, C2: 10 }, none: 49, recommendedLineId: null } };
+    renderPanel({ bounceReview: aiReview(TIE) });
+    await selectLineRow('B3');
+    expect(screen.getByTestId('recon-bounce-ai-pct-C1')).toBeInTheDocument();
   });
 
   it('60/40 without a recommendation: percentages shown, nothing checked, discard disabled, "choose" notice', async () => {
@@ -1005,7 +1108,6 @@ describe('ReconciliationSplitPanel — AI suggestion on an ambiguous pair', () =
     expect(screen.getByTestId('recon-bounce-ai-pct-C1')).toHaveTextContent(pctText(40));
     expect(screen.getByTestId('recon-bounce-radio-C1')).not.toBeChecked();
     expect(screen.getByTestId('recon-bounce-radio-C2')).not.toBeChecked();
-    expect(screen.queryByTestId('recon-bounce-ai-badge-C2')).toBeNull();
     expect(screen.getByTestId('recon-bounce-notice')).toHaveTextContent('financeReconcileBounceNoticeChoose');
     expect(screen.getByTestId('recon-bounce-discard')).toBeDisabled();
   });
@@ -1016,7 +1118,6 @@ describe('ReconciliationSplitPanel — AI suggestion on an ambiguous pair', () =
     await selectLineRow('B3');
     expect(screen.getByTestId('recon-bounce-radio-C1')).not.toBeChecked();
     expect(screen.getByTestId('recon-bounce-radio-C2')).not.toBeChecked();
-    expect(screen.queryByTestId('recon-bounce-ai-badge-C2')).toBeNull();
     expect(screen.getByTestId('recon-bounce-discard')).toBeDisabled();
   });
 
@@ -1025,7 +1126,6 @@ describe('ReconciliationSplitPanel — AI suggestion on an ambiguous pair', () =
     await selectLineRow('B3');
     expect(orderedOptionRows()).toEqual(['recon-bounce-row-C1', 'recon-bounce-row-C2']);
     expect(screen.queryByTestId('recon-bounce-ai-pct-C1')).toBeNull();
-    expect(screen.queryByTestId('recon-bounce-ai-badge-C2')).toBeNull();
     expect(screen.getByTestId('recon-bounce-radio-C2')).not.toBeChecked();
     expect(screen.getByTestId('recon-bounce-notice')).toHaveTextContent('financeReconcileBounceNoticeChoose');
   });
@@ -1149,7 +1249,6 @@ describe('ReconciliationSplitPanel — discarding with the AI suggestion', () =>
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith('financeReconcileBounceToastRestored'));
     await selectLineRow('B3');
     expect(screen.getByTestId('recon-bounce-radio-C2')).toBeChecked();
-    expect(screen.getByTestId('recon-bounce-ai-badge-C2')).toBeInTheDocument();
     expect(discardPairMock).toHaveBeenCalledTimes(1);
   });
 
@@ -1202,7 +1301,6 @@ describe('ReconciliationSplitPanel — discarding with the AI suggestion', () =>
     expect(screen.getByTestId('recon-bounce-panel')).toBeInTheDocument();
     // The stale AI default is dropped for this rejection: no preselection, badge or AI notice.
     await waitFor(() => expect(screen.getByTestId('recon-bounce-radio-C2')).not.toBeChecked());
-    expect(screen.queryByTestId('recon-bounce-ai-badge-C2')).toBeNull();
     expect(screen.getByTestId('recon-bounce-notice')).toHaveTextContent('financeReconcileBounceNoticeChoose');
     expect(screen.getByTestId('recon-bounce-notice')).not.toHaveTextContent(noticeAiText(85));
     expect(screen.getByTestId('recon-bounce-discard')).toBeDisabled();
@@ -1250,7 +1348,6 @@ describe('ReconciliationSplitPanel — discarding with the AI suggestion', () =>
           bounceReview={aiReview({ B3: { ...AI_85_10.B3 } })} />,
       );
       await waitFor(() => expect(screen.getByTestId('recon-bounce-radio-C2')).toBeChecked());
-      expect(screen.getByTestId('recon-bounce-ai-badge-C2')).toBeInTheDocument();
       expect(screen.getByTestId('recon-bounce-discard')).toBeEnabled();
     });
   });

@@ -30,7 +30,7 @@ function noticeClass(model) {
 }
 
 /** The percentage as the i18n sentences take it: a whole number, grouped like every figure. */
-function pctParam(pct) {
+export function pctParam(pct) {
   return formatGroupedNumber(pct, { maximumFractionDigits: 0 });
 }
 
@@ -50,7 +50,7 @@ function noticeText(ui, model, bcpLocale) {
       ? ui('financeReconcileBounceNoticeHigh', { signal: ui(reason.signalKey) })
       : ui('financeReconcileBounceNoticeHighPlain');
   } else {
-    headline = ui('financeReconcileBounceNoticeReview', { reason: ui(reason.longKey, reason.params) });
+    headline = ui('financeReconcileBounceNoticeLowConfidence', { reason: ui(reason.longKey, reason.params) });
   }
   return [
     headline,
@@ -123,12 +123,32 @@ function TotalRow({ label, value, meta = null, tone = 'neutral', testId }) {
  * often the text, so the name carries what tells them apart: the date, the amount and the bank
  * reference when there is one.
  */
-function chooseLabel(ui, row, currency, bcpLocale) {
+export function chooseLabel(ui, row, currency, bcpLocale) {
   const ref = String(row.referenceNo ?? '').trim();
   const params = { date: formatDate(row.date, bcpLocale), amount: formatSigned(row.amount, currency) };
   return ref
     ? ui('financeReconcileBounceChooseOriginalLineRef', { ...params, ref })
     : ui('financeReconcileBounceChooseOriginalLine', params);
+}
+
+/**
+ * The AI's mark on a candidate outflow: ONE discreet element, a decorative sparkle and the
+ * percentage ("✦ 85 %"). The percentage text carries the meaning (the radio is described by it
+ * through aria-describedby; the sparkle is aria-hidden). Nothing without a percentage. Shared with
+ * the automatch modal's rows (`testId` overrides the panel's id and test id there). No tooltip.
+ */
+export function AiPercentText({ rowId, pct, testId = null }) {
+  const ui = useUI();
+  if (pct == null) return null;
+  return (
+    <span
+      id={testId ? undefined : `recon-bounce-ai-pct-${rowId}`}
+      className="inline-flex shrink-0 items-center gap-0.5 text-xs font-medium leading-4 text-[var(--status-info-fg)]"
+      data-testid={testId ?? `recon-bounce-ai-pct-${rowId}`}>
+      <SparkleIcon className="size-3 shrink-0" weight="fill" aria-hidden="true" />
+      {ui('financeReconcileBounceAiProbability', { pct: pctParam(pct) })}
+    </span>
+  );
 }
 
 function PairRow({ row, model, onChoose, currency, bcpLocale }) {
@@ -139,7 +159,6 @@ function PairRow({ row, model, onChoose, currency, bcpLocale }) {
   // ETP-6359 — the AI's percentage for this original (absent without AI) and, on the row it
   // recommends, a text badge: the percentage is spoken through aria-describedby, not by colour.
   const pct = model.percents?.[row.id] ?? null;
-  const aiRecommended = model.aiRecommendedId != null && model.aiRecommendedId === row.id;
   const pctId = `recon-bounce-ai-pct-${row.id}`;
   return (
     <TableRow
@@ -187,24 +206,7 @@ function PairRow({ row, model, onChoose, currency, bcpLocale }) {
                 className="w-auto min-w-0 text-xs font-normal leading-4 text-[hsl(var(--muted-foreground))]"
                 data-testid={`recon-bounce-ref-${row.id}`} />
             ) : null}
-            {pct == null ? null : (
-              <span
-                id={pctId}
-                className="shrink-0 text-xs font-medium leading-4 text-[hsl(var(--muted-foreground))]"
-                data-testid={`recon-bounce-ai-pct-${row.id}`}>
-                {ui('financeReconcileBounceAiProbability', { pct: pctParam(pct) })}
-              </span>
-            )}
-            {aiRecommended ? (
-              <span
-                className="inline-flex min-h-5 min-w-0 max-w-full items-center gap-0.5 rounded-full bg-[var(--status-info-bg)] px-2 py-0.5 text-xs font-medium leading-4 text-[var(--status-info-fg)]"
-                data-testid={`recon-bounce-ai-badge-${row.id}`}>
-                <SparkleIcon className="size-3 shrink-0" weight="fill" aria-hidden="true" />
-                <span className="min-w-0 break-words">
-                  {ui('financeReconcileBounceAiBadge', { pct: pctParam(pct ?? 0) })}
-                </span>
-              </span>
-            ) : null}
+            <AiPercentText rowId={row.id} pct={pct} />
           </div>
         </div>
       </TableCell>
@@ -223,6 +225,101 @@ function PairRow({ row, model, onChoose, currency, bcpLocale }) {
 function netTone(net) {
   if (net == null) return 'neutral';
   return Math.abs(net) < 0.005 ? 'success' : 'destructive';
+}
+
+/** The notice above the pair's rows: why it is proposed, the AI sentence, the effect of discarding. */
+export function BounceNotice({ model, bcpLocale }) {
+  const ui = useUI();
+  return (
+    <p
+      role="status"
+      className={cn('mx-2 mb-2 rounded-lg px-3 py-2 text-[13px] leading-[18px]', noticeClass(model))}
+      data-testid="recon-bounce-notice">
+      {noticeText(ui, model, bcpLocale)}
+    </p>
+  );
+}
+
+/**
+ * The footer of a pair: the selected line, its counterpart and the net effect, and the actions
+ * ("No es un rechazo", "Descartar par" / "Restaurar par"). Shared by the single-line panel and the
+ * two-list "Posibles rechazos" view.
+ */
+export function BounceFooter({
+  model, line, currency, bcpLocale, onDismiss, onDiscard, onRestore, busy = false,
+  windowReadOnly = false,
+}) {
+  const ui = useUI();
+  const discarded = model.mode === DISCARDED_STATE;
+  const otherLabel = model.role === 'bounce'
+    ? ui('financeReconcileBounceTotalOriginal')
+    : ui('financeReconcileBounceTotalBounce');
+  return (
+  <div className="border-t border-[hsl(var(--border-subtle))] bg-card px-0 pt-2 pb-1" data-testid="recon-bounce-footer">
+    <div className="flex flex-col gap-1">
+      {/* The line selected in the left panel, with its date and bank reference: two returns of
+          the same text and amount the same day are otherwise indistinguishable here. */}
+      {line ? (
+        <TotalRow
+          label={selectedLineLabel(ui, model)}
+          value={formatSigned(line.amount, currency)}
+          meta={lineMeta(ui, line, bcpLocale)}
+          testId="recon-bounce-total-selected"
+          data-testid="TotalRow__bounce-selected" />
+      ) : null}
+      {discarded ? null : (
+        <TotalRow
+          label={otherLabel}
+          value={model.other ? formatSigned(model.other.amount, currency) : '—'}
+          meta={lineMeta(ui, model.other, bcpLocale)}
+          testId="recon-bounce-total-other"
+          data-testid="TotalRow__bounce-other" />
+      )}
+      {model.net == null && discarded ? null : (
+        <TotalRow
+          label={ui('financeReconcileBounceTotalNet')}
+          value={model.net == null ? '—' : formatSigned(model.net, currency)}
+          tone={netTone(model.net)}
+          testId="recon-bounce-total-net"
+          data-testid="TotalRow__bounce-net" />
+      )}
+    </div>
+    <div className="flex items-center justify-between gap-2 px-3 py-2">
+      {discarded ? <span /> : (
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onDismiss}
+          className={SECONDARY_BTN}
+          data-testid="recon-bounce-dismiss">
+          <EyeSlashIcon className="h-4 w-4" data-testid="EyeOff__bounce-dismiss" />
+          {ui('financeReconcileBounceDismiss')}
+        </Button>
+      )}
+      {discarded ? (
+        <Button
+          type="button"
+          onClick={onRestore}
+          disabled={busy || windowReadOnly || !line?.id}
+          className={PILL_BTN}
+          data-testid="recon-bounce-restore">
+          <ArrowCounterClockwiseIcon className="h-4 w-4" data-testid="RotateCcw__bounce-restore" />
+          {ui(model.paired ? 'financeReconcileBounceRestore' : 'financeReconcileBounceRestoreLine')}
+        </Button>
+      ) : (
+        <Button
+          type="button"
+          onClick={onDiscard}
+          disabled={busy || windowReadOnly || !model.discard}
+          className={PILL_BTN}
+          data-testid="recon-bounce-discard">
+          <ProhibitIcon className="h-4 w-4" data-testid="Ban__bounce-discard" />
+          {ui('financeReconcileBounceDiscard')}
+        </Button>
+      )}
+    </div>
+  </div>
+  );
 }
 
 /**
@@ -258,10 +355,6 @@ export function BouncePairPanel({
   busy = false, windowReadOnly = false,
 }) {
   const ui = useUI();
-  const discarded = model.mode === DISCARDED_STATE;
-  const otherLabel = model.role === 'bounce'
-    ? ui('financeReconcileBounceTotalOriginal')
-    : ui('financeReconcileBounceTotalBounce');
   return (
     <div className="flex min-w-[30%] flex-1 flex-col overflow-hidden" data-testid="recon-bounce-panel">
       <div className="flex flex-wrap items-center gap-2 p-2">
@@ -271,12 +364,7 @@ export function BouncePairPanel({
           {sourceLabel(ui, model)}
         </span>
       </div>
-      <p
-        role="status"
-        className={cn('mx-2 mb-2 rounded-lg px-3 py-2 text-[13px] leading-[18px]', noticeClass(model))}
-        data-testid="recon-bounce-notice">
-        {noticeText(ui, model, bcpLocale)}
-      </p>
+      <BounceNotice model={model} bcpLocale={bcpLocale} />
       <div className="flex-1 overflow-y-auto [&>div]:overflow-visible">
         <Table className="table-fixed" data-testid="Table__bounce-pair">
           <TableHeader data-testid="TableHeader__bounce-pair">
@@ -303,70 +391,16 @@ export function BouncePairPanel({
           </TableBody>
         </Table>
       </div>
-      <div className="border-t border-[hsl(var(--border-subtle))] bg-card px-0 pt-2 pb-1" data-testid="recon-bounce-footer">
-        <div className="flex flex-col gap-1">
-          {/* The line selected in the left panel, with its date and bank reference: two returns of
-              the same text and amount the same day are otherwise indistinguishable here. */}
-          {line ? (
-            <TotalRow
-              label={selectedLineLabel(ui, model)}
-              value={formatSigned(line.amount, currency)}
-              meta={lineMeta(ui, line, bcpLocale)}
-              testId="recon-bounce-total-selected"
-              data-testid="TotalRow__bounce-selected" />
-          ) : null}
-          {discarded ? null : (
-            <TotalRow
-              label={otherLabel}
-              value={model.other ? formatSigned(model.other.amount, currency) : '—'}
-              meta={lineMeta(ui, model.other, bcpLocale)}
-              testId="recon-bounce-total-other"
-              data-testid="TotalRow__bounce-other" />
-          )}
-          {model.net == null && discarded ? null : (
-            <TotalRow
-              label={ui('financeReconcileBounceTotalNet')}
-              value={model.net == null ? '—' : formatSigned(model.net, currency)}
-              tone={netTone(model.net)}
-              testId="recon-bounce-total-net"
-              data-testid="TotalRow__bounce-net" />
-          )}
-        </div>
-        <div className="flex items-center justify-between gap-2 px-3 py-2">
-          {discarded ? <span /> : (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onDismiss}
-              className={SECONDARY_BTN}
-              data-testid="recon-bounce-dismiss">
-              <EyeSlashIcon className="h-4 w-4" data-testid="EyeOff__bounce-dismiss" />
-              {ui('financeReconcileBounceDismiss')}
-            </Button>
-          )}
-          {discarded ? (
-            <Button
-              type="button"
-              onClick={onRestore}
-              disabled={busy || windowReadOnly || !line?.id}
-              className={PILL_BTN}
-              data-testid="recon-bounce-restore">
-              <ArrowCounterClockwiseIcon className="h-4 w-4" data-testid="RotateCcw__bounce-restore" />
-              {ui(model.paired ? 'financeReconcileBounceRestore' : 'financeReconcileBounceRestoreLine')}
-            </Button>
-          ) : (
-            <Button
-              type="button"
-              onClick={onDiscard}
-              disabled={busy || windowReadOnly || !model.discard}
-              className={PILL_BTN}
-              data-testid="recon-bounce-discard">
-              <ProhibitIcon className="h-4 w-4" data-testid="Ban__bounce-discard" />
-              {ui('financeReconcileBounceDiscard')}
-            </Button>
-          )}
-        </div>
-      </div>
+      <BounceFooter
+        model={model}
+        line={line}
+        currency={currency}
+        bcpLocale={bcpLocale}
+        onDismiss={onDismiss}
+        onDiscard={onDiscard}
+        onRestore={onRestore}
+        busy={busy}
+        windowReadOnly={windowReadOnly} />
     </div>
   );
 }

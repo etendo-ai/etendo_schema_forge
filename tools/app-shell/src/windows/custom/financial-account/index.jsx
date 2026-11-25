@@ -34,6 +34,7 @@ import { useBankConnectionFlow } from '@/hooks/useBankConnectionFlow';
 import { AutoMatchSuggestionModal } from '@/components/contract-ui/AutoMatchSuggestionModal';
 import { useAutoMatch } from '@/hooks/useReconciliation';
 import { useAutoMatchReview } from '@/hooks/useAutoMatchReview.js';
+import { splitAutoMatchGroups } from '@/components/contract-ui/bouncePairs.js';
 import { SyncStatusInline } from '@/components/financial-accounts/SyncStatusInline';
 import { RefreshButton } from '@/components/financial-accounts';
 import { ACCOUNT_TYPE } from '@/components/financial-accounts/tokens';
@@ -376,7 +377,23 @@ export function FinancialAccountDetail({ recordId }) {
   // `useNeoResource` doesn't clear `data` when `path` goes back to null) confirms there is at least
   // one suggestion. `autoMatchFetchedRef` tracks whether the in-flight/last-seen load happened while
   // armed, so a request that resolves after the user left the tab is ignored.
+  // ETP-5581 — the state the modal and the reconciliation panel share around a bounce pair: the
+  // modal's checks, the line "Revisar en el panel" asked to show, and the pairs dismissed with
+  // "No es un rechazo". Inert while the backend sends no bounce pair.
+  const autoMatchReview = useAutoMatchReview(autoMatchGroups, {
+    active: activeTab === 'reconciliation' && !isCashAccount,
+    bounceAiAssessments: autoMatchAi,
+  });
   const autoMatchFetchedRef = useRef(false);
+  // The modal is worth opening by itself when the run found something to act on: a transaction
+  // group, or at least ONE possible bank rejection (bounce pair) that the user has not already
+  // dismissed ("No es un rechazo"), even with no transaction group at all (ETP-6359).
+  const dismissedPairKeys = autoMatchReview.dismissedKeys;
+  const hasAutoMatchSuggestions = useMemo(() => {
+    const { transactionGroups, bouncePairs } = splitAutoMatchGroups(autoMatchGroups);
+    return transactionGroups.length > 0
+      || bouncePairs.some((pair) => !dismissedPairKeys?.has(pair.groupKey));
+  }, [autoMatchGroups, dismissedPairKeys]);
   useEffect(() => {
     if (!autoMatchArmed) {
       autoMatchFetchedRef.current = false;
@@ -388,18 +405,11 @@ export function FinancialAccountDetail({ recordId }) {
     }
     if (!autoMatchFetchedRef.current) return;
     setAutoMatchArmed(false);
-    if (autoMatchGroups.length > 0) {
+    if (hasAutoMatchSuggestions) {
       setAutoMatchAutoOpened(true);
       setAutoMatchOpen(true);
     }
-  }, [autoMatchArmed, autoMatchLoading, autoMatchGroups]);
-  // ETP-5581 — the state the modal and the reconciliation panel share around a bounce pair: the
-  // modal's checks, the line "Revisar en el panel" asked to show, and the pairs dismissed with
-  // "No es un rechazo". Inert while the backend sends no bounce pair.
-  const autoMatchReview = useAutoMatchReview(autoMatchGroups, {
-    active: activeTab === 'reconciliation' && !isCashAccount,
-    bounceAiAssessments: autoMatchAi,
-  });
+  }, [autoMatchArmed, autoMatchLoading, hasAutoMatchSuggestions]);
   // "Revisar en el panel": close the modal and show the pair's bounce line. There is no return
   // path: the Automatch button reopens the modal, on the same suggestions (and so the same checks)
   // unless a discard or restore in the panel reloaded them. Disarming means the automatch never

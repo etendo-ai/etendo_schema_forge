@@ -40,6 +40,7 @@ import {
   bounceDecisions,
   withBounceDecisions,
   dismissPairPayload,
+  canPairOutflow,
 } from '../bouncePairs.js';
 
 const MODULE_URL = pathToFileURL(
@@ -729,5 +730,37 @@ describe('summarizeApplyResults', () => {
   it('answers zeros for no results', () => {
     assert.deepEqual(summarizeApplyResults(), { groupsOk: 0, pairsOk: 0, failures: [] });
     assert.deepEqual(summarizeApplyResults(null), { groupsOk: 0, pairsOk: 0, failures: [] });
+  });
+});
+
+describe('canPairOutflow (the backend discardPair shape: opposite sign, exact amount, 0..60 days)', () => {
+  const bounce = { amount: 0.61, date: '2026-08-24' };
+  it('accepts an exact opposite amount dated on or before the rejection', () => {
+    assert.equal(canPairOutflow({ amount: -0.61, date: '2026-08-24' }, bounce), true);
+    assert.equal(canPairOutflow({ amount: -0.61, date: '2026-06-25' }, bounce), true);
+  });
+  it('refuses another amount, the same sign, a later outflow or one more than 60 days earlier', () => {
+    assert.equal(canPairOutflow({ amount: -0.62, date: '2026-08-24' }, bounce), false);
+    assert.equal(canPairOutflow({ amount: 0.61, date: '2026-08-24' }, bounce), false);
+    assert.equal(canPairOutflow({ amount: -0.61, date: '2026-08-25' }, bounce), false);
+    assert.equal(canPairOutflow({ amount: -0.61, date: '2026-06-24' }, bounce), false);
+    assert.equal(canPairOutflow(null, bounce), false);
+  });
+});
+
+describe('bouncePanelModel — an explicit pick outside the pair\'s originals (two-table view)', () => {
+  const o1 = { id: 'O1', amount: -5, date: '2026-10-01' };
+  const x = { id: 'X', amount: -5, date: '2026-10-02' };
+  const line = {
+    id: 'B', state: BOUNCE_STATE, amount: 5, date: '2026-10-03',
+    bouncePair: { role: 'bounce', ambiguous: false, confidence: 'review', counterpartLine: o1 },
+  };
+  it('defaults to the single original, and an explicit pick overrides it', () => {
+    assert.equal(bouncePanelModel(line).chosenId, 'O1');
+    const model = bouncePanelModel(line, { chosenOriginalId: 'X', chosenOriginalLine: x });
+    assert.equal(model.chosenId, 'X');
+    assert.equal(model.explicitPick, true);
+    assert.deepEqual(model.discard, { statementLineId: 'X', counterpartLineId: 'B' });
+    assert.equal(model.net, 0);
   });
 });

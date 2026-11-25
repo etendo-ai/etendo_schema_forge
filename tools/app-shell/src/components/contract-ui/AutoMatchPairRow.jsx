@@ -69,15 +69,17 @@ export function AutoMatchPairRow({
  *
  * @param {{ description: string, amount: number, currency: string, strong?: boolean,
  *   dateText?: string, badge?: import('react').ReactNode, reason?: import('react').ReactNode,
- *   action?: import('react').ReactNode, testId?: string, metaTestId?: string }} props
+ *   action?: import('react').ReactNode, testId?: string, metaTestId?: string,
+ *   compact?: boolean }} props `compact` (the reconciliation panel's pair lists): the amount column
+ *   shrinks to its content instead of the modal's fixed 160 px
  */
 export function AutoMatchPairSide({
   description, amount, currency, strong = false, dateText = '', badge = null, reason = null,
-  action = null, testId, metaTestId,
+  action = null, testId, metaTestId, compact = false,
 }) {
   const value = Number(amount ?? 0);
   return (
-    <div className="flex min-w-0 flex-1 gap-10" data-testid={testId}>
+    <div className={cn('flex min-w-0 flex-1', compact ? 'gap-2' : 'gap-10')} data-testid={testId}>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         {/* Clipped with an ellipsis, the full text on hover: bank descriptions often differ only
             in their last characters ("…CONCEPTO 10000268 100-1" / "…-2"). */}
@@ -100,7 +102,7 @@ export function AutoMatchPairSide({
           {reason}
         </div>
       </div>
-      <div className="flex w-40 flex-none flex-col items-end gap-1">
+      <div className={cn('flex flex-none flex-col items-end gap-1', compact ? 'w-auto max-w-[45%]' : 'w-40')}>
         <MoneyAmount
           value={value}
           currency={currency || 'EUR'}

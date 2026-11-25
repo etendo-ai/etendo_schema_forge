@@ -758,6 +758,44 @@ describe('FinancialAccountDetail — bounce-pair review (Revisar en el panel)', 
     return utils;
   }
 
+  // The modal also opens by itself when the run found ONLY possible rejections (no transaction
+  // group): one non-dismissed pair is enough (ETP-6359).
+  const landWith = (groups, beforeLanding) => {
+    const utils = render(<FinancialAccountDetail recordId="acc-1" />);
+    currentAutoMatchLoading = true;
+    fireEvent.click(screen.getByTestId('detail-tab-reconciliation'));
+    beforeLanding?.();
+    currentAutoMatchGroups = groups;
+    currentAutoMatchLoading = false;
+    utils.rerender(<FinancialAccountDetail recordId="acc-1" />);
+    return utils;
+  };
+
+  it('auto-opens with only bounce pairs (no transaction group), as an automatic opening', () => {
+    landWith([HIGH, REVIEW]);
+    expect(modal()).toHaveAttribute('data-open', 'true');
+    expect(modal()).toHaveAttribute('data-auto-opened', 'true');
+  });
+
+  it('does not auto-open with zero groups and zero pairs', () => {
+    landWith([]);
+    expect(modal()).toHaveAttribute('data-open', 'false');
+  });
+
+  it('does not auto-open when every pair was dismissed in the panel', () => {
+    landWith([REVIEW], () => fireEvent.click(screen.getByTestId('stub-panel-dismiss')));
+    expect(modal()).toHaveAttribute('data-open', 'false');
+  });
+
+  it('auto-opens once: after the user closes it, a reload of the pairs does not pop it again', () => {
+    const { rerender } = landWith([HIGH]);
+    expect(modal()).toHaveAttribute('data-open', 'true');
+    fireEvent.click(screen.getByTestId('stub-automatch-close'));
+    currentAutoMatchGroups = [HIGH, REVIEW];
+    rerender(<FinancialAccountDetail recordId="acc-1" />);
+    expect(modal()).toHaveAttribute('data-open', 'false');
+  });
+
   it('starts with the default checks', () => {
     renderWithPairs();
     expect(modal()).toHaveAttribute('data-checked', 'tx-1,bp-high');

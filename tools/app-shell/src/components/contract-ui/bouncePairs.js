@@ -17,7 +17,7 @@
 
 import { parseCalendarDate } from '../../lib/dateOnly.js';
 import {
-  aiAssessmentFor, aiDefaultChoice, aiPercent, sortOptionsByAi,
+  aiAssessmentFor, aiDefaultChoice, sortOptionsByAi, visibleAiPercent,
 } from './bounceAi.js';
 
 /** `kind` of an autoMatch group that is a bounce pair. */
@@ -389,21 +389,28 @@ export function countsWithDismissedPairs(counts, lines, dismissedKeys) {
  * `counterpartLineId`, the same shape as the autoMatch group), null while no original is chosen.
  *
  * ETP-6359: `aiAssessments` is the autoMatch answer's `bounceAiAssessments` (absent = no AI). Only
- * the bounce role uses it, see {@link bounceRoleModel}.
+ * the bounce role uses it, see {@link bounceRoleModel}. `chosenOriginalLine` is the line object of
+ * an explicit pick that is NOT one of the pair's own originals (the two-table "Posibles rechazos"
+ * view lets the user pair the rejection with any outflow of the same amount).
  *
  * @param {object|null} line the selected row
  * @param {{ discardedLines?: Array<object>, chosenOriginalId?: string|null,
- *   aiAssessments?: Record<string, object>|null }} [options]
+ *   chosenOriginalLine?: object|null, aiAssessments?: Record<string, object>|null }} [options]
  * @returns {object|null}
  */
 export function bouncePanelModel(
-  line, { discardedLines = [], chosenOriginalId = null, aiAssessments = null } = {},
+  line,
+  {
+    discardedLines = [], chosenOriginalId = null, chosenOriginalLine = null, aiAssessments = null,
+  } = {},
 ) {
   if (!line) return null;
   if (line.state === DISCARDED_STATE) return discardedModel(line, discardedLines);
   const pair = line.state === BOUNCE_STATE ? line.bouncePair : null;
   if (!pair) return null;
-  if (pair.role === 'bounce') return bounceRoleModel(line, pair, chosenOriginalId, aiAssessments);
+  if (pair.role === 'bounce') {
+    return bounceRoleModel(line, pair, { chosenOriginalId, chosenOriginalLine, aiAssessments });
+  }
   const bounce = pair.counterpartLine ?? null;
   return {
     mode: BOUNCE_STATE,
@@ -429,23 +436,26 @@ export function bouncePanelModel(
  * flagged by `aiPreselected`. A single-original pair shows its percentage but is never
  * preselected. Without an assessment the model is exactly what it was.
  */
-function bounceRoleModel(line, pair, chosenOriginalId, aiAssessments = null) {
+function bounceRoleModel(line, pair, { chosenOriginalId, chosenOriginalLine, aiAssessments }) {
   const ambiguous = isAmbiguousPair(pair);
   const assessment = aiAssessmentFor(aiAssessments, line.id);
   const baseOptions = ambiguous
     ? (pair.candidates ?? []).map((c) => c?.line).filter(Boolean)
     : [pair.counterpartLine].filter(Boolean);
   const options = ambiguous ? sortOptionsByAi(baseOptions, assessment) : baseOptions;
-  let chosen = null;
+  // chosen = explicit pick ?? AI default ?? (the single original of a non-ambiguous pair). An
+  // explicit pick may be any outflow (also one the detector did not offer for this rejection).
+  let chosen = options.find((o) => o.id === chosenOriginalId) ?? null;
+  if (!chosen && chosenOriginalId != null && chosenOriginalLine?.id === chosenOriginalId) {
+    chosen = chosenOriginalLine;
+  }
+  const explicitPick = chosen != null;
   let aiPreselected = false;
-  if (ambiguous) {
-    chosen = options.find((o) => o.id === chosenOriginalId) ?? null;
-    if (!chosen) {
-      const aiId = aiDefaultChoice(assessment, options);
-      chosen = options.find((o) => o.id === aiId) ?? null;
-      aiPreselected = chosen != null;
-    }
-  } else {
+  if (!chosen && ambiguous) {
+    const aiId = aiDefaultChoice(assessment, options);
+    chosen = options.find((o) => o.id === aiId) ?? null;
+    aiPreselected = chosen != null;
+  } else if (!chosen) {
     chosen = options[0] ?? null;
   }
   const model = {
@@ -457,13 +467,15 @@ function bounceRoleModel(line, pair, chosenOriginalId, aiAssessments = null) {
     selectable: ambiguous,
     chosenId: chosen?.id ?? null,
     other: chosen,
+    explicitPick,
     reason: bounceReason(pair, chosen, line),
     discard: chosen ? { statementLineId: chosen.id, counterpartLineId: line.id } : null,
     net: pairNet(line, chosen),
   };
   if (!assessment) return model;
+  // Shown percentages: all null when "none" wins (one rule with the modal, see aiNoneWins).
   const percents = {};
-  for (const option of options) percents[option.id] = aiPercent(assessment, option.id);
+  for (const option of options) percents[option.id] = visibleAiPercent(assessment, option.id);
   const recommendedId = aiDefaultChoice(assessment, options);
   return {
     ...model,
@@ -513,4 +525,167 @@ export function summarizeApplyResults(results = []) {
     }
   }
   return { groupsOk, pairsOk, failures };
+}
+
+/**
+ * A pendingLines row of a detected pair, in the shape of an autoMatch bounce-pair group, so the
+ * reconciliation panel's "Posibles rechazos" list renders it with the same row as the automatch
+ * modal (original on the left, rejection on the right). Pure adapter, nothing is invented:
+ * - the BOUNCE row (role `bounce`) is the rejection (`counterpartLine`); its original is the
+ *   annotation's `counterpartLine` (a short object), or, when ambiguous, its `candidates`;
+ * - an ORIGINAL or CANDIDATE row (only when its pair has no bounce row on screen) is the original
+ *   (`statementLine`) and the annotation's `counterpartLine` is the rejection.
+ *
+ * @param {object} row a pendingLines row with state `bounce` and a `bouncePair`
+ * @returns {object} an autoMatch-group-shaped object
+ */
+export function rowAsGroup(row) {
+  const pair = row?.bouncePair ?? {};
+  const base = {
+    kind: BOUNCE_PAIR_KIND,
+    groupKey: pair.groupKey,
+    confidence: pair.confidence,
+    signal: pair.signal,
+    signals: pair.signals,
+    ambiguous: !!pair.ambiguous,
+  };
+  if (pair.role === 'bounce') {
+    return {
+      ...base,
+      candidates: pair.candidates ?? [],
+      statementLine: isAmbiguousPair(pair) ? null : (pair.counterpartLine ?? null),
+      counterpartLine: row,
+    };
+  }
+  return {
+    ...base,
+    candidates: isAmbiguousPair(pair) ? [{ line: row }] : [],
+    statementLine: row,
+    counterpartLine: pair.counterpartLine ?? null,
+  };
+}
+
+/** Whether any text field of a line contains the (lower-cased) query. */
+function lineMatchesQuery(line, q) {
+  return [line?.description, line?.partnerName, line?.referenceNo]
+    .some((v) => (v || '').toLowerCase().includes(q));
+}
+
+/**
+ * One entry per detected pair for the panel's "Posibles rechazos" list: the `bounce`-state rows
+ * grouped by `bouncePair.groupKey`, anchored on the pair's bounce row (or, when the date range cut
+ * it off, on whichever row exists) and ordered as the anchors come in `lines`. A shared candidate
+ * outflow never gets a row of its own: it appears inside each bounce's candidates.
+ *
+ * `query` (free text, already trimmed or not) keeps a pair when it matches the description, partner
+ * or reference of ANY of its lines on screen or of its short counterpart objects.
+ *
+ * @param {Array<object>} lines the left panel's lines (after dismissals)
+ * @param {{ query?: string }} [options]
+ * @returns {Array<{ key: string, groupKey: string|undefined, anchor: object, group: object }>}
+ */
+export function buildBouncePairRows(lines, { query = '' } = {}) {
+  const entries = new Map();
+  (lines ?? []).forEach((line, index) => {
+    if (line?.state !== BOUNCE_STATE || !line.bouncePair) return;
+    const key = line.bouncePair.groupKey ?? `line-${line.id}`;
+    const entry = entries.get(key);
+    if (!entry) {
+      entries.set(key, { key, anchor: line, index, rows: [line] });
+      return;
+    }
+    entry.rows.push(line);
+    if (line.bouncePair.role === 'bounce' && entry.anchor.bouncePair.role !== 'bounce') {
+      entry.anchor = line;
+      entry.index = index;
+    }
+  });
+  const q = String(query ?? '').trim().toLowerCase();
+  return [...entries.values()]
+    .filter((e) => {
+      if (!q) return true;
+      const pair = e.anchor.bouncePair;
+      const shortLines = [pair.counterpartLine, ...(pair.candidates ?? []).map((c) => c?.line)];
+      return [...e.rows, ...shortLines].some((l) => lineMatchesQuery(l, q));
+    })
+    .sort((a, b) => a.index - b.index)
+    .map(({ key, anchor }) => {
+      const group = rowAsGroup(anchor);
+      return {
+        key,
+        groupKey: anchor.bouncePair.groupKey,
+        anchor,
+        group,
+        // The outflows this pair lists: its original, or its candidates, in the backend's order.
+        outflowIds: pairOriginalLines(group).map((l) => l.id),
+      };
+    });
+}
+
+/**
+ * The outflows of the "Posibles rechazos" view (ETP-6359): every distinct original / candidate
+ * outflow of the pairs, ONCE (deduplicated by line id: a candidate shared by two rejections is one
+ * entry), each with the `groupKey`s of the pairs that list it. Ordered by date, then as first seen.
+ * A full `pendingLines` row of the outflow (it has the partner name) wins over the short object the
+ * annotation carries.
+ *
+ * @param {Array<object>} lines the left panel's lines (after dismissals)
+ * @param {{ query?: string }} [options] the same free-text query as {@link buildBouncePairRows}
+ * @returns {Array<{ line: object, pairKeys: Array<string|undefined> }>}
+ */
+export function buildBounceOutflows(lines, { query = '' } = {}) {
+  const fullById = new Map();
+  for (const l of lines ?? []) {
+    if (l?.state === BOUNCE_STATE && l.bouncePair && l.bouncePair.role !== 'bounce') fullById.set(l.id, l);
+  }
+  const byId = new Map();
+  for (const entry of buildBouncePairRows(lines, { query })) {
+    for (const short of pairOriginalLines(entry.group)) {
+      const found = byId.get(short.id);
+      if (found) {
+        found.pairKeys.push(entry.groupKey);
+      } else {
+        byId.set(short.id, { line: fullById.get(short.id) ?? short, pairKeys: [entry.groupKey] });
+      }
+    }
+  }
+  return [...byId.values()]
+    .map((e, index) => ({ e, index }))
+    .sort((a, b) => String(a.e.line.date ?? '').localeCompare(String(b.e.line.date ?? '')) || a.index - b.index)
+    .map(({ e }) => e);
+}
+
+/**
+ * How many detected pairs the lines hold: the figure "Posibles rechazos" shows in the status filter
+ * (the backend's `counts.bounce` counts LINES, three or more per pair).
+ *
+ * @param {Array<object>} lines
+ * @returns {number}
+ */
+export function countBouncePairs(lines) {
+  return buildBouncePairRows(lines).length;
+}
+
+/** Days a rejection may come after its original (the backend's `BankBounceDetector.WINDOW_DAYS`). */
+export const BOUNCE_WINDOW_DAYS = 60;
+
+/**
+ * Whether an outflow can be paired with a rejection, as the backend's `discardPair` validates it:
+ * opposite sign and EXACTLY the same amount (to the cent), and the rejection dated on or after the
+ * outflow and at most {@link BOUNCE_WINDOW_DAYS} days later (else 409 `SIGN_MISMATCH`,
+ * `AMOUNT_MISMATCH` or `DISCARD_NOT_ALLOWED`). A missing date is not held against the pair. The
+ * server decides in the end (a registered payment is only known there); this only keeps the panel
+ * from offering what is certain to be refused.
+ *
+ * @param {object|null} outflow an outflow line (`amount`, `date`)
+ * @param {object|null} bounce the rejection line
+ * @returns {boolean}
+ */
+export function canPairOutflow(outflow, bounce) {
+  if (!outflow || !bounce) return false;
+  const a = Math.round((Number(outflow.amount) || 0) * 100);
+  const b = Math.round((Number(bounce.amount) || 0) * 100);
+  if (a === 0 || a + b !== 0) return false;
+  const days = daysBetween(outflow.date, bounce.date);
+  return days == null || (days >= 0 && days <= BOUNCE_WINDOW_DAYS);
 }

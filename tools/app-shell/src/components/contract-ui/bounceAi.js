@@ -49,6 +49,34 @@ export function aiPercent(assessment, lineId) {
 }
 
 /**
+ * Whether "none of these outflows" outweighs EVERY candidate: the assessment's `none` is strictly
+ * greater than the highest candidate percentage. Then no percentage is shown for that rejection
+ * anywhere (it would mislead), in the modal and in the panel alike. An assessment without `none`,
+ * or one whose best candidate ties or beats it, is not "none wins".
+ *
+ * @param {object|null|undefined} assessment
+ * @returns {boolean}
+ */
+export function aiNoneWins(assessment) {
+  const none = assessment?.none == null ? NaN : Number(assessment.none);
+  if (!Number.isFinite(none)) return false;
+  const values = Object.values(assessment?.probabilities ?? {}).map(Number).filter(Number.isFinite);
+  return values.length > 0 && none > Math.max(...values);
+}
+
+/**
+ * The percentage to SHOW for an outflow: {@link aiPercent}, or null when `none` wins (see
+ * {@link aiNoneWins}). The one rule the modal row and the panel both display through.
+ *
+ * @param {object|null|undefined} assessment
+ * @param {string|null|undefined} lineId
+ * @returns {number|null}
+ */
+export function visibleAiPercent(assessment, lineId) {
+  return aiNoneWins(assessment) ? null : aiPercent(assessment, lineId);
+}
+
+/**
  * The options ordered by descending probability. Stable: equal (or unrated) options keep the order
  * the backend sent, and the same array comes back when there is no assessment.
  *

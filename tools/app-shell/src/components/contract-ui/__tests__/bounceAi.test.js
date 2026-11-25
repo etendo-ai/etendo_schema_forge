@@ -11,6 +11,8 @@ import assert from 'node:assert/strict';
 import {
   aiAssessmentFor,
   aiPercent,
+  aiNoneWins,
+  visibleAiPercent,
   sortOptionsByAi,
   aiDefaultChoice,
   isAiStaleError,
@@ -57,6 +59,26 @@ describe('aiPercent', () => {
     assert.equal(aiPercent(null, 'L-OUT-B'), null);
     assert.equal(aiPercent({}, 'L-OUT-B'), null);
     assert.equal(aiPercent({ probabilities: { x: 'abc' } }, 'x'), null);
+  });
+});
+
+describe('aiNoneWins / visibleAiPercent (one rule for the modal and the panel)', () => {
+  const none = (n, probabilities = { 'L-OUT-A': 49, 'L-OUT-B': 10 }) => ({ probabilities, none: n });
+  it('is true only when none is strictly greater than the best candidate', () => {
+    assert.equal(aiNoneWins(none(50)), true);
+    assert.equal(aiNoneWins(none(49)), false);
+    assert.equal(aiNoneWins(none(10)), false);
+  });
+  it('is false without `none`, without candidates or without an assessment', () => {
+    assert.equal(aiNoneWins({ probabilities: { 'L-OUT-A': 10 } }), false);
+    assert.equal(aiNoneWins({ probabilities: {}, none: 90 }), false);
+    assert.equal(aiNoneWins(null), false);
+  });
+  it('hides every candidate percentage when none wins and shows them otherwise', () => {
+    assert.equal(visibleAiPercent(none(50), 'L-OUT-A'), null);
+    assert.equal(visibleAiPercent(none(50), 'L-OUT-B'), null);
+    assert.equal(visibleAiPercent(none(5), 'L-OUT-A'), 49);
+    assert.equal(visibleAiPercent({ probabilities: { 'L-OUT-A': 49 } }, 'L-OUT-A'), 49);
   });
 });
 

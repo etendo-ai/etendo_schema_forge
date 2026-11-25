@@ -44,7 +44,7 @@ function failureText(err, ui, fallbackKey) {
  */
 function discardChoiceSource(model) {
   if (model.aiPreselected) return CHOICE_SOURCE_AI;
-  return model.percents && model.selectable ? CHOICE_SOURCE_USER : null;
+  return model.percents && (model.selectable || model.explicitPick) ? CHOICE_SOURCE_USER : null;
 }
 
 /**
@@ -224,7 +224,7 @@ function useFocusRequest({
  * toasts, and the "Revisar en el panel" focus request.
  *
  * @param {object} args
- * @returns {{ panel: JSX.Element|null }}
+ * @returns {{ panel: JSX.Element|null, parts: object|null }}
  */
 export function useBouncePairPanel({
   accountId, currency, bcpLocale, selectedLine, lines, loading, discardedLines,
@@ -254,7 +254,7 @@ export function useBouncePairPanel({
     return out;
   }, [freshAssessments, aiInvalidated]);
   // The original chosen for an ambiguous pair, remembered per bounce line.
-  const [chosen, setChosen] = useState({ lineId: null, originalId: null });
+  const [chosen, setChosen] = useState({ lineId: null, originalId: null, original: null });
 
   useFocusRequest({
     focus: review?.focus ?? null,
@@ -265,6 +265,7 @@ export function useBouncePairPanel({
   const model = useMemo(() => bouncePanelModel(selectedLine, {
     discardedLines,
     chosenOriginalId: chosen.lineId === selectedLine?.id ? chosen.originalId : null,
+    chosenOriginalLine: chosen.lineId === selectedLine?.id ? chosen.original : null,
     aiAssessments,
   }), [selectedLine, discardedLines, chosen, aiAssessments]);
 
@@ -273,8 +274,11 @@ export function useBouncePairPanel({
     onChanged?.();
   }, [reloadLines, onChanged]);
 
-  const choose = useCallback((originalId) => {
-    setChosen({ lineId: selectedLine?.id ?? null, originalId });
+  // `pick` is an outflow id (the single-line panel's radios) or the outflow line itself (the
+  // two-table view, where it may be any outflow of the same amount, not only a detected candidate).
+  const choose = useCallback((pick) => {
+    const original = pick != null && typeof pick === 'object' ? pick : null;
+    setChosen({ lineId: selectedLine?.id ?? null, originalId: original ? original.id : pick, original });
   }, [selectedLine?.id]);
 
   const onDismiss = useCallback(() => {
@@ -377,5 +381,14 @@ export function useBouncePairPanel({
       data-testid="BouncePairPanel__d0f4d5" />
   ) : null;
 
-  return { panel };
+  // ETP-6359 — the pieces of the same panel for the two-table "Posibles rechazos" view, which lays
+  // them out itself: the model, the selected line and the handlers (null without a model).
+  const parts = model
+    ? {
+      model, line: selectedLine, onChoose: choose, onDismiss, onDiscard, onRestore,
+      busy: discarding || restoring, windowReadOnly,
+    }
+    : null;
+
+  return { panel, parts };
 }

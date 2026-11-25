@@ -3,13 +3,13 @@ import { useUI } from '@/i18n';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
-import { formatGroupedNumber } from '@/lib/formatCurrency.js';
 import { AutoMatchCard, AutoMatchCardHeader } from './AutoMatchCard.jsx';
 import { AutoMatchPairRow, AutoMatchPairSide } from './AutoMatchPairRow.jsx';
 import {
   bounceReason, isAmbiguousPair, isSelectableGroup, pairOriginalLines,
 } from './bouncePairs.js';
-import { aiAssessmentFor, aiPercent, sortOptionsByAi } from './bounceAi.js';
+import { AiPercentText } from './BouncePairPanel.jsx';
+import { aiAssessmentFor, sortOptionsByAi, visibleAiPercent } from './bounceAi.js';
 
 const TAG_CLS = 'inline-flex h-6 shrink-0 items-center gap-0.5 rounded-full px-2 py-1 text-xs font-normal';
 /**
@@ -25,7 +25,9 @@ const REVIEW_BTN = 'h-8 flex-none gap-1 rounded-full border-[hsl(var(--border-co
  *
  * @returns {{ badge: import('react').ReactNode, reason: import('react').ReactNode }}
  */
-function pairBadgeAndReason(ui, group, original, aiPct = null) {
+export function pairBadgeAndReason(
+  ui, group, original, aiPct = null, reviewTagKey = 'financeReconcileBounceTagReviewPlain',
+) {
   const reason = bounceReason(group, original, group.counterpartLine);
   const reasonCls = 'text-xs leading-4 text-[hsl(var(--muted-foreground))]';
   if (reason.high) {
@@ -47,19 +49,19 @@ function pairBadgeAndReason(ui, group, original, aiPct = null) {
   }
   // ETP-6359 — the AI's probability, next to (never inside) the badge: its own element after the reason.
   const aiText = aiPct == null ? null : (
-    <span className={reasonCls} data-testid={`automatch-bounce-ai-pct-${group.groupKey}`}>
-      {ui('financeReconcileAutomatchBounceAiMatch', {
-        pct: formatGroupedNumber(aiPct, { maximumFractionDigits: 0 }),
-      })}
-    </span>
+    <AiPercentText
+      rowId={group.groupKey}
+      pct={aiPct}
+      testId={`automatch-bounce-ai-pct-${group.groupKey}`} />
   );
+
   return {
     badge: (
       <span
         className={cn(TAG_CLS, 'bg-[var(--status-warning-bg)] text-[var(--status-warning-fg)]')}
         data-testid={`automatch-bounce-tag-review-${group.groupKey}`}>
         <WarningCircleIcon className="size-3.5 text-[var(--status-warning-fg)]" weight="fill" />
-        {ui('financeReconcileBounceTagReviewPlain')}
+        {ui(reviewTagKey)}
       </span>
     ),
     reason: aiText ? (
@@ -107,11 +109,8 @@ function BouncePairRow({
   const ariaLabel = ui(selectable
     ? 'financeReconcileAutomatchBounceCheck'
     : 'financeReconcileAutomatchBounceAmbiguousCheck');
-  // GAP-9: when "none of these" outweighs the best candidate the percentage would mislead, so the
-  // modal drops it (the panel still lists the per-candidate figures). No `none` = shown as before.
-  const bestPct = assessment ? aiPercent(assessment, shownOriginal.id) : null;
-  const noneWins = bestPct != null && Number(assessment.none) > bestPct;
-  const aiPct = noneWins ? null : bestPct;
+  // One rule with the panel: no percentage when "none" wins (aiNoneWins, bounceAi.js).
+  const aiPct = assessment ? visibleAiPercent(assessment, shownOriginal.id) : null;
   const { badge, reason } = pairBadgeAndReason(ui, group, original, aiPct);
   return (
     <AutoMatchPairRow

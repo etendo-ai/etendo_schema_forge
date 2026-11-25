@@ -297,7 +297,7 @@ describe('financeReconcileBounce* — the footer and reference keys', () => {
       'financeReconcileAutomatchBounceTitle', 'financeReconcileAutomatchBounceColBounce',
       'financeReconcileAutomatchKpiBouncePairs', 'financeReconcileBounceTotalBounce',
       'financeReconcileBounceSelectedBounce', 'financeReconcileBounceDismiss',
-      'financeReconcileBounceNoticeReview',
+      'financeReconcileBounceNoticeLowConfidence',
     ];
     for (const key of HEADLINES) {
       expect(esES.genericLabels[key], `es_ES.${key}`).toMatch(/rechazo/i);
@@ -411,13 +411,11 @@ describe('financeReconcileAutomatch* — the two-card redesign', () => {
 });
 
 
-// ETP-6359 — the AI second layer of the bank-rejection suggestions: seven new keys.
+// ETP-6359 — the AI second layer of the bank-rejection suggestions: five new keys.
 describe('locale parity — AI suggestion of the bank-rejection review', () => {
   const AI_KEYS = [
-    'financeReconcileAutomatchBounceAiMatch',
     'financeReconcileBounceNoticeAi',
     'financeReconcileBounceAiProbability',
-    'financeReconcileBounceAiBadge',
     'financeReconcileBounceAiUndo',
     'financeReconcileBounceAiStale',
     'backendError.bounceAiSuggestionStale',
@@ -446,11 +444,9 @@ describe('locale parity — AI suggestion of the bank-rejection review', () => {
 
   it('the sentences that show a percentage take {pct} and carry the "%" sign', () => {
     for (const key of [
-      'financeReconcileAutomatchBounceAiMatch',
-      'financeReconcileBounceNoticeAi',
+        'financeReconcileBounceNoticeAi',
       'financeReconcileBounceAiProbability',
-      'financeReconcileBounceAiBadge',
-    ]) {
+      ]) {
       for (const [name, dictionary] of Object.entries(LOCALE_SET)) {
         const value = dictionary.genericLabels[key];
         expect(value, `${name}.${key}`).toContain('{pct}');
@@ -461,8 +457,8 @@ describe('locale parity — AI suggestion of the bank-rejection review', () => {
 
   it('writes the percent sign as each language does: "85 %" in Spanish, "85%" in English', () => {
     const render = (dictionary, key) => dictionary.genericLabels[key].replace('{pct}', '85');
-    for (const key of ['financeReconcileAutomatchBounceAiMatch', 'financeReconcileBounceAiProbability',
-      'financeReconcileBounceAiBadge', 'financeReconcileBounceNoticeAi']) {
+    for (const key of ['financeReconcileBounceAiProbability',
+      'financeReconcileBounceNoticeAi']) {
       expect(render(enUS, key), `en_US.${key}`).toMatch(/85%/);
       expect(render(enUS, key), `en_US.${key}`).not.toMatch(/85 %/);
       for (const [name, dictionary] of Object.entries({ es_ES: esES, es_AR: esAR })) {
