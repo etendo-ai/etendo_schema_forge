@@ -58,6 +58,9 @@ function EtendoMark() {
   );
 }
 
+/** The product's brand name, shown as-is in every language (not a translatable label). */
+const ETENDO_WORDMARK_TEXT = 'etendo.ai';
+
 /**
  * The etendo.ai horizontal logo of the desktop pill (designer's redesign, 2026-11-25): a 28px lime
  * (#B8FA50) tile with radius 9 holding Etendo's mark, then the white "etendo.ai" wordmark (about
@@ -69,7 +72,7 @@ function EtendoWordmark() {
       <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-[9px] bg-[#B8FA50]">
         <img src="/logo-etendo-ai.png" alt="" className="h-7 w-7 max-w-none" />
       </span>
-      <span className="text-base font-semibold leading-6 tracking-[-0.01em] text-white">etendo.ai</span>
+      <span className="text-base font-semibold leading-6 tracking-[-0.01em] text-white">{ETENDO_WORDMARK_TEXT}</span>
     </span>
   );
 }
