@@ -19,7 +19,7 @@ import {
 import {
   NO_ZONE, nowWallClock,
   isOpenEnded, validToWallClock, addMillisToWallClock, isAfterWallClock,
-  formatInZone, formatRangeInZone,
+  formatInZone, formatWallClock,
 } from './conversionRatesModel.js';
 
 /** Debounce of the preview request while the user types. */
@@ -95,10 +95,18 @@ export function isEnterSubmitKey(event, form) {
   return target.getAttribute('aria-expanded') !== 'true';
 }
 
+/**
+ * A server wall clock in the viewer's zone, WITHOUT the zone label: the dialog's summary lines
+ * leave it out (it would wrap them) since the date field above names it as its suffix.
+ */
+function shownTime(raw, zone) {
+  return formatWallClock(zone.show(raw));
+}
+
 function PreviewLine({ item, zone, ui }) {
   const range = isOpenEnded(item.validTo)
-    ? ui('convRatePreviewOpenRange', { from: formatInZone(item.validFrom, zone, ui) })
-    : ui('convRatePreviewClosedRange', formatRangeInZone(item.validFrom, item.validTo, zone, ui));
+    ? ui('convRatePreviewOpenRange', { from: shownTime(item.validFrom, zone) })
+    : ui('convRatePreviewClosedRange', { from: shownTime(item.validFrom, zone), to: shownTime(item.validTo, zone) });
   return <div>{`${item.fromIso} → ${item.toIso} · ${formatRate(item.rate)} · ${range}`}</div>;
 }
 
@@ -129,7 +137,8 @@ function PreviewSummary({ preview, mode, destIso, orgIso, zone, ui }) {
         <div className="text-muted-foreground" data-testid="convrate-dialog-summary-close">
           {ui('convRatePreviewCloses', {
             currency: destIso,
-            ...formatRangeInZone(forwardClose.validFrom, forwardClose.newValidTo, zone, ui),
+            from: shownTime(forwardClose.validFrom, zone),
+            to: shownTime(forwardClose.newValidTo, zone),
           })}
         </div>
       )}
@@ -170,8 +179,8 @@ function EditSummary({ lines, destIso, orgIso, ui }) {
  */
 function ConfirmRateChangeDialog({ open, lines, row, destIso, orgIso, saving, onBack, onConfirm, zone, ui }) {
   const period = row && !isOpenEnded(row.validToDate)
-    ? ui('convRateConfirmPeriodClosed', formatRangeInZone(row.validFromDate, validToWallClock(row), zone, ui))
-    : ui('convRateConfirmPeriodOpen', { from: formatInZone(row?.validFromDate, zone, ui) });
+    ? ui('convRateConfirmPeriodClosed', { from: shownTime(row.validFromDate, zone), to: shownTime(validToWallClock(row), zone) })
+    : ui('convRateConfirmPeriodOpen', { from: shownTime(row?.validFromDate, zone) });
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!next && !saving) onBack(); }} data-testid="Dialog__convrate-confirm">
       <DialogContent

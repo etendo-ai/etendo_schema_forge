@@ -315,21 +315,6 @@ export function formatInZone(raw, zone, ui) {
   return withZone(formatWallClock(shown), zone.labelAt(shown), ui);
 }
 
-/**
- * The two ends of a range inside a sentence: the zone is written once, after `to`, when both
- * ends share it (`from 01/11/2026 09:00 to 05/11/2026 08:59 (GMT-3)`), else after each.
- */
-export function formatRangeInZone(fromRaw, toRaw, zone, ui) {
-  const from = zone.show(fromRaw);
-  const to = zone.show(toRaw);
-  const fromLabel = zone.labelAt(from);
-  const toLabel = zone.labelAt(to);
-  return {
-    from: fromLabel === toLabel ? formatWallClock(from) : withZone(formatWallClock(from), fromLabel, ui),
-    to: withZone(formatWallClock(to), toLabel, ui),
-  };
-}
-
 function calendarISO(d) {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }

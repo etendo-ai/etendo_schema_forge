@@ -292,6 +292,21 @@ describe('ManualRateDialog — times in the viewer zone', () => {
     expect(api.createManualRate.mock.calls[0][1]).toMatchObject({ validFromDate: '2026-11-20T10:00:00' });
   });
 
+  it('the preview line shows the time in the viewer zone without the zone label', async () => {
+    const user = userEvent.setup();
+    api.previewManualRate.mockResolvedValue({
+      creates: [{ fromIso: 'EUR', toIso: 'USD', rate: 1.3, validFrom: '2026-11-20T10:00:00', validTo: null }],
+      closes: [],
+    });
+    renderDialog(DIALOG_MODES.NEW_RATE, { zone, ui: (key, params) => (params ? `${key}${JSON.stringify(params)}` : key) });
+    await waitFor(() => expect(screen.getByTestId('convrate-dialog-valid-from-input')).toHaveValue('2026-11-20T07:00:00'));
+    await typeRate(user, '1,3');
+
+    const summary = await screen.findByTestId('convrate-dialog-summary');
+    expect(summary).toHaveTextContent('20/11/2026 07:00');
+    expect(summary).not.toHaveTextContent('convRateWithZone');
+  });
+
   it('a start after the server minute in the viewer zone is refused, though earlier than its server wall clock', async () => {
     const user = userEvent.setup();
     renderDialog(DIALOG_MODES.NEW_RATE, { zone });

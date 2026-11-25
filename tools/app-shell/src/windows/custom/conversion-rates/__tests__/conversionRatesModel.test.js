@@ -2,7 +2,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  isOpenEnded, displayValidTo, formatWallClock, convertWallClock, createZoneView, formatRangeInZone,
+  isOpenEnded, displayValidTo, formatWallClock, convertWallClock, createZoneView,
 } from '../conversionRatesModel.js';
 
 describe('isOpenEnded', () => {
@@ -68,7 +68,6 @@ describe('convertWallClock (server zone ↔ viewer zone)', () => {
 });
 
 describe('createZoneView', () => {
-  const ui = (key, params) => `${key}:${params.text}|${params.zone}`;
   const view = createZoneView('UTC', 'America/Argentina/Buenos_Aires', new Date('2026-11-25T12:00:00Z'));
 
   it('shows server wall clock in the viewer zone and sends it back, labelled GMT-3', () => {
@@ -87,20 +86,5 @@ describe('createZoneView', () => {
   it('displayValidTo stretches a synced 00:00 end to 23:59 of the server day, then converts it', () => {
     const row = { validFromDate: '2026-11-17T00:00:00', validToDate: '2026-11-17T00:00:00', sMFCRSynced: true };
     assert.equal(displayValidTo(row, view), '17/11/2026 20:59');
-  });
-
-  it('a range names its zone once, after its end, when both ends share it', () => {
-    assert.deepEqual(formatRangeInZone('2026-11-01T12:00:00', '2026-11-05T11:59:00', view, ui), {
-      from: '01/11/2026 09:00',
-      to: 'convRateWithZone:05/11/2026 08:59|GMT-3',
-    });
-  });
-
-  it('a range across a DST change names the zone after each end', () => {
-    const madrid = createZoneView('UTC', 'Europe/Madrid');
-    assert.deepEqual(formatRangeInZone('2026-10-20T10:00:00', '2026-10-30T10:00:00', madrid, ui), {
-      from: 'convRateWithZone:20/10/2026 12:00|GMT+2',
-      to: 'convRateWithZone:30/10/2026 11:00|GMT+1',
-    });
   });
 });
