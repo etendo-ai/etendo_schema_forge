@@ -8,6 +8,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const fiscal = { profile: 'sii', earliestSiiCutoverDate: '2020-01-01' };
+const caps = { importDua: true };
 vi.mock('@/hooks/useCapabilitiesSafe.js', () => ({ useCapabilitiesSafe: () => ({ siiImportDua: true }) }));
 vi.mock('@/auth/AuthContext.jsx', () => ({ useAuth: () => ({ selectedOrg: { id: 'org-1' } }) }));
 vi.mock('@/windows/custom/fiscal-config/useFiscalConfig.js', () => ({
@@ -22,7 +23,7 @@ vi.mock('@/windows/custom/shared/SiiImportDuaSection.jsx', async () => {
     default: ({ duaRequired, step, children }) => createElement('section', {
       'data-testid': 'stub-dua-block', 'data-required': String(duaRequired), 'data-step': String(step),
     }, children),
-    useSiiImportDuaEnabled: () => true,
+    useSiiImportDuaEnabled: () => caps.importDua,
   };
 });
 vi.mock('@/windows/custom/shared/SiiImportTaxesSection.jsx', async () => {
@@ -41,8 +42,10 @@ import ImportDuaLinesSection from '../ImportDuaLinesSection.jsx';
 
 const draft = { id: 'inv-1', adOrgId: 'org-1', documentStatus: 'DR', processed: false };
 
-function renderSection(data, onFieldChange = vi.fn()) {
-  render(h(ImportDuaLinesSection, { data, recordId: 'inv-1', apiBaseUrl: '/api/purchase-invoice', onFieldChange }));
+function renderSection(data, onFieldChange = vi.fn(), extraProps = {}) {
+  render(h(ImportDuaLinesSection, {
+    data, recordId: 'inv-1', apiBaseUrl: '/api/purchase-invoice', onFieldChange, ...extraProps,
+  }));
   return { onFieldChange, switchEl: screen.getByTestId('Switch__importDua') };
 }
 
@@ -124,5 +127,75 @@ describe('ImportDuaLinesSection — one block, DUA required only for SII', () =>
   it('shows no block while unchecked', () => {
     renderSection({ ...draft, etgoImportDua: false });
     expect(screen.queryByTestId('stub-dua-block')).toBeNull();
+  });
+});
+
+describe('ImportDuaLinesSection — check on, availability and read-only', () => {
+  beforeEach(() => { fiscal.profile = 'sii'; fiscal.earliestSiiCutoverDate = '2020-01-01'; caps.importDua = true; });
+
+  it('turning the switch on writes only etgoImportDua=true', () => {
+    const { switchEl, onFieldChange } = renderSection({ ...draft, etgoImportDua: false, aeatsiiClaveTipoFc: 'F1' });
+    expect(switchEl).not.toBeDisabled();
+    fireEvent.click(switchEl);
+    expect(onFieldChange.mock.calls).toEqual([['etgoImportDua', true]]);
+  });
+
+  it('renders nothing when the siiImportDua capability is off', () => {
+    caps.importDua = false;
+    const { container } = render(h(ImportDuaLinesSection, {
+      data: { ...draft, etgoImportDua: true }, recordId: 'inv-1', apiBaseUrl: '/api/purchase-invoice', onFieldChange: vi.fn(),
+    }));
+    expect(container).toBeEmptyDOMElement();
+    expect(screen.queryByTestId('Switch__importDua')).toBeNull();
+  });
+
+  it.each([
+    ['sent to SII', { aeatsiiIssent: 'Y' }, {}],
+    ['sent to SII (boolean)', { aeatsiiIssent: true }, {}],
+    ['processed', { processed: true }, {}],
+    ['completed (document read-only)', { documentStatus: 'CO' }, { isDocumentReadOnly: true }],
+    ['opened by a read-only role', {}, { windowReadOnly: true }],
+  ])('disables the switch on an invoice %s', (_label, patch, extraProps) => {
+    const { switchEl, onFieldChange } = renderSection({ ...draft, etgoImportDua: true, ...patch }, vi.fn(), extraProps);
+    expect(switchEl).toBeDisabled();
+    fireEvent.click(switchEl);
+    expect(onFieldChange).not.toHaveBeenCalled();
+  });
+});
+
+describe('ImportDuaLinesSection — uncheck edge cases', () => {
+  beforeEach(() => { fiscal.profile = 'sii'; fiscal.earliestSiiCutoverDate = '2020-01-01'; caps.importDua = true; });
+
+  it('writes only etgoImportDua=false while the fiscal config is still loading (no F1)', () => {
+    fiscal.profile = undefined;
+    fiscal.earliestSiiCutoverDate = undefined;
+    const { switchEl, onFieldChange } = renderSection({ ...draft, etgoImportDua: true, aeatsiiClaveTipoFc: 'F5' });
+    fireEvent.click(switchEl);
+    expect(onFieldChange.mock.calls).toEqual([['etgoImportDua', false]]);
+  });
+
+  it('unchecking an LC the user had checked (stored Y) writes the check off plus F1', () => {
+    const { switchEl, onFieldChange } = renderSection({ ...draft, etgoImportDua: 'Y', aeatsiiClaveTipoFc: 'LC' });
+    expect(switchEl).not.toBeDisabled();
+    fireEvent.click(switchEl);
+    expect(onFieldChange.mock.calls).toEqual([['etgoImportDua', false], ['aeatsiiClaveTipoFc', 'F1']]);
+  });
+});
+
+describe('ImportDuaLinesSection — DUA required boundaries', () => {
+  beforeEach(() => { fiscal.profile = 'sii'; fiscal.earliestSiiCutoverDate = '2020-01-01'; caps.importDua = true; });
+
+  it('requires the DUA when the accounting date is exactly the SII adoption date', () => {
+    fiscal.earliestSiiCutoverDate = '2026-11-01';
+    renderSection({ ...draft, etgoImportDua: true, accountingDate: '2026-11-01' });
+    expect(screen.getByTestId('stub-dua-block')).toHaveAttribute('data-required', 'true');
+    expect(screen.getByTestId('stub-import-taxes')).toHaveAttribute('data-required', 'true');
+  });
+
+  it('keeps the DUA optional while the fiscal config is still loading', () => {
+    fiscal.profile = undefined;
+    fiscal.earliestSiiCutoverDate = undefined;
+    renderSection({ ...draft, etgoImportDua: true, accountingDate: '2026-11-01' });
+    expect(screen.getByTestId('stub-dua-block')).toHaveAttribute('data-required', 'false');
   });
 });
