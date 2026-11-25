@@ -39,7 +39,6 @@ const mockUseFeatureFlag = vi.hoisted(() => vi.fn(() => false));
 const mockUseAuth = vi.hoisted(() => vi.fn(() => ({ capabilities: { isAdminOrClientAdmin: true } })));
 vi.mock('@/lib/flags', () => ({
   useFeatureFlag: (...args) => mockUseFeatureFlag(...args),
-  ACCT_PROCESS_MONITOR: 'acct-process-monitor',
   PUBLIC_API_KEYS: 'public-api-keys',
   DOC_TEMPLATE_SELECTION: 'doc-template-selection',
   PROOF_OF_CONCEPT_MENU: 'proof-of-concept-menu',
@@ -71,7 +70,7 @@ vi.mock('../../menu.json', () => ({
         hidden: false,
         items: [
           { name: 'sales-order', label: 'Sales Order', hidden: false },
-          { name: 'acct-process-monitor', label: 'Accounting Process', hidden: false, featureFlag: 'acct-process-monitor', capability: 'isAdminOrClientAdmin' },
+          { name: 'acct-process-monitor', label: 'Accounting Process', hidden: false, capability: 'isAdminOrClientAdmin' },
           { name: 'api-keys', label: 'Public API Keys', hidden: false, featureFlag: 'public-api-keys', capability: 'isAdminOrClientAdmin' },
           { name: 'deal', label: 'Deal', hidden: true },
         ],
@@ -263,10 +262,21 @@ describe('CommandPalette', () => {
     expect(screen.queryByText('translated:Public API Keys')).not.toBeInTheDocument();
   });
 
-  it('hides accounting processes when their feature flag is off', () => {
+  it('offers accounting processes to an admin without any feature flag', () => {
     render(<CommandPalette />);
     openPalette();
-    expect(screen.queryByText('translated:Accounting Process')).not.toBeInTheDocument();
+    expect(screen.getByText('translated:Accounting Process')).toBeInTheDocument();
+  });
+
+  it('hides accounting processes from a non-admin', () => {
+    mockUseAuth.mockReturnValue({ capabilities: { isAdminOrClientAdmin: false } });
+    try {
+      render(<CommandPalette />);
+      openPalette();
+      expect(screen.queryByText('translated:Accounting Process')).not.toBeInTheDocument();
+    } finally {
+      mockUseAuth.mockReturnValue({ capabilities: { isAdminOrClientAdmin: true } });
+    }
   });
 
   it('shows public API keys only for an admin when the feature flag is on', () => {

@@ -607,7 +607,6 @@
           "label": "Accounting Process",
           "favname": "Accounting Process",
           "icon": "Cog",
-          "featureFlag": "acct-process-monitor",
           "capability": "isAdminOrClientAdmin"
         },
         {
