@@ -2362,6 +2362,9 @@ describe('PortalPage — state tabs and the period range', () => {
     const user = userEvent.setup();
     renderPortal(`/portal/${TOKEN}?view=list&kind=INVOICE`);
     await listReady();
+    // The mount itself sends ONE request: the per-kind reset used to run as an effect after the
+    // first commit and re-request the list with a fresh range object (every list GET went out twice).
+    expect(listQueries()).toHaveLength(1);
     const monthFrom = listQueries().at(-1).get('dateFrom');
     const before = listQueries().length;
 

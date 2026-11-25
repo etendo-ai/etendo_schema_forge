@@ -58,16 +58,20 @@ export default function PortalDocumentListView({
     apiFetch, token, tenantName: identity?.tenantName, onInvalid,
   });
 
-  // A new kind starts from the defaults: the rolling last month on the period tabs.
-  useEffect(() => {
+  // A new kind starts from the defaults: the rolling last month on the period tabs. Reset DURING
+  // render (React's "adjust state when a prop changes"), not in an effect: an effect ran after the
+  // first commit — on mount too — and its fresh `defaultPortalRange()` object changed the query, so
+  // every list was requested twice (QA pass 3: each GET /documents went out twice). Now the first
+  // commit already holds the final state, and a mount or a kind change sends one request.
+  const [shownKind, setShownKind] = useState(kind);
+  if (shownKind !== kind) {
+    setShownKind(kind);
     setRange(defaultPortalRange());
     setStateRange({ group: null, range: null });
     setSubtype(null);
     setSearchInput('');
     setSearch('');
-    // Only a new kind resets everything: a tab (group) change is handled below.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kind]);
+  }
 
   // CP-18b + QA pass 3: a "state" tab (Vencido, Pendiente, Bajo evaluación, En proceso) lists
   // everything in that state, so it shows all time (the date button reads «Todo el tiempo»), as an
