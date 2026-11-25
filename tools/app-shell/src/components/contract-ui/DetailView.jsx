@@ -3086,7 +3086,7 @@ export function DetailView({
                           token={token}
                           apiBaseUrl={apiBaseUrl}
                           api={api} isDocumentReadOnly={isDocumentReadOnly} windowReadOnly={windowReadOnly}
-                          summary={summary}
+                          summary={summary} onHeaderRefresh={() => hook.refreshHeaderTotals?.(data?.id || recordId)}
                           notesField={notesField}
                           onFieldChange={handleChangeWithCallout}
                           notesFocused={notesFocused}

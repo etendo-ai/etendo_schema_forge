@@ -11432,7 +11432,7 @@
       ]
     },
     "4bc12fadc3f4675f289d036b6b78cded78314e733c80834fa999e947d67ec251": {
-      "checksum": "0e8a388f8b5f08a0df0b560a92fa776a8f4d4e75e16f46ffd2465bf00208199b",
+      "checksum": "3b78fe3b409f3aa56c88a94f7fa87ec65327f54592b75a23486f410b62be069f",
       "params": [
         "183"
       ],
@@ -12827,6 +12827,12 @@
           "ad_column_id": "F29923759F0C4CEF899EB0320D8A29E7",
           "ad_table_id": "318",
           "columnname": "em_etgo_due_date",
+          "position": null
+        },
+        {
+          "ad_column_id": "09F59E95FFFC402681D6FEABEBEE190D",
+          "ad_table_id": "318",
+          "columnname": "EM_Etgo_Import_Dua",
           "position": null
         },
         {
