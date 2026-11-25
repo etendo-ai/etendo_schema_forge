@@ -1599,7 +1599,7 @@ export default function LocationEditorModal({
                                 error={attemptedSave && form.streetName.trim() === '' ? ui('fieldRequiredMessage') : null}
                                 testId="location-field-streetName"
                                 styles={LIMITED_FIELD_STYLES}
-                            />
+                                data-testid="LimitedTextField__927831" />
 
                             {/* Número + Nombre del edificio en grid */}
                             <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 12 }}>
@@ -1612,7 +1612,7 @@ export default function LocationEditorModal({
                                     placeholder={ui('buildingNumberEmptyPlaceholder')}
                                     testId="location-field-buildingNumber"
                                     styles={LIMITED_FIELD_STYLES}
-                                />
+                                    data-testid="LimitedTextField__927831" />
                                 <LimitedTextField
                                     id="location-field-buildingName"
                                     label={ui('buildingNameLabel')}
@@ -1621,7 +1621,7 @@ export default function LocationEditorModal({
                                     onChange={e => setField('buildingName', e.target.value)}
                                     testId="location-field-buildingName"
                                     styles={LIMITED_FIELD_STYLES}
-                                />
+                                    data-testid="LimitedTextField__927831" />
                             </div>
 
                             {/* ETP-5806 — Address Line 1/2 are no longer user-editable: they are
