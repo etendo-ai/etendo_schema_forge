@@ -3400,7 +3400,7 @@ had to be inserted by SQL.
 summary") and `modules/com.etendoerp.go/docs/aeat-390-endpoints.md` ("Manual test against a
 stub"). The fix is to register both properties in the property list of the aeat303 module.
 
-## [2026-11-25] ETP-6179 — Confirm + create invoice is still two steps outside the customer-return form
+## [2026-11-25] ETP-6179 — Confirm + create invoice is still two steps outside the customer return
 
 **Component:** `ConfirmInOutModal` (`validateInvoiceFirst`) and the confirm popups that create an
 invoice after `documentAction`.
@@ -3408,16 +3408,15 @@ invoice after `documentAction`.
 **Observation (QA CP-12):** confirming the document and creating its invoice are two requests, and
 the first cannot be undone; a refused invoice (contact without payment terms/method, no price list,
 unpriced product) leaves the document completed without it. ETP-6179 closes this only for the
-customer return's form Confirmar: `createReturnInvoice` accepts `validateOnly:true` on the draft
-and `ConfirmWithCreditButton` (return-material-receipt) sends it first.
+customer return: `createReturnInvoice` accepts `validateOnly:true` on the draft, and both its
+form Confirmar (`ConfirmWithCreditButton`) and its row-hover Confirmar
+(`ReturnMaterialReceiptRowConfirmModal`) send it first.
 
 **Still two-step (not fixed, outside the localization team's scope):**
 - return to vendor (`return-to-vendor-shipment`): its `createReturnInvoice` does not declare
   `validateOnly` (`ReturnInvoiceKind.acceptsValidateOnly` is false);
 - goods shipment and goods receipt confirm-and-invoice popups (`GoodsShipmentConfirmModal`,
-  `ConfirmGoodsReceiptModal`);
-- the row-hover Confirmar of return-material-receipt (`buildReturnRowConfirmModal`), which does not
-  pass `validateInvoiceFirst`.
+  `ConfirmGoodsReceiptModal`).
 
 **Fix path:** add a `validateOnly` dry run to the invoice action (backend), then pass
 `validateInvoiceFirst` to its `ConfirmInOutModal`. Never pass the prop to an action without the dry
