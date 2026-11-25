@@ -2,7 +2,7 @@ import { render, screen, fireEvent, waitFor, configure } from '@testing-library/
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import enUS from '@/locales/en_US.json';
-import { AuthProvider, createMemoryAuthStorage } from '@etendosoftware/app-shell-core/auth';
+import { AuthProvider, createMemoryAuthStorage } from '@etendo-ai/app-shell-core/auth';
 import InviteAcceptancePage from '../InviteAcceptancePage.jsx';
 
 /**
@@ -35,12 +35,12 @@ vi.mock('@/i18n', () => ({
   useUI: () => (key) => LABELS[key] ?? key,
 }));
 
-vi.mock('@etendosoftware/app-shell-core/i18n', () => ({
+vi.mock('@etendo-ai/app-shell-core/i18n', () => ({
   useUI: () => (key) => LABELS[key] ?? key,
   useLocaleSwitch: () => ({ locale: 'es_ES', setLocale: null }),
 }));
 
-vi.mock('@etendosoftware/etendo-go-core/onboarding/sso', () => ({
+vi.mock('@etendo-ai/etendo-go-core/onboarding/sso', () => ({
   getConfiguredSsoProviders: () => ['google'],
   renderSsoProviderButton: async () => {},
   loadGoogleIdentityScript: async () => {},

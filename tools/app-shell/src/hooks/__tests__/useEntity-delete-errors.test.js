@@ -20,7 +20,7 @@ import { transformSync } from 'esbuild';
 const SRC_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const REPO_ROOT_URL = pathToFileURL(resolve(SRC_DIR, '..', '..', '..') + '/').href;
 const APP_SHELL_CORE_URL = pathToFileURL(
-  resolve(SRC_DIR, '..', '..', '..', 'node_modules', '@etendosoftware', 'app-shell-core') + '/'
+  resolve(SRC_DIR, '..', '..', '..', 'node_modules', '@etendo-ai', 'app-shell-core') + '/'
 ).href;
 
 registerHooks({

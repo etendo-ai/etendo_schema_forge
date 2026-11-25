@@ -1,4 +1,4 @@
-import { apiFetch } from '@etendosoftware/app-shell-core/auth/api';
+import { apiFetch } from '@etendo-ai/app-shell-core/auth/api';
 /**
  * Shared plumbing for the NEO pseudo-spec bridge webhook family (`NeoGoWebhookBridge`
  * in `com.etendoerp.go`) — `rolesApi.js` (`SFRolesOverview`/`SFSystemRoleTemplates`)

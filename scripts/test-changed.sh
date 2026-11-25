@@ -25,11 +25,11 @@ CPUS="$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null |
 TEST_WORKERS="${TEST_WORKERS:-$(( CPUS / 2 > 1 ? CPUS / 2 : 1 ))}"
 
 # The suites resolve packages from the repository root (global-setup imports the
-# @etendosoftware/schema-forge-cli slice-labels helper). Without them the errors read "Cannot find
+# @etendo-ai/schema-forge-cli slice-labels helper). Without them the errors read "Cannot find
 # module" or "No test files found", far from the real cause. vitest is hoisted to the root by the npm
 # workspaces, or sits in tools/app-shell when that folder was installed on its own.
 missing=""
-[ -e node_modules/@etendosoftware/schema-forge-cli ] || missing="node_modules/@etendosoftware/schema-forge-cli"
+[ -e node_modules/@etendo-ai/schema-forge-cli ] || missing="node_modules/@etendo-ai/schema-forge-cli"
 [ -e node_modules/vitest ] || [ -e tools/app-shell/node_modules/vitest ] || missing="${missing:-vitest}"
 if [ -n "$missing" ]; then
   echo "test-changed: $missing is missing. Run 'npm ci' at the repository root (not only in tools/app-shell)." >&2

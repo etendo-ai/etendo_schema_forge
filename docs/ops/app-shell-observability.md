@@ -13,7 +13,7 @@ and the committed `.env.observability.example` for all current environment varia
 
 ### Every provider goes through the telemetry gateway (ETP-4578)
 
-The three providers are the core's adapters (`@etendosoftware/app-shell-core/observability/adapters/*`)
+The three providers are the core's adapters (`@etendo-ai/app-shell-core/observability/adapters/*`)
 with this app's environment wiring (`providers/datadog.js`, `rum.js`, `providers/mixpanel.js`).
 The facade (`observability/core.js`) hands every payload to the core's sanitizing gateway, which
 applies the host allowlist again before any adapter sees it; the adapters then close what each

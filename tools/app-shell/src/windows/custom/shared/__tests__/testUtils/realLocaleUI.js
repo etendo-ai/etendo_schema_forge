@@ -43,7 +43,7 @@ export function loadLocaleDictionary(locale) {
 
 /**
  * Mirrors useUI()'s real resolution exactly (see
- * @etendosoftware/app-shell-core/src/i18n/useUI.js): resolves `genericLabels`,
+ * @etendo-ai/app-shell-core/src/i18n/useUI.js): resolves `genericLabels`,
  * falls back to the raw key, then substitutes any `{param}` placeholders.
  */
 export function makeRealUI(dictionary) {
@@ -60,7 +60,7 @@ export function makeRealUI(dictionary) {
 
 /**
  * Mirrors useMenuLabel()'s real resolution chain exactly (see
- * @etendosoftware/app-shell-core/src/i18n/useMenuLabel.js):
+ * @etendo-ai/app-shell-core/src/i18n/useMenuLabel.js):
  * ui -> menus -> windows -> tabs -> genericLabels -> raw key.
  */
 export function makeRealTMenu(dictionary) {

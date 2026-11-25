@@ -9,7 +9,7 @@ import { SEND_VISIBLE_WHEN_CONFIRMED } from './sendActionVisibility.js';
 import { buildMenuActionExecutedHandler } from './buildDocumentRowQuickActions.js';
 // Plain (hook-free) module, never the `@/auth/api.js` barrel — see
 // makeInvoiceReactivateRowFilter's doc for why this file cannot use `useApiFetch`.
-import { apiFetch } from '@etendosoftware/app-shell-core/auth/api';
+import { apiFetch } from '@etendo-ai/app-shell-core/auth/api';
 import { isCompletedStatus, isDraftStatus } from '../../../lib/docStatus.js';
 
 export function getInvoiceDraftMode(ui, options = {}) {

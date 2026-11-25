@@ -1,1 +1,1 @@
-export * from '@etendosoftware/app-shell-core/components/ui/add-line-button.jsx';
+export * from '@etendo-ai/app-shell-core/components/ui/add-line-button.jsx';

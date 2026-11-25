@@ -46,7 +46,7 @@ import userEvent from '@testing-library/user-event';
 import {
   MemoryRouter, Route, Routes, useLocation, useNavigationType,
 } from 'react-router-dom';
-import { registerApiSession, resetApiSessionForTests } from '@etendosoftware/app-shell-core/auth';
+import { registerApiSession, resetApiSessionForTests } from '@etendo-ai/app-shell-core/auth';
 import PortalDecisionPage from '../PortalDecisionPage.jsx';
 import { PORTAL_DECISION_STORAGE_KEY, PORTAL_LINK_STORAGE_KEY } from '@/lib/portal/portalLinkSession.js';
 

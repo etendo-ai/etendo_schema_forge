@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useUI } from '@/i18n';
-import { isNetworkError } from '@etendosoftware/app-shell-core/auth';
+import { isNetworkError } from '@etendo-ai/app-shell-core/auth';
 import { CheckIcon } from '@phosphor-icons/react';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import {

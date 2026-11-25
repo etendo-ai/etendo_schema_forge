@@ -7,7 +7,7 @@ import { useBatch } from '@/components/copilot/ocr/ingest/useBatch.js';
 import { buildBulkDeleteOperations, outcomeFromBulkDeleteEnvelope } from '@/lib/batchDelete.js';
 import { specFromBaseUrl } from '@/lib/neoBaseUrl.js';
 import { invalidateAfterWrite } from '@/lib/crossSpecCacheInvalidation.js';
-import { useOptionalDataCache } from '@etendosoftware/app-shell-core/data';
+import { useOptionalDataCache } from '@etendo-ai/app-shell-core/data';
 
 /** ETP-6143 — how often a running bulk-delete job is polled for its progress. */
 export const BULK_DELETE_POLL_INTERVAL_MS = 750;

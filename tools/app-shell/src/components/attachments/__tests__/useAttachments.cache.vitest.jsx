@@ -9,8 +9,8 @@ vi.mock('@/i18n', () => ({ useUI: () => (k) => k }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 import { renderHook, act, waitFor } from '@testing-library/react';
-import { AuthProvider, createMemoryAuthStorage } from '@etendosoftware/app-shell-core/auth';
-import { DataProvider, createQueryCache } from '@etendosoftware/app-shell-core/data';
+import { AuthProvider, createMemoryAuthStorage } from '@etendo-ai/app-shell-core/auth';
+import { DataProvider, createQueryCache } from '@etendo-ai/app-shell-core/data';
 import { useAttachments } from '../useAttachments';
 
 const API = 'http://host/sws/neo/contacts';

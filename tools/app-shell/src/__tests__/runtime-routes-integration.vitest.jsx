@@ -16,14 +16,14 @@
 // `window.history` before rendering, same as a real browser navigation would.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, cleanup, waitFor } from '@testing-library/react';
-import { AppShellRuntime } from '@etendosoftware/app-shell-core/runtime';
+import { AppShellRuntime } from '@etendo-ai/app-shell-core/runtime';
 import { buildRuntimeRoutes } from '../runtime-routes.jsx';
 import en_US from '../locales/en_US.json';
 import es_ES from '../locales/es_ES.json';
 
 const { authLogoutOverride } = vi.hoisted(() => ({ authLogoutOverride: { current: null } }));
 
-vi.mock('@etendosoftware/app-shell-core/auth', async (importOriginal) => {
+vi.mock('@etendo-ai/app-shell-core/auth', async (importOriginal) => {
   const actual = await importOriginal();
   return {
     ...actual,

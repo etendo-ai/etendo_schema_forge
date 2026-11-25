@@ -1,4 +1,4 @@
-import { detectBaseUrl } from '@etendosoftware/app-shell-core/auth/api';
+import { detectBaseUrl } from '@etendo-ai/app-shell-core/auth/api';
 
 /**
  * Read-only client for the Business Partner self-service portal (ETP-5267).

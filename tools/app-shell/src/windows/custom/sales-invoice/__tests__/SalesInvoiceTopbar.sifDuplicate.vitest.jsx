@@ -18,7 +18,7 @@ vi.mock('@/i18n', () => ({
   useMenuLabel: () => (key) => key,
 }));
 
-vi.mock('@etendosoftware/app-shell-core', () => ({
+vi.mock('@etendo-ai/app-shell-core', () => ({
   useUI: () => (key) => key,
 }));
 

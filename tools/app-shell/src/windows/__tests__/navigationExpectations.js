@@ -51,12 +51,8 @@ const exceptions = {
   // sepa-remittances flag (capability) and the window grant, like invoice-inbox above.
   remittance: { accessWindowId: 'FF8080812E71F7C7012E71FD0499001B', capability: 'sepaRemittances' },
   // ETP-5269. Synthetic destination (runtime-routes.jsx), no AD window of its own.
-  // Additionally hidden behind the `acct-process-monitor` feature flag. That gate lives in
-  // SideMenu and is invisible to buildMenuGroups — the boundary this catalog measures — so here
-  // it is an ordinary capability-gated Settings entry, exactly like `roles` above. `flag` is
-  // metadata for the one spec that DOES cross the flag boundary (SideMenu.vitest.jsx enables
-  // every flag declared here); nothing else in this module reads it.
-  'acct-process-monitor': { capability: 'isAdminOrClientAdmin', flag: 'acct-process-monitor' },
+  // GA (ETP-6425): an ordinary capability-gated Settings entry, exactly like `roles` above.
+  'acct-process-monitor': { capability: 'isAdminOrClientAdmin' },
   // Tax Report AD window: core-maps/ad-menu-cache.json (typed window entry),
   // app-shell-functional-flows.md, "Role-gated custom pages".
   'fiscal-models': { windowId: '3E8FEA1EA7404D979306C9EE7FD2E7E8' },

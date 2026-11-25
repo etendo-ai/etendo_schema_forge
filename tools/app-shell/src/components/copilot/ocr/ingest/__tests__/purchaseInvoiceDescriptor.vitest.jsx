@@ -3,7 +3,7 @@ import { BACK } from '../../ocrFlowSignals';
 import { classifyProductMatch, normalizeProductName, PRODUCT_AUTO_MATCH_MIN_SIMILARITY, nonBlank, toIsoDate, buildLineOps, findBp, findBpLocation, findDefaultTax, checkBpHasLocation, findDuplicatePurchaseInvoices } from '../purchaseInvoiceDescriptor';
 
 // Mock simSearch to test findBp without network
-vi.mock('@etendosoftware/app-shell-core/lib/simSearch.js', () => ({
+vi.mock('@etendo-ai/app-shell-core/lib/simSearch.js', () => ({
   simSearch: vi.fn().mockResolvedValue([]),
 }));
 
@@ -331,7 +331,7 @@ describe('purchaseInvoiceDescriptor', () => {
     beforeEach(async () => {
       const mod = await import('../purchaseInvoiceDescriptor');
       buildPurchaseInvoiceBatch = mod.buildPurchaseInvoiceBatch;
-      const simMod = await import('@etendosoftware/app-shell-core/lib/simSearch.js');
+      const simMod = await import('@etendo-ai/app-shell-core/lib/simSearch.js');
       simSearchMock = simMod.simSearch;
       simSearchMock.mockReset();
       globalThis.fetch = vi.fn();

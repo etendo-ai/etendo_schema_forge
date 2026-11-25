@@ -1,5 +1,5 @@
 import { render, screen, fireEvent } from '@testing-library/react';
-import { resolveLabel } from '@etendosoftware/app-shell-core/i18n';
+import { resolveLabel } from '@etendo-ai/app-shell-core/i18n';
 
 /**
  * ETP-5106 — the "Ordenar por" menu must resolve labels through the host window's

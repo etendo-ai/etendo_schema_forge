@@ -1,7 +1,7 @@
-import { registerFkResolver } from '@etendosoftware/app-shell-core/lib/import/fkResolvers.js';
-import { simSearchEveryLanguage } from '@etendosoftware/app-shell-core/lib/simSearch.js';
-import { classifyCandidates } from '@etendosoftware/app-shell-core/lib/import/resolveForeignKeys.js';
-import { normalizeText } from '@etendosoftware/app-shell-core/lib/import/resolveDependentEntity.js';
+import { registerFkResolver } from '@etendo-ai/app-shell-core/lib/import/fkResolvers.js';
+import { simSearchEveryLanguage } from '@etendo-ai/app-shell-core/lib/simSearch.js';
+import { classifyCandidates } from '@etendo-ai/app-shell-core/lib/import/resolveForeignKeys.js';
+import { normalizeText } from '@etendo-ai/app-shell-core/lib/import/resolveDependentEntity.js';
 
 /**
  * Unit of Measure lookup for the Products CSV import.

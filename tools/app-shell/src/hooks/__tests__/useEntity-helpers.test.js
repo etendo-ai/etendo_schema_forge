@@ -24,14 +24,14 @@ const SRC_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 // Monorepo root (schema_forge/) — workspace packages live under it, e.g.
 // tools/app-shell/src and packages/app-shell-core/src.
 const REPO_ROOT_URL = pathToFileURL(resolve(SRC_DIR, '..', '..', '..') + '/').href;
-// @etendosoftware/app-shell-core is Vite-authored library code published to
+// @etendo-ai/app-shell-core is Vite-authored library code published to
 // npm (formerly local workspace code under this repo, moved out as part of
 // the Schema Forge repo split — ETP-4346). It uses the same Vite-only
 // constructs (import.meta.env, import.meta.glob) as workspace sources, so it
 // needs the same esbuild transform even though it now lives under
 // node_modules. Every other node_modules package is left on the default loader.
 const APP_SHELL_CORE_URL = pathToFileURL(
-  resolve(SRC_DIR, '..', '..', '..', 'node_modules', '@etendosoftware', 'app-shell-core') + '/'
+  resolve(SRC_DIR, '..', '..', '..', 'node_modules', '@etendo-ai', 'app-shell-core') + '/'
 ).href;
 
 registerHooks({
@@ -48,7 +48,7 @@ registerHooks({
   load(url, context, nextLoad) {
     // Transpile workspace JSX, and any workspace JS that uses Vite-only
     // constructs (import.meta.env). node_modules are left to the default
-    // loader, EXCEPT @etendosoftware/app-shell-core (see comment above).
+    // loader, EXCEPT @etendo-ai/app-shell-core (see comment above).
     const isWorkspace = url.startsWith(REPO_ROOT_URL) && !url.includes('/node_modules/');
     const isAppShellCore = url.startsWith(APP_SHELL_CORE_URL);
     if (url.endsWith('.jsx') || ((isWorkspace || isAppShellCore) && url.endsWith('.js'))) {

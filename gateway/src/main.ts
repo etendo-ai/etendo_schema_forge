@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { PUBLIC_API_SCHEMA, type PublicApiSchema } from '@etendosoftware/api-gateway-core';
+import { PUBLIC_API_SCHEMA, type PublicApiSchema } from '@etendo-ai/api-gateway-core';
 import { AppModule } from './app.module.ts';
 import { buildPerEntityOpenApiPaths } from './openapi/build-per-entity-paths.ts';
 import { registerOpenApiRoutes } from './openapi/register-openapi-routes.ts';

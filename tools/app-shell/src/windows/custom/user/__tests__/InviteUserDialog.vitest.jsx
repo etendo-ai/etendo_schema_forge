@@ -3,11 +3,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   registerApiSession,
   resetApiSessionForTests,
-} from '@etendosoftware/app-shell-core/auth/api';
+} from '@etendo-ai/app-shell-core/auth/api';
 import {
   resetSessionCredentials,
   setSessionCredentials,
-} from '@etendosoftware/app-shell-core/auth/sessionCredentials.js';
+} from '@etendo-ai/app-shell-core/auth/sessionCredentials.js';
 import { InviteUserDialog } from '../InviteUserDialog.jsx';
 
 vi.mock('@/i18n', () => ({

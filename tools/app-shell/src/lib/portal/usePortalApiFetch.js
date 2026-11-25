@@ -1,5 +1,5 @@
 import { useMemo, useRef } from 'react';
-import { createApiFetch } from '@etendosoftware/app-shell-core/auth';
+import { createApiFetch } from '@etendo-ai/app-shell-core/auth';
 import {
   PORTAL_CLIENT_HEADER, PORTAL_SESSION_HEADER, readPortalSession, rememberPortalSession,
 } from './portalLinkSession.js';
