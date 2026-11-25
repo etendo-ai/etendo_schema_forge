@@ -23112,7 +23112,7 @@
     "fm.aeat.result.test.body": "This was a validation-only test against the AEAT test service. Nothing was actually submitted.",
     "fm.aeat.result.error.title": "The submission could not be completed",
     "fm.aeat.error.missingPresenter": "Presenter NIF and name are required to submit the declaration.",
-    "fm.aeat.error.noCertificate": "This organization has no certificate configured. Upload one from Fiscal configuration before submitting in production (test mode does not require a certificate).",
+    "fm.aeat.error.noCertificate": "This organization has no certificate configured. Upload one from Fiscal Configuration before submitting in production (test mode does not require a certificate).",
     "fm.aeat.error.alreadySubmitted": "This declaration has already been submitted to the AEAT. Resubmitting the same declaration in production is not supported here — filing a complementaria is a separate, manual process.",
     "fm.aeat.error.connection": "Connection error while submitting to the AEAT. Please try again.",
     "fm.aeat.error.generic": "Unknown error. Please try again.",
