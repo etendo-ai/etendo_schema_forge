@@ -1,7 +1,9 @@
 // @covers tools/app-shell/src/pages/portal/portalPresentation.js
+// @covers tools/app-shell/src/pages/portal/portalPresentation.js
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  PORTAL_ALL_TIME_GROUPS,
   PORTAL_HIGHLIGHTS,
   PORTAL_KIND_GROUPS,
   canOfferDecision,
@@ -9,6 +11,7 @@ import {
   documentLabelKey,
   initialPortalRange,
   invoicePaymentState,
+  isAllTimeGroup,
   isPortalGroup,
   isPortalSubtype,
   joinRecipients,
@@ -174,6 +177,31 @@ describe('status groups (the list tabs)', () => {
     for (const [code, highlight] of Object.entries(PORTAL_HIGHLIGHTS)) {
       if (highlight.group) assert.ok(tabs.has(highlight.group), `${code} opens unknown tab ${highlight.group}`);
     }
+  });
+});
+
+describe('isAllTimeGroup (state tabs list the whole history)', () => {
+  // Over every tab the list draws: only the "state" tabs switch to all time; the period tabs
+  // (accepted, rejected, completed, voided, delivered, paid) keep the customer's range.
+  for (const [kind, groups] of Object.entries(PORTAL_KIND_GROUPS)) {
+    for (const { code } of groups) {
+      const expected = ['awaiting', 'pending', 'overdue', 'inProgress'].includes(code);
+      it(`${expected ? 'switches' : 'keeps the range on'} the ${code} tab of ${kind}`, () => {
+        assert.equal(isAllTimeGroup(code), expected);
+      });
+    }
+  }
+
+  it('keeps the range with no tab, the «Todos» tab or an unknown / mis-cased group', () => {
+    for (const group of [null, undefined, '', 'all', 'OVERDUE', 'inprogress']) {
+      assert.equal(isAllTimeGroup(group), false, String(group));
+    }
+  });
+
+  it('names only groups that are a tab of some kind', () => {
+    // A typo here would silently leave that tab on the rolling month (the CP-18b bug).
+    const tabs = new Set(Object.values(PORTAL_KIND_GROUPS).flat().map((g) => g.code));
+    for (const group of PORTAL_ALL_TIME_GROUPS) assert.ok(tabs.has(group), group);
   });
 });
 

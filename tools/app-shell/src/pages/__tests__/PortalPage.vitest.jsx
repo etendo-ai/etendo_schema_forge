@@ -2184,15 +2184,27 @@ describe('PortalPage — state tabs list the whole history', () => {
     expect(listQueries().at(-1).get('dateFrom')).toBeNull();
   });
 
-  it('keeps the chosen range on a period tab («Pagado»)', async () => {
+  // «Pagado», «Aceptado» and «Todos» (reached from «Pagado», since it is the tab a list opens on)
+  // keep the range: the request still carries dateFrom/dateTo.
+  it.each([
+    ['«Pagado»', 'INVOICE', ['paid'], 'paid'],
+    ['«Aceptado»', 'QUOTATION', ['accepted'], 'accepted'],
+    ['«Todos»', 'INVOICE', ['paid', 'all'], null],
+  ])('keeps the chosen range on the period tab %s', async (_label, kind, clicks, expectedGroup) => {
     const user = userEvent.setup();
-    renderPortal(`/portal/${TOKEN}?view=list&kind=INVOICE`);
+    responses.documents = () => jsonResponse({ documents: [order(1)], totalCount: 1 });
+    renderPortal(`/portal/${TOKEN}?view=list&kind=${kind}`);
     await listReady();
+    const before = listQueries().length;
 
-    await user.click(screen.getByTestId('portal-status-tab-paid'));
+    for (const tab of clicks) await user.click(screen.getByTestId(`portal-status-tab-${tab}`));
 
-    await waitFor(() => expect(listQueries().at(-1).get('group')).toBe('paid'));
-    expect(listQueries().at(-1).get('dateFrom')).toBeTruthy();
+    await waitFor(() => expect(listQueries().length).toBeGreaterThan(before + clicks.length - 1));
+    await waitFor(() => expect(listQueries().at(-1).get('group')).toBe(expectedGroup));
+    const query = listQueries().at(-1);
+    expect(query.get('dateFrom')).toBeTruthy();
+    expect(query.get('dateTo')).toBeTruthy();
+    expect(screen.getByTestId('portal-date-range')).not.toHaveTextContent('dateRangeAllTime');
   });
 });
 

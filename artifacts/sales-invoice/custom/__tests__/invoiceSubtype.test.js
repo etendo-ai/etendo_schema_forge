@@ -75,4 +75,19 @@ describe('salesInvoiceSendDocumentType', () => {
     assert.equal(salesInvoiceSendDocumentType({ arInvoiceSubtype: 'FAC' }, labels), 'menu:Sales Invoice');
     assert.equal(salesInvoiceSendDocumentType(null, labels), 'menu:Sales Invoice');
   });
+
+  it('falls back to the doc type name when the server field is missing', () => {
+    for (const [row, expected] of [
+      [{ 'cDocTypeTargetId$_identifier': 'Factura Rectificativa' }, 'ui:sendDocumentTypeCreditNote'],
+      [{ 'transactionDocument$_identifier': 'Return Material Sales Invoice' }, 'ui:sendDocumentTypeCreditNote'],
+      [{ 'transactionDocument$_identifier': 'AR Invoice' }, 'menu:Sales Invoice'],
+    ]) {
+      assert.equal(salesInvoiceSendDocumentType(row, labels), expected, JSON.stringify(row));
+    }
+  });
+
+  it('lets the server subtype win over the doc type name', () => {
+    const row = { arInvoiceSubtype: 'FAC', 'transactionDocument$_identifier': 'AR Credit Memo' };
+    assert.equal(salesInvoiceSendDocumentType(row, labels), 'menu:Sales Invoice');
+  });
 });

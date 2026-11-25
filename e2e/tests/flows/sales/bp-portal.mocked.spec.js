@@ -247,19 +247,23 @@ test.describe('Customer portal — mocked', () => {
     // A plain list opens on the rolling last month (D-2).
     expect(initialFrom).toBeTruthy();
 
-    // Status filter: the tab's customer-facing group goes to the backend, and to the URL.
-    const byGroup = page.waitForRequest((request) => request.url().includes('/sws/portal/documents?')
-      && new URL(request.url()).searchParams.get('group') === 'pending');
+    // Status filter: the tab's customer-facing group goes to the backend, and to the URL. «Pendiente»
+    // is a state tab, so it lists the whole history: no date range (QA pass 2, CP-18b).
+    const byGroup = page.waitForRequest((request) => {
+      if (!request.url().includes('/sws/portal/documents?')) return false;
+      const params = new URL(request.url()).searchParams;
+      return params.get('group') === 'pending' && !params.get('dateFrom') && !params.get('dateTo');
+    });
     await page.getByTestId('portal-status-tab-pending').click();
     await byGroup;
     await expect(page.getByTestId('portal-status-tab-pending')).toHaveAttribute('aria-selected', 'true');
     expect(new URL(page.url()).searchParams.get('group')).toBe('pending');
 
-    // Date filter: a preset replaces the default range, and the group stays applied.
+    // Date filter: a preset narrows the all-time state tab, and the group stays applied.
     const byDate = page.waitForRequest((request) => {
       if (!request.url().includes('/sws/portal/documents?')) return false;
       const params = new URL(request.url()).searchParams;
-      return params.get('group') === 'pending' && params.get('dateFrom') !== initialFrom;
+      return params.get('group') === 'pending' && Boolean(params.get('dateFrom')) && params.get('dateFrom') !== initialFrom;
     });
     await list.getByTestId('portal-date-range').click();
     await page.getByRole('button', { name: /últimos 12 meses|last 12 months/i }).click();
