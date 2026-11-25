@@ -5,6 +5,7 @@ import { initFeatureFlags } from './lib/flags/index.js';
 import { bootSupportSession, isSupportModeActive } from './lib/supportSession.js';
 import { installGtm, resolveGtmId } from './lib/marketing/gtm.js';
 import { detectBasePath } from './lib/neoBaseUrl.js';
+import { installVitePreloadRecovery } from './lib/vitePreloadRecovery.js';
 
 // ETP-5351 — runs before initFeatureFlags / initBrowserObservability (static imports are evaluated
 // earlier, but none of them reports the URL): takes a support ticket out of the
@@ -24,6 +25,9 @@ installGtm(resolveGtmId({
 // (the NEO session, a record's header, its marked attachment). See lib/neoRequestDedupe.js for
 // the allowlist; every other request goes out untouched.
 installNeoRequestDedupe();
+
+// ETP-6441 — one reload per session when a lazy chunk arrives truncated.
+installVitePreloadRecovery();
 
 // Fire-and-forget: never rejects, and flags resolve to their declared defaults
 // until (or unless) the provider becomes ready.
