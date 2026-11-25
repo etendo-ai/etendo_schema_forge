@@ -558,7 +558,7 @@ Layout (Holded reference):
   - Changing the account drops an IBAN the user had typed (the form field is cleared), because the
     server resolves a blank value into the new account's IBAN and a new remittance would otherwise still send the typed one.
   - On a processed remittance the IBAN is read-only (the value only).
-- **Collection options** (scheme, financed) sit above this card. See «Collection options» below.
+- **Collection option** (the scheme) sits above this card. See «Collection options» below.
 - **Creditor identifier (AT-02).** A plain input like the IBAN, for a collection type (hidden on payment). A
   collection holds its **own copy** (REM column `Creditor_Identifier`, property `creditorIdentifier`), taken from
   the bank account's default when it is created; the file always uses it, so editing the account later does not
@@ -574,9 +574,9 @@ Layout (Holded reference):
     account's default is edited only in «Editar cuenta».
   - On confirm the server uses the computed value and copies it to the remittance when there is no own one nor the
     account's. A **processed** remittance shows the copy read-only (locked).
-  - **Payment** remittances: the server refuses `creditorIdentifier`, `directDebitScheme = B2B` and
-    `financed = true` (422 `ETGO_RemittanceOptionsCollectionOnly`), so the block never sends them: choosing a
-    payment type after touching them puts the three fields back to the values the record had.
+  - **Payment** remittances: the server refuses `creditorIdentifier` and `directDebitScheme = B2B`
+    (422 `ETGO_RemittanceOptionsCollectionOnly`), so the block never sends them: choosing a
+    payment type after touching them puts both fields back to the values the record had.
   - **«Antes de confirmar»** only reports `ETGO_RemittanceFileAccountNoCreditorId` (no valid or computable
     identifier, e.g. organization without tax ID or country) or `…InvalidCreditorId` (an invalid own one) as a plain
     sentence with a pointer to the field, and the card **drops** those problems while the field holds a valid value
@@ -846,9 +846,9 @@ Testids: `remittance-return-dialog`, `-count`, `-total`, `-date-label`, `-loadin
 `-not-collection`, `-search`, `-select-all`, `-lines`, `-line` (`data-state`, `data-code`), `-check` (the Checkbox label),
 `-note`, `-date` (the DateField input), `-date-error`, `-warning`, `-problems`, and the dialog's primary button `action-confirm-modal`.
 
-### Collection options: «Esquema de adeudo» and «Remesa financiada»
+### Collection option: «Esquema de adeudo»
 
-Two header fields that fill the free columns 3 and 4 of the header form's own grid, in the row of «Nombre» and «Fecha» (the footer is `inlineInHeaderCard`, so its fragment is spliced into that grid; the cards below span the full row)
+One header field that fills a free column of the header form's own grid, in the row of «Nombre» and «Fecha» (the footer is `inlineInHeaderCard`, so its fragment is spliced into that grid; the cards below span the full row)
 (`artifacts/remittance/custom/RemittanceAdvancedOptions.jsx`, rendered by the same `formFooter`), **before the first
 save**, only when the selected remittance type is a **collection**. The type is known from `direction`
 (`'collection' | 'payment'`) on each item of the type selector
@@ -858,27 +858,19 @@ backend does not send it, the block degrades to `sepaFileData.collection === tru
 | Option | Column / field | Values |
 |---|---|---|
 | «Esquema de adeudo» (select, with an (i) help) | `REM_REMITTANCE.DD_SCHEME` / `directDebitScheme` | «Core» (default), «B2B (interempresas)» |
-| «Remesa financiada» (switch, with an (i) help) | `REM_REMITTANCE.ISFINANCED` / `financed` | off (default) / on; the file's identifier carries it |
 
-- Both travel in the header's create/update (`onChange('directDebitScheme' | 'financed', …)`, saved by «Guardar»),
-  like the IBAN. They are `editable`, `form: false` in `decisions.json`. Untouched, nothing is sent (the server
-  defaults to Core / off).
-- `financed` stays `required` in the contract, as the AD says (`ISFINANCED` is NOT NULL, default N): the quality
-  gate's `notNullRequiresRequired` invariant forbids overriding it to `false`. Being `form: false`, it is not in the
-  generated form's field list, so it never enters DetailView's save gate: «Guardar» stays enabled on a new
-  remittance with the switch untouched, and the column default N applies.
-- Editable only before processing; afterwards read-only as the same disabled grey input the other read-only header fields use, holding «Core» / «B2B (interempresas)», and «Remesa financiada» as the same switch, disabled (422 `ETGO_RemittanceProcessedNotEditable`).
-- **Collection only (committee decision, ETP-6247).** «Remesa financiada» (and the scheme) only exist for a
-  collection remittance. On a **payment** remittance both are **hidden**, not disabled, in every state: new,
-  editable and processed/read-only (the block renders `RemittanceAdvancedOptions` only when the type is a
-  collection; an unknown direction keeps them hidden too). When the type turns out to be a payment (a new type, or
-  another account whose type is a payment) while the form still carries `financed: true` or `B2B` from a
-  collection, `RemittanceSepaFileData` clears them in the form (`financed: false`, `directDebitScheme: CORE`),
-  which the server accepts and drops; the backend also normalizes a stored flag to N. The confirm dialog, the
-  list and the KPIs never mention «financiada», for either direction.
+- It travels in the header's create/update (`onChange('directDebitScheme', …)`, saved by «Guardar»), like the IBAN.
+  It is `editable`, `form: false` in `decisions.json`. Untouched, nothing is sent (the server defaults to Core).
+- Editable only before processing; afterwards read-only as the same disabled grey input the other read-only header
+  fields use, holding «Core» / «B2B (interempresas)» (422 `ETGO_RemittanceProcessedNotEditable`).
+- **Collection only.** On a **payment** remittance the scheme is **hidden**, not disabled, in every state (new,
+  editable, processed); an unknown direction keeps it hidden too. When the type turns out to be a payment while the
+  form still carries `B2B` from a collection, `RemittanceSepaFileData` resets it to `CORE`, which the server
+  accepts and drops.
+- Financed remittances (Classic Remit for Discount) are not supported in GO.
 - 422 `ETGO_RemittanceSchemeInvalid` and `ETGO_RemittanceOptionsCollectionOnly` map to
   `backendError.remittanceSchemeInvalid` / `backendError.remittanceOptionsCollectionOnly`.
-- `sepaFileData` also answers `directDebitScheme` (`null` on a payment remittance) and `financed`.
+- `sepaFileData` also answers `directDebitScheme` (`null` on a payment remittance).
 
 ### SEPA creditor identifier
 

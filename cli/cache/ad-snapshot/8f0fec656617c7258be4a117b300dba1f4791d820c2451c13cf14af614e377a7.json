@@ -18564,7 +18564,7 @@
       ]
     },
     "71ffdfc8865e7daf652e4f855e18d8bb6126fff59ba2b01e651989778533de54": {
-      "checksum": "6a6400844ac2407d403f676008bad92c3fce64f83c2fa0efd64cf0b88daf8201",
+      "checksum": "9191ab1fd7da4077e718b6491c0233143e9ae91681fd195613c525cc4e668cf3",
       "params": [
         "FF8080812E71F7C7012E71FD0499001B"
       ],
@@ -18940,12 +18940,6 @@
           "ad_table_id": "FF8080812E6C2859012E6D0271E1009D",
           "columnname": "Iban",
           "position": "28"
-        },
-        {
-          "ad_column_id": "133447821EA54D0ABD2B97631D333B12",
-          "ad_table_id": "FF8080812E6C2859012E6D0271E1009D",
-          "columnname": "IsFinanced",
-          "position": "29"
         },
         {
           "ad_column_id": "6ABCDDF9439F46209669EE29B61CF935",

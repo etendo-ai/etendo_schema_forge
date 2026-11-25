@@ -187,7 +187,7 @@ function IbanReadOnly({ info, ui }) {
  *   remittance's own, else the account's, else the one computed from the organization) with its origin in a few
  *   words, validated inline (lib/sepaCreditorId.js) and handed to the header form as `creditorIdentifier`, saved
  *   by the header's «Guardar». Read-only once processed; not shown on payment remittances.
- * Above this card, a collection type also shows «Esquema de adeudo» and «Remesa financiada» (RemittanceAdvancedOptions).
+ * Above this card, a collection type also shows «Esquema de adeudo» (RemittanceAdvancedOptions).
  * There is no BIC (user decision). The contract lives in sepaFileDataApi.js.
  */
 export default function RemittanceSepaFileData({ data, apiBaseUrl, onChange, registerFields, fieldErrors }) {
@@ -206,7 +206,7 @@ export default function RemittanceSepaFileData({ data, apiBaseUrl, onChange, reg
       onChange?.('creditorIdentifier', '');
     }
   }, [data?.financialAccount, onChange]);
-  // The collection-only fields (scheme, financed, creditor identifier) are refused by the server on a payment
+  // The collection-only fields (scheme, creditor identifier) are refused by the server on a payment
   // remittance (422 ETGO_RemittanceOptionsCollectionOnly), so choosing a payment type afterwards must leave them OUT
   // of the payload: each goes back to the value the record had when the user first touched any of them.
   const collectionOnlyRef = useRef(null);
@@ -242,7 +242,7 @@ export default function RemittanceSepaFileData({ data, apiBaseUrl, onChange, reg
 
 const IBAN_FIELD_ID = 'remittance-sepa-iban';
 const CREDITOR_FIELD_ID = 'remittance-sepa-creditor';
-const COLLECTION_ONLY_FIELDS = ['directDebitScheme', 'financed', 'creditorIdentifier'];
+const COLLECTION_ONLY_FIELDS = ['directDebitScheme', 'creditorIdentifier'];
 
 function SepaDataForRecord({ data, apiBaseUrl, onChange, registerFields, fieldErrors, typedRef, markCollectionOnly }) {
   const ui = useUI();
@@ -335,17 +335,15 @@ function SepaDataForRecord({ data, apiBaseUrl, onChange, registerFields, fieldEr
   const shownCreditor = creditorDraft ?? info?.creditorId ?? '';
   const creditorValid = normalizeCreditorId(shownCreditor) !== '' && !creditorIdErrorKey(shownCreditor);
   const isCollection = direction ? direction === 'collection' : (info?.collection ?? null);
-  // ETP-6247 (committee): «Remesa financiada» and the B2B scheme are collection-only. When the type turns out to be a
-  // PAYMENT (a new type, or another account whose type is a payment), a value carried over from a collection is
-  // cleared in the form: the switch is not rendered for a payment, so nothing else could take it back, and the server
-  // refuses `financed: true` / B2B on a payment (ETGO_RemittanceOptionsCollectionOnly) while it drops `false` / CORE.
-  const financedOn = data?.financed === true || data?.financed === 'Y';
+  // ETP-6247: the B2B scheme is collection-only. When the type turns out to be a PAYMENT (a new type, or another
+  // account whose type is a payment), a B2B carried over from a collection is reset to CORE in the form: the scheme
+  // is not rendered for a payment, so nothing else could take it back, and the server refuses B2B on a payment
+  // (ETGO_RemittanceOptionsCollectionOnly) while it drops CORE.
   const schemeB2b = data?.directDebitScheme === SCHEME_B2B;
   useEffect(() => {
     if (isCollection !== false || processed) return;
-    if (financedOn) onChange?.('financed', false);
     if (schemeB2b) onChange?.('directDebitScheme', SCHEME_CORE);
-  }, [isCollection, processed, financedOn, schemeB2b, onChange]);
+  }, [isCollection, processed, schemeB2b, onChange]);
 
   const editable = Boolean(info) && !processed;
   let body;
@@ -370,7 +368,7 @@ function SepaDataForRecord({ data, apiBaseUrl, onChange, registerFields, fieldEr
   // (`col-span-full`) and the grid's own gap separates them from the field rows.
   return (
     <>
-    {/* ETP-6247 — the collection options (scheme, financed): header fields, visible before the first save. */}
+    {/* ETP-6247 — the collection option (scheme): a header field, visible before the first save. */}
     {accountId && isCollection === true && (
       <RemittanceAdvancedOptions info={info} processed={processed} onChange={onChange} onTouched={markCollectionOnly} data-testid="RemittanceAdvancedOptions__header" />
     )}

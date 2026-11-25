@@ -45,7 +45,6 @@ vi.mock('@generated/remittance/custom/RemittanceStatusBanner', () => ({
 
 import { render, screen } from '@testing-library/react';
 import decisions from '@generated/remittance/decisions.json';
-import contract from '@generated/remittance/contract.json';
 import { getMissingRequiredFields } from '@/lib/requiredFields.js';
 import { REMITTANCE_DRAFT_MODE } from '@/windows/custom/remittance/index.jsx';
 import RemittancePage from '@generated/remittance/generated/web/remittance/RemittancePage.jsx';
@@ -219,21 +218,12 @@ describe('RemittancePage — detail slots', () => {
     expect(fields.filter((f) => f.optionBadge).map((f) => f.key)).toEqual(['financialAccount']);
   });
 
-  // ETP-6247 — REM_REMITTANCE.ISFINANCED is NOT NULL (default N), so `financed` stays required in the contract (the
-  // quality gate's notNullRequiresRequired invariant). It is form:false — the custom «Opciones avanzadas» switch owns
-  // it — so it is not in the generated form's field list, which is DetailView's save gate (`gateFields`): a new
-  // remittance whose switch was never touched still saves. And a required boolean holding false counts as filled.
-  it('«financed» stays required in the contract without holding «Guardar» back on a new remittance', async () => {
-    const financed = contract.frontendContract.entities.remittance.fields.find((f) => f.name === 'financed');
-    expect(financed).toMatchObject({ required: true, sourceRequired: true, form: false, type: 'boolean', defaultValue: 'N' });
-
+  // The generated form's fields are DetailView's save gate (`gateFields`): a new remittance with every form field
+  // filled has nothing missing.
+  it('a new remittance with its form fields filled has no missing required field', async () => {
     const { default: RealRemittanceForm } = await vi.importActual('@generated/remittance/generated/web/remittance/RemittanceForm.jsx');
-    expect(RealRemittanceForm.fields.map((f) => f.key)).not.toContain('financed');
     const newRemittance = Object.fromEntries(RealRemittanceForm.fields.map((f) => [f.key, 'x']));
     expect(getMissingRequiredFields(RealRemittanceForm.fields, newRemittance)).toEqual([]);
-
-    const requiredBoolean = [{ key: 'financed', required: true, type: 'boolean' }];
-    expect(getMissingRequiredFields(requiredBoolean, { financed: false })).toEqual([]);
   });
 
   it.each(LOCALES)('the «Sin IBAN» badge label is translated in %s', (_loc, json) => {

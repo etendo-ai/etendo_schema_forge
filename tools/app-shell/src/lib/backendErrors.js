@@ -584,7 +584,7 @@ const BACKEND_ERROR_KEY_MAP = {
   ETGO_RemittanceAccountIbanRequired: 'backendError.remittanceAccountIbanRequired',
   // The remittance's own IBAN (REM_REMITTANCE.IBAN, written with the header): length 15-34 or mod 97 failed.
   ETGO_RemittanceIbanInvalid: 'backendError.remittanceIbanInvalid',
-  // Collection-only options of the remittance header (direct debit scheme CORE|B2B, «Remesa financiada»).
+  // Collection-only option of the remittance header (direct debit scheme CORE|B2B).
   ETGO_RemittanceSchemeInvalid: 'backendError.remittanceSchemeInvalid',
   ETGO_RemittanceOptionsCollectionOnly: 'backendError.remittanceOptionsCollectionOnly',
   ETGO_RemittanceAccountNotAllowed: 'backendError.remittanceAccountNotAllowed',

@@ -318,12 +318,6 @@
           "required": false,
           "reason": "ETP-6247 — REM_REMITTANCE.DD_SCHEME: CORE | B2B, only for collection remittances (default CORE, set by RemittanceHeaderWrites on the create of a collection, and by the RemittanceSepaDefaultsCallout callout in the Classic form; REM_REMITTANCE_TRG only freezes it once processed). Writable while the remittance is not processed (RemittanceHeaderWrites normalizes it, 422 ETGO_RemittanceSchemeInvalid / ETGO_RemittanceOptionsCollectionOnly); the SEPA file carries it in LclInstrm/Cd. form:false: the custom «Opciones avanzadas» block owns it."
         },
-        "financed": {
-          "visibility": "editable",
-          "grid": false,
-          "form": false,
-          "reason": "ETP-6247 — REM_REMITTANCE.ISFINANCED (NOT NULL, default N): «Remesa financiada», only for collection remittances. Writable while not processed; the SEPA file's GrpHdr/MsgId carries the financed prefix. form:false: the custom «Opciones avanzadas» block owns it. Stays required as the AD says (quality-gate invariant): with form:false it is not in the header form's save gate, and an untouched switch leaves it to the column default N."
-        },
         "iBAN": {
           "visibility": "editable",
           "grid": false,

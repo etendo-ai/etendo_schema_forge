@@ -288,7 +288,6 @@ describe('RemittanceSepaFileData — collection options', () => {
     renderBlock({ ...HEADER, id: undefined, remittanceType: TYPE });
     expect(await screen.findByTestId('remittance-scheme-row')).toBeInTheDocument();
     expect(screen.getByTestId('remittance-scheme-trigger')).toHaveTextContent('remittanceSchemeCore');
-    expect(screen.getByTestId('remittance-financed-switch')).not.toBeChecked();
     expect(mockApiFetch.mock.calls.some(([url]) => url === `/remittance/selectors/remittanceType?FIN_Financial_Account_ID=acc-1`)).toBe(true);
   });
 
@@ -301,10 +300,9 @@ describe('RemittanceSepaFileData — collection options', () => {
   });
 
   it('degrade to sepaFileData.collection when the selector sends no direction', async () => {
-    backend({ info: sepa({ collection: true, directDebitScheme: 'B2B', financed: true }), items: [{ id: TYPE, label: 'Cobro' }] });
+    backend({ info: sepa({ collection: true, directDebitScheme: 'B2B' }), items: [{ id: TYPE, label: 'Cobro' }] });
     renderBlock({ ...HEADER, remittanceType: TYPE });
     expect(await screen.findByTestId('remittance-scheme-row')).toBeInTheDocument();
-    expect(screen.getByTestId('remittance-financed-switch')).toBeChecked();
     expect(screen.getByTestId('remittance-scheme-trigger')).toHaveTextContent('remittanceSchemeB2b');
   });
 
@@ -315,44 +313,39 @@ describe('RemittanceSepaFileData — collection options', () => {
     expect(screen.queryByTestId('remittance-scheme-row')).toBeNull();
   });
 
-  it('a change goes to the header form; choosing a payment type then puts all three collection-only fields back as they were', async () => {
-    backend({ info: sepa({ directDebitScheme: 'CORE', financed: false }), items: [{ id: TYPE, label: 'Cobro', direction: 'collection' }, { id: 'type-2', label: 'Pago', direction: 'payment' }] });
-    const record = { ...HEADER, remittanceType: TYPE, directDebitScheme: 'CORE', financed: false };
+  it('a change goes to the header form; choosing a payment type then puts both collection-only fields back as they were', async () => {
+    backend({ info: sepa({ directDebitScheme: 'CORE' }), items: [{ id: TYPE, label: 'Cobro', direction: 'collection' }, { id: 'type-2', label: 'Pago', direction: 'payment' }] });
+    const record = { ...HEADER, remittanceType: TYPE, directDebitScheme: 'CORE' };
     const { rerender } = renderBlock(record);
-    fireEvent.click(await screen.findByTestId('remittance-financed-switch'));
-    expect(onChange).toHaveBeenCalledWith('financed', true);
     fireEvent.change(await screen.findByTestId('remittance-sepa-creditor-input'), { target: { value: 'ES97000B12345678' } });
     onChange.mockClear();
     rerender(<RemittanceSepaFileData data={{ ...record, remittanceType: 'type-2' }} {...props} />);
-    await waitFor(() => expect(onChange).toHaveBeenCalledWith('financed', false));
-    expect(onChange).toHaveBeenCalledWith('directDebitScheme', 'CORE');
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith('directDebitScheme', 'CORE'));
     expect(onChange).toHaveBeenCalledWith('creditorIdentifier', undefined);
   });
-  // ETP-6247 (committee) — «Remesa financiada» is collection-only: hidden (not disabled) on a payment, also read-only,
-  // and a value carried over from a collection is cleared when the type turns out to be a payment.
-  it('clears a financed flag and a B2B scheme the record carries when the type is a payment', async () => {
-    backend({ info: sepa({ collection: false, directDebitScheme: 'B2B', financed: true }), items: [{ id: TYPE, label: 'Pago', direction: 'payment' }] });
-    renderBlock({ ...HEADER, remittanceType: TYPE, directDebitScheme: 'B2B', financed: true });
-    await waitFor(() => expect(onChange).toHaveBeenCalledWith('financed', false));
-    expect(onChange).toHaveBeenCalledWith('directDebitScheme', 'CORE');
-    expect(screen.queryByTestId('remittance-financed-row')).toBeNull();
+  // ETP-6247 — the B2B scheme is collection-only: a B2B carried over from a collection is reset to CORE when the type
+  // turns out to be a payment.
+  it('resets a B2B scheme the record carries to CORE when the type is a payment', async () => {
+    backend({ info: sepa({ collection: false, directDebitScheme: 'B2B' }), items: [{ id: TYPE, label: 'Pago', direction: 'payment' }] });
+    renderBlock({ ...HEADER, remittanceType: TYPE, directDebitScheme: 'B2B' });
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith('directDebitScheme', 'CORE'));
+    expect(screen.queryByTestId('remittance-scheme-row')).toBeNull();
   });
 
-  it('touches nothing on a payment type that is already not financed', async () => {
+  it('touches nothing on a payment type with the CORE scheme', async () => {
     backend({ info: sepa({ collection: false }), items: [{ id: TYPE, label: 'Pago', direction: 'payment' }] });
-    renderBlock({ ...HEADER, remittanceType: TYPE, directDebitScheme: 'CORE', financed: false });
+    renderBlock({ ...HEADER, remittanceType: TYPE, directDebitScheme: 'CORE' });
     await screen.findByTestId('remittance-sepa-iban-editor');
     await waitFor(() => expect(screen.queryByTestId('remittance-sepa-creditor')).toBeNull());
-    expect(onChange).not.toHaveBeenCalledWith('financed', expect.anything());
+    expect(onChange).not.toHaveBeenCalled();
   });
 
-  it('shows no financed switch on a processed payment remittance', async () => {
-    backend({ info: sepa({ collection: false, financed: false }), items: [{ id: TYPE, label: 'Pago', direction: 'payment' }] });
+  it('shows no collection option on a processed payment remittance', async () => {
+    backend({ info: sepa({ collection: false }), items: [{ id: TYPE, label: 'Pago', direction: 'payment' }] });
     renderBlock({ ...HEADER, remittanceType: TYPE, processed: true });
     await screen.findByTestId('remittance-sepa-file-data');
     await waitFor(() => expect(screen.queryByTestId('remittance-sepa-creditor')).toBeNull());
-    expect(screen.queryByTestId('remittance-financed-row')).toBeNull();
-    expect(screen.queryByTestId('remittance-financed-switch')).toBeNull();
+    expect(screen.queryByTestId('remittance-scheme-row')).toBeNull();
     expect(onChange).not.toHaveBeenCalled();
   });
 });
