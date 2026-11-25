@@ -4,8 +4,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildTemplateCsv } from '@etendosoftware/app-shell-core/lib/import/buildTemplateCsv.js';
-import { mapColumns } from '@etendosoftware/app-shell-core/lib/import/mapColumns.js';
+import { buildTemplateCsv } from '@etendo-ai/app-shell-core/lib/import/buildTemplateCsv.js';
+import { mapColumns } from '@etendo-ai/app-shell-core/lib/import/mapColumns.js';
 import { resolveCodedValue } from '../codedValue.js';
 // Imported for their side effect: each descriptor registers its own export hints. A module's
 // side effect runs ONCE, so the registration cannot be recovered by re-importing after

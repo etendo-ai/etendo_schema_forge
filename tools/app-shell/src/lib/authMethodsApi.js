@@ -18,8 +18,8 @@
  * is imported by plain `node --test` suites (see docs/request-policy.md).
  */
 
-import { AUTH_ERROR_UI_KEYS } from '@etendosoftware/etendo-go-core/onboarding/api';
-import { apiFetch } from '@etendosoftware/app-shell-core/auth/api';
+import { AUTH_ERROR_UI_KEYS } from '@etendo-ai/etendo-go-core/onboarding/api';
+import { apiFetch } from '@etendo-ai/app-shell-core/auth/api';
 
 /**
  * Codes the removal endpoint answers with, mapped to UI dictionary keys.

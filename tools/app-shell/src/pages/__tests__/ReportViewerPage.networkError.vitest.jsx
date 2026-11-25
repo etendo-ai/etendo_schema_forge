@@ -15,7 +15,7 @@ import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {
   registerErrorTranslator, resetErrorTranslatorForTests,
-} from '@etendosoftware/app-shell-core/auth';
+} from '@etendo-ai/app-shell-core/auth';
 
 const TRANSLATED = 'No se pudo completar la acción. Intenta nuevamente.';
 

@@ -14,9 +14,9 @@
  * once.
  */
 export default function singleCoreInstancePlugin() {
-  const CORE_SRC = '/@etendosoftware/app-shell-core/src/';
+  const CORE_SRC = '/@etendo-ai/app-shell-core/src/';
   const UNSTAMPED_CORE_IMPORT =
-    /(["'])(\/@fs\/[^"'?]*\/@etendosoftware\/app-shell-core\/src\/[^"'?]+\.jsx?)\1/g;
+    /(["'])(\/@fs\/[^"'?]*\/@etendo-ai\/app-shell-core\/src\/[^"'?]+\.jsx?)\1/g;
   return {
     name: 'single-app-shell-core-instance',
     apply: 'serve',

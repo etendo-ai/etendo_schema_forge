@@ -693,10 +693,10 @@ describe('vite.config.js — core Radix deps are deduped and pre-bundled togethe
     // The package does not export ./package.json, so walk up node_modules like Node would.
     let pkgPath;
     for (let dir = dirname(VITE_CONFIG_PATH); !pkgPath; dir = dirname(dir)) {
-      const candidate = join(dir, 'node_modules/@etendosoftware/app-shell-core/package.json');
+      const candidate = join(dir, 'node_modules/@etendo-ai/app-shell-core/package.json');
       if (existsSync(candidate)) pkgPath = candidate;
       else if (dirname(dir) === dir) {
-        assert.fail('cannot find node_modules/@etendosoftware/app-shell-core/package.json; run npm install');
+        assert.fail('cannot find node_modules/@etendo-ai/app-shell-core/package.json; run npm install');
       }
     }
     const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));

@@ -1,4 +1,4 @@
-import { useAuthOptional } from '@etendosoftware/app-shell-core/auth';
+import { useAuthOptional } from '@etendo-ai/app-shell-core/auth';
 import { useWindowAccess } from '@/auth/AuthContext.jsx';
 import { ListProgressBar } from '@/components/contract-ui/ListProgressBar.jsx';
 import { AccessDeniedMessage } from '@/components/access/ProcessAccessGuard.jsx';

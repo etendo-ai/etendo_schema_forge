@@ -1,4 +1,4 @@
-import { apiFetch } from '@etendosoftware/app-shell-core/auth/api';
+import { apiFetch } from '@etendo-ai/app-shell-core/auth/api';
 
 /*
  * ETP-5734 — the two account-level reads behind the "Mis empresas" page.

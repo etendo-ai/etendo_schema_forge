@@ -9,7 +9,7 @@
 import { renderHook, act } from '@testing-library/react';
 import { toast } from 'sonner';
 import { openSaveConflict, dismissSaveConflict } from '@/lib/saveConflict.js';
-import { rememberRecordVersion } from '@etendosoftware/app-shell-core/lib/recordVersions.js';
+import { rememberRecordVersion } from '@etendo-ai/app-shell-core/lib/recordVersions.js';
 import { isStaleRecordResponse, useLineSaveConflict } from '../useLineSaveConflict.js';
 
 vi.mock('sonner', () => ({
@@ -21,7 +21,7 @@ vi.mock('@/lib/saveConflict.js', () => ({
   dismissSaveConflict: vi.fn(),
 }));
 
-vi.mock('@etendosoftware/app-shell-core/lib/recordVersions.js', () => ({
+vi.mock('@etendo-ai/app-shell-core/lib/recordVersions.js', () => ({
   rememberRecordVersion: vi.fn(),
 }));
 

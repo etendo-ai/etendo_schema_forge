@@ -1,6 +1,6 @@
 import { describe, it, vi, afterEach } from 'vitest';
 import assert from 'node:assert/strict';
-import { getFkResolver } from '@etendosoftware/app-shell-core/lib/import/fkResolvers.js';
+import { getFkResolver } from '@etendo-ai/app-shell-core/lib/import/fkResolvers.js';
 import '../contactsFkResolvers.js'; // side-effecting import: registers on load
 
 describe('contacts-country resolver', () => {

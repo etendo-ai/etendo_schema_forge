@@ -11,7 +11,7 @@
 import { renderHook, act } from '@testing-library/react';
 import {
   registerErrorTranslator, resetErrorTranslatorForTests,
-} from '@etendosoftware/app-shell-core/auth';
+} from '@etendo-ai/app-shell-core/auth';
 import { useEntity } from '../useEntity';
 
 vi.mock('sonner', () => ({

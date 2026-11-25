@@ -4,7 +4,7 @@ import { strict as assert } from 'node:assert';
 import singleCoreInstancePlugin from '../vite-plugins/single-core-instance.js';
 
 const HASH = 'abc123';
-const CORE = '/@fs/Users/x/node_modules/@etendosoftware/app-shell-core/src/hooks/useCurrency.jsx';
+const CORE = '/@fs/Users/x/node_modules/@etendo-ai/app-shell-core/src/hooks/useCurrency.jsx';
 
 function setup({ url = '/src/foo.js', headers = {}, hash = HASH, headersSent = false } = {}) {
   let middleware;
@@ -54,7 +54,7 @@ describe('single-core-instance plugin', () => {
 
   it('rewrites core URLs served from node_modules', () => {
     const r = setup({
-      url: '/node_modules/@etendosoftware/app-shell-core/src/index.js?v=1',
+      url: '/node_modules/@etendo-ai/app-shell-core/src/index.js?v=1',
       headers: JS,
     });
     r.res.end(`import "${CORE}";`);

@@ -42,7 +42,7 @@ import userEvent from '@testing-library/user-event';
 import {
   MemoryRouter, Route, Routes, useLocation, useNavigationType,
 } from 'react-router-dom';
-import { registerApiSession, resetApiSessionForTests } from '@etendosoftware/app-shell-core/auth';
+import { registerApiSession, resetApiSessionForTests } from '@etendo-ai/app-shell-core/auth';
 import PortalDecisionPage from '../PortalDecisionPage.jsx';
 
 const DECISION_TOKEN = 'dec-0123456789abcdef';

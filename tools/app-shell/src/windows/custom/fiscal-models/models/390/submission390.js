@@ -11,7 +11,7 @@
 // (`manualRegistrationStatus`), so it can be reactivated; a telematic filing cannot.
 //
 // A plain module: requests go through the core `apiFetch` (docs/request-policy.md).
-import { apiFetch } from '@etendosoftware/app-shell-core/auth/api';
+import { apiFetch } from '@etendo-ai/app-shell-core/auth/api';
 import { persistManualData } from '../../fiscalModelsUtils.js';
 import { ANNUAL_PERIOD } from '../../fiscalPeriods.js';
 import { isValidFormerStatement } from '../../formerStatement.js';
