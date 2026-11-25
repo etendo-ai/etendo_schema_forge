@@ -705,7 +705,7 @@ Any authenticated route can also be opened with `?embedded=1`; in that mode the 
   cancel the job; reopening the page reads its latest server status.
 - **Calendar review (`action: 'calendarReview'`, ETP-5577).** "Revisar calendario contable" is
   productive-only and, like the transfer row, server-owned: it is spliced in right after
-  Configuración fiscal (`calendarReviewStep.js`) only when `GET /sws/go/onboarding/calendar-review`
+  Configuración Fiscal (`calendarReviewStep.js`) only when `GET /sws/go/onboarding/calendar-review`
   answers `required: true` — productive tenants onboarded since ETP-5577, whose periods all start
   never-opened — and it is done when the server says `reviewed`. It adds one to the productive
   total. The body (`CalendarReviewPanel.jsx`) summarizes the current fiscal year and offers
@@ -724,7 +724,7 @@ Any authenticated route can also be opened with `?embedded=1`; in that mode the 
   sees this row. Their refusal toast offers **Ir al calendario** instead, so they can still open
   periods, but they cannot regenerate the calendar from the UI.
 - **Gated row (`gateQuestionKey`).** The row asks a yes/no question that REPLACES its description
-  and its action until it is answered. The only one today is **Configuración fiscal** (a
+  and its action until it is answered. The only one today is **Configuración Fiscal** (a
   `productiveOnly` row, so a trial tenant never sees it): *"¿Debe informar las facturas a algún
   Sistema de Información Fiscal (SIF) como SII, TicketBai o Verifactu?"* (ETP-5597: systems listed
   in the order SII, TicketBai, Verifactu; en_US "Fiscal Information System (SIF)")
@@ -754,7 +754,7 @@ Any authenticated route can also be opened with `?embedded=1`; in that mode the 
     `first-steps-onboarding.mocked.spec.js` (row shown, Confirmar → `/calendar`, hidden without
     the marker).
 - **Manual verification path:**
-  1. On a productive tenant, open Primeros pasos → "Configuración fiscal" and confirm it opens
+  1. On a productive tenant, open Primeros pasos → "Configuración Fiscal" and confirm it opens
      with the SIF question instead of the Configurar button.
   2. Answer **Sí** and confirm the Configurar button appears and reaches `/fiscal-config`.
   3. Answer **No** instead and confirm the step ticks; reload and confirm it is still ticked.

@@ -2,7 +2,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { createElement } from 'react';
 import { render, screen } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, matchRoutes } from 'react-router-dom';
 import { buildRuntimeRoutes } from '../runtime-routes.jsx';
 import { applySupportSessionFromServer, resetSupportSessionForTests } from '../lib/supportSession.js';
 import { defaultNavigation, optionalNavigation } from '../windows/__tests__/navigationExpectations.js';
@@ -33,9 +33,37 @@ describe('buildRuntimeRoutes', () => {
 
   // The customer portal and its quotation-decision landing are opened from an email by someone
   // with no account: the token in the path is the whole credential, so neither may ask for a login.
-  it.each(['portal/:token', 'portal/decision/:token'])('registers %s as a public route', (path) => {
+  it.each([
+    'portal', 'portal/:segment', 'portal/:clientId/:token',
+    'portal/decision', 'portal/decision/:token', 'portal/:clientId/decision', 'portal/:clientId/decision/:token',
+  ])('registers %s as a public route', (path) => {
     const routes = buildRuntimeRoutes({ windowMap: {}, apiBaseUrl: 'http://x/api' });
     expect(routes.find((route) => route.path === path)?.public).toBe(true);
+  });
+
+  it('no longer registers the pre-CP-43 portal/:token route (portal/:segment serves it)', () => {
+    const routes = buildRuntimeRoutes({ windowMap: {}, apiBaseUrl: 'http://x/api' });
+    expect(routes.some((route) => route.path === 'portal/:token')).toBe(false);
+  });
+
+  // Ranking matters: `/portal/{client}/decision` must reach the decision landing, not be read as
+  // the `portal/:clientId/:token` link with "decision" as its token.
+  const CLIENT = '0123456789ABCDEF0123456789ABCDEF';
+  it.each([
+    [`/portal/${CLIENT}`, 'portal'],
+    [`/portal/${CLIENT}/tok-123`, 'portal'],
+    ['/portal/tok-123', 'portal'],
+    ['/portal', 'portal'],
+    [`/portal/${CLIENT}/decision`, 'decision'],
+    [`/portal/${CLIENT}/decision/tok-123`, 'decision'],
+    ['/portal/decision', 'decision'],
+    ['/portal/decision/tok-123', 'decision'],
+  ])('%s is served by the %s page', (pathname, page) => {
+    const routes = buildRuntimeRoutes({ windowMap: {}, apiBaseUrl: 'http://x/api' });
+    const pageOf = (path) => routes.find((route) => route.path === path).element.props.children.type;
+    const expected = page === 'portal' ? pageOf('portal') : pageOf('portal/decision');
+    const [match] = matchRoutes(routes.filter((route) => !route.index), pathname);
+    expect(match.route.element.props.children.type).toBe(expected);
   });
 
   it('registers public logout before dynamic window routes while keeping dashboard protected', () => {
