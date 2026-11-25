@@ -209,7 +209,11 @@ describe('canOfferDecision', () => {
     ['refuses when the row says canDecide false (not a recipient)', quotation({ canDecide: false }), false],
     ['refuses when the row has no canDecide flag', quotation({ canDecide: undefined }), false],
     ['refuses when the decision says canDecide false', quotation({ decision: { canDecide: false } }), false],
-    ['refuses when there is no decision block', quotation({ decision: undefined }), false],
+    // A list row (mobile card options menu, redesign 2026-11-25) carries no decision block: its own
+    // canDecide decides, with the same status and validity checks.
+    ['offers it on a list row that only carries canDecide', quotation({ decision: undefined }), true],
+    ['refuses on a list row whose canDecide is false', quotation({ decision: undefined, canDecide: false }), false],
+    ['refuses on an expired list row', quotation({ decision: undefined, validUntil: '2020-01-10' }), false],
     ['refuses once accepted, even if the flags say yes', quotation({ documentStatus: 'ETGO_AC' }), false],
     ['refuses once rejected', quotation({ documentStatus: 'CJ' }), false],
     ['refuses once the validity date is past', quotation({ validUntil: '2020-01-10' }), false],

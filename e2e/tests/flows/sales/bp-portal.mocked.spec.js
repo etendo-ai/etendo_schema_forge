@@ -9,6 +9,8 @@
 // @covers tools/app-shell/src/lib/portal/scrubPortalUrl.boot.js
 // @covers tools/app-shell/src/pages/portal/PortalListDesktop.jsx
 // @covers tools/app-shell/src/pages/portal/PortalDetailPanel.jsx
+// @covers tools/app-shell/src/pages/portal/PortalListMobile.jsx
+// @covers tools/app-shell/src/pages/portal/PortalShell.jsx
 import { test, expect } from '../../helpers/test.js';
 
 /**
@@ -22,6 +24,15 @@ import { test, expect } from '../../helpers/test.js';
  *    the portal on the quotation, with no notice.
  * D. The landing's confirmation is lost on the way back: its one automatic resend answers "already
  *    applied", and the customer reads that instead of the failure card.
+ * E. On a phone (redesign 2026-11-25): a quotation card's options open the decision popup, the
+ *    funnel opens the type / status / date filters, and "Más" holds the language switch.
+ *
+ * No journey may reach a marketing or telemetry host (Google Tag Manager, HubSpot, Datadog,
+ * Mixpanel): the portal is a public page for someone else's customers. Those requests are aborted
+ * and recorded, and every journey asserts there were none. In a bundle with no provider
+ * configuration that is also true of the app, so the check guards against a portal page that loads
+ * a tracker on its own (a hardcoded script, an SDK started without configuration); the per-route
+ * gate itself is unit-tested (gtm.vitest.js, observability-browser.test.js).
  *
  * The portal is a public page: no `login()`, no session. Every `/sws/portal/*` route is mocked here
  * and answers 401 unless the request carries the token in the `X-Portal-Token` header, so a request
@@ -89,6 +100,24 @@ const QUOTATION = {
 
 const DECISION_TOKEN = 'dec-e2e-0123456789abcdef';
 
+/** A quotation as a list row carries it: its own `canDecide`, no decision block. */
+const QUOTATION_ROW = {
+  kind: 'QUOTATION', id: 'q-1', documentNo: 'PR/0001', date: '2026-08-01', validUntil: '2999-01-10',
+  documentStatus: 'UE', currency: 'EUR', taxBase: 100, grandTotal: 121, canDecide: true,
+};
+
+/** Marketing and telemetry hosts the portal must never reach. */
+const TRACKING_HOSTS = [
+  /(^|\.)googletagmanager\.com$/,
+  /(^|\.)google-analytics\.com$/,
+  /(^|\.)hubspot\.com$/,
+  /(^|\.)hs-scripts\.com$/,
+  /(^|\.)hs-analytics\.net$/,
+  /(^|[.-])datadoghq\.(eu|com)$/,
+  /(^|\.)mixpanel\.com$/,
+  /(^|\.)mxpnl\.com$/,
+];
+
 const json = (route, body, status = 200) => route.fulfill({
   status, contentType: 'application/json', body: JSON.stringify(body),
 });
@@ -101,6 +130,11 @@ const json = (route, body, status = 200) => route.fulfill({
  */
 async function installPortalMock(page, { me, confirmAnswer = null, loseFirstConfirm = false }) {
   const requests = [];
+  requests.tracking = [];
+  await page.route((url) => TRACKING_HOSTS.some((host) => host.test(url.hostname)), async (route) => {
+    requests.tracking.push(new URL(route.request().url()).hostname);
+    await route.abort();
+  });
   await page.route('**/sws/**', (route) => json(route, {}));
   await page.route('**/sws/portal/**', async (route) => {
     const request = route.request();
@@ -135,6 +169,9 @@ async function installPortalMock(page, { me, confirmAnswer = null, loseFirstConf
       return json(route, { state: 'sent', email: 'compras@cliente.es' });
     }
     if (path === '/documents/quotation/q-1') return json(route, QUOTATION);
+    if (path === '/documents' && url.searchParams.get('type') === 'quotation') {
+      return json(route, { documents: [QUOTATION_ROW], totalCount: 1, statuses: ['UE'] });
+    }
     if (path === '/documents') {
       return json(route, { documents: INVOICES, totalCount: INVOICES.length, statuses: ['CO', 'CL'], totals: LIST_TOTALS });
     }
@@ -157,6 +194,7 @@ async function installPortalMock(page, { me, confirmAnswer = null, loseFirstConf
  */
 function expectTokenOnlyInHeader(requests) {
   expect(requests.length).toBeGreaterThan(0);
+  expect(requests.tracking, 'a portal page reached a tracking host').toEqual([]);
   for (const request of requests) {
     expect(request.token, `${request.method} ${request.path} without X-Portal-Token`).toBe(TOKEN);
     expect(request.client, `${request.method} ${request.path} without X-Portal-Client`).toBe(CLIENT);
@@ -323,7 +361,8 @@ test.describe('Customer portal — mocked', () => {
       const landed = new URL(page.url());
       expect(Object.fromEntries(landed.searchParams)).toEqual({ view: 'doc', kind: 'QUOTATION', id: 'q-1' });
       await expect(page.getByTestId('portal-panel-title')).toContainText('PR/0001');
-      await expect(page.getByTestId('portal-arrival-notice')).toHaveCount(0);
+      // "With no notice": the one notice the portal shows on arrival is the gone-entry one.
+      await expect(page.getByTestId('portal-entry-unavailable')).toHaveCount(0);
       expect(requests.decisionConfirms).toBe(1);
       expectTokenOnlyInHeader(requests);
     });
@@ -349,5 +388,64 @@ test.describe('Customer portal — mocked', () => {
     expect(requests.decisionConfirms).toBe(2);
     // The resend answered: the read-only view, the last resort, was never needed.
     expect(requests.some((request) => request.path === '/decisions/view')).toBe(false);
+    expect(requests.tracking).toEqual([]);
+  });
+
+  test('E: on a phone, card options, the filter funnel and the language in "Más"', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    const requests = await installPortalMock(page, {
+      me: { state: 'valid', businessPartnerName: 'Cliente Uno', tenantName: 'Acme SA', hasLogo: false, clientId: CLIENT },
+    });
+
+    await page.goto(`/portal/${CLIENT}/${TOKEN}`);
+    await expect(page.getByTestId('portal-pending-hero')).toBeVisible();
+    await expect(page.getByTestId('portal-mobile-tenant-name')).toHaveText('Acme SA');
+    await expectTokenOutOfAddressBar(page, `/portal/${CLIENT}`);
+
+    // A quotation card's ⋮ → Aceptar re-reads the detail and opens the detail's own popup.
+    await page.getByTestId('portal-bottom-nav-quotation').click();
+    const card = page.getByTestId('portal-document-card').filter({ hasText: 'PR/0001' });
+    await expect(card).toBeVisible();
+    await card.getByTestId('portal-card-menu').click();
+    await page.getByTestId('portal-card-menu-accept').click();
+    const accept = page.getByTestId('portal-accept-modal');
+    await expect(accept).toBeVisible();
+    await expect(accept).toContainText('compras@cliente.es');
+    expect(requests.some((request) => request.path === '/documents/quotation/q-1')).toBe(true);
+    await accept.getByTestId('portal-accept-cancel').click();
+    await expect(accept).toHaveCount(0);
+    expect(requests.decisionBodies).toBeUndefined();
+
+    // The funnel: document type, status and date range, as on desktop.
+    await page.getByTestId('portal-bottom-nav-invoice').click();
+    await expect(page.getByTestId('portal-document-card')).toHaveCount(INVOICES.length);
+    await page.getByTestId('portal-list-filters-mobile').click();
+    const filters = page.getByTestId('portal-list-filters-mobile-panel');
+    await expect(filters.getByTestId('portal-list-filters-mobile-range')).toBeVisible();
+    const bySubtype = page.waitForRequest((request) => request.url().includes('/sws/portal/documents?')
+      && new URL(request.url()).searchParams.get('subtype') === 'creditNote');
+    await filters.getByTestId('portal-list-subtype-creditnote-mobile').click();
+    await bySubtype;
+    const byGroup = page.waitForRequest((request) => request.url().includes('/sws/portal/documents?')
+      && new URL(request.url()).searchParams.get('group') === 'pending');
+    await filters.getByTestId('portal-list-filter-pending-mobile').click();
+    await byGroup;
+    await expect(filters.getByTestId('portal-list-filter-pending-mobile')).toHaveAttribute('aria-pressed', 'true');
+    await page.keyboard.press('Escape');
+
+    // "Más" → the customer's entry → the language. Spanish first, so the switch to English is a
+    // real change whatever language the browser starts in.
+    const more = page.getByTestId('portal-bottom-nav-more');
+    const user = page.getByTestId('portal-more-user');
+    await more.click();
+    await expect(user).toContainText('Cliente Uno');
+    await user.getByTestId('portal-language-es').click();
+    await expect(page.getByTestId('portal-bottom-nav-home')).toContainText('Inicio');
+    if (!(await user.isVisible())) await more.click();
+    await user.getByTestId('portal-language-en').click();
+    await expect(page.getByTestId('portal-bottom-nav-home')).toContainText('Home');
+
+    await expect(page.getByTestId('portal-invalid-link')).toHaveCount(0);
+    expectTokenOnlyInHeader(requests);
   });
 });

@@ -121,14 +121,17 @@ export function quotationValidity(document) {
 /**
  * Whether the portal offers Aceptar / Rechazar on a quotation (ETP-6209 Part C; QA 24/11 CP-49).
  *
- * The backend decides (`decision.canDecide` and the row's `canDecide`: pending, not expired, AND
+ * The backend decides (the row's `canDecide`, and `decision.canDecide` on a detail: pending, not expired, AND
  * emailed to the address this link was sent to); the browser only refuses on top of it, never
  * grants: a quotation already answered or whose validity date is past shows no buttons even if an
  * answer said otherwise. A missing flag is `false`.
  */
 export function canOfferDecision(document) {
   if (document?.kind !== 'QUOTATION') return false;
-  if (document.decision?.canDecide !== true || document.canDecide !== true) return false;
+  // A list row carries only its own `canDecide`; a detail also carries the `decision` block, and
+  // then both must agree.
+  if (document.canDecide !== true) return false;
+  if (document.decision != null && document.decision.canDecide !== true) return false;
   if (!(isNotApprovedStatus(document.documentStatus) || isCompletedStatus(document.documentStatus))) {
     return false;
   }

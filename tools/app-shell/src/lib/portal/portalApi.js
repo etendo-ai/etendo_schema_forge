@@ -330,6 +330,8 @@ export async function fetchPortalHome(fetchImpl, token, { months = 12 } = {}) {
     convertedBalance: readConvertedAmount(data?.convertedBalance),
     // CP-47: what was paid this year over every currency, in the company currency.
     convertedPaidThisYear: readConvertedAmount(data?.convertedPaidThisYear),
+    // The overdue part of the balance over every currency, in the company currency (mobile summary).
+    convertedOverdue: readConvertedAmount(data?.convertedOverdue),
     tiles: data?.tiles && typeof data.tiles === 'object' ? data.tiles : {},
     recent: Array.isArray(data?.recent) ? data.recent.map(normalizePortalDocument) : [],
     paidThisYear: Array.isArray(data?.paidThisYear) ? data.paidThisYear.map((p) => ({

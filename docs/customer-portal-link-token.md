@@ -2,8 +2,9 @@
 
 ETP-6209, QA CP-43. The token in a customer-portal email link is the whole credential (it works like a
 password). The portal runs on the same host as the app (`app.etendo.ai`), where Google Tag Manager
-loads Google Analytics and HubSpot. Every one of these tags reads `location.href`, and the next site
-reads `document.referrer`. So the token must be out of the address bar before any of them runs.
+loads Google Analytics and HubSpot on the app's pages. Portal pages load none of them (see "Portal
+pages load no third-party tags and no tracking" below). The token still leaves the address bar before
+anything runs, so that no script, extension or next site (`document.referrer`) can read it.
 
 ## Link formats
 
@@ -77,29 +78,61 @@ the token: the token is already out of the URL by then. It only keeps the portal
 outbound navigation. If the SPA container ever gets its own server config, a `Referrer-Policy:
 same-origin` response header on `/portal*` is the static equivalent.
 
-## Rule for third-party tags (GTM, Google Analytics, HubSpot, anything new)
+## Portal pages load no third-party tags and no tracking
 
-- Load them **from JavaScript that runs after `main.jsx`'s first import**, as `installGtm()` does
-  in `main.jsx` (ETP-6363). Keep `import './lib/portal/scrubPortalUrl.boot.js'` as the first line
-  of `main.jsx`. Nothing may be imported above it.
-- **Never add a static `<script>` to `index.html`** for a tag. A classic or `async` script there can
-  run before the module graph and read the token.
-- Single-page navigations inside the portal only change the search string (`?view=…`). GTM's
-  History Change trigger therefore only ever sees token-free URLs.
+ETP-6209, agreed with QA and the product owner: the portal has **no tracking**. Marketing's rule is
+no analytics, pixels or cookies without a consent banner, and the portal's visitors are customers of
+our customers, who never see one. `main.jsx` decides once whether the page load starts on a portal
+path (`const portalPage = isPortalPath(…)`), and hands that one decision to the tag container and to
+observability:
 
-## Known gap: HubSpot click tracking captures element text (open)
+- `isPortalPath({ pathname, routerBase })` (`lib/portal/portalLinkSession.js`) recognises `/portal`,
+  `/portal/…` and the decision landing, below the router base too. It reuses `parsePortalPath`, so
+  there is no second regex;
+- **no Google Tag Manager, so no Google Analytics or HubSpot**: `resolveGtmId({ …, portalPage })`
+  (`lib/marketing/gtm.js`) returns `null` and `installGtm(null)` does nothing. The marketing
+  `dataLayer` pushes (`lib/marketing/dataLayer.js`) are no-ops without GTM (`isGtmInstalled`);
+- **no Datadog Browser RUM**: `initBrowserObservability({ portalPage })` (`lib/observability/browser.js`)
+  leaves the Datadog provider out. The core adapter always tracks user interactions (click actions),
+  may record session replay and keeps the `_dd_s` session cookie, and none of that can be switched
+  off per page. There is no non-RUM Datadog logger, so **the portal's JS errors do not reach
+  Datadog** (accepted trade-off);
+- **no browser Mixpanel**: the Mixpanel provider is left out as well;
+- **no feature-flag provider**: `main.jsx` skips `initFeatureFlags()` on a portal page. No portal code
+  reads a client-side flag (checked across the 96 modules the two portal pages import, the shared
+  components included). With remote flags, the Datadog Feature Flags SDK would report exposures to
+  Datadog on its own. Every flag resolves to its declared default there. As a side effect, a
+  **remote** telemetry kill (`telemetry-kill-aws-rum`) does not reach a portal tab; the build-time
+  `VITE_TELEMETRY_KILL` still does;
+- **AWS CloudWatch RUM stays when it is enabled**. It records performance, errors and HTTP calls only
+  (no interactions), with cookies off by default (`VITE_RUM_ALLOW_COOKIES`), and it is the portal's
+  only browser error monitoring.
+
+The `main.jsx boot order` guardrail in `lib/portal/__tests__/portalLinkSession.test.js` fails if
+`main.jsx` stops handing `portalPage` to `resolveGtmId`, to `initBrowserObservability` or to the
+`initFeatureFlags()` guard. If portal code ever needs a flag, that guard has to be revisited, and
+the flag would need a provider that sends no exposures.
+
+**Deciding once per page load is enough, because the portal is a separate entry.** Nothing in the
+app navigates into `/portal` (the only way in is the email link, which is a full page load). The
+portal never navigates into the app inside the same document: its outbound links ("Creado con
+Etendo", "Empieza gratis") open a new tab, which is a fresh page load that decides for itself. If
+an in-app link into `/portal` is ever added, it must be a full navigation (`window.location`),
+never a router `navigate()`. Otherwise GTM, Datadog RUM and Mixpanel, already started by the app
+page, would see the portal (GTM through its History Change trigger, the others through their route
+tracking).
+
+Everywhere else (sign-up, onboarding, the app) GTM loads as before. The rules that kept the token
+safe from tags still apply to any tag the app adds:
+
+- Load tags **from JavaScript that runs after `main.jsx`'s first import**, as `installGtm()` does.
+  Keep `import './lib/portal/scrubPortalUrl.boot.js'` as the first line of `main.jsx`.
+- **Never add a static `<script>` to `index.html`** for a tag. A classic or `async` script there would
+  run on portal pages too, before the module graph, and could read the token.
+
+## Closed: HubSpot click tracking captured element text
 
 QA found `track.hubspot.com/__ptc.gif?…_hs_element_text=24/11/2026 PR1000060 … Bajo evaluación
-900,00`. HubSpot click events record the clicked element's text, so customer document data
-(numbers, dates, amounts) reaches HubSpot. This is not a token leak, but it is customer data. No
-code change was made for it. The options, to be decided by product and marketing:
-
-1. **In the GTM container (no code):** do not fire the HubSpot tag, or HubSpot's click events, on
-   `Page Path` starting with `/portal`. This is the cheapest option and it is reversible.
-2. **In HubSpot:** remove or scope the "clicked element" events defined for the app's URLs so that
-   they exclude `/portal`.
-3. **In the SPA:** push `_hsq.push(['doNotTrack'])` on portal routes. This is HubSpot's documented
-   opt-out. It also stops the portal page views that the KPI asks for, and its cookie persists for
-   the whole host.
-4. **In the SPA:** do not install GTM on portal routes. This conflicts with the acceptance criterion
-   that GA and HubSpot receive `/portal/{AD_Client}`.
+900,00`: HubSpot click events recorded the text of the clicked element, so customer document data
+reached HubSpot. It is closed by the rule above: HubSpot is loaded only through GTM, and GTM no
+longer loads on portal pages.

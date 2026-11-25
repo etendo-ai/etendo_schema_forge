@@ -1452,6 +1452,53 @@ Built in both repos following C.0–C.11.
 
 ---
 
+## Mobile redesign (designer's proposal, 2026-11-25; next release)
+
+Figma `6cMWBbmrAt65GwZCT5YIF1`, node `3377-13236`. Built in `sf/tools/app-shell/src/pages/portal/`:
+
+- **Desktop "Creado con etendo.ai" pill** (`PortalBits.jsx` `PortalCreatedWithPill`): 40px tall,
+  "Creado con", the etendo.ai horizontal logo and the arrow. "Conoce más" is gone. The link is
+  unchanged (`ETENDO_PRICING_URL`). The rest of desktop is unchanged.
+- **Inicio** (`PortalHomeView.jsx`):
+  - the dark summary (`MobileHomeSummary`): company logo, name, Etendo's compact link and search;
+    "Hola, …" with the number of invoices pending payment; "Total pendiente" (the converted "≈" one
+    with several currencies); the overdue badge and "Desde el …"; "Ver facturas pendientes";
+  - "Requiere tu atención" as a horizontal row of 152×124 tiles, with the desktop tiles' wording;
+  - "Documentos recientes" with the status as coloured text (`PortalTag palette="text"`).
+- **Lists**:
+  - header: title, count, search and the funnel (`PortalListMobile.jsx` `PortalMobileFilters`).
+    The funnel offers the desktop quick filters (type, status, date range), which closes QA CP-37;
+  - cards (`PortalMobileCard`): number, status, reference chip, "Fecha" and the kind's second value,
+    "Importe total" and an options menu ⋮;
+  - the options menu offers "Ver detalle" and "Descargar PDF", plus Aceptar / Rechazar only when
+    `canOfferDecision`. It reads the detail and opens the detail's own popups
+    (`PortalDecisionActions variant="headless"`).
+- **Detail**:
+  - header: back, title, "Emitido por" and a round download button;
+  - the summary card (`PortalSummary`), "Ver PDF" and the related documents (`PortalRelatedList
+    variant="mobile"`);
+  - Aceptar presupuesto / Rechazar, stacked.
+- **Bottom bar**: Inicio, Presupuestos, Facturas, Más. The active item is #325CFF with a 4px dot.
+
+**Deviations from the mockup (PO decisions):**
+- The header has no user button. The customer's popup (name, email, ES/EN) lives in "Más".
+- Status names are the app's in the list tabs and badges (CP-16). The home "Requiere tu atención"
+  tiles are the exception: they keep their own wording («Por responder», «Vencida», «En curso»,
+  «Este mes») on both mobile and desktop (PO decision, 2026-11-25).
+- The detail has no "Líneas" and no "Comentarios".
+- The note above the buttons does not promise an order: «Al aceptar, <empresa> recibirá tu
+  confirmación.».
+- The mobile "Creado con" stays the compact Etendo tile where it was, because marketing has not
+  decided.
+- The company logo also stays in the list and detail headers (QA CP-46).
+
+**Data the backend does not send, so the element is approximated or left out:**
+- **«Desde el …»:** the design asks for the oldest *pending* invoice date. It shows `overdueSince`
+  (oldest *overdue*) instead.
+- **Overdue badge with several currencies:** omitted, because there is no converted overdue amount.
+- **Card category chip:** uses the row's `reference`. The design shows a description (e.g.
+  «Servicios de consultoría»), which the list rows do not carry.
+
 ## Still open
 
 Parts A and B are done. This plan stays in `docs/plans/` (not `completed/`) until the items below

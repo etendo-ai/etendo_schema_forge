@@ -5,18 +5,14 @@ import { Button } from '@/components/ui/button';
 import { getDateBounds } from '@/lib/dateRangeBounds.js';
 import { PORTAL_ERROR, fetchPortalDocuments } from '@/lib/portal/portalApi.js';
 import { PortalListToolbar as DesktopToolbar, PortalListTable as DesktopTable } from './PortalListDesktop.jsx';
-import { PortalCustomer, PortalLogoTile } from './PortalShell.jsx';
+import { PortalLogoTile } from './PortalShell.jsx';
 import {
-  PortalCountChip, PortalDate, PortalDesktopHeader, PortalDocumentStatus, PortalMain,
-  PortalMoney, PortalRowBadge, PortalSearchPill,
-  PORTAL_ROW_FOCUS, PortalInvoiceTypeBadge,
-  PortalCreatedWithTile, usePortalTabLabel,
+  PortalDesktopHeader, PortalMain, PortalSearchPill, PortalCreatedWithTile, usePortalTabLabel,
 } from './PortalBits.jsx';
+import { PortalMobileCard, PortalMobileFilters, usePortalCardActions } from './PortalListMobile.jsx';
 import {
-  PORTAL_KIND_GROUPS, PORTAL_KIND_META, documentLabelKey, initialPortalRange, isPortalSubtype,
-  quotationValidity, toCalendarParam,
+  PORTAL_KIND_GROUPS, PORTAL_KIND_META, initialPortalRange, isPortalSubtype, toCalendarParam,
 } from './portalPresentation.js';
-import { isCompletedStatus } from '../../lib/docStatus.js';
 
 const SEARCH_DEBOUNCE_MS = 300;
 
@@ -53,6 +49,10 @@ export default function PortalDocumentListView({
   const [failed, setFailed] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [reload, setReload] = useState(0);
+  // Mobile card options (redesign 2026-11-25): PDF download and accept / reject.
+  const cardActions = usePortalCardActions({
+    apiFetch, token, tenantName: identity?.tenantName, onInvalid,
+  });
 
   // A new kind starts from the defaults: the rolling last month, or all time when the link named a
   // status group (`initialPortalRange`). Switching tabs inside the list keeps the chosen range.
@@ -135,7 +135,7 @@ export default function PortalDocumentListView({
       aria-label={ui('portalColStatus')}
       // Never wraps (M1): on a narrow phone the segmented control scrolls sideways with no visible
       // scrollbar, as the app's horizontal rails do (`PendingTasksRail`).
-      className={cn('flex overflow-x-auto rounded-[10px] bg-muted p-1 md:rounded-lg', mobile ? 'gap-1' : 'gap-0.5')}
+      className={cn('flex overflow-x-auto p-1', mobile ? 'gap-1 rounded-xl bg-[#F3F5F9]' : 'gap-0.5 rounded-lg bg-muted')}
       style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
     >
       {tabs.map((tab) => {
@@ -150,8 +150,9 @@ export default function PortalDocumentListView({
             className={cn(
               'rounded-lg font-medium text-foreground',
               'shrink-0 whitespace-nowrap',
-              mobile ? 'h-11 flex-1 px-3 text-[15px]' : 'h-8 px-3',
+              mobile ? 'h-8 px-3 text-sm font-normal leading-6' : 'h-8 px-3',
               selected ? 'bg-card shadow-sm' : '',
+              mobile && selected ? 'font-medium' : '',
             )}
             data-testid={`portal-status-tab-${(tab.code ?? 'all').toLowerCase()}${mobile ? '-mobile' : ''}`}
           >
@@ -206,26 +207,33 @@ export default function PortalDocumentListView({
 
   return (
     <>
-      {/* Mobile header (design Movil-Listado) */}
-      <header className="flex shrink-0 flex-col gap-3.5 border-b border-border bg-card px-4 py-4 sm:px-6 md:hidden">
+      {/* Mobile header (redesign 2026-11-25): the title with its count, the search with the funnel
+          (the quick filters, CP-37), then the status tabs. The company logo leads it (CP-46) and
+          Etendo's compact link stays on the right (marketing has not decided the mobile one). */}
+      <header className="flex shrink-0 flex-col gap-4 border-b border-[#E3E7EC] bg-white px-4 pb-5 pt-4 md:hidden">
         <div className="flex items-center justify-between gap-3">
-          {/* At 360 px the title steps down to 24 px so it, the count and the avatar (the user
-              menu, with the language) share one line; the board's 28 px from 640 up. */}
           <div className="flex min-w-0 items-center gap-2.5">
-            {/* QA 24/11 CP-46: the issuing company's logo leads the mobile header; Etendo's tile
-                stays on the right as the secondary link. */}
             <PortalLogoTile identity={identity} logoUrl={logoUrl} size="lg" data-testid="PortalLogoTile__c7f7d2" />
-            <h1 className="truncate text-2xl font-bold leading-9 sm:text-[28px]">{plural}</h1>
-            <PortalCountChip count={totalCount} data-testid="PortalCountChip__c7f7d2" />
+            <h1 className="truncate text-2xl font-medium leading-9 text-[#1B1A1F] [font-family:'Plus_Jakarta_Sans','Inter',sans-serif]">{plural}</h1>
+            <span className="shrink-0 rounded-lg bg-[#F3F5F9] px-2 py-0.5 text-xs leading-4 text-[#40465C] tabular-nums" data-testid="portal-count-chip">
+              {totalCount}
+            </span>
           </div>
-          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-            {/* Etendo link left of the other controls, as on the Inicio bar (provisional until
-                the mobile design arrives). */}
-            <PortalCreatedWithTile data-testid="PortalCreatedWithTile__c7f7d2" />
-            <PortalCustomer identity={identity} variant="avatar" data-testid="PortalCustomer__c7f7d2" />
-          </div>
+          <PortalCreatedWithTile data-testid="PortalCreatedWithTile__c7f7d2" />
         </div>
-        <div className="flex gap-2.5">{searchPill(true)}</div>
+        <div className="flex items-center gap-2">
+          {searchPill(true)}
+          <PortalMobileFilters
+            kind={kind}
+            tabs={tabs}
+            group={group}
+            onGroup={selectGroup}
+            subtype={subtype}
+            onSubtype={setSubtype}
+            range={range}
+            onRange={setRange}
+            data-testid="PortalMobileFilters__c7f7d2" />
+        </div>
         {renderTabs(true)}
       </header>
 
@@ -240,7 +248,7 @@ export default function PortalDocumentListView({
         data-testid="PortalDesktopHeader__c7f7d2" />
 
       <PortalMain
-        className="overflow-y-auto px-6 pb-28 pt-5 md:gap-0 md:rounded-xl md:p-0"
+        className="overflow-y-auto bg-[#F3F5F9] px-4 pb-28 pt-4 md:gap-0 md:rounded-xl md:bg-card md:p-0"
         testId="portal-document-list"
         data-testid="PortalMain__c7f7d2">
         <DesktopToolbar
@@ -266,14 +274,16 @@ export default function PortalDocumentListView({
               convertedTotal={page?.convertedTotal}
               onOpen={open}
               data-testid="DesktopTable__c7f7d2" />
-            <ul className="flex flex-col gap-3 md:hidden" data-testid="portal-document-cards">
+            <ul className="flex flex-col gap-4 md:hidden" data-testid="portal-document-cards">
               {documents.map((document) => (
                 <li key={document.id}>
-                  <MobileCard
+                  <PortalMobileCard
                     document={document}
                     kind={kind}
                     onOpen={open}
-                    data-testid="MobileCard__c7f7d2" />
+                    onDownload={cardActions.download}
+                    onDecide={cardActions.decide}
+                    data-testid="PortalMobileCard__c7f7d2" />
                 </li>
               ))}
             </ul>
@@ -282,89 +292,7 @@ export default function PortalDocumentListView({
 
         <div className="md:py-3">{footer}</div>
       </PortalMain>
+      {cardActions.popups}
     </>
-  );
-}
-
-/** The line under a mobile card's date: validity, the generated order, or the due date. */
-function CardSecondaryLine({ document }) {
-  const ui = useUI();
-  if (document.kind === 'QUOTATION') {
-    if (document.orderNo) return <span>{ui('portalKindOrder')} {document.orderNo}</span>;
-    const validity = quotationValidity(document);
-    if (validity?.state === 'expired') {
-      return (
-        <span className="text-destructive">
-          {ui('portalExpiredOnPrefix')} <PortalDate value={document.validUntil} data-testid="PortalDate__c7f7d2" />
-        </span>
-      );
-    }
-    if (document.validUntil) {
-      return <span>{ui('portalColValidUntil')} <PortalDate value={document.validUntil} data-testid="PortalDate__c7f7d2" /></span>;
-    }
-    return null;
-  }
-  if (document.kind === 'INVOICE' && document.dueDate) {
-    return <span>{ui('portalDueOnPrefix')} <PortalDate value={document.dueDate} data-testid="PortalDate__c7f7d2" /></span>;
-  }
-  return null;
-}
-
-/** One mobile card (design Movil-Listado). */
-function MobileCard({ document, kind, onOpen }) {
-  const ui = useUI();
-  const isInvoice = kind === 'INVOICE';
-  return (
-    <button
-      type="button"
-      onClick={() => onOpen(document)}
-      className={`flex w-full cursor-pointer flex-col gap-3 rounded-xl border border-border bg-card p-[18px] text-left ${PORTAL_ROW_FOCUS}`}
-      data-testid="portal-document-card"
-    >
-      <span className="flex items-center justify-between gap-3">
-        <span className="flex min-w-0 items-center gap-2">
-          <span className="font-semibold">{document.documentNo}</span>
-          {isInvoice ? <PortalInvoiceTypeBadge document={document} data-testid="PortalInvoiceTypeBadge__c7f7d2" /> : null}
-        </span>
-        {/* An invoice shows its payment state; its document status too when it is not the plain
-            "completed" every listed invoice shares (closed, voided), like the table. */}
-        <span className="flex flex-wrap items-center justify-end gap-1">
-          {isInvoice && !isCompletedStatus(document.documentStatus)
-            ? <PortalDocumentStatus
-            status={document.documentStatus}
-            className="text-[13px] leading-[18px]"
-            data-testid="PortalDocumentStatus__c7f7d2" />
-            : null}
-          <PortalRowBadge
-            document={document}
-            className="text-[13px] leading-[18px]"
-            data-testid="PortalRowBadge__c7f7d2" />
-        </span>
-      </span>
-      {document.reference ? <span className="truncate text-muted-foreground">{document.reference}</span> : null}
-      <span className="flex items-end justify-between border-t border-border pt-3">
-        <span className="flex flex-col text-sm">
-          <span className="text-muted-foreground"><PortalDate value={document.date} data-testid="PortalDate__c7f7d2" /></span>
-          <CardSecondaryLine document={document} data-testid="CardSecondaryLine__c7f7d2" />
-        </span>
-        <span className="flex flex-col items-end">
-          <PortalMoney
-            currency={document.currency}
-            value={document.grandTotal}
-            className="text-xl font-semibold leading-7 tabular-nums"
-            data-testid="PortalMoney__c7f7d2" />
-          {isInvoice ? (
-            <span className="text-sm text-muted-foreground" data-testid="portal-card-outstanding">
-              {ui('portalColOutstanding')}{' '}
-              <PortalMoney
-                currency={document.currency}
-                value={document.outstandingAmount}
-                className="tabular-nums"
-                data-testid="PortalMoney__c7f7d2" />
-            </span>
-          ) : null}
-        </span>
-      </span>
-    </button>
   );
 }

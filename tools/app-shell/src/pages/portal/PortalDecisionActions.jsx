@@ -6,7 +6,7 @@ import {
   EnvelopeSimpleIcon,
   XIcon,
 } from '@phosphor-icons/react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 
@@ -36,6 +36,8 @@ const ERROR_KEYS = Object.freeze({
   // CP-49: answered by a request only (a race with the detail): as a blocked reason it shows
   // nothing, see DecisionBlockedNotice.
   [PORTAL_DECISION_ERROR.notRecipient]: 'portalDecisionBlockedNotRecipient',
+  // 409 `accept_unavailable`: accepting is switched off for this quotation; rejecting still works.
+  [PORTAL_DECISION_ERROR.acceptUnavailable]: 'portalDecisionAcceptUnavailable',
 });
 
 /** Blocked reasons that show no notice at all: the quotation simply reads without buttons. */
@@ -74,16 +76,22 @@ const STEP = Object.freeze({
  * Its answer opens "Revisa tu correo electrónico"; once closed ("Entendido") the panel keeps saying
  * where the email went. A refused request closes the popup and says why next to the buttons.
  *
- * @param {'panel'|'bar'|'inline'} variant the panel's button row, the mobile bottom bar, or
- *   `inline`: the desktop side panel — Aceptar, Rechazar as the Figma's 32px buttons, laid out as
- *   items of the caller's own wrapping row (the caller adds "Descargar PDF" after them); notices
- *   and errors take a full line at the end of that row.
+ * @param {'panel'|'bar'|'inline'|'headless'} variant the panel's button row, the mobile bottom
+ *   bar, `inline`: the desktop side panel — Aceptar, Rechazar as the Figma's 32px buttons, laid out
+ *   as items of the caller's own wrapping row (the caller adds "Descargar PDF" after them); notices
+ *   and errors take a full line at the end of that row — or `headless`: no buttons at all, the
+ *   popups only, opened on `initialStep` ('accept' | 'reject'), for the mobile list card's options
+ *   menu (redesign 2026-11-25). When the flow ends, `onDone(messageKey|null)` is called with the
+ *   i18n key of what to tell the customer (a refusal), or null.
  */
 export default function PortalDecisionActions({
-  apiFetch, token, document, tenantName, onInvalid, variant = 'panel',
+  apiFetch, token, document, tenantName, onInvalid, variant = 'panel', initialStep = null, onDone,
 }) {
   const ui = useUI();
+  const headless = variant === 'headless';
   const [step, setStep] = useState(null);
+  // Headless: whether the flow has started (its first popup opened, or it ended at once).
+  const [started, setStarted] = useState(false);
   const [reason, setReason] = useState(null);
   const [reasonText, setReasonText] = useState('');
   const [busy, setBusy] = useState(false);
@@ -92,10 +100,37 @@ export default function PortalDecisionActions({
   const [notRecipient, setNotRecipient] = useState(false);
 
   const decision = document?.decision;
-  if (!decision) return null;
-  const offered = canOfferDecision(document);
+  const offered = Boolean(decision) && canOfferDecision(document);
 
-  const acceptShown = PORTAL_ACCEPT_ENABLED && decision.acceptAvailable;
+  // Headless: the first popup opens only once the quotation can be answered (no one-frame flash of
+  // a popup that would close at once) and, for Aceptar, only when accepting is available; otherwise
+  // the flow ends at once with the reason.
+  const acceptAvailable = PORTAL_ACCEPT_ENABLED && decision?.acceptAvailable === true;
+  useEffect(() => {
+    if (!headless || started) return;
+    setStarted(true);
+    if (!offered) {
+      const blocked = decision?.blockedReason;
+      setError(SILENT_BLOCKED_REASONS.includes(blocked) && blocked !== PORTAL_DECISION_ERROR.notRecipient
+        ? null
+        : (ERROR_KEYS[blocked] ?? null));
+      return;
+    }
+    if (initialStep !== 'reject' && !acceptAvailable) {
+      setError(ERROR_KEYS[PORTAL_DECISION_ERROR.acceptUnavailable]);
+      return;
+    }
+    setStep(initialStep === 'reject' ? STEP.rejectReasons : STEP.acceptConfirm);
+  }, [headless, started, offered, decision?.blockedReason, initialStep, acceptAvailable]);
+  // Headless: the flow is over once no popup is open (closed, sent and acknowledged, or refused).
+  useEffect(() => {
+    if (!headless || !started || step !== null) return;
+    onDone?.(error ?? (notRecipient ? 'portalDecisionBlockedNotRecipient' : null));
+  }, [headless, started, step, error, notRecipient, onDone]);
+
+  if (!decision) return null;
+
+  const acceptShown = acceptAvailable;
   const bar = variant === 'bar';
   const inline = variant === 'inline';
   // As items of the caller's wrapping row, a notice takes a whole line after the buttons.
@@ -176,6 +211,7 @@ export default function PortalDecisionActions({
     </>
   );
 
+  if (headless) return dialogs;
   if (sentTo != null) {
     return (
       <>
@@ -206,11 +242,11 @@ export default function PortalDecisionActions({
 
   return (
     <div
-      className={cn(inline ? 'contents' : 'flex flex-col gap-2.5', bar ? 'rounded-xl border border-border bg-card p-4' : '')}
+      className={cn(inline ? 'contents' : 'flex flex-col gap-2.5', bar ? 'rounded-xl bg-white p-4' : '')}
       data-testid={bar ? 'portal-decision-bar' : 'portal-decision-panel'}
     >
       {bar && acceptShown ? (
-        <span className="text-center text-sm text-muted-foreground">
+        <span className="text-center text-xs leading-4 text-[#6B7280]" data-testid="portal-decision-accept-hint">
           {ui('portalDecisionAcceptHint', { tenantName: tenantName ?? '' })}
         </span>
       ) : null}
@@ -292,11 +328,40 @@ function InlineDecisionButtons({ acceptShown, busy, onReject, onAccept }) {
 /** Rechazar, and Aceptar when the PO enabled it (the panel row and the mobile bar). */
 function DecisionButtons({ bar, acceptShown, busy, onReject, onAccept }) {
   const ui = useUI();
+  if (bar) {
+    // Mobile detail (redesign 2026-11-25): "Aceptar presupuesto" (primary, #325CFF) over
+    // "Rechazar" (secondary), both full width.
+    return (
+      <div className="flex flex-col gap-2">
+        {acceptShown ? (
+          <button
+            type="button"
+            className="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-lg bg-[#325CFF] text-sm font-medium leading-6 text-white disabled:opacity-50"
+            onClick={onAccept}
+            disabled={busy}
+            data-testid="portal-decision-accept"
+          >
+            <CheckIcon size={20} aria-hidden="true" data-testid="Check__a48dad" />
+            {ui('portalDecisionAcceptQuotation')}
+          </button>
+        ) : null}
+        <button
+          type="button"
+          className={`inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-lg border border-[#C7CBD3] bg-white text-sm font-medium leading-6 text-[#1B1A1F] disabled:opacity-50 ${PORTAL_FIGMA_SHADOW}`}
+          onClick={onReject}
+          disabled={busy}
+          data-testid="portal-decision-reject"
+        >
+          <XIcon size={20} className="text-[#81848F]" aria-hidden="true" data-testid="X__a48dad" />
+          {ui('portalDecisionReject')}
+        </button>
+      </div>
+    );
+  }
   return (
-    <div className={cn(bar ? 'grid gap-3' : 'flex flex-wrap gap-2', bar && acceptShown ? 'grid-cols-[minmax(0,1fr)_minmax(0,2fr)]' : '')}>
+    <div className="flex flex-wrap gap-2">
       <Button
         variant="outline"
-        className={bar ? 'h-14 rounded-[10px]' : ''}
         onClick={onReject}
         disabled={busy}
         data-testid="portal-decision-reject"
@@ -305,13 +370,12 @@ function DecisionButtons({ bar, acceptShown, busy, onReject, onAccept }) {
       </Button>
       {acceptShown ? (
         <Button
-          className={bar ? 'h-14 rounded-[10px] font-semibold' : ''}
           onClick={onAccept}
           disabled={busy}
           data-testid="portal-decision-accept"
         >
           <CheckIcon className="mr-1.5 h-4 w-4" aria-hidden="true" data-testid="Check__a48dad" />
-          {ui(bar ? 'portalDecisionAcceptQuotation' : 'portalDecisionAccept')}
+          {ui('portalDecisionAccept')}
         </Button>
       ) : null}
     </div>

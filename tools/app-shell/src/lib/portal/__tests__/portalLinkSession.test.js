@@ -8,6 +8,7 @@ import { resolve } from 'node:path';
 import {
   PORTAL_DECISION_STORAGE_KEY,
   PORTAL_LINK_STORAGE_KEY,
+  isPortalPath,
   parsePortalPath,
   portalPath,
   readPortalDecision,
@@ -102,6 +103,25 @@ describe('parsePortalPath', () => {
       assert.equal(parsePortalPath(path), null);
     });
   }
+});
+
+describe('isPortalPath', () => {
+  it('recognises every portal page, below the router base too', () => {
+    for (const [pathname, routerBase] of [
+      ['/portal'], ['/portal/ABC'], ['/portal/decision'], ['/portal/decision/tok'],
+      ['/go/portal/0123456789ABCDEF0123456789ABCDEF/decision', '/go'],
+    ]) {
+      assert.equal(isPortalPath({ pathname, routerBase }), true, pathname);
+    }
+  });
+
+  it('says no to the app and to a path outside the router base', () => {
+    for (const [pathname, routerBase] of [
+      ['/'], ['/onboarding'], ['/portals'], ['/sales-order/portal'], ['/portal', '/go'],
+    ]) {
+      assert.equal(isPortalPath({ pathname, routerBase }), false, pathname);
+    }
+  });
 });
 
 describe('scrubPortalTokenFromLocation', () => {
@@ -261,5 +281,18 @@ describe('main.jsx boot order', () => {
     const imports = [...source.matchAll(/^import\s.*from\s+'([^']+)';/gm)].map((match) => match[1]);
     assert.deepEqual(imports.sort(), ['../neoBaseUrl.js', './portalLinkSession.js']);
     assert.match(source, /scrubPortalTokenFromLocation\(\{\s*routerBase: detectBasePath\(\)\.routerBase\s*\}\)/);
+  });
+
+  // ETP-6209 — the portal has no tracking: main.jsx decides once whether the page is a portal page
+  // (isPortalPath, no second regex) and hands that one decision to GTM, to observability and to the
+  // feature flags. A merge that drops one hand-off loads GA4/HubSpot, Datadog RUM/Mixpanel or the
+  // Datadog Feature Flags SDK (which reports exposures) on the portal again.
+  it('hands one portal decision to GTM, to observability and to the feature flags', () => {
+    const source = readFileSync(resolve(APP_SHELL, 'src/main.jsx'), 'utf8');
+    assert.match(source, /const portalPage = isPortalPath\(\{[^}]*pathname: window\.location\.pathname,[^}]*routerBase: detectBasePath\(\)\.routerBase,?\s*\}\);/);
+    assert.match(source, /resolveGtmId\(\{[^}]*\bportalPage\b[^}]*\}\)/);
+    assert.match(source, /initBrowserObservability\(\{[^}]*\bportalPage\b[^}]*\}\)/);
+    assert.match(source, /const flagsReady = portalPage \? undefined : initFeatureFlags\(\);/);
+    assert.equal(source.match(/\binitFeatureFlags\(/g)?.length, 1, 'initFeatureFlags is called only behind the portal guard');
   });
 });

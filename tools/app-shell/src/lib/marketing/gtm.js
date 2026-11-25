@@ -26,11 +26,18 @@ function hostsOf(value) {
 /**
  * Which container this page loads, if any.
  *
- * @param {{ env?: object, hostname?: string, supportSession?: boolean }} options
+ * Never on a customer-portal page (`portalPage`, ETP-6209): the portal is used by customers of
+ * our customers, with no account and no consent banner, and marketing's rule is no analytics,
+ * pixels or cookies without one. The portal is its own entry (nothing in the app navigates into
+ * it, and it leaves only by opening a new tab), so deciding once per page load is enough.
+ *
+ * @param {{ env?: object, hostname?: string, supportSession?: boolean, portalPage?: boolean }} options
  * @returns {string|null} the container id, or null when it must not load here
  */
-export function resolveGtmId({ env = {}, hostname = '', supportSession = false } = {}) {
-  if (supportSession || env.VITE_GTM_ENABLED === 'false') return null;
+export function resolveGtmId({
+  env = {}, hostname = '', supportSession = false, portalPage = false,
+} = {}) {
+  if (portalPage || supportSession || env.VITE_GTM_ENABLED === 'false') return null;
   const id = String(env.VITE_GTM_ID || DEFAULT_GTM_ID).trim();
   if (!GTM_ID_PATTERN.test(id)) return null;
   return hostsOf(env.VITE_GTM_HOSTS).includes(String(hostname).toLowerCase()) ? id : null;

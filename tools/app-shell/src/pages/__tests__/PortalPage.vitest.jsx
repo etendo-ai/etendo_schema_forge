@@ -3,6 +3,7 @@
 // @covers tools/app-shell/src/pages/portal/PortalHomeView.jsx
 // @covers tools/app-shell/src/pages/portal/PortalDocumentListView.jsx
 // @covers tools/app-shell/src/pages/portal/PortalListDesktop.jsx
+// @covers tools/app-shell/src/pages/portal/PortalListMobile.jsx
 // @covers tools/app-shell/src/pages/portal/PortalDocumentDetailView.jsx
 // @covers tools/app-shell/src/pages/portal/PortalDetailPanel.jsx
 // @covers tools/app-shell/src/pages/portal/PortalBits.jsx
@@ -24,6 +25,12 @@ vi.mock('@/lib/portal/usePortalApiFetch.js', async (importOriginal) => {
 
 // The download plumbing lives in its own module so a test can see what would be saved.
 vi.mock('@/lib/portal/portalDownload.js', () => ({ saveBlobAsFile: vi.fn() }));
+
+// The mobile card's options end on a toast when they fail; the toast is what the customer reads.
+vi.mock('sonner', async (importOriginal) => ({
+  ...(await importOriginal()),
+  toast: { error: vi.fn(), success: vi.fn(), warning: vi.fn(), info: vi.fn() },
+}));
 
 // react-pdf cannot render in jsdom: the viewer is the boundary. The stub shows which URL it got.
 vi.mock('@/windows/custom/shared/PdfViewer.jsx', () => ({
@@ -85,10 +92,11 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { registerApiSession, resetApiSessionForTests } from '@etendosoftware/app-shell-core/auth';
 import PortalPage from '../PortalPage.jsx';
-import { PortalCreatedWithHeaderLink } from '../portal/PortalBits.jsx';
+import { PortalCreatedWithHeaderLink, PortalTag } from '../portal/PortalBits.jsx';
 import { PortalListTable } from '../portal/PortalListDesktop.jsx';
 import { PortalRelatedList } from '../portal/PortalDetailPanel.jsx';
 import { saveBlobAsFile } from '@/lib/portal/portalDownload.js';
+import { toast } from 'sonner';
 import { PORTAL_LINK_STORAGE_KEY, rememberPortalLink } from '@/lib/portal/portalLinkSession.js';
 
 /**
@@ -640,14 +648,22 @@ describe('PortalPage — view in the URL', () => {
 });
 
 describe('PortalPage — shell', () => {
-  it('shows the customer the link belongs to, as the sidebar row and the mobile avatar', async () => {
+  // Mobile redesign (2026-11-25): the header lost its user button; the customer (name, email and
+  // the language) lives in the bottom bar's "Más" sheet (PO decision: the language must stay).
+  it('shows the customer the link belongs to, as the sidebar row and in the mobile "Más" sheet', async () => {
+    const user = userEvent.setup();
     renderPortal();
     await shellReady();
 
     expect(screen.getByTestId('portal-customer-name').textContent).toBe('Cliente Uno');
-    const avatar = screen.getByTestId('portal-customer-avatar');
-    expect(avatar.textContent).toBe('CU');
-    expect(avatar).toHaveAttribute('aria-label', 'Cliente Uno');
+    expect(screen.queryByTestId('portal-customer-avatar')).not.toBeInTheDocument();
+    const bottomNav = screen.getByTestId('portal-bottom-nav');
+    await user.click(within(bottomNav).getByTestId('portal-bottom-nav-more'));
+    const more = within(within(bottomNav).getByTestId('portal-more-user'));
+    expect(more.getByTestId('portal-user-menu-header')).toHaveTextContent('Cliente Uno');
+    expect(more.getByTestId('portal-user-menu-email').textContent).toBe('cliente@uno.es');
+    expect(more.getByTestId('portal-language-es')).toBeInTheDocument();
+    expect(more.getByTestId('portal-language-en')).toBeInTheDocument();
   });
 
   it('shows no customer row and no avatar when /me names no customer', async () => {
@@ -659,7 +675,21 @@ describe('PortalPage — shell', () => {
     expect(screen.queryByTestId('portal-customer-avatar')).not.toBeInTheDocument();
   });
 
-  it('draws the header "Creado con Etendo" pill from lg and the compact tile below it, never both', () => {
+  // The "Más" sheet is the only place the mobile language lives: it must not depend on a name.
+  it('keeps the language in the mobile "Más" sheet when /me names no customer', async () => {
+    const user = userEvent.setup();
+    responses.me = jsonResponse({ tenantName: 'Acme SA' });
+    renderPortal();
+    await shellReady();
+
+    await user.click(screen.getByTestId('portal-bottom-nav-more'));
+    const more = within(screen.getByTestId('portal-more-user'));
+    expect(more.queryByTestId('portal-user-menu-header')).not.toBeInTheDocument();
+    await user.click(more.getByTestId('portal-language-en'));
+    expect(localeState.setLocale).toHaveBeenCalledWith('en_US');
+  });
+
+  it('draws the header "Creado con etendo.ai" pill from lg and the compact tile below it, never both', () => {
     render(<PortalCreatedWithHeaderLink />);
 
     const pill = screen.getByTestId('portal-created-with');
@@ -669,9 +699,13 @@ describe('PortalPage — shell', () => {
     expect(pill.parentElement).not.toHaveClass('lg:hidden');
     expect(compact.parentElement).toHaveClass('lg:hidden');
     expect(compact.parentElement).not.toHaveClass('hidden');
-    // The pill writes the copy; the compact tile is only the mark, named and titled by the label.
-    expect(pill).toHaveTextContent('portalCreatedWith');
-    expect(pill).toHaveTextContent('portalLearnMore');
+    // The pill (redesign 2026-11-25): "Creado con", the etendo.ai horizontal logo and the arrow; no
+    // "Conoce más" any more. The compact tile is only the mark, named and titled by the label.
+    expect(pill).toHaveTextContent('portalCreatedWithShort');
+    // Exactly "Creado con" + the wordmark: no second line ("Conoce más") is left.
+    expect(pill.textContent).toBe('portalCreatedWithShortetendo.ai');
+    expect(within(pill).getByTestId('portal-etendo-wordmark')).toHaveTextContent('etendo.ai');
+    expect(pill).toHaveClass('h-10', 'bg-[#1B1A1F]', 'rounded-[200px]');
     expect(compact.textContent).toBe('');
     expect(compact).toHaveAttribute('title', 'portalCreatedWithLinkLabel');
     for (const link of [pill, compact]) expectEtendoLink(link);
@@ -685,7 +719,8 @@ describe('PortalPage — shell', () => {
       path: `/portal/${TOKEN}`,
       ready: shellReady,
       desktopHeader: () => screen.getByTestId('portal-view-header'),
-      mobileHeader: () => screen.getByTestId('portal-mobile-topbar'),
+      // The mobile redesign's dark summary carries Inicio's header (logo, name, Etendo, search).
+      mobileHeader: () => screen.getByTestId('portal-pending-hero'),
     },
     {
       view: 'list',
@@ -756,7 +791,7 @@ describe('PortalPage — rail', () => {
     const rail = screen.getByTestId('portal-sidebar');
     expect(rail).toHaveAttribute('data-collapsed', 'false');
     // "Empieza gratis" opens the app's sign-up (PO answer).
-    expect(within(rail).getByTestId('portal-promo-cta')).toHaveAttribute('href', 'https://app.etendo.ai/onboarding');
+    expect(within(rail).getByTestId('portal-promo-cta')).toHaveAttribute('href', 'https://etendo.ai/precios/?utm_source=portal_clientes&utm_medium=in_app&utm_campaign=portal_clientes&utm_content=banner_empieza_gratis');
 
     await user.click(screen.getByTestId('portal-rail-toggle'));
 
@@ -849,7 +884,8 @@ describe('PortalPage — language', () => {
       renderPortal();
       await shellReady();
 
-      await user.click(screen.getAllByTestId('portal-customer-avatar')[0]);
+      // Mobile: the language is in the bottom bar's "Más" sheet.
+      await user.click(screen.getByTestId('portal-bottom-nav-more'));
 
       for (const short of ['es', 'en']) {
         const { className } = screen.getByTestId(`portal-language-${short}`);
@@ -868,12 +904,17 @@ describe('PortalPage — home', () => {
     const pending = screen.getAllByTestId('portal-balance-outstanding');
     expect(pending).toHaveLength(2);
     expect(pending[0].textContent).toBe(eur('1.210,50'));
-    // The overdue detail belongs to the mobile card, once, for the currency that has it.
+    // The overdue detail belongs to the mobile summary, once, for the currency that has it (the
+    // redesign's badge and "Desde el …"); without a converted figure each currency keeps its total.
     const hero = screen.getByTestId('portal-pending-hero');
-    expect(hero.textContent.match(/portalOverdueSince/g)).toHaveLength(1);
+    expect(within(hero).getAllByTestId('portal-pending-hero-total')).toHaveLength(2);
+    expect(within(hero).getAllByTestId('portal-pending-hero-overdue')).toHaveLength(1);
     // textContent, not toHaveTextContent: the matcher turns the amount's non-breaking space into a
     // plain one, so the formatted amount would never match.
-    expect(hero.textContent).toContain(t('portalOverdueSince', { amount: eur('210,50'), date: '15/08/2026' }));
+    expect(within(hero).getByTestId('portal-pending-hero-overdue').textContent)
+      .toBe(t('portalOverdueAmount', { amount: eur('210,50') }));
+    expect(within(hero).getByTestId('portal-pending-hero-since').textContent)
+      .toBe(t('portalSinceDate', { date: '15/08/2026' }));
   });
 
   it('says nothing is pending when there are no balances', async () => {
@@ -1261,14 +1302,14 @@ describe('PortalPage — document list', () => {
     });
   });
 
-  it('shows no amount columns for shipments and a dash on the card', async () => {
+  it('shows no amount columns for shipments and no total on the card', async () => {
     renderPortal(listPath('SHIPMENT'));
     await listReady();
 
     const table = screen.getByTestId('portal-document-table');
     expect(within(table).queryByText('portalColTaxBase')).not.toBeInTheDocument();
     expect(within(table).queryByText('portalColTotal')).not.toBeInTheDocument();
-    expect(within(screen.getByTestId('portal-document-card')).getByText('—')).toBeInTheDocument();
+    expect(within(screen.getByTestId('portal-document-card')).queryByText('portalSummaryTotal')).not.toBeInTheDocument();
   });
 
   it('shows an empty state when the kind has nothing in range', async () => {
@@ -1462,7 +1503,8 @@ describe('PortalPage — document detail', () => {
     renderPortal();
     await detailReady();
 
-    await user.click(screen.getByRole('button', { name: /orderDoc/ }));
+    // The desktop panel's row (the mobile list, hidden here, names it the same way).
+    await user.click(screen.getAllByRole('button', { name: 'portalKindOrder #PV/0001' })[0]);
 
     await waitFor(() => expect(screen.getByTestId('portal-panel-title').textContent).toBe('portalKindOrder PV/0001'));
     expect(callsTo('/documents/order/ord-1')).toHaveLength(1);
@@ -1690,5 +1732,402 @@ describe('PortalPage — link states', () => {
     await waitFor(() => expect(screen.getByTestId('portal-renewed')).toBeInTheDocument());
     expect(callsTo('/renew')).toHaveLength(2);
     expect(screen.queryByTestId('portal-renew-error')).not.toBeInTheDocument();
+  });
+});
+
+// ─── Mobile redesign (designer's proposal, 2026-11-25) ─────────────────────────────────────────
+describe('PortalPage — mobile redesign', () => {
+  const quotationRow = (overrides) => ({
+    kind: 'QUOTATION', id: 'q-1', documentNo: 'PR/0001', date: '2026-08-01', validUntil: '2999-01-10',
+    documentStatus: 'UE', currency: 'EUR', taxBase: 100, grandTotal: 121, canDecide: true, ...overrides,
+  });
+
+  // PO decision (2026-11-25): the home tiles keep their own wording on both viewports; only the
+  // list tabs and badges use the app's status labels (CP-16).
+  it('names the home tiles with the same wording on mobile and desktop', async () => {
+    renderPortal();
+    await shellReady();
+
+    expect(within(screen.getByTestId('portal-tile-quotation')).getByTestId('portal-tile-status').textContent)
+      .toBe('portalHighlightAwaitingAnswer');
+    expect(within(screen.getByTestId('portal-tile-invoice')).getByTestId('portal-tile-status').textContent)
+      .toBe('portalHighlightOverdue');
+    expect(screen.queryByTestId('portal-tile-status-mobile')).not.toBeInTheDocument();
+  });
+
+  // Several currencies, converted (CP-47): one total and, when the backend converts the overdue
+  // part too, one "≈ … vencidos" badge with no date (a date would mix currencies).
+  it('shows the converted overdue badge under the converted pending total', async () => {
+    responses.home = jsonResponse({
+      ...HOME,
+      convertedBalance: { amount: 1300.5, currency: 'EUR', approximate: true },
+      convertedOverdue: { amount: 847, currency: 'EUR', approximate: true },
+    });
+    renderPortal();
+    await shellReady();
+
+    const hero = within(screen.getByTestId('portal-pending-hero'));
+    expect(hero.getAllByTestId('portal-pending-hero-total')).toHaveLength(1);
+    expect(hero.getByTestId('portal-pending-hero-converted')).toHaveAttribute('data-approximate', 'true');
+    const badges = hero.getAllByTestId('portal-pending-hero-overdue');
+    expect(badges).toHaveLength(1);
+    expect(badges[0].textContent).toBe(t('portalOverdueAmount', { amount: `≈ ${eur('847,00')}` }));
+    expect(hero.queryByTestId('portal-pending-hero-since')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['is not converted', null],
+    ['is zero', { amount: 0, currency: 'EUR', approximate: true }],
+    ['is negative', { amount: -12, currency: 'EUR', approximate: true }],
+  ])('hides the overdue badge under the converted total when the overdue part %s', async (_label, convertedOverdue) => {
+    responses.home = jsonResponse({
+      ...HOME,
+      convertedBalance: { amount: 1300.5, currency: 'EUR', approximate: true },
+      convertedOverdue,
+    });
+    renderPortal();
+    await shellReady();
+
+    const hero = within(screen.getByTestId('portal-pending-hero'));
+    expect(hero.getByTestId('portal-pending-hero-converted')).toBeInTheDocument();
+    expect(hero.queryByTestId('portal-pending-hero-overdue')).not.toBeInTheDocument();
+  });
+
+  it('shows the recent documents\' status as coloured text on mobile', async () => {
+    renderPortal();
+    await shellReady();
+
+    const rows = screen.getAllByTestId('portal-recent-document-mobile');
+    const status = within(rows[0]).getByTestId('portal-document-status');
+    expect(status).not.toHaveClass('border');
+    expect(status.className).toMatch(/text-\[#/);
+  });
+
+  it('draws the mobile document detail with no lines and no comments', async () => {
+    responses.me = jsonResponse(WITH_ENTRY);
+    renderPortal();
+    await detailReady();
+
+    const panel = within(screen.getByTestId('portal-document-cards-panel'));
+    expect(panel.getByTestId('portal-mobile-summary')).toBeInTheDocument();
+    expect(panel.getByTestId('portal-mobile-summary-taxes')).toHaveTextContent('portalFieldTaxes (IVA 21%)');
+    expect(panel.getByTestId('portal-view-pdf')).toBeInTheDocument();
+    expect(panel.getAllByTestId('portal-related-item-mobile')).toHaveLength(1);
+    // Out of scope (PO decision): neither "Líneas" nor "Comentarios".
+    expect(panel.queryByTestId('portal-document-lines-mobile')).not.toBeInTheDocument();
+    expect(panel.queryByText('portalLines')).not.toBeInTheDocument();
+    expect(panel.queryByText(/portalComments/)).not.toBeInTheDocument();
+    expect(panel.queryByText('Tornillo')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['a pending quotation the backend lets this customer answer', {}, true],
+    ['a quotation not sent to this address (canDecide false, CP-49)', { canDecide: false }, false],
+    ['a quotation without canDecide (as /home and /search rows)', { canDecide: undefined }, false],
+    ['a rejected quotation', { documentStatus: 'CJ' }, false],
+    ['an expired quotation', { validUntil: '2020-01-10' }, false],
+  ])('offers Aceptar / Rechazar in a card\'s options on %s: %s', async (_label, overrides, offered) => {
+    const user = userEvent.setup();
+    responses.documents = () => jsonResponse({ documents: [quotationRow(overrides)], totalCount: 1 });
+    renderPortal(`/portal/${TOKEN}?view=list&kind=QUOTATION`);
+    await listReady();
+
+    await user.click(within(screen.getByTestId('portal-document-card')).getByTestId('portal-card-menu'));
+    const menu = within(await screen.findByRole('menu'));
+    expect(menu.getByTestId('portal-card-menu-open')).toBeInTheDocument();
+    expect(menu.getByTestId('portal-card-menu-pdf')).toBeInTheDocument();
+    expect(Boolean(menu.queryByTestId('portal-card-menu-accept'))).toBe(offered);
+    expect(Boolean(menu.queryByTestId('portal-card-menu-reject'))).toBe(offered);
+  });
+
+  it('opens the detail\'s accept popup from a card\'s options, with its recipients', async () => {
+    const user = userEvent.setup();
+    responses.documents = () => jsonResponse({ documents: [quotationRow({})], totalCount: 1 });
+    responses.document = () => jsonResponse({
+      ...quotationRow({}), lines: [], related: [], hasPdf: false,
+      decision: { canDecide: true, acceptAvailable: true, email: 'a@acme.es', confirmationRecipients: ['a@acme.es', 'b@acme.es'] },
+    });
+    renderPortal(`/portal/${TOKEN}?view=list&kind=QUOTATION`);
+    await listReady();
+
+    await user.click(within(screen.getByTestId('portal-document-card')).getByTestId('portal-card-menu'));
+    await user.click(screen.getByTestId('portal-card-menu-accept'));
+
+    const modal = await screen.findByTestId('portal-accept-modal');
+    expect(callsTo('/documents/quotation/q-1')).toHaveLength(1);
+    expect(within(modal).getAllByTestId('portal-decision-email-address').map((el) => el.textContent))
+      .toEqual(['a@acme.es', 'b@acme.es']);
+  });
+
+  it('opens the same quick filters as desktop from the mobile funnel (CP-37)', async () => {
+    const user = userEvent.setup();
+    renderPortal(`/portal/${TOKEN}?view=list&kind=INVOICE`);
+    await listReady();
+
+    await user.click(screen.getByTestId('portal-list-filters-mobile'));
+    const panel = within(await screen.findByTestId('portal-list-filters-mobile-panel'));
+    expect(panel.getByTestId('portal-list-subtype-all-mobile')).toHaveAttribute('aria-pressed', 'true');
+    expect(panel.getByTestId('portal-list-filter-all-mobile')).toBeInTheDocument();
+    expect(panel.getByTestId('portal-list-filters-mobile-range')).toBeInTheDocument();
+
+    await user.click(panel.getByTestId('portal-list-subtype-creditnote-mobile'));
+    await waitFor(() => expect(listQueries().at(-1).get('subtype')).toBe('creditNote'));
+  });
+
+  it('keeps the bottom bar\'s active item marked with its dot', async () => {
+    renderPortal();
+    await shellReady();
+
+    const home = screen.getByTestId('portal-bottom-nav-home');
+    expect(home).toHaveAttribute('aria-current', 'page');
+    expect(home).toHaveClass('text-[#325CFF]');
+    expect(within(home).getByTestId('portal-bottom-nav-active-dot')).toBeInTheDocument();
+  });
+});
+
+describe('PortalPage — mobile home summary', () => {
+  it.each([
+    ['one pending invoice in the singular', [{ currency: 'EUR', outstanding: 10, pendingCount: 1, overdue: 0, overdueCount: 0 }],
+      t('portalPendingInvoicesSentence_one', { count: 1 })],
+    ['several, summed over every currency, in the plural', HOME.balances,
+      t('portalPendingInvoicesSentence_plural', { count: 4 })],
+  ])('counts %s', async (_label, balances, sentence) => {
+    responses.home = jsonResponse({ ...HOME, balances });
+    renderPortal();
+    await shellReady();
+
+    expect(screen.getByTestId('portal-mobile-greeting')).toHaveTextContent(sentence);
+  });
+
+  it('opens the invoices on their "pending" tab from «Ver facturas pendientes»', async () => {
+    const user = userEvent.setup();
+    renderPortal();
+    await shellReady();
+
+    await user.click(screen.getByTestId('portal-view-pending-invoices'));
+
+    await waitFor(() => expect(listKind()).toBe('INVOICE'));
+    expect(urlView()).toEqual({ view: 'list', kind: 'INVOICE', group: 'pending' });
+    await waitFor(() => expect(listQueries().at(-1).get('group')).toBe('pending'));
+  });
+});
+
+describe('PortalPage — mobile document detail', () => {
+  const entry = (kind, id) => jsonResponse({ ...IDENTITY, entryDocument: { kind, id } });
+  const summaryRows = () => within(screen.getByTestId('portal-mobile-summary'))
+    .getAllByTestId(/^portal-mobile-summary-/).map((row) => row.getAttribute('data-testid'));
+
+  it('draws a shipment summary with its status and date, and no amount at all', async () => {
+    responses.me = entry('SHIPMENT', 'shp-1');
+    responses.document = () => jsonResponse({
+      kind: 'SHIPMENT', id: 'shp-1', documentNo: 'AL/0001', date: '2026-08-01', documentStatus: 'CO',
+      lines: [], taxes: [], related: [], hasPdf: false,
+    });
+    renderPortal();
+    await detailReady();
+
+    const summary = within(screen.getByTestId('portal-mobile-summary'));
+    expect(summary.getByTestId('portal-document-status')).toHaveAttribute('data-status', 'CO');
+    expect(summaryRows()).toEqual(['portal-mobile-summary-date']);
+  });
+
+  it.each([
+    ['one tax', [{ tax: 'IVA 21%', taxableAmount: 100, taxAmount: 21 }], 'portalFieldTaxes (IVA 21%)'],
+    ['two taxes', [{ tax: 'IVA 21%', taxableAmount: 100, taxAmount: 21 }, { tax: 'IVA 10%', taxableAmount: 50, taxAmount: 5 }], 'portalFieldTaxes'],
+    ['no tax', [], 'portalFieldTaxes'],
+  ])('names the tax in the taxes row only with exactly one tax: %s', async (_label, taxes, label) => {
+    responses.me = entry('ORDER', 'ord-1');
+    responses.document = () => jsonResponse({ ...DETAILS['order/ord-1'], taxBase: 150, taxes });
+    renderPortal();
+    await detailReady();
+
+    const row = screen.getByTestId('portal-mobile-summary-taxes');
+    expect(row.querySelector('dt').textContent).toBe(label);
+    expect(summaryRows()).toEqual(expect.arrayContaining(['portal-mobile-summary-taxBase', 'portal-mobile-summary-taxes']));
+  });
+
+  // The mobile and desktop related lists coexist in the DOM (the breakpoint hides one): each keeps
+  // its own ids, so a test or an E2E step can never pick the hidden one by mistake.
+  it('gives the mobile related rows their own ids, while desktop keeps portal-related-item', async () => {
+    responses.me = jsonResponse(WITH_ENTRY);
+    renderPortal();
+    await detailReady();
+
+    const mobile = within(screen.getByTestId('portal-document-cards-panel'));
+    const desktop = within(screen.getByTestId('portal-related-panel'));
+    expect(mobile.getAllByTestId('portal-related-item-mobile')).toHaveLength(1);
+    expect(mobile.queryByTestId('portal-related-item')).not.toBeInTheDocument();
+    expect(desktop.getAllByTestId('portal-related-item')).toHaveLength(1);
+    expect(desktop.queryByTestId('portal-related-item-mobile')).not.toBeInTheDocument();
+  });
+
+  it('says there are no related documents with the mobile and desktop ids apart', async () => {
+    responses.me = entry('INVOICE', 'inv-2');
+    renderPortal();
+    await detailReady();
+
+    const mobile = within(screen.getByTestId('portal-document-cards-panel'));
+    const desktop = within(screen.getByTestId('portal-related-panel'));
+    expect(mobile.getByTestId('portal-related-empty-mobile')).toBeInTheDocument();
+    expect(mobile.queryByTestId('portal-related-empty')).not.toBeInTheDocument();
+    expect(desktop.getByTestId('portal-related-empty')).toBeInTheDocument();
+    expect(desktop.queryByTestId('portal-related-empty-mobile')).not.toBeInTheDocument();
+  });
+});
+
+describe('PortalTag palettes', () => {
+  it.each([
+    ['the app badge by default', undefined, 'info', ['border', 'rounded-lg'], []],
+    ['the Figma badge', 'figma', 'info', ['border', 'bg-[#EBEFFF]', 'text-[#2B48BC]'], []],
+    ['coloured text, with no badge', 'text', 'info', ['text-[#2F55E8]'], ['border', 'rounded-lg', 'bg-[#EBEFFF]']],
+    ['neutral text for an unknown tone', 'text', 'nope', ['text-[#6B7280]'], ['border']],
+  ])('draws %s', (_label, palette, tone, present, absent) => {
+    render(<PortalTag palette={palette} tone={tone} testId="tag">x</PortalTag>);
+
+    const tag = screen.getByTestId('tag');
+    expect(tag).toHaveClass(...present);
+    for (const cls of absent) expect(tag).not.toHaveClass(cls);
+  });
+});
+
+describe('PortalPage — mobile list card options and filters', () => {
+  const cardOf = (documentNo) => screen.getAllByTestId('portal-document-card')
+    .find((card) => card.textContent.includes(documentNo));
+
+  async function openCardMenu(user, documentNo) {
+    await user.click(within(cardOf(documentNo)).getByTestId('portal-card-menu'));
+  }
+
+  it('saves the printable under a path-safe name from a card\'s "Descargar PDF"', async () => {
+    const user = userEvent.setup();
+    renderPortal(`/portal/${TOKEN}?view=list&kind=INVOICE`);
+    await listReady();
+
+    await openCardMenu(user, 'FV/0002');
+    await user.click(screen.getByTestId('portal-card-menu-pdf'));
+
+    await waitFor(() => expect(saveBlobAsFile).toHaveBeenCalledWith(expect.any(Blob), 'FV-0002.pdf'));
+    expect(saveBlobAsFile.mock.calls[0][0].type).toBe('application/pdf');
+    expect(callsTo('/documents/invoice/inv-2/pdf')).toHaveLength(1);
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['a missing printable (404)', 404, 'portalPdfUnavailable'],
+    ['a failed download (500)', 500, 'portalDownloadFailed'],
+  ])('says so on a toast for %s, and saves nothing', async (_label, status, key) => {
+    const user = userEvent.setup();
+    responses.pdf = jsonResponse({}, { status });
+    renderPortal(`/portal/${TOKEN}?view=list&kind=INVOICE`);
+    await listReady();
+
+    await openCardMenu(user, 'FV/0002');
+    await user.click(screen.getByTestId('portal-card-menu-pdf'));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(key));
+    expect(saveBlobAsFile).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('portal-invalid-link')).not.toBeInTheDocument();
+  });
+
+  // A refused read re-runs /me once (see "a read refused after a valid /me"); /me refuses too here.
+  it('hands a card\'s download refused as an invalid link to the page, which ends on the dead-link screen', async () => {
+    const user = userEvent.setup();
+    responses.pdf = jsonResponse({}, { status: 401 });
+    responses.me = sequence(jsonResponse(IDENTITY), jsonResponse({}, { status: 401 }));
+    renderPortal(`/portal/${TOKEN}?view=list&kind=INVOICE`);
+    await listReady();
+
+    await openCardMenu(user, 'FV/0002');
+    await user.click(screen.getByTestId('portal-card-menu-pdf'));
+
+    await waitFor(() => expect(screen.getByTestId('portal-invalid-link')).toBeInTheDocument());
+    expect(callsTo('/me')).toHaveLength(2);
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  describe('Aceptar from a card', () => {
+    const row = {
+      kind: 'QUOTATION', id: 'q-1', documentNo: 'PR/0001', date: '2026-08-01', validUntil: '2999-01-10',
+      documentStatus: 'UE', currency: 'EUR', taxBase: 100, grandTotal: 121, canDecide: true,
+    };
+
+    beforeEach(() => {
+      responses.documents = () => jsonResponse({ documents: [row], totalCount: 1 });
+    });
+
+    it.each([
+      ['a failed read with a toast', 500, () => expect(toast.error).toHaveBeenCalledWith('portalDecisionError')],
+      ['a dead link with the dead-link screen', 401, () => expect(screen.getByTestId('portal-invalid-link')).toBeInTheDocument()],
+    ])('opens no popup when the detail cannot be re-read, and ends on %s', async (_label, status, expectOutcome) => {
+      const user = userEvent.setup();
+      responses.document = () => jsonResponse({}, { status });
+      // A refused read re-runs /me once; /me refuses too, so the page ends on the dead link.
+      responses.me = sequence(jsonResponse(IDENTITY), jsonResponse({}, { status: 401 }));
+      renderPortal(`/portal/${TOKEN}?view=list&kind=QUOTATION`);
+      await listReady();
+
+      await openCardMenu(user, 'PR/0001');
+      await user.click(screen.getByTestId('portal-card-menu-accept'));
+
+      await waitFor(expectOutcome);
+      expect(callsTo('/documents/quotation/q-1')).toHaveLength(1);
+      expect(screen.queryByTestId('portal-accept-modal')).not.toBeInTheDocument();
+    });
+
+    it('closes the popup and says why on a toast when the request is refused', async () => {
+      const user = userEvent.setup();
+      responses.document = () => jsonResponse({
+        ...row, lines: [], related: [], hasPdf: false,
+        decision: { canDecide: true, acceptAvailable: true, email: 'a@acme.es' },
+      });
+      const answer = apiFetchMock.getMockImplementation();
+      apiFetchMock.mockImplementation(async (path, options) => (path.split('?')[0].endsWith('/decision')
+        ? jsonResponse({ error: 'cooldown' }, { status: 409 })
+        : answer(path, options)));
+      renderPortal(`/portal/${TOKEN}?view=list&kind=QUOTATION`);
+      await listReady();
+
+      await openCardMenu(user, 'PR/0001');
+      await user.click(screen.getByTestId('portal-card-menu-accept'));
+      await user.click(await screen.findByTestId('portal-accept-continue'));
+
+      await waitFor(() => expect(toast.error)
+        .toHaveBeenCalledWith(t('portalDecisionCooldown', { tenantName: 'Acme SA' })));
+      expect(screen.queryByTestId('portal-accept-modal')).not.toBeInTheDocument();
+      // The list stays: the card can open the flow again.
+      expect(screen.getByTestId('portal-document-card')).toBeInTheDocument();
+    });
+  });
+
+  it('sends the status picked in the mobile funnel as the list group, and marks it', async () => {
+    const user = userEvent.setup();
+    renderPortal(`/portal/${TOKEN}?view=list&kind=INVOICE`);
+    await listReady();
+
+    await user.click(screen.getByTestId('portal-list-filters-mobile'));
+    await user.click(await screen.findByTestId('portal-list-filter-pending-mobile'));
+
+    await waitFor(() => expect(listQueries().at(-1).get('group')).toBe('pending'));
+    expect(urlView()).toEqual({ view: 'list', kind: 'INVOICE', group: 'pending' });
+    expect(screen.getByTestId('portal-list-filter-pending-mobile')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('portal-list-filter-all-mobile')).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it.each([
+    ['a preset replaces the default month', 'dateRangeLast12Months', (from, initial) => expect(from).not.toBe(initial)],
+    ['"all time" drops the date bounds', 'dateRangeAllTime', (from) => expect(from).toBeNull()],
+  ])('sends the date range picked in the mobile funnel: %s', async (_label, preset, expectFrom) => {
+    const user = userEvent.setup();
+    renderPortal(`/portal/${TOKEN}?view=list&kind=INVOICE`);
+    await listReady();
+    const initialFrom = listQueries().at(-1).get('dateFrom');
+    expect(initialFrom).toBeTruthy();
+
+    await user.click(screen.getByTestId('portal-list-filters-mobile'));
+    const range = within(await screen.findByTestId('portal-list-filters-mobile-range'));
+    await user.click(range.getByRole('button', { name: preset }));
+
+    await waitFor(() => expect(listQueries().length).toBeGreaterThan(1));
+    expectFrom(listQueries().at(-1).get('dateFrom'), initialFrom);
   });
 });

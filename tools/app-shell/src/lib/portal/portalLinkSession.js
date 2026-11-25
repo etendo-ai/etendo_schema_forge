@@ -21,9 +21,10 @@
  *    working for the rest of the session; a fresh tab without the email link has no token and
  *    shows the generic "link no longer valid" screen.
  *
- * **Third-party tags MUST be injected after this runs** — from JavaScript loaded by `main.jsx`
- * after its first import, never as a static `<script>` in `index.html` (a classic or async script
- * there may run before the module graph and read the token). See `docs/customer-portal-link-token.md`.
+ * **Portal pages have no tracking** (ETP-6209): when {@link isPortalPath} says the page is a portal
+ * page, `main.jsx` skips GTM and starts observability without Datadog RUM or Mixpanel. Anywhere else, tags MUST still be injected
+ * after this runs — from JavaScript loaded by `main.jsx` after its first import, never as a static
+ * `<script>` in `index.html`. See `docs/customer-portal-link-token.md`.
  *
  * Pure apart from the two functions that touch `window`; everything else takes its inputs, so it
  * can be tested with plain `node --test`.
@@ -228,6 +229,26 @@ function applyReferrerPolicy(doc) {
   meta.setAttribute('content', 'same-origin');
 }
 
+/** The pathname below the router base, or `null` when it is outside the base. */
+function belowRouterBase(pathname, routerBase) {
+  const base = routerBase && routerBase !== '/' ? routerBase.replace(/\/+$/, '') : '';
+  if (base && !String(pathname ?? '').startsWith(`${base}/`)) return null;
+  return { base, path: String(pathname ?? '').slice(base.length) };
+}
+
+/**
+ * Whether a browser pathname is a customer-portal page (`/portal`, `/portal/…`, the decision
+ * landing included), honouring the router base path. The portal loads no third-party tags at all
+ * (ETP-6209: no tracking without a consent banner), so `main.jsx` asks this before installing GTM.
+ *
+ * @param {{ pathname?: string, routerBase?: string }} [options]
+ * @returns {boolean}
+ */
+export function isPortalPath({ pathname = '', routerBase = '/' } = {}) {
+  const below = belowRouterBase(pathname, routerBase);
+  return Boolean(below && parsePortalPath(below.path));
+}
+
 /**
  * Moves a portal token from the address bar into this tab's sessionStorage and rewrites the URL
  * without it. Runs once, synchronously, at module evaluation of `main.jsx`'s first import.
@@ -238,9 +259,10 @@ function applyReferrerPolicy(doc) {
 export function scrubPortalTokenFromLocation({ win = globalThis.window, routerBase = '/' } = {}) {
   const location = win?.location;
   if (!location?.pathname) return false;
-  const base = routerBase && routerBase !== '/' ? routerBase.replace(/\/+$/, '') : '';
-  if (base && !location.pathname.startsWith(`${base}/`)) return false;
-  const parsed = parsePortalPath(location.pathname.slice(base.length));
+  const below = belowRouterBase(location.pathname, routerBase);
+  if (!below) return false;
+  const { base } = below;
+  const parsed = parsePortalPath(below.path);
   if (!parsed) return false;
   applyReferrerPolicy(win.document);
   if (!parsed.token) return false;

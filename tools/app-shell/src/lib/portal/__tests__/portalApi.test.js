@@ -165,6 +165,8 @@ describe('fetchPortalIdentity', () => {
       email: 'cliente@uno.es',
       tenantName: 'Acme SA',
       hasLogo: true,
+      // CP-43: the link's tenant, when the backend names it.
+      clientId: null,
     });
   });
 
@@ -179,6 +181,7 @@ describe('fetchPortalIdentity', () => {
       email: null,
       tenantName: null,
       hasLogo: false,
+      clientId: null,
     });
   });
 
@@ -193,6 +196,7 @@ describe('fetchPortalIdentity', () => {
       email: null,
       tenantName: null,
       hasLogo: false,
+      clientId: null,
     });
   });
 
@@ -363,6 +367,10 @@ describe('fetchPortalHome', () => {
       invoicesThisYear: { total: 0, upToDate: 0 },
       // The period asked for, when the backend does not echo one.
       chart: { months: 6, currency: null, bars: [] },
+      // CP-47: no converted figures from an unreadable body.
+      convertedBalance: null,
+      convertedOverdue: null,
+      convertedPaidThisYear: null,
     });
   });
 
@@ -458,6 +466,8 @@ describe('fetchPortalDocument', () => {
 
     assert.deepEqual(document.decision, {
       canDecide: false, blockedReason: 'expired', acceptAvailable: true, email: 'contact@acme.com',
+      // CP-45: falls back to the one address when the backend lists no recipients.
+      confirmationRecipients: ['contact@acme.com'],
     });
   });
 });
@@ -553,7 +563,7 @@ describe('requestPortalDecision', () => {
 
     const result = await requestPortalDecision(fetchImpl, TOKEN, 'q/1', { decision: 'ACCEPT' });
 
-    assert.deepEqual(result, { ok: true, email: 'contact@acme.com' });
+    assert.deepEqual(result, { ok: true, email: 'contact@acme.com', recipients: ['contact@acme.com'] });
     assert.equal(calls[0].path, '/sws/portal/quotations/q%2F1/decision');
     assert.deepEqual(calls[0].options, {
       method: 'POST',
@@ -659,7 +669,7 @@ describe('fetchPortalDecision / confirmPortalDecision', () => {
         state: 'confirmed', appliedNow: true, decision: 'REJECT', reasonCode: 'OTHER',
         reasonText: 'Ya no', documentNo: 'PR/0001', tenantName: 'Acme SA',
         portalToken: null, quotationId: null,
-        date: null, grandTotal: null, currency: null, documentStatus: null,
+        date: null, grandTotal: null, currency: null, documentStatus: null, clientId: null,
       },
     ],
     [
@@ -668,7 +678,7 @@ describe('fetchPortalDecision / confirmPortalDecision', () => {
       {
         state: 'confirmed', appliedNow: true, decision: 'ACCEPT', reasonCode: null, reasonText: null,
         documentNo: null, tenantName: null, portalToken: 'tok-new', quotationId: 'q-1',
-        date: null, grandTotal: null, currency: null, documentStatus: null,
+        date: null, grandTotal: null, currency: null, documentStatus: null, clientId: null,
       },
     ],
     [
@@ -677,7 +687,7 @@ describe('fetchPortalDecision / confirmPortalDecision', () => {
       {
         state: 'confirmed', appliedNow: false, decision: null, reasonCode: null, reasonText: null,
         documentNo: null, tenantName: null, portalToken: null, quotationId: null,
-        date: null, grandTotal: null, currency: null, documentStatus: null,
+        date: null, grandTotal: null, currency: null, documentStatus: null, clientId: null,
       },
     ],
     [
@@ -686,7 +696,7 @@ describe('fetchPortalDecision / confirmPortalDecision', () => {
       {
         state: 'not_pending', appliedNow: false, decision: null, reasonCode: null, reasonText: null,
         documentNo: null, tenantName: null, portalToken: null, quotationId: null,
-        date: null, grandTotal: null, currency: null, documentStatus: null,
+        date: null, grandTotal: null, currency: null, documentStatus: null, clientId: null,
       },
     ],
   ]) {

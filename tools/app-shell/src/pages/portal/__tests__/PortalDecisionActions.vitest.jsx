@@ -326,3 +326,122 @@ describe('PortalDecisionActions — a refused request', () => {
     expect(screen.queryByTestId('portal-decision-error')).not.toBeInTheDocument();
   });
 });
+
+describe('PortalDecisionActions — 409 accept_unavailable', () => {
+  it('says accepting is unavailable instead of the generic send error', async () => {
+    const user = userEvent.setup();
+    const apiFetch = vi.fn(async () => jsonResponse({ error: 'accept_unavailable' }, { status: 409 }));
+    renderActions(quotation(OPEN), { apiFetch });
+
+    await user.click(screen.getByTestId('portal-decision-accept'));
+    await user.click(screen.getByTestId('portal-accept-continue'));
+
+    await waitFor(() => expect(screen.getByTestId('portal-decision-error').textContent)
+      .toBe(t('portalDecisionAcceptUnavailable', { tenantName: 'Acme SA' })));
+  });
+});
+
+// Mobile redesign (2026-11-25): the list card's options menu opens these popups with no buttons
+// of its own (`variant="headless"`), and is told when the flow is over.
+describe('PortalDecisionActions — headless (list card options)', () => {
+  function renderHeadless(document, { initialStep = 'accept', apiFetch = vi.fn() } = {}) {
+    const onDone = vi.fn();
+    render(
+      <PortalDecisionActions
+        apiFetch={apiFetch}
+        token={TOKEN}
+        document={document}
+        tenantName="Acme SA"
+        onInvalid={vi.fn()}
+        variant="headless"
+        initialStep={initialStep}
+        onDone={onDone}
+      />,
+    );
+    return { onDone, apiFetch };
+  }
+
+  it.each([
+    ['accept', 'portal-accept-modal'],
+    ['reject', 'portal-reject-modal'],
+  ])('opens straight on the %s popup, with no buttons', (initialStep, modal) => {
+    renderHeadless(quotation(OPEN), { initialStep });
+
+    expect(screen.getByTestId(modal)).toBeInTheDocument();
+    expect(screen.queryByTestId('portal-decision-panel')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('portal-decision-accept')).not.toBeInTheDocument();
+  });
+
+  it('opens nothing and reports why when the quotation was not sent to this address (CP-49)', async () => {
+    const { onDone } = renderHeadless(quotation({ ...OPEN, canDecide: false, blockedReason: 'not_recipient' }));
+
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith('portalDecisionBlockedNotRecipient'));
+    expect(screen.queryByTestId('portal-accept-modal')).not.toBeInTheDocument();
+  });
+
+  it('opens no accept popup and reports why when accepting is unavailable, but still offers rejecting', async () => {
+    const { onDone } = renderHeadless(quotation({ ...OPEN, acceptAvailable: false }));
+
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith('portalDecisionAcceptUnavailable'));
+    expect(screen.queryByTestId('portal-accept-modal')).not.toBeInTheDocument();
+  });
+
+  it('opens the reject popup when accepting is unavailable', () => {
+    renderHeadless(quotation({ ...OPEN, acceptAvailable: false }), { initialStep: 'reject' });
+
+    expect(screen.getByTestId('portal-reject-modal')).toBeInTheDocument();
+  });
+
+  it('ends once the customer closes the popup', async () => {
+    const user = userEvent.setup();
+    const { onDone } = renderHeadless(quotation(OPEN));
+
+    await user.click(screen.getByTestId('portal-accept-cancel'));
+
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith(null));
+  });
+
+  it('ends with no message once the sent confirmation is acknowledged', async () => {
+    const user = userEvent.setup();
+    const apiFetch = vi.fn(async () => jsonResponse({ state: 'sent', email: 'contact@acme.com' }));
+    const { onDone } = renderHeadless(quotation(OPEN), { apiFetch });
+
+    await user.click(screen.getByTestId('portal-accept-continue'));
+    await user.click(await screen.findByTestId('portal-check-email-ok'));
+
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith(null));
+    expect(bodyOf(apiFetch)).toEqual({ decision: 'ACCEPT' });
+    expect(onDone).toHaveBeenCalledTimes(1);
+  });
+
+  // A refused send closes the popup and hands the reason to the card, which shows it as a toast.
+  it.each([
+    ['a cooldown', 'cooldown', 'portalDecisionCooldown'],
+    ['a quotation not sent to this address', 'not_recipient', 'portalDecisionBlockedNotRecipient'],
+    ['a quotation no longer pending', 'not_pending', 'portalDecisionBlockedNotPending'],
+  ])('ends with the reason when the send is refused for %s', async (_label, code, key) => {
+    const user = userEvent.setup();
+    const apiFetch = vi.fn(async () => jsonResponse({ error: code }, { status: 409 }));
+    const { onDone } = renderHeadless(quotation(OPEN), { apiFetch });
+
+    await user.click(screen.getByTestId('portal-accept-continue'));
+
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith(key));
+    expect(screen.queryByTestId('portal-accept-modal')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('portal-check-email-modal')).not.toBeInTheDocument();
+  });
+
+  // The detail re-read for the card may say the quotation can no longer be answered: no popup may
+  // be left open over the list, and the flow must still end so the card can open another one.
+  it.each([
+    ['an answered quotation', quotation({ ...OPEN, canDecide: false, blockedReason: 'not_pending' }, { documentStatus: 'CJ' }), null],
+    ['an expired quotation', quotation({ ...OPEN, canDecide: false, blockedReason: 'expired' }, { validUntil: '2020-01-10' }), 'portalDecisionBlockedExpired'],
+    ['a detail with no decision block', quotation(undefined), null],
+  ])('opens no popup and ends on %s', async (_label, document, key) => {
+    const { onDone } = renderHeadless(document, { initialStep: 'reject' });
+
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith(key));
+    expect(screen.queryByTestId('portal-reject-modal')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('portal-accept-modal')).not.toBeInTheDocument();
+  });
+});

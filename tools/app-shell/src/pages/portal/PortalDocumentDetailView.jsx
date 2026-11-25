@@ -10,23 +10,19 @@ import {
 } from '@phosphor-icons/react';
 import { useCallback, useEffect, useState } from 'react';
 
-import { useLocale, useUI } from '@/i18n';
+import { useUI } from '@/i18n';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import PdfViewer, { usePdfZoom } from '@/windows/custom/shared/PdfViewer.jsx';
 import FileLightbox from '@/windows/custom/shared/FileLightbox.jsx';
-import SummaryCard, { InfoRow, MovementSummaryCard } from '@/windows/custom/shared/preview-cards/SummaryCard.jsx';
-import RelatedDocumentsCard from '@/windows/custom/shared/preview-cards/RelatedDocumentsCard.jsx';
-import { STATUS_BADGE } from '@/components/related-documents/constants.jsx';
-import { statusLabel } from '@/lib/statusBadge.js';
-import { formatCurrency, formatGroupedNumber } from '@/lib/formatCurrency.js';
+import { formatGroupedNumber } from '@/lib/formatCurrency.js';
 import {
   PORTAL_ERROR, fetchPortalDocument, fetchPortalDocumentPdf,
 } from '@/lib/portal/portalApi.js';
 import { portalPdfFileName } from '@/lib/portal/portalInvoices.js';
 import { saveBlobAsFile } from '@/lib/portal/portalDownload.js';
 import {
-  PortalDate, PortalMain, PortalMoney, PortalPaymentStatus, PortalSection, PORTAL_SECTION_TITLE,
+  PortalDate, PortalDocumentStatus, PortalMain, PortalMoney, PortalPaymentStatus, PORTAL_SECTION_TITLE,
   PORTAL_FIGMA_BUTTON_SECONDARY, PORTAL_FIGMA_SHADOW, PortalCreatedWithHeaderLink, PortalCreatedWithTile,
 } from './PortalBits.jsx';
 
@@ -48,11 +44,6 @@ function formatQuantity(value) {
     : formatGroupedNumber(value, { minimumFractionDigits: 0, maximumFractionDigits: 4 });
 }
 
-/** Money inside a sentence ("2 × 75,00 €"), through the same canonical formatter. */
-function formatMoneyText(currency, value) {
-  return value == null ? '—' : formatCurrency(currency, value);
-}
-
 /**
  * One document, read-only (design Documento / Movil-Documento).
  *
@@ -62,8 +53,9 @@ function formatMoneyText(currency, value) {
  * the summary card and "Documentos relacionados". Only when the document has no printable does
  * the left pane fall back to a sheet drawn from the data, under a "PDF no disponible" note.
  *
- * Mobile: a top bar with back, title, "Emitido por" and a download button; the summary card;
- * the lines with "Ver PDF" (the printable at full screen); the related documents.
+ * Mobile (designer's redesign, 2026-11-25): a top bar with back, title, "Emitido por" and a round
+ * download button; the summary card; "Ver PDF" (the printable at full screen); the related
+ * documents; Aceptar / Rechazar for a quotation the customer can answer. No lines, no comments.
  *
  * Comments and Accept / Reject (quotations) are agreed OUT items (Part C), so their slots are
  * left out.
@@ -217,22 +209,22 @@ export default function PortalDocumentDetailView({
   const pageHeaders = (
     <>
       {/* Mobile top bar (design Movil-Documento) */}
-      <header className="flex h-20 shrink-0 items-center gap-3 border-b border-border bg-card px-4 md:hidden">
+      <header className="flex shrink-0 items-center gap-2 border-b border-[#E3E7EC] bg-white px-4 py-3 md:hidden">
         <button
           type="button"
           aria-label={ui('portalBack', { list: plural })}
           onClick={back}
-          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[10px]"
+          className="flex h-10 w-8 shrink-0 items-center justify-center rounded-lg text-[#1B1A1F]"
           data-testid="portal-back-mobile"
         >
-          <ArrowLeftIcon className="h-5 w-5" aria-hidden="true" data-testid="ArrowLeft__6a1d3b" />
+          <ArrowLeftIcon size={20} aria-hidden="true" data-testid="ArrowLeft__6a1d3b" />
         </button>
         {/* QA 24/11 CP-46: the issuing company's logo is the header's brand on mobile; Etendo's tile
             stays as the secondary link. Decorative: "Emitido por …" names the company below. */}
         <PortalLogoTile identity={identity} logoUrl={logoUrl} size="lg" decorative data-testid="PortalLogoTile__6a1d3b" />
         <div className="flex min-w-0 flex-1 flex-col">
-          <h1 className="truncate text-xl font-semibold leading-7">{title}</h1>
-          <span className="truncate text-[13px] leading-[18px] text-muted-foreground">{ui('portalIssuedBy', { name: issuer })}</span>
+          <h1 className="truncate text-base font-medium leading-6 text-[#1B1A1F] [font-family:inherit]">{title}</h1>
+          <span className="truncate text-xs leading-4 text-[#6B7280]">{ui('portalIssuedBy', { name: issuer })}</span>
         </div>
         {/* Etendo link left of the other controls, as on the Inicio bar (provisional until the
             mobile design arrives). */}
@@ -243,10 +235,10 @@ export default function PortalDocumentDetailView({
             aria-label={ui('portalDownloadPdf')}
             onClick={downloadPdf}
             disabled={!pdfReady}
-            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[10px] border border-border bg-card disabled:opacity-50"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#C7CBD3] bg-white text-[#40465C] disabled:opacity-50"
             data-testid="portal-download-pdf-mobile"
           >
-            <DownloadSimpleIcon className="h-5 w-5" aria-hidden="true" data-testid="Download__6a1d3b" />
+            <DownloadSimpleIcon size={20} aria-hidden="true" data-testid="Download__6a1d3b" />
           </button>
         ) : null}
       </header>
@@ -338,28 +330,34 @@ export default function PortalDocumentDetailView({
             </div>
           </div>
 
-          {/* Mobile: the app's own preview cards (`windows/custom/shared/preview-cards`), as the
-              quotation, order, invoice and shipment previews use them; they bring their own
-              margins. The desktop panel above follows the Figma instead. */}
-          <div className="flex flex-col pb-4 md:hidden" data-testid="portal-document-cards-panel">
+          {/* Mobile (designer's redesign, 2026-11-25): the summary card, "Ver PDF", the related
+              documents and, for a quotation the customer can answer, Aceptar / Rechazar. No lines and
+              no comments box: both are out of the portal's scope (PO decision). */}
+          <div className="flex flex-col gap-4 px-2 pb-4 md:hidden" data-testid="portal-document-cards-panel">
             <PortalSummary document={document} data-testid="PortalSummary__6a1d3b" />
-            {document.kind === 'INVOICE' && document.installments.length > 1 ? (
-              <div className="mx-4 mt-5"><Installments document={document} data-testid="Installments__6a1d3b" /></div>
+            {document.hasPdf ? (
+              <button
+                type="button"
+                onClick={() => setLightboxOpen(true)}
+                disabled={!pdfReady}
+                className="self-end px-2 text-sm font-medium leading-6 text-[#1B1A1F] underline underline-offset-2 disabled:opacity-50"
+                data-testid="portal-view-pdf"
+              >
+                {ui('portalViewPdf')}
+              </button>
             ) : null}
-            <div className="mx-4 mt-5 md:hidden">
-              <MobileLines
-                document={document}
-                canViewPdf={pdfReady}
-                onViewPdf={() => setLightboxOpen(true)}
-                data-testid="MobileLines__6a1d3b" />
-            </div>
-            <RelatedDocumentsCard
-              items={document.related.map(toRelatedItem)}
-              onOpen={(type, doc) => onNavigate({ view: 'doc', kind: doc.portalKind, id: doc.id })}
-              data-testid="portal-related"
-            />
+            {document.kind === 'INVOICE' && document.installments.length > 1 ? (
+              <Installments document={document} data-testid="Installments__6a1d3b" />
+            ) : null}
+            <PortalRelatedList
+              variant="mobile"
+              related={document.related}
+              refreshing={refreshingRelated}
+              onRefresh={refreshRelated}
+              onOpen={(item) => onNavigate({ view: 'doc', kind: item.kind, id: item.id })}
+              data-testid="PortalRelatedList__6a1d3b" />
             {/* Part C on mobile: the board's bottom action bar (Movil-Documento). */}
-            <div className="mx-4 mt-5 md:hidden">
+            <div>
               <PortalDecisionActions
                 apiFetch={apiFetch}
                 token={token}
@@ -481,100 +479,83 @@ function PortalPdfPreview({ url, onFullScreen, onDownload }) {
   );
 }
 
-/** Portal kind → the app's related-document chip type (`DOCUMENT_CHIP_TYPES`). */
-const CHIP_TYPE_OF_KIND = Object.freeze({
-  QUOTATION: 'sales-quotation',
-  ORDER: 'sales-order',
-  SHIPMENT: 'shipment',
-  INVOICE: 'sales-invoice',
-});
-
-/** A portal related document as the shared card's `{ type, doc }` row, in the app's field names. */
-function toRelatedItem(related) {
-  return {
-    type: CHIP_TYPE_OF_KIND[related.kind] ?? 'sales-invoice',
-    doc: {
-      id: related.id,
-      portalKind: related.kind,
-      documentNo: related.documentNo,
-      grandTotalAmount: related.grandTotal,
-      'currency$_identifier': related.currency,
-      documentStatus: related.documentStatus,
-    },
-  };
-}
-
 /**
- * The summary: the app's own `SummaryCard`, fed the props each app preview passes for its kind
- * (QuotationPreview: valid until; InvoicePreview: due date), with the rows the portal adds as the
- * app adds its own (`InfoRow` children: payment state, outstanding, payment method, tax base,
- * taxes). A shipment has no amount, so — like the app's shipment and receipt previews — it uses
- * `MovementSummaryCard`.
+ * The mobile summary card (designer's redesign, 2026-11-25): "Importe total" and the amount (30/32)
+ * with the status badge on the right, then label / value rows (14/20, label #6B7280, value right):
+ * Fecha, the kind's own date (Válido hasta, Vencimiento), an invoice's payment state and
+ * outstanding, Método de pago, Base imponible and Impuestos (with the tax name when there is one).
+ * A shipment has no amounts: only its status and date.
  */
 function PortalSummary({ document }) {
   const ui = useUI();
-  const dictionary = useLocale();
-  const statusText = statusLabel(document.documentStatus, dictionary, ui);
+  const hasAmounts = document.kind !== 'SHIPMENT';
   const isInvoice = document.kind === 'INVOICE';
   const taxesTotal = document.taxes.reduce((sum, tax) => sum + (tax.taxAmount ?? 0), 0);
-  const money = (value) => (value == null ? '—' : formatCurrency(document.currency, value));
-  // The card's own labels end in a colon ("Contacto:", "Fecha:", "Estado:"); the rows the portal
-  // adds follow it.
-  const rowLabel = (key) => `${ui(key)}:`;
-
-  if (document.kind === 'SHIPMENT') {
-    return (
-      <MovementSummaryCard
-        title={ui('shipmentPreviewStatus')}
-        rows={[
-          { label: ui('shipmentPreviewDocNo'), value: document.documentNo || '—' },
-          { label: ui('shipmentPreviewContact'), value: document.customer.name || '—' },
-          { label: ui('shipmentPreviewDate'), value: <PortalDate value={document.date} data-testid="PortalDate__6a1d3b" /> },
-        ]}
-        statusRowLabel={ui('shipmentPreviewStatus')}
-        statusLabel={statusText}
-        statusBadgeClass={STATUS_BADGE[document.documentStatus] || 'bg-muted text-muted-foreground border-border-subtle'}
-        data-testid="MovementSummaryCard__6a1d3b" />
-    );
-  }
-
+  const taxNames = document.taxes.map((tax) => tax.tax).filter(Boolean);
+  const taxesLabel = taxNames.length === 1
+    ? `${ui('portalFieldTaxes')} (${taxNames[0]})` : ui('portalFieldTaxes');
+  const rows = [
+    { key: 'date', label: ui('date'), value: <PortalDate value={document.date} data-testid="PortalDate__6a1d3b" /> },
+    document.kind === 'QUOTATION'
+      ? { key: 'validUntil', label: ui('portalColValidUntil'), value: <PortalDate value={document.validUntil} data-testid="PortalDate__6a1d3b" /> }
+      : null,
+    isInvoice
+      ? { key: 'dueDate', label: ui('portalColDueDate'), value: <PortalDate value={document.dueDate} data-testid="PortalDate__6a1d3b" /> }
+      : null,
+    isInvoice
+      ? {
+        key: 'paymentStatus',
+        label: ui('portalColPaymentStatus'),
+        value: <PortalPaymentStatus
+          document={document}
+          installments={document.installments}
+          palette="figma"
+          className="rounded-full font-normal"
+          data-testid="PortalPaymentStatus__6a1d3b" />,
+      }
+      : null,
+    isInvoice
+      ? { key: 'outstanding', label: ui('portalColOutstanding'), value: <PortalMoney currency={document.currency} value={document.outstandingAmount} data-testid="PortalMoney__6a1d3b" /> }
+      : null,
+    document.paymentMethod
+      ? { key: 'paymentMethod', label: ui('portalFieldPaymentMethod'), value: document.paymentMethod }
+      : null,
+    hasAmounts
+      ? { key: 'taxBase', label: ui('portalColTaxBase'), value: <PortalMoney currency={document.currency} value={document.taxBase} data-testid="PortalMoney__6a1d3b" /> }
+      : null,
+    hasAmounts
+      ? { key: 'taxes', label: taxesLabel, value: <PortalMoney currency={document.currency} value={taxesTotal} data-testid="PortalMoney__6a1d3b" /> }
+      : null,
+  ].filter(Boolean);
   return (
-    <SummaryCard
-      currencyCode={document.currency ?? ''}
-      grandTotal={document.grandTotal}
-      contact={document.customer.name}
-      date={document.date}
-      statusCode={document.documentStatus}
-      statusLabel={statusText}
-      validUntil={document.kind === 'QUOTATION' ? (document.validUntil || null) : undefined}
-      dueDate={isInvoice ? (document.dueDate ?? null) : undefined}
-      data-testid="SummaryCard__6a1d3b">
-      {isInvoice ? (
-        <InfoRow label={rowLabel('portalColPaymentStatus')} data-testid="InfoRow__6a1d3b">
-          <PortalPaymentStatus
-            document={document}
-            installments={document.installments}
-            className="whitespace-normal text-right"
-            data-testid="PortalPaymentStatus__6a1d3b" />
-        </InfoRow>
-      ) : null}
-      {isInvoice ? <InfoRow
-        label={rowLabel('portalColOutstanding')}
-        value={money(document.outstandingAmount)}
-        data-testid="InfoRow__6a1d3b" /> : null}
-      {document.paymentMethod ? <InfoRow
-        label={rowLabel('portalFieldPaymentMethod')}
-        value={document.paymentMethod}
-        data-testid="InfoRow__6a1d3b" /> : null}
-      <InfoRow
-        label={rowLabel('portalColTaxBase')}
-        value={money(document.taxBase)}
-        data-testid="InfoRow__6a1d3b" />
-      <InfoRow
-        label={rowLabel('portalFieldTaxes')}
-        value={money(taxesTotal)}
-        data-testid="InfoRow__6a1d3b" />
-    </SummaryCard>
+    <section className="flex flex-col rounded-xl bg-white px-4 pb-2 pt-4" data-testid="portal-mobile-summary">
+      <div className="flex items-start justify-between gap-3 pb-3">
+        {hasAmounts ? (
+          <div className="flex min-w-0 flex-col">
+            <span className="text-xs leading-4 text-[#6B7280]">{ui('portalSummaryTotal')}</span>
+            <PortalMoney
+              currency={document.currency}
+              value={document.grandTotal}
+              className="truncate text-[30px] font-medium leading-8 tabular-nums text-[#1B1A1F]"
+              testId="portal-mobile-summary-total"
+              data-testid="PortalMoney__6a1d3b" />
+          </div>
+        ) : <span />}
+        <PortalDocumentStatus
+          status={document.documentStatus}
+          palette="figma"
+          className="shrink-0 rounded-full font-normal"
+          data-testid="PortalDocumentStatus__6a1d3b" />
+      </div>
+      <dl className="flex flex-col">
+        {rows.map((row) => (
+          <div key={row.key} className="flex items-center justify-between gap-3 py-2 text-sm leading-5" data-testid={`portal-mobile-summary-${row.key}`}>
+            <dt className="text-[#6B7280]">{row.label}</dt>
+            <dd className="min-w-0 truncate text-right text-[#1B1A1F] tabular-nums">{row.value}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   );
 }
 
@@ -690,56 +671,6 @@ function Installments({ document }) {
         ))}
       </div>
     </div>
-  );
-}
-
-/** Mobile only: the lines, with "Ver PDF" (design Movil-Documento). */
-function MobileLines({ document, canViewPdf, onViewPdf }) {
-  const ui = useUI();
-  const hasAmounts = document.kind !== 'SHIPMENT';
-  return (
-    <PortalSection
-      title={ui('portalLines')}
-      action={document.hasPdf ? (
-        <button
-          type="button"
-          onClick={onViewPdf}
-          disabled={!canViewPdf}
-          className="text-sm font-medium disabled:opacity-50"
-          data-testid="portal-view-pdf"
-        >
-          {ui('portalViewPdf')}
-        </button>
-      ) : null}
-      className="rounded-xl md:hidden"
-      testId="portal-document-lines-mobile"
-      data-testid="PortalSection__6a1d3b">
-      {document.lines.length === 0 ? (
-        <p className="px-5 py-4 text-sm text-muted-foreground">{ui('portalNoLines')}</p>
-      ) : (
-        <ul className="divide-y divide-border">
-          {withStableKeys(document.lines, lineKey).map(({ item: line, key }) => (
-            <li key={key} className="flex justify-between gap-3 px-5 py-4">
-              <span className="flex min-w-0 flex-col">
-                <span className="font-medium">{line.product || line.description}</span>
-                <span className="text-sm text-muted-foreground">
-                  {[line.productCode,
-                    hasAmounts
-                      ? `${formatQuantity(line.quantity)} × ${formatMoneyText(document.currency, line.unitPrice)}`
-                      : `${formatQuantity(line.quantity)} ${line.uom ?? ''}`.trim(),
-                    line.tax].filter(Boolean).join(' · ')}
-                </span>
-              </span>
-              {hasAmounts ? <PortalMoney
-                currency={document.currency}
-                value={line.amount}
-                className="font-medium tabular-nums"
-                data-testid="PortalMoney__6a1d3b" /> : null}
-            </li>
-          ))}
-        </ul>
-      )}
-    </PortalSection>
   );
 }
 

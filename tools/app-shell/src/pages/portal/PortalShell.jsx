@@ -1,5 +1,4 @@
 import {
-  MagnifyingGlassIcon,
   SquaresFourIcon,
   ArrowLineLeftIcon,
   ArrowLineRightIcon,
@@ -25,14 +24,15 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { LanguageMenuSection } from '@/components/LanguageMenuSection.jsx';
-import { PortalCreatedWithTile, PortalTag } from './PortalBits.jsx';
+import { PortalTag } from './PortalBits.jsx';
 import { PORTAL_HIGHLIGHTS, PORTAL_KIND_META } from './portalPresentation.js';
 
 /**
- * Where the promo card's "Empieza gratis" sends the visitor to create an account (PO answer): the
- * app's own public sign-up route, `/onboarding` (`runtime-routes.jsx`), on app.etendo.ai.
+ * Where the promo card's "Empieza gratis" sends the visitor: marketing's pricing page with its UTM,
+ * verbatim (ETP-6209, decided 2026-11-25). It replaced the app's own sign-up route. It opens in a
+ * new tab with `rel="noopener noreferrer"`, so etendo.ai never receives the portal URL.
  */
-export const ETENDO_SIGNUP_URL = 'https://app.etendo.ai/onboarding';
+export const ETENDO_SIGNUP_URL = 'https://etendo.ai/precios/?utm_source=portal_clientes&utm_medium=in_app&utm_campaign=portal_clientes&utm_content=banner_empieza_gratis';
 
 /**
  * Icon per destination: the design's Phosphor glyphs, the same everywhere a kind is drawn (rail,
@@ -115,37 +115,6 @@ export function PortalLogoTile({ identity, logoUrl, size = 'sm', round = false, 
 }
 
 /**
- * The tenant's brand block: the logo tile beside the company name and "Portal del cliente"
- * (story item 8). Either text line degrades on its own without breaking the layout.
- */
-export function PortalBrand({ identity, logoUrl, size = 'sm' }) {
-  const ui = useUI();
-  const large = size === 'lg';
-  return (
-    <div className={cn('flex min-w-0 items-center', large ? 'gap-3' : 'gap-2.5')} data-testid="portal-brand">
-      <PortalLogoTile
-        identity={identity}
-        logoUrl={logoUrl}
-        size={size}
-        data-testid="PortalLogoTile__a5d12f" />
-      <div className="flex min-w-0 flex-col">
-        {identity?.tenantName ? (
-          <span
-            className={cn('truncate font-semibold text-foreground', large ? 'text-base' : 'text-sm')}
-            data-testid="portal-tenant-name"
-          >
-            {identity.tenantName}
-          </span>
-        ) : null}
-        <span className={cn('truncate whitespace-nowrap text-muted-foreground', large ? 'text-[13px] leading-[18px]' : 'text-xs leading-4')}>
-          {ui('portalPageTitle')}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-/**
  * The user menu (PO answer): as in the app, clicking the user opens the app's user popup look — a
  * header with the customer's name and email (`/me`), then the language (§B.8) through the app's
  * own `DropdownMenu` and `LanguageMenuSection` (`APP_LOCALES`, rows and active marker), as the
@@ -183,88 +152,6 @@ function PortalUserMenu({ identity, align = 'end', side = 'bottom', children }) 
         ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
-  );
-}
-
-/**
- * The customer the link belongs to (`/me`'s `businessPartnerName`), shown where the design puts
- * its user (Main: the sidebar's user row; Movil-*: the avatar on the top bar's right). It is
- * the trigger of the user menu ({@link PortalUserMenu}: name, email and language). Nothing
- * renders without a name.
- *
- * The app has no shared initials helper — `UserAvatarButton` takes the first letter inline and
- * `OrgLogoField` keeps its own private function — so the initials come from this file's
- * `initialsOf` (the logo tile's fallback), and the styles from `UserAvatarButton`: its sidebar row
- * (person icon on a muted circle, then the name) and its round initials avatar.
- *
- * @param {'row'|'avatar'} variant the sidebar row (desktop) or the round avatar (mobile)
- */
-export function PortalCustomer({ identity, variant = 'row' }) {
-  const name = identity?.businessPartnerName;
-  if (!name) return null;
-  if (variant === 'avatar') {
-    return (
-      <PortalUserMenu identity={identity} data-testid="PortalUserMenu__a5d12f">
-        <button
-          type="button"
-          aria-label={name}
-          title={name}
-          // ≈40 px on a phone (360), the board's 48 px from 640 up (the 720 board).
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-foreground text-sm font-semibold text-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:h-12 sm:w-12"
-          data-testid="portal-customer-avatar"
-        >
-          {initialsOf(name)}
-        </button>
-      </PortalUserMenu>
-    );
-  }
-  return (
-    <div className="flex min-w-0 items-center gap-2.5" title={name} data-testid="portal-customer">
-      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
-        <UserIcon size={16} aria-hidden="true" data-testid="User__a5d12f" />
-      </span>
-      <span className="min-w-0 flex-1 truncate" data-testid="portal-customer-name">{name}</span>
-    </div>
-  );
-}
-
-/**
- * The mobile top bar of Inicio (design Movil-Inicio): the brand, then on the right the compact
- * "Creado con Etendo" tile, a search button and the customer's avatar, which opens the user menu
- * (the language).
- */
-export function PortalMobileBrandBar({ identity, logoUrl, onSearch }) {
-  const ui = useUI();
-  return (
-    <header
-      className="flex h-20 shrink-0 items-center justify-between gap-3 border-b border-border bg-card px-4 sm:gap-4 sm:px-6 md:hidden"
-      data-testid="portal-mobile-topbar"
-    >
-      {/* The brand takes the room left by the controls and truncates only a very long name. */}
-      <div className="min-w-0 flex-1">
-        <PortalBrand
-          identity={identity}
-          logoUrl={logoUrl}
-          size="lg"
-          data-testid="PortalBrand__a5d12f" />
-      </div>
-      <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-        {/* Provisional placement until the mobile design arrives (user decision, 2026-11-20). */}
-        <PortalCreatedWithTile data-testid="PortalCreatedWithTile__a5d12f" />
-        {onSearch ? (
-          <button
-            type="button"
-            aria-label={ui('portalSearch')}
-            onClick={onSearch}
-            className="flex h-10 w-10 items-center justify-center rounded-[10px] border border-border bg-card sm:h-12 sm:w-12"
-            data-testid="portal-mobile-search"
-          >
-            <MagnifyingGlassIcon className="h-5 w-5" aria-hidden="true" data-testid="Search__a5d12f" />
-          </button>
-        ) : null}
-        <PortalCustomer identity={identity} variant="avatar" data-testid="PortalCustomer__a5d12f" />
-      </div>
-    </header>
   );
 }
 
@@ -555,6 +442,7 @@ export default function PortalShell({ identity, logoUrl, current, tiles, onNavig
       </div>
 
       <PortalBottomNav
+        identity={identity}
         current={current}
         onNavigate={onNavigate}
         isActive={isActive}
@@ -613,7 +501,7 @@ function PortalRailFooter({ identity, collapsed }) {
 
 /**
  * The expanded rail's banner ("Lleva tu negocio más lejos"), at the bottom of the menu list.
- * "Empieza gratis" opens the app's sign-up (`ETENDO_SIGNUP_URL`) in a new tab (PO answer).
+ * "Empieza gratis" opens marketing's pricing page (`ETENDO_SIGNUP_URL`) in a new tab.
  */
 function PortalPromo() {
   const ui = useUI();
@@ -639,8 +527,42 @@ function PortalPromo() {
   );
 }
 
-/** The mobile bottom navigation: Inicio, Presupuestos, Facturas, and "Más" for the rest. */
-function PortalBottomNav({ onNavigate, isActive }) {
+/**
+ * The customer's entry in the mobile "Más" sheet: the user popup's content (name, email and the
+ * language) shown inline. The redesign (2026-11-25) dropped the header avatar that opened it, and
+ * the language must stay reachable (PO decision), so it lives here.
+ */
+function MoreMenuUser({ identity }) {
+  const { locale, setLocale } = useLocaleSwitch();
+  const name = identity?.businessPartnerName;
+  const email = identity?.email;
+  return (
+    <div className="border-t border-border" data-testid="portal-more-user">
+      {name || email ? (
+        <div className="px-4 py-3" data-testid="portal-user-menu-header">
+          <p className="truncate text-sm font-semibold" title={name ?? undefined}>{name || '—'}</p>
+          {email ? (
+            <p className="mt-1 truncate text-xs text-muted-foreground" title={email} data-testid="portal-user-menu-email">{email}</p>
+          ) : null}
+        </div>
+      ) : null}
+      {setLocale ? (
+        <LanguageMenuSection
+          locale={locale}
+          setLocale={setLocale}
+          testIdFor={(code) => `portal-language-${code.slice(0, 2).toLowerCase()}`}
+          data-testid="LanguageMenuSection__a5d12f" />
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * The mobile bottom navigation (redesign, 2026-11-25): Inicio, Presupuestos, Facturas, and "Más"
+ * for the other kinds and the customer's menu (name, email, language). The active item is #325CFF
+ * with a 4px dot under its label.
+ */
+function PortalBottomNav({ identity, onNavigate, isActive }) {
   const ui = useUI();
   const [moreOpen, setMoreOpen] = useState(false);
   const moreRef = useRef(null);
@@ -680,12 +602,12 @@ function PortalBottomNav({ onNavigate, isActive }) {
     <nav
       ref={moreRef}
       aria-label={ui('portalMainNavigation')}
-      className="fixed inset-x-0 bottom-0 z-20 grid h-[88px] grid-cols-4 border-t border-border bg-card px-3 py-2 md:hidden"
+      className="fixed inset-x-0 bottom-0 z-20 grid h-[72px] grid-cols-4 border-t border-[#E3E7EC] bg-white px-3 py-2 md:hidden"
       data-testid="portal-bottom-nav"
     >
       {moreOpen ? (
         <div
-          className="absolute bottom-full right-3 mb-2 flex min-w-48 flex-col rounded-xl border border-border bg-card py-1.5 shadow-lg"
+          className="absolute bottom-full right-3 mb-2 flex max-h-[70vh] min-w-56 flex-col overflow-y-auto rounded-xl border border-border bg-card py-1.5 shadow-lg"
           data-testid="portal-more-menu"
         >
           {secondary.map((kind) => {
@@ -703,6 +625,7 @@ function PortalBottomNav({ onNavigate, isActive }) {
               </button>
             );
           })}
+          <MoreMenuUser identity={identity} data-testid="MoreMenuUser__a5d12f" />
         </div>
       ) : null}
       {items.map(({ key, Icon, label, active, onClick, expanded }) => (
@@ -713,20 +636,18 @@ function PortalBottomNav({ onNavigate, isActive }) {
           aria-expanded={expanded}
           onClick={onClick}
           className={cn(
-            'flex flex-col items-center justify-center gap-1 text-[13px]',
-            active ? 'font-semibold text-foreground' : 'text-muted-foreground',
+            'flex flex-col items-center justify-center gap-0.5 text-xs leading-4',
+            active ? 'font-medium text-[#325CFF]' : 'text-[#6B7280]',
           )}
           data-testid={`portal-bottom-nav-${key}`}
         >
-          <span
-            className={cn(
-              'flex h-8 w-14 items-center justify-center rounded-full',
-              active ? 'bg-[hsl(var(--accent-highlight))] text-[hsl(var(--accent-highlight-foreground))]' : '',
-            )}
-          >
-            <Icon size={20} aria-hidden="true" data-testid="Icon__a5d12f" />
-          </span>
+          <Icon size={20} weight={active ? 'fill' : 'regular'} aria-hidden="true" data-testid="Icon__a5d12f" />
           {label}
+          <span
+            className={cn('h-1 w-1 rounded-full', active ? 'bg-[#325CFF]' : 'bg-transparent')}
+            aria-hidden="true"
+            data-testid={active ? 'portal-bottom-nav-active-dot' : undefined}
+          />
         </button>
       ))}
     </nav>

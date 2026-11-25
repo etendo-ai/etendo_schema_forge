@@ -10,7 +10,7 @@ import { getDueDateDotStyle, getDueDateState } from '@/lib/invoiceDueDate.js';
 import { invoicePaymentState, quotationValidity } from './portalPresentation.js';
 
 /**
- * Where the "Creado con Etendo · Conoce más" pill (desktop) and the compact Etendo tile (mobile)
+ * Where the "Creado con etendo.ai" pill (desktop) and the compact Etendo tile (mobile)
  * send the visitor: marketing's URL with its UTM, verbatim (ETP-6209, approved 2026-11-24). The one
  * place it lives; both links read it. Each opens with `rel="noopener noreferrer"`, and portal
  * pages carry `<meta name="referrer" content="same-origin">` (`lib/portal/portalLinkSession.js`),
@@ -33,11 +33,27 @@ function EtendoMark() {
 }
 
 /**
- * The top bar's "Creado con Etendo / Conoce más" pill, with the Figma's exact values (2026-11-20):
- * 216×44, padding 4px, gap 8px, #1B1A1F, radius 200px; Etendo's 32px lime circle, a 128px text
- * block (12/16 500 white title, 11/16 60%-white subtitle) and a 32px 10%-white round arrow with a
- * 50%-white CaretRight. It opens marketing's page ({@link ETENDO_PRICING_URL}) in a new tab; the
- * arrow is part of the link, not a button.
+ * The etendo.ai horizontal logo of the desktop pill (designer's redesign, 2026-11-25): a 28px lime
+ * (#B8FA50) tile with radius 9 holding Etendo's mark, then the white "etendo.ai" wordmark (about
+ * 102×28 in all). The tile reuses `/logo-etendo-ai.png`, the same lime tile as {@link EtendoMark}.
+ */
+function EtendoWordmark() {
+  return (
+    <span className="flex h-7 shrink-0 items-center gap-1.5" aria-hidden="true" data-testid="portal-etendo-wordmark">
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-[9px] bg-[#B8FA50]">
+        <img src="/logo-etendo-ai.png" alt="" className="h-7 w-7 max-w-none" />
+      </span>
+      <span className="text-base font-semibold leading-6 tracking-[-0.01em] text-white">etendo.ai</span>
+    </span>
+  );
+}
+
+/**
+ * The desktop top bar's "Creado con etendo.ai" pill (designer's redesign, 2026-11-25; it replaced
+ * "Creado con Etendo · Conoce más"): 40px tall, padding 4px 4px 4px 16px, gap 8px, #1B1A1F, radius
+ * 200px; "Creado con" (Inter 500 12/16, -0.005em, white), the etendo.ai horizontal logo and a 32px
+ * 10%-white round arrow with a 50%-white CaretRight. It opens marketing's page
+ * ({@link ETENDO_PRICING_URL}) in a new tab; the arrow is part of the link, not a button.
  */
 export function PortalCreatedWithPill({ className }) {
   const ui = useUI();
@@ -48,21 +64,16 @@ export function PortalCreatedWithPill({ className }) {
       rel="noopener noreferrer"
       aria-label={ui('portalCreatedWithLinkLabel')}
       className={cn(
-        'flex h-11 w-[216px] min-w-0 max-w-full items-center gap-2 rounded-[200px] bg-[#1B1A1F] p-1 text-left',
+        'flex h-10 min-w-0 max-w-full items-center gap-2 rounded-[200px] bg-[#1B1A1F] py-1 pl-4 pr-1 text-left',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
         className,
       )}
       data-testid="portal-created-with"
     >
-      <EtendoMark data-testid="EtendoMark__7a317e" />
-      <span className="flex w-[128px] min-w-0 shrink flex-col items-start justify-center pr-1">
-        <span className="-my-[3px] max-w-full truncate text-xs font-medium leading-4 tracking-[-0.005em] text-white">
-          {ui('portalCreatedWith')}
-        </span>
-        <span className="max-w-full truncate text-[11px] font-normal leading-4 tracking-[-0.005em] text-white/60">
-          {ui('portalLearnMore')}
-        </span>
+      <span className="shrink-0 whitespace-nowrap text-xs font-medium leading-4 tracking-[-0.005em] text-white">
+        {ui('portalCreatedWithShort')}
       </span>
+      <EtendoWordmark data-testid="EtendoWordmark__7a317e" />
       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[360px] bg-white/10 text-white/50" aria-hidden="true">
         <CaretRightIcon size={20} data-testid="CaretRight__7a317e" />
       </span>
@@ -95,8 +106,8 @@ export function PortalCreatedWithTile({ testId = 'portal-created-with-mobile' })
 }
 
 /**
- * The Etendo link of a desktop header's right side: the exact-Figma pill from lg up (inside the
- * Figma's 224×44 wrapper, whose 8px right padding keeps it off the window's edge) and, between md
+ * The Etendo link of a desktop header's right side: the "Creado con etendo.ai" pill from lg up
+ * (its wrapper's 8px right padding keeps it off the window's edge) and, between md
  * and lg, where the pill does not fit beside the search, the compact lime circle with the same
  * right spacing. Never both. The md–lg tile is PROVISIONAL until the mobile/medium design arrives.
  */
@@ -106,7 +117,7 @@ export function PortalCreatedWithHeaderLink() {
       <span className="flex shrink-0 pr-2 lg:hidden">
         <PortalCreatedWithTile testId="portal-created-with-compact" data-testid="PortalCreatedWithTile__7a317e" />
       </span>
-      <div className="hidden h-11 w-[224px] min-w-0 max-w-full items-center pr-2 lg:flex">
+      <div className="hidden h-11 min-w-0 max-w-full items-center pr-2 lg:flex">
         <PortalCreatedWithPill data-testid="PortalCreatedWithPill__7a317e" />
       </div>
     </>
@@ -203,21 +214,40 @@ const FIGMA_TAG_TONES = Object.freeze({
 });
 
 /**
+ * The mobile redesign's status as coloured TEXT with no background (2026-11-25: recent documents,
+ * related documents): 12/16 500 in the tone's colour.
+ */
+const TEXT_TAG_TONES = Object.freeze({
+  info: 'text-[#2F55E8]',
+  success: 'text-[#1E874C]',
+  warning: 'text-[#C28800]',
+  caution: 'text-[#C28800]',
+  destructive: 'text-[#D50B3E]',
+  neutral: 'text-[#6B7280]',
+});
+
+/**
  * Where the Figma colours a status differently from the app's tone (the label stays the app's):
  * a quotation waiting for the customer (`UE`) is blue, an invoice still to pay is yellow.
  */
 const FIGMA_STATUS_TONES = Object.freeze({ UE: 'info' });
 const FIGMA_PAYMENT_TONES = Object.freeze({ pending: 'warning' });
 
-/** The design's badge. `palette="figma"`: the main screen's Figma colours. */
+/**
+ * The design's badge. `palette="figma"`: the main screen's Figma colours; `palette="text"`: the
+ * mobile redesign's coloured text without a badge.
+ */
 export function PortalTag({
   tone = 'neutral', palette, children, className, testId, ...rest
 }) {
-  const tones = palette === 'figma' ? FIGMA_TAG_TONES : TAG_TONES;
+  const textOnly = palette === 'text';
+  const tones = { figma: FIGMA_TAG_TONES, text: TEXT_TAG_TONES }[palette] ?? TAG_TONES;
   return (
     <span
       className={cn(
-        'inline-flex items-center whitespace-nowrap rounded-lg border px-2.5 py-0.5 text-xs font-medium leading-4',
+        textOnly
+          ? 'inline-flex items-center whitespace-nowrap text-xs font-medium leading-4'
+          : 'inline-flex items-center whitespace-nowrap rounded-lg border px-2.5 py-0.5 text-xs font-medium leading-4',
         tones[tone] ?? tones.neutral,
         className,
       )}
@@ -235,7 +265,7 @@ export function PortalDocumentStatus({ status, className, palette }) {
   const ui = useUI();
   const dictionary = useLocale();
   if (!status) return null;
-  const tone = (palette === 'figma' && FIGMA_STATUS_TONES[status]) || getStatusTone(status);
+  const tone = (palette && palette !== 'default' && FIGMA_STATUS_TONES[status]) || getStatusTone(status);
   return (
     <PortalTag
       tone={tone}
@@ -256,7 +286,7 @@ export function PortalPaymentStatus({
   const ui = useUI();
   const state = invoicePaymentState(document, installments, { useServerOverdue });
   if (!state) return null;
-  const tone = (palette === 'figma' && FIGMA_PAYMENT_TONES[state.id]) || state.tone;
+  const tone = (palette && palette !== 'default' && FIGMA_PAYMENT_TONES[state.id]) || state.tone;
   return (
     <PortalTag
       tone={tone}
@@ -401,18 +431,23 @@ export const PORTAL_DASHBOARD_SECTION_TITLE = `${PORTAL_SECTION_TITLE} md:[font-
  * (spec of 2026-11-17): a 40px band with 8/12 padding and the Space Mono title, on desktop only;
  * the other views keep the default until their own spec arrives.
  */
-export function PortalSection({ title, action, children, className = '', testId, variant }) {
+export function PortalSection({
+  title, action, children, className = '', headerClassName = '', titleClassName = '', testId, variant,
+}) {
   const dashboard = variant === 'dashboard';
   return (
     <section
-      className={`min-w-0 overflow-hidden rounded-lg border border-border bg-card md:rounded-lg ${className}`}
+      // cn (tailwind-merge): a caller's override (e.g. the mobile "Documentos recientes":
+      // overflow-visible, rounded-none, border-0, bg-transparent) wins over these defaults.
+      className={cn('min-w-0 overflow-hidden rounded-lg border border-border bg-card md:rounded-lg', className)}
       data-testid={testId}
     >
       <div className={cn(
         'flex h-14 items-center justify-between border-b border-border bg-muted px-5',
         dashboard ? 'md:h-10 md:px-3 md:py-2' : 'md:h-12 md:px-3',
+        headerClassName,
       )}>
-        <h2 className={dashboard ? PORTAL_DASHBOARD_SECTION_TITLE : PORTAL_SECTION_TITLE}>{title}</h2>
+        <h2 className={cn(dashboard ? PORTAL_DASHBOARD_SECTION_TITLE : PORTAL_SECTION_TITLE, titleClassName)}>{title}</h2>
         {action}
       </div>
       {children}
