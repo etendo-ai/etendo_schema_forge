@@ -821,12 +821,9 @@ function ImportTaxesBlock({
 
   return (
     <section className="space-y-4 border-t border-border pt-4" data-testid="SiiImportTaxesSection__card">
-      <header className="flex flex-col gap-0.5" data-testid="SiiImportTaxesSection__card__header">
+      <header data-testid="SiiImportTaxesSection__card__header">
         <span className="text-sm font-semibold text-foreground leading-5" data-testid="SiiImportTaxesSection__card__title">
           {ui('sifDataTabs.importTaxes.title')}
-        </span>
-        <span className="text-xs text-muted-foreground" data-testid="SiiImportTaxesSection__card__subtitle">
-          {ui('sifDataTabs.importTaxes.subtitle')}
         </span>
       </header>
       {!recordId ? (

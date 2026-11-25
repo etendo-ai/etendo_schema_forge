@@ -341,6 +341,8 @@ describe('SiiImportTaxesSection — the card', () => {
 
   it('asks to save the invoice first while it is unsaved, with no request', () => {
     renderCard({ recordId: null });
+    expect(screen.getByTestId('SiiImportTaxesSection__card__title')).toHaveTextContent('sifDataTabs.importTaxes.title');
+    expect(screen.queryByTestId('SiiImportTaxesSection__card__subtitle')).not.toBeInTheDocument();
     expect(screen.getByTestId('SiiImportTaxesSection__saveFirst')).toHaveTextContent('sifDataTabs.importTaxes.saveFirst');
     expect(mockApiFetch).not.toHaveBeenCalled();
   });

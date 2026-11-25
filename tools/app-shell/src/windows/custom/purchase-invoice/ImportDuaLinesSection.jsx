@@ -142,21 +142,16 @@ export default function ImportDuaLinesSection({
 
   return (
     <div className="space-y-3 px-4 pt-4" data-testid="ImportDuaLinesSection__root">
-      <div className="flex items-start gap-3" data-testid="ImportDuaLinesSection__check">
+      <div className="flex items-center gap-3" data-testid="ImportDuaLinesSection__check">
         <Switch
           id="pinv-importDua"
           checked={checked}
           onCheckedChange={handleToggle}
           disabled={readOnly || lockedOn}
           data-testid="Switch__importDua" />
-        <div className="space-y-0.5">
-          <Label htmlFor="pinv-importDua" className="text-sm text-foreground font-medium" data-testid="Label__importDua">
-            {ui('sifDataTabs.dua.importCheck')}
-          </Label>
-          <p className="text-xs text-muted-foreground" data-testid="ImportDuaLinesSection__help">
-            {ui('sifDataTabs.dua.importCheckHelp')}
-          </p>
-        </div>
+        <Label htmlFor="pinv-importDua" className="text-sm text-foreground font-medium" data-testid="Label__importDua">
+          {ui('sifDataTabs.dua.importCheck')}
+        </Label>
       </div>
       <UncheckConfirmDialog
         ui={ui}

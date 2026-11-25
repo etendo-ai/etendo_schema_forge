@@ -54,6 +54,12 @@ describe('ImportDuaLinesSection — lock and uncheck', () => {
     expect(switchEl).not.toBeDisabled();
   });
 
+  it('labels the switch with no help text under it', () => {
+    renderSection({ ...draft, etgoImportDua: false });
+    expect(screen.getByTestId('Label__importDua')).toBeInTheDocument();
+    expect(screen.queryByTestId('ImportDuaLinesSection__help')).not.toBeInTheDocument();
+  });
+
   it('locks it on a legacy F5 / LC with the stored check off', () => {
     const { switchEl } = renderSection({ ...draft, etgoImportDua: false, aeatsiiClaveTipoFc: 'LC' });
     expect(switchEl).toBeDisabled();
