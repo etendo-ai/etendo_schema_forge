@@ -73,6 +73,13 @@ Every task is reviewed on its own, on its PR, before it enters the pack. For a b
      window-specific logic.
 5. **The PR's state.** Open, base `develop`, no conflicts, CI green (Job A of `merge-block-helper`).
    A conflict with `develop` is resolved on the feature branch first.
+6. **What the bot tends to get wrong** (first pack, ETP-6423):
+   - "fails for something unrelated to the change": check it. Once it was the PR's own new test.
+   - docs not updated with the behaviour (`neo-headless.md`, email contracts);
+   - a verdict checked on one entity and assumed for the rest: sweep every entity the button or
+     field appears on;
+   - out-of-scope content brought back (the ticket says what is out of scope);
+   - `Co-Authored-By` trailers and Spanish commit bodies, against the commit conventions.
 
 Verdict per task, recorded in the pack's Jira task:
 
@@ -96,6 +103,8 @@ git -C <repo> merge --no-ff --no-edit origin/feature/ETP-B
 
 - `--no-track`: a branch made from `origin/develop` must not track it, or a stray push lands there.
 - **Order:** oldest PR first, unless one task depends on another.
+- **Merge the reviewed head.** The bot may rebuild a task's branch after the review: compare each
+  branch's head with the sha reviewed in stage 1 and review again whatever changed.
 - **Merge commits only.** Never squash or rebase: each task's commits keep their history and their
   `Hooks-Verified` trailer (merge commits do not need it).
 - **A conflict between two tasks** is resolved on the pack branch, in the merge commit. When the
@@ -116,6 +125,17 @@ local-env worktree ETP-P --module com.etendoerp.go=taskpack/ETP-P --repo schema_
   it listed them. Record the result per task (pass / fail + evidence) in the pack's Jira task.
 - Run the narrow automated tests the tasks touched (`./gradlew test --tests ...` inside the
   environment; Vitest for schema_forge).
+- What the first pack needed in its environment:
+  - every module of `com.etendoerp.go/jenkinsExtraModules.txt` (CI clones them; a local checkout may
+    lack one, e.g. `com.etendoerp.automated.remittance`, and the build fails on a missing method);
+  - server-side PDFs: `etgo.jsreport.url` (the jsreport container) and `etgo.printables.url` (the
+    SPA's `/printables`) in the environment's `Openbravo.properties`, then restart its Tomcat;
+  - document emails: `etendo.go.email.documentDownloadBaseUrl` / `…TokenSecret` for the links, and
+    `etendo.go.email.provider.*` pointed at a local HTTP sink that stores each POST, so the email
+    is "sent" and its content can be read;
+  - copilot UI tools without an LLM: Playwright with `page.route('**/api/ai/chat')` answering an AI
+    SDK UI-message stream that calls the tool, and reading the tool output from the follow-up
+    request.
 
 ## Fixes
 
@@ -143,12 +163,17 @@ Where a fix goes depends on whose problem it is:
 - **A human merges it**, in GitHub, with a merge commit. Agents never merge into `develop`.
 - When a pack spans two repos, merge both PRs together, `com.etendoerp.go` first (as the cut does).
 
+**Keep the PR mergeable.** When `develop` moves before the merge (conflicts, or a branch rule that
+requires the branch to be up to date), merge `develop` into the pack branch again, rerun the pack's
+tests and push. Conflicts seen in the first pack: the test-cell files (`src-test/cells/*.txt`, keep
+both lists and recount the section headers) and READMEs.
+
 **The tasks' own PRs** stay open while the pack is reviewed and are not closed by hand. When the
 pack's PR merges, each task's head commit reaches `develop` and GitHub marks its PR as merged on its
-own. Check it after the first pack; a PR that is still open then is closed with a comment pointing at
-the pack's PR.
+own (confirmed with ETP-6423: all 8 PRs). If one stays open, its branch moved after the pack was
+built: close it with a comment pointing at the pack's PR, or bring the new commits in.
 
-**Jira.** Once the pack is in `develop`, each task and the pack's task move on as any merged task.
+**Jira.** Once the pack is in `develop`, each task and the pack's task move to "Control de calidad".
 
 ## Who does what
 
