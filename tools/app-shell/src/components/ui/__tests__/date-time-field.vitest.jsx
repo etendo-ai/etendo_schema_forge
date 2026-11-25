@@ -109,6 +109,13 @@ describe('DateTimeField', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
+  it('shows the optional suffix inside the field, read-only too, and nothing without it', () => {
+    const { rerender } = render(<DateTimeField value="2026-11-19T14:20:00" readOnly suffix="GMT-3" data-testid={T} />);
+    expect(screen.getByTestId(`${T}-suffix`)).toHaveTextContent('GMT-3');
+    rerender(<DateTimeField value="2026-11-19T14:20:00" readOnly data-testid={T} />);
+    expect(screen.queryByTestId(`${T}-suffix`)).not.toBeInTheDocument();
+  });
+
   it('read-only: no popover trigger, the placeholder stands for an empty value', () => {
     render(<DateTimeField value={null} readOnly placeholder="convRateOpenEnd" data-testid={T} />);
     expect(screen.getByTestId(`${T}-trigger`)).toBeDisabled();

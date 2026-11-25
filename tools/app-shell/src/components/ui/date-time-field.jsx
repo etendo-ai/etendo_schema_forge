@@ -103,6 +103,9 @@ function TimeInput({ value, onCommit, label, 'data-testid': testId }) {
  * @param {boolean} [props.required]
  * @param {string} [props.id]
  * @param {string} [props.name]
+ * @param {import('react').ReactNode} [props.suffix] muted text inside the field, on the right (e.g.
+ *   a time zone `GMT-3`), as the currency suffix of an amount field; also shown read-only. Absent:
+ *   nothing
  * @param {string} [props.className] appended to the field shell
  * @param {string} [props['aria-label']]
  * @param {string} [props['data-testid']] put on the text input; the popover parts derive from it
@@ -116,6 +119,7 @@ export function DateTimeField({
   readOnly = false,
   invalid = false,
   max,
+  suffix,
   required,
   id,
   name,
@@ -265,6 +269,11 @@ export function DateTimeField({
           onBlur={readOnly ? undefined : handleBlur}
           onKeyDown={readOnly ? undefined : handleKeyDown}
           className="flex-1 min-w-0 bg-transparent border-0 outline-none text-sm leading-6 font-normal text-text-primary tabular-nums placeholder:text-text-secondary disabled:cursor-not-allowed disabled:text-text-disabled read-only:cursor-default" />
+        {suffix ? (
+          <span className="shrink-0 whitespace-nowrap text-sm text-muted-foreground" data-testid={`${testId}-suffix`}>
+            {suffix}
+          </span>
+        ) : null}
       </div>
       {!locked && (
         <PopoverContent className="w-[264px] p-0" align="start" data-testid={`${testId}-content`}>

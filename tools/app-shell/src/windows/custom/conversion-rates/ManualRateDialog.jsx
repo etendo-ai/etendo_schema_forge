@@ -19,7 +19,7 @@ import {
 import {
   NO_ZONE, nowWallClock,
   isOpenEnded, validToWallClock, addMillisToWallClock, isAfterWallClock,
-  withZone, formatInZone, formatRangeInZone,
+  formatInZone, formatRangeInZone,
 } from './conversionRatesModel.js';
 
 /** Debounce of the preview request while the user types. */
@@ -594,10 +594,10 @@ function RateField({ value, onChange, onBlur, inError, error, orgIso, destIso, u
 /**
  * Válido desde: in error (red border, aria-invalid) on a field error or on a server refusal of the
  * start (overlap, future); the hint stays under it, as in the error design. Typed in the viewer's
- * zone, named in the label.
+ * zone, named inside the field as a muted suffix (`GMT-3`) so the label fits one line.
  */
 function ValidFromField({ value, onChange, onBlur, max, inError, error, zone, ui }) {
-  const label = withZone(ui('convRateValidFromDateTime'), zone.label, ui);
+  const label = ui('convRateValidFromDateTime');
   return (
     <Field label={label} required className="min-w-0" data-testid="Field__convrate-from">
       <DateTimeField
@@ -605,6 +605,7 @@ function ValidFromField({ value, onChange, onBlur, max, inError, error, zone, ui
         onChange={onChange}
         onBlur={onBlur}
         max={max ?? undefined}
+        suffix={zone.label}
         invalid={inError}
         required
         aria-label={label}
@@ -618,12 +619,12 @@ function ValidFromField({ value, onChange, onBlur, max, inError, error, zone, ui
 }
 
 /**
- * Modificar: the range of the row, read-only (in the viewer's zone, named in the labels), and the
+ * Modificar: the range of the row, read-only (in the viewer's zone, named inside each field), and the
  * hint that only the rate can change.
  */
 function EditRangeFields({ rateField, row, zone, ui }) {
-  const fromLabel = withZone(ui('convRateValidFromDateTime'), zone.label, ui);
-  const toLabel = withZone(ui('convRateValidToDateTime'), zone.label, ui);
+  const fromLabel = ui('convRateValidFromDateTime');
+  const toLabel = ui('convRateValidToDateTime');
   return (
     <>
       <div className="max-w-[240px]">{rateField}</div>
@@ -632,6 +633,7 @@ function EditRangeFields({ rateField, row, zone, ui }) {
           <DateTimeField
             value={row?.validFromDate ? zone.show(row.validFromDate) : row?.validFromDate}
             readOnly
+            suffix={zone.label}
             aria-label={fromLabel}
             data-testid="convrate-dialog-valid-from" />
         </Field>
@@ -639,6 +641,7 @@ function EditRangeFields({ rateField, row, zone, ui }) {
           <DateTimeField
             value={isOpenEnded(row?.validToDate) ? null : zone.show(row.validToDate)}
             readOnly
+            suffix={isOpenEnded(row?.validToDate) ? null : zone.label}
             placeholder={ui('convRateOpenEnd')}
             aria-label={toLabel}
             data-testid="convrate-dialog-valid-to" />
