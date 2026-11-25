@@ -347,7 +347,8 @@ export default function PaymentsCard({
             ui={ui}
             onOpen={(remittanceId) => navigate(`/remittance/${remittanceId}`)}
             compact
-            testid="PaymentsCard__remittance-banner" />
+            testid="PaymentsCard__remittance-banner"
+            data-testid="RemittanceInfoBanner__c6fe34" />
         </div>
       )}
       {content}

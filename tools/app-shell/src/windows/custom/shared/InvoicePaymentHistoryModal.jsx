@@ -800,7 +800,8 @@ export default function InvoicePaymentHistoryModal({
               isSales={isSales}
               ui={ui}
               onOpen={handleRemittanceClick}
-              testid="InvoicePaymentHistoryModal__remittance-banner" />
+              testid="InvoicePaymentHistoryModal__remittance-banner"
+              data-testid="RemittanceInfoBanner__b82d4f" />
           </div>
         )}
 
