@@ -93,6 +93,26 @@ export default function PurchaseInvoiceTopbar({ data, recordId, apiBaseUrl, onRe
             </span>
           );
         }
+        // ETP-6247 — the whole outstanding is in a CONFIRMED payment remittance: the bank pays it,
+        // so the badge says so instead of offering it as pending. Opens the same payments modal,
+        // whose banner names the remittance and links to it.
+        if (badge.kind === 'remitted') {
+          return (
+            <span
+              className="inline-flex items-center gap-2 whitespace-nowrap text-sm leading-6 font-medium h-10"
+              style={{ padding: '0 12px', borderRadius: '8px', backgroundColor: 'var(--status-warning-bg)', color: 'var(--status-warning-fg)', cursor: 'pointer' }}
+              data-testid="payment-status-badge"
+              data-state="remitted"
+              onClick={handleBadgeClick}
+            >
+              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: 'var(--status-warning-fg)' }} />
+              {ui('remittanceInvoiceChip')}
+              <span style={{ opacity: 0.4 }}>&middot;</span>
+              <span className="font-semibold tabular-nums">{formatCurrency(currency || 'USD', badge.remittedAmount)}</span>
+              <span data-testid="payment-status-badge-view" style={{ opacity: 0.6, marginLeft: 4 }}>{ui('view')} &rarr;</span>
+            </span>
+          );
+        }
         if (isFullyPaid) {
           return (
             <span
@@ -105,6 +125,7 @@ export default function PurchaseInvoiceTopbar({ data, recordId, apiBaseUrl, onRe
               {ui('statusPaid')}
               <span style={{ opacity: 0.4 }}>&middot;</span>
               <span className="font-semibold tabular-nums">{formatCurrency(currency || 'USD', totalPaid)}</span>
+              <span data-testid="payment-status-badge-view" style={{ opacity: 0.6, marginLeft: 4 }}>{ui('view')} &rarr;</span>
             </span>
           );
         }
@@ -119,6 +140,10 @@ export default function PurchaseInvoiceTopbar({ data, recordId, apiBaseUrl, onRe
             {ui('statusPending')}
             <span style={{ opacity: 0.4 }}>&middot;</span>
             <span className="font-semibold tabular-nums">{formatCurrency(currency || 'USD', badge.amount)}</span>
+            {/* ETP-6247 — on a partial remittance `badge.amount` is the free part, shown like any
+                pending figure; the remitted part is in the payments modal. */}
+            {/* Same "Ver →" affordance as the sales topbar: the badge opens the payments modal. */}
+            <span data-testid="payment-status-badge-view" style={{ opacity: 0.6, marginLeft: 4 }}>{ui('view')} &rarr;</span>
           </span>
         );
       })()}

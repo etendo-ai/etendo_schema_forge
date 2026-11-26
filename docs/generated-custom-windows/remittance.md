@@ -43,8 +43,11 @@ capability `sepaRemittances` (`SEPA_REMITTANCES_CAPABILITY` in `lib/capabilityVi
 The Financiero role template gets the window through `TemplateRoleWindowAccess`.
 
 Wiring:
-- **Menu** (`menu.json`): group Finance (Finanzas), first item of the group (Cuentas, Cobro and
-  Pago moved to the Tesorería group in ETP-6389; Remesas stayed in Finanzas). Item `remittance`, label `Remittance` (menu label «Remesas» in Spanish),
+- **Menu** (`menu.json`): group Treasury (Tesorería), right after Pago (`payment-out`): Cobro,
+  Pago, Remesas, Cuentas, Informes, Condiciones de pago. It sat first in Finanzas until ETP-6247
+  moved it next to the other treasury entries (ETP-6389 had created Tesorería). The breadcrumb
+  follows (`window.breadcrumb: "Treasury / Remittance"` in `decisions.json`, as payment-in/out).
+  Item `remittance`, label `Remittance` (menu label «Remesas» in Spanish),
   `accessWindowId: "FF8080812E71F7C7012E71FD0499001B"`, `capability: "sepaRemittances"`. The
   sidebar shows it only when both are granted. The reviewed navigation baseline
   (`windows/__tests__/navigationExpectations.js`) lists it with the same two gates.
@@ -108,12 +111,11 @@ stay listed but dimmed, never hidden. The entry is hidden on a row with no trans
 and the detail cannot drift. «Devolver» and «Reactivar» are not in the row menu.
 
 Below it, **«Descargar fichero»** (download icon) is offered on a confirmed row (`PR`, `SB`, `CT`, `PT`,
-`CP`, `PP`; not `PE`, which has no file yet, nor `AN`). It reuses the same logic as the detail's button, shared as
-`resolveLatestRemittanceFile` in `remittanceFileApi.js` (`fileReadiness.latestFile`, falling back to the
-newest `.xml` attachment) and `downloadRemittanceFile`, through `useApiFetch`; the row carries no
-attachment id, so it is resolved the same way the detail button does. It only downloads: nothing opens. A row with
-no file toasts `remittanceFileNone` and a failure toasts the translated `remittanceFileDownloadError`
-(both existing keys, no new i18n).
+`CP`, `PP`; not `PE`, which has no file yet, nor `AN`). It reuses the detail button's download,
+`downloadRemittanceFileNotifying` in `remittanceFileApi.js`: the read-only `downloadFile` action generates the
+file on the fly (nothing is attached to the remittance, like Classic). It only downloads: nothing opens. A file
+that still carries returned receipts adds an informative toast (`remittanceFileIncludesReturnedLines`), and a
+refusal toasts the translated `remittanceFileDownloadError`.
 
 The shared `RowQuickActions` kebab gained generic, backwards-compatible **submenu** support: a `menuActions`
 entry with `submenu: [{ key, label | labelKey, content?, disabled?, onClick }]` renders as a row with a
@@ -319,7 +321,7 @@ order only, not `saveBeforeProcesses`.
 
 | Entry | Button | Visible | Asks | Backend |
 |---|---|---|---|---|
-| `confirm` (ETP-6247, was `process`) | «Confirmar», primary (`positive`) | `@Processed@='N'` and `requiresLines` | `confirmModal: true` routes it to `customComponents.processConfirmModal` → `RemittanceProcessConfirmModal` → `RemittanceConfirmDialog` (see «Confirmar y fichero SEPA» below). The dialog reads the grouping from the entry's `params` (default `P` «Sin agrupar», or `GGPD` «Agrupar por cliente y vencimiento») | `confirm`, posted by the dialog itself → `{ status, attachmentId, fileName, downloadUrl }` |
+| `confirm` (ETP-6247, was `process`) | «Confirmar», primary (`positive`) | `@Processed@='N'` and `requiresLines` | `confirmModal: true` routes it to `customComponents.processConfirmModal` → `RemittanceProcessConfirmModal` → `RemittanceConfirmDialog` (see «Confirmar y fichero SEPA» below). The dialog reads the grouping from the entry's `params` (default `P` «Sin agrupar», `GGP` «Agrupar por cliente» or `GGPD` «Agrupar por cliente y vencimiento») | `confirm`, posted by the dialog itself → `{ status, fileName }` (nothing attached; the file is downloaded with `downloadFile`) |
 | `markSent` (ETP-6247) | none: not a header button. The step is chosen from the status chip (`RemittanceStatusSelector`) or the grid's row menu | `@RemittanceStatus@='PR'` in `decisions.json` (`exclude: true` + `add: true`: declared, not emitted) | `RemittanceSentDialog` (the chips «Pendiente de envío → Enviada al banco» and what it does), which posts the action itself | `markSent` → `{ status: 'SB' }` |
 | `markCollected` (ETP-6247) | none: same as `markSent` | `@RemittanceStatus@='SB'` (no longer straight from PR in the UI; the backend still allows it) | `RemittanceCollectDialog` (the chips «Enviada al banco → Cobrada» and the settlement warning), which posts the action itself | `markCollected` → `{ status: 'CT'\|'PT', settledOn }` |
 | `reactivate` | «Reactivar», `primary-danger` | PR or SB (same clause as `markCollected`): once collected, partial or voided it is refused (422 `ETGO_RemittanceReactivateNotAllowed`) | a confirmation, because it deletes the payments the process created: `customComponents.processConfirmModal` → `RemittanceProcessConfirmModal` | `reactivate` → `{ status: 'PE' }` |
@@ -378,11 +380,20 @@ action `confirm`):
    and «Cobrada» (`markCollected`, from `PR`/`SB`: settles every payment on the fecha de
    cargo/abono with the automated-remittance module's `settleOnDueDate`, ends `CT`/`PT` and flags
    the remittance automated) are the later steps; see `neo-headless.md` §4.6c;
+   While the remittance is confirmed but not collected/paid, its invoices keep their full
+   outstanding (totals and KPIs unchanged), but the invoice UI shows the remitted part: «En remesa»
+   instead of the pending amount when the whole due is remitted, only the free part as the pending
+   amount when part of it is (the split En remesa / Pendiente is in the payments modal), the
+   payment as «Remesado» with a «Ver remesa» link back here, and no payment can be
+   registered for the remitted part (the backend refuses it with `ETGO_InvoiceInRemittance`). A draft
+   remittance changes nothing on the invoice. Details: `sales-invoice.md` / `purchase-invoice.md`,
+   *Invoices in a confirmed remittance — ETP-6247*;
 4. it generates the SEPA file (`pain.008.001.08` for CORE collections, `pain.001.001.09` for SCT payments).
    For CORE, GO checks the bank identifications and party names, and reconciles the number and
    amount of the debits against each payment group and the file header. If one of these checks
    fails, the error identifies the XML element to review.
-5. it stores the file as the remittance's main attachment.
+5. it does **not** store the file: like Classic, the SEPA file is generated on the fly at every download
+   (`downloadFile`), so nothing is attached to the remittance.
 
 Any failure rolls everything back. **It cannot be undone**: going back is a matter of returns, which
 are out of scope. The SPA pieces live in `artifacts/remittance/custom/`. The contract is in
@@ -390,10 +401,9 @@ are out of scope. The SPA pieces live in `artifacts/remittance/custom/`. The con
 
 | Action | Body | Response |
 |---|---|---|
-| `POST <spec>/remittance/{id}/action/fileReadiness` | `{}` | `{ ready, scheme, problems: [{ scope: org\|account\|line, code, message, params, organizationId?, accountId?, lineId?, lineIds?, businessPartnerId?, businessPartnerName?, invoiceId?, documentNo? }], summary: { invoiceCount, lineCount, totalAmount, currency, dueDate }, latestFile: { attachmentId, fileName } \| null }`. `message` is already localized by the backend, params substituted; the SPA shows it and uses `code` + positional `params` only as a fallback |
-| `POST …/action/confirm` | `{ fieldValues: { grouping } }` | `{ status, attachmentId, fileName, downloadUrl }`. A refusal is a 422 with `error.message` (localized) and `messageKeys`; `ETGO_RemittanceFileNotReady` also carries `error.problems` |
-| `POST …/action/generateFile` | `{}` | processed remittances only: a NEW main attachment (the previous files are kept); same response |
-| `GET /sws/neo/attachments/file/{attachmentId}` | — | the file, saved with `downloadBlobAsFile` |
+| `POST <spec>/remittance/{id}/action/fileReadiness` | `{}` | `{ ready, scheme, problems: [{ scope: org\|account\|line, code, message, params, organizationId?, accountId?, lineId?, lineIds?, businessPartnerId?, businessPartnerName?, invoiceId?, documentNo? }], summary: { invoiceCount, lineCount, totalAmount, currency, dueDate }, returnedCount }` (`returnedCount`: the returned receipts the file still carries; the SPA does not read it here). `message` is already localized by the backend, params substituted; the SPA shows it and uses `code` + positional `params` only as a fallback |
+| `POST …/action/confirm` | `{ fieldValues: { grouping } }` | `{ status, fileName }` (nothing attached). A refusal is a 422 with `error.message` (localized) and `messageKeys`; `ETGO_RemittanceFileNotReady` also carries `error.problems` |
+| `POST …/action/downloadFile` (or GET) | `{}` | read-only, processed remittances: `{ fileName, contentType: "application/xml", content, returnedCount }`, the XML (UTF-8 text) generated on the fly, saved as `Blob(content, { type: contentType })` with `downloadBlobAsFile` under `fileName` (e.g. `1000016_Cobros_nandu_enero.xml`). Never refused because of returns. 422 refusals: `ETGO_RemittanceFileNotProcessed` («…todavía no se puede descargar su fichero SEPA.»), `ETGO_RemittanceFileNotReady` (with `error.problems`), and the generator / XSD / EPC ones (`ETGO_RemittanceFileGenerationFailed`, `…Invalid`, `…SchemaMissing`), shown as the backend's localized sentence |
 
 **«Antes de confirmar»** (`RemittanceFileCard`, rendered by `RemittanceSepaFileData` right under
 «Datos para el fichero SEPA»). It is deliberately light: no card or title strip. A warning strip (the app's notice tokens: left accent, warning colors) with the problems and «Volver a comprobar», only when there are
@@ -417,9 +427,14 @@ portal on `document.body`. Esc, the close icon, the backdrop and Cancelar close 
 confirming).
 - **Shows:** a summary strip with the number of invoices (`summary.invoiceCount`; without a summary,
   the lines count labelled «Recibos»), the total (`formatCurrency`) and the fecha de cargo/abono
-  (`formatCalendarDate`); «Agrupación» as two choice cards (radio group, arrow keys), each with a
-  one-line description (`remittanceGroupingNoneDescription`,
-  `remittanceGroupingByBpAndDueDateDescription`), and with no grouping param a single static
+  (`formatCalendarDate`); «Agrupación» as three choice cards (radio group, arrow keys), in this
+  order: «Sin agrupar» (`P`), «Agrupar por cliente» (`GGP`, ETP-6247: one payment per business
+  partner with all its invoices whatever their due dates, icon `UserIcon`) and «Agrupar por cliente y
+  vencimiento» (`GGPD`, icon `UsersIcon`). Each has a one-line description
+  (`remittanceGroupingNoneDescription`, `remittanceGroupingByBpDescription`,
+  `remittanceGroupingByBpAndDueDateDescription`). The wording says «cliente»/«cobro» for both
+  directions, like the existing GGPD card. The order and values come from `processOverrides.confirm.params`
+  in `decisions.json`. With no grouping param there is a single static
   «Sin agrupar» card; and ONE neutral info `InfoBanner` (`remittanceConfirmInfo`, `remittance-confirm-info`): «Se generará el fichero SEPA y los pagos quedarán en «Remesado». Las facturas siguen sin cobrar hasta que pases la remesa a «Cobrada»; puedes reactivarla hasta entonces.» No separate file note and no «Todo listo» line: while checking, only a minimal «Comprobando…»; problems, when there are any, are ONE warning banner with the list (`remittance-confirm-problems-banner`). The selected card is the grouping posted. Enter on a card confirms with it, but only
   when Confirmar would be enabled.
 - **Problems** use `ReadinessProblemsBlock`, exported by `RemittanceFileCard.jsx` and shared with «Antes de confirmar», so the heading,
@@ -428,9 +443,8 @@ confirming).
   checking, on a failed check and while there are problems.
 - **Confirming** posts `confirm` itself instead of using `handleProcess`, which drops the
   response. It does **not** close the modal and downloads nothing by itself: it switches, in the same
-  modal and without a toast, to the success step **«¡Remesa confirmada!»**. Without an `attachmentId`
-  in the response there is no file to offer, so that case keeps the old behaviour: the toast
-  `remittanceConfirmSuccessNoFile`, refresh and close.
+  modal and without a toast, to the success step **«¡Remesa confirmada!»**, always: the file is generated
+  on the fly, so there is always one to offer.
 - **The success step** (`ConfirmedStep`, `ActionChoiceModal` with zero options and `cancelLabel` «Cerrar»):
   - a subtitle: «Descarga el fichero SEPA y súbelo a la banca online de tu banco. Después, pasa la
     remesa a Enviada al banco.» (one neutral text: the response status is `PR` for collections and
@@ -460,26 +474,25 @@ confirming).
 that, and the gate lives in the dialog. This is registered as debt in `flags-registry.json`
 (`confirm-button-not-disabled`).
 
-**«Fichero SEPA»: actions, not a card.** The «Fichero SEPA» card (last file name, «Regenerar fichero», «Descargar
-fichero») was removed from the detail body by user decision (ETP-6247); «Datos para el fichero SEPA» and
-the pending «Antes de confirmar» card stay. The last file name is no longer shown (it is in «Adjuntos»).
+**«Fichero SEPA»: generated on the fly, not stored.** Like Classic, the SEPA file is not attached to the
+remittance: the read-only `downloadFile` action generates it at every download. There is no «Regenerar fichero»
+any more (every download is a fresh generation) and no file name to show. «Datos para el fichero SEPA» and the
+pending «Antes de confirmar» card stay.
 - **«Descargar fichero»** is an outline button with the download icon in the detail's top action bar
   (`artifacts/remittance/custom/RemittanceDownloadButton.jsx`, injected by the route as the DetailView
   `topbarSecondary` slot, left of Reactivar / Guardar). It is visible on a confirmed remittance (`PR`,
-  `SB`, `CT`, `PT`, `CP`, `PP`; the same rule as the row menu's item, `FILE_STATUSES`). It only
-  downloads: the main file is `fileReadiness.latestFile`, or, as a fallback, the newest `.xml` in
-  `/sws/neo/attachments/REM_Remittance/{id}` (`resolveLatestRemittanceFile`), saved with
-  `downloadRemittanceFile`. A spinner shows while it runs; no file toasts `remittanceFileNone` and a
-  failure the translated `remittanceFileDownloadError`.
-- **«Regenerar fichero»** is an item of the detail kebab (⋮), only on `PR` and `SB`
-  (`REGENERATE_STATUSES`): the route passes `menuActions` as a function of the record (the existing form)
-  and the item's `onClick` opens `RemittanceRegenerateDialog`, a simple confirmation. It says a new main
-  file is created, the old one stays in the attachments, and a bank may flag the new one as a duplicate
-  (the file's `MsgId` does not change); then it posts `generateFile` and downloads the new file. With NO
-  file yet (a remittance created and processed in Classic) the same call GENERATES the first file and the
-  words say so (`remittanceFileGenerate*`; the dialog looks the file up when it opens). A refusal (for
-  example 422 `ETGO_RemittanceFileHasReturns`, whose localized sentence is toasted as is) keeps the
-  confirmation open. A collected remittance (`CT`, ...) has no regenerate: the file already went to the bank.
+  `SB`, `CT`, `PT`, `CP`, `PP`; the same rule as the row menu's item, `FILE_STATUSES`). It calls
+  `downloadRemittanceFileNotifying` (`downloadFile`, the XML saved with `downloadBlobAsFile`). A spinner shows
+  while it runs; a refusal toasts the translated `remittanceFileDownloadError`.
+- **Returned receipts.** The file is the one sent to the bank, so it still includes receipts returned since.
+  When the download's `returnedCount > 0` it adds an informative, non-blocking toast with no number:
+  «El fichero incluye también las líneas devueltas, tal como se envió al banco.»
+  (`remittanceFileIncludesReturnedLines`). It carries no count on purpose: `returnedCount` counts payments,
+  so with «Agrupar por cliente» two returned invoices of one customer would read «1 recibo». A processed
+  remittance shows no notice in the detail (`RemittanceFileCard` renders nothing once processed): the
+  «Cobrada parcialmente…» banner and the lines' «Estado del recibo = Devuelto» already say it.
+- The Cobrada/Pagada banners (`remittanceBannerCollectedFile` / `PaidFile`) and the Pendiente de envío one say
+  the file is downloaded with «Descargar fichero», without implying it is stored.
 
 **Errors.** Every `ETGO_RemittanceFile*` text is localized by the backend in the request language,
 with its positional params substituted, and the 422s carry no `messageParams`. So `backendErrors.js`
@@ -542,7 +555,7 @@ Layout (Holded reference):
   - Changing the account drops an IBAN the user had typed (the form field is cleared), because the
     server resolves a blank value into the new account's IBAN and a new remittance would otherwise still send the typed one.
   - On a processed remittance the IBAN is read-only (the value only).
-- **Collection options** (scheme, financed) sit above this card. See «Collection options» below.
+- **Collection option** (the scheme) sits above this card. See «Collection options» below.
 - **Creditor identifier (AT-02).** A plain input like the IBAN, for a collection type (hidden on payment). A
   collection holds its **own copy** (REM column `Creditor_Identifier`, property `creditorIdentifier`), taken from
   the bank account's default when it is created; the file always uses it, so editing the account later does not
@@ -558,9 +571,9 @@ Layout (Holded reference):
     account's default is edited only in «Editar cuenta».
   - On confirm the server uses the computed value and copies it to the remittance when there is no own one nor the
     account's. A **processed** remittance shows the copy read-only (locked).
-  - **Payment** remittances: the server refuses `creditorIdentifier`, `directDebitScheme = B2B` and
-    `financed = true` (422 `ETGO_RemittanceOptionsCollectionOnly`), so the block never sends them: choosing a
-    payment type after touching them puts the three fields back to the values the record had.
+  - **Payment** remittances: the server refuses `creditorIdentifier` and `directDebitScheme = B2B`
+    (422 `ETGO_RemittanceOptionsCollectionOnly`), so the block never sends them: choosing a
+    payment type after touching them puts both fields back to the values the record had.
   - **«Antes de confirmar»** only reports `ETGO_RemittanceFileAccountNoCreditorId` (no valid or computable
     identifier, e.g. organization without tax ID or country) or `…InvalidCreditorId` (an invalid own one) as a plain
     sentence with a pointer to the field, and the card **drops** those problems while the field holds a valid value
@@ -731,8 +744,8 @@ the SPA shows:
 | Status | Chip (tone) | Header actions | File actions |
 |---|---|---|---|
 | `PE` | Pendiente (neutral) | Confirmar | «Antes de confirmar» |
-| `PR` | Pendiente de envío (warning), selector | Reactivar, **Descargar fichero** (top bar) | Regenerar (kebab) |
-| `SB` | Enviada al banco (info), selector | Reactivar, **Descargar fichero** (top bar) | Regenerar (kebab) |
+| `PR` | Pendiente de envío (warning), selector | Reactivar, **Descargar fichero** (top bar) | none |
+| `SB` | Enviada al banco (info), selector | Reactivar, **Descargar fichero** (top bar) | none |
 | `CT` / `PT` | Cobrada / Pagada (success) | Devolver (CT), **Descargar fichero** (top bar) | none |
 | `CP` | Cobrada parcial (warning) | Devolver (what is left), **Descargar fichero** (top bar) | none |
 
@@ -771,7 +784,7 @@ nothing). Importing the bank's return file, undoing a settlement and voiding are
   `state` is PENDING, PROCESSED, SETTLED or RETURNED. `returnable` is true only for a settled line
   nothing blocks; otherwise `reasonCode` is NOT_PROCESSED, NOT_SETTLED, ALREADY_RETURNED,
   NOT_A_COLLECTION, POSTED or RECONCILED. `paymentLineIds` are the lines that share the payment
-  (grouping GGPD): a return takes them all.
+  (grouping GGP or GGPD): a return takes them all.
 - `POST …/action/returnLines` `{ fieldValues: { lineIds, returnDate? } }` → `{ status, returned, returnPaymentId, returnPaymentDocumentNo }`.
   All or nothing. `returnDate` defaults to today and cannot be in the future. The status afterwards is
   `CP`, even if every line is returned. Refusals are 422 with a localized `error.message`:
@@ -796,14 +809,27 @@ nothing). Importing the bank's return file, undoing a settlement and voiding are
     keys; it takes the visible returnable lines);
   - the shared `Checkbox`, and `role="option"` rows (hover, selected state, spacing, a row click toggles);
   - the shared `DateField` for the return date (locale order, default today).
-  It lists **every** line with invoice, partner and `formatCurrency` amount. A returnable line is
-  enabled; the others are dimmed, `aria-disabled`, and show why (`remittanceReturnReason*`, or
-  «Devuelta el {date}»). Ticking a line ticks every line of its payment (`paymentLineIds`), so a
-  shared payment is returned whole. The list scrolls (`max-h-56`). `DateField` has no `maxDate`
+  It lists **one row per bank instruction** (payment), not per line (ETP-6247): with a grouping
+  (GGP / GGPD) several lines (invoices) share one payment, one instruction to the bank, and a return
+  always takes the whole payment. `groupReturnLines` groups the lines by `returnState.lines[id].paymentId`
+  (a line without a payment is its own row); `returnGroupSummary` builds the row from
+  `returnLineSummary` of each line. A one-line payment reads as before («FV1000091 · Cliente»); a
+  grouped one reads «Cliente · N facturas» (`remittanceReturnInvoiceCount`, or «Varios clientes»,
+  `remittanceReturnSeveralPartners`, when the partners differ) with the invoice numbers below,
+  truncated with the full list in `title`, and the `formatCurrency` sum as the amount. A returnable row
+  is enabled; the others are dimmed, `aria-disabled`, and show why (`remittanceReturnReason*`, or
+  «Devuelta el {date}»), from the first line of the payment that cannot be returned. Ticking a row
+  selects every line of its payment (`toggleReturnSelection` takes the row's line ids, plus their
+  `paymentLineIds`); «Seleccionar todo» takes every line of the visible returnable rows
+  (`selectAllReturnable`). The search matches the invoice or partner of ANY line of a row. The POST is
+  unchanged: `returnLines` still receives the ids of every line of the selected payments. The summary's
+  count is the number of selected instructions, labelled «Cobros» (`remittanceReturnInstructions`), and the
+  success toast and the danger banner speak of «cobros» too, which reads right whether a payment holds one
+  invoice or several. The list scrolls (`max-h-56`). `DateField` has no `maxDate`
   (only `minDate`), so a later day is accepted by the field and refused by the dialog:
   `remittanceReturnDateFuture` under the field and the primary disabled; a `maxDate` would need
-  `schema_forge_core`. A danger `InfoBanner` says the payment is voided, the invoices are pending
-  again and the remittance ends partially collected. A 422 `ETGO_RemittanceReturnNotAllowed` lists
+  `schema_forge_core`. A danger `InfoBanner` says each selected collection is voided with all its
+  invoices, which are pending again, and the remittance ends partially collected. A 422 `ETGO_RemittanceReturnNotAllowed` lists
   `error.problems` and keeps the dialog open.
 - **After success:** toast, `onRefresh` (re-reads the header and the lines, so the chip and banner show
   `CP`) and close.
@@ -817,9 +843,13 @@ Testids: `remittance-return-dialog`, `-count`, `-total`, `-date-label`, `-loadin
 `-not-collection`, `-search`, `-select-all`, `-lines`, `-line` (`data-state`, `data-code`), `-check` (the Checkbox label),
 `-note`, `-date` (the DateField input), `-date-error`, `-warning`, `-problems`, and the dialog's primary button `action-confirm-modal`.
 
-### Collection options: «Esquema de adeudo» and «Remesa financiada»
+**Date columns, no overdue dot (ETP-6247).** The list's «Fecha» (`transactionDate`) and «Fecha de cargo/abono»
+(`dueDate`), and the lines' «Fecha factura» (`invoiceDate`) and «Vencimiento» (`dueDate`), declare `"dot": false`
+in `decisions.json`: a remittance date is not a due date, so the generic red/green overdue dot is not shown.
 
-Two header fields that fill the free columns 3 and 4 of the header form's own grid, in the row of «Nombre» and «Fecha» (the footer is `inlineInHeaderCard`, so its fragment is spliced into that grid; the cards below span the full row)
+### Collection option: «Esquema de adeudo»
+
+One header field that fills a free column of the header form's own grid, in the row of «Nombre» and «Fecha» (the footer is `inlineInHeaderCard`, so its fragment is spliced into that grid; the cards below span the full row)
 (`artifacts/remittance/custom/RemittanceAdvancedOptions.jsx`, rendered by the same `formFooter`), **before the first
 save**, only when the selected remittance type is a **collection**. The type is known from `direction`
 (`'collection' | 'payment'`) on each item of the type selector
@@ -829,25 +859,25 @@ backend does not send it, the block degrades to `sepaFileData.collection === tru
 | Option | Column / field | Values |
 |---|---|---|
 | «Esquema de adeudo» (select, with an (i) help) | `REM_REMITTANCE.DD_SCHEME` / `directDebitScheme` | «Core» (default), «B2B (interempresas)» |
-| «Remesa financiada» (switch, with an (i) help) | `REM_REMITTANCE.ISFINANCED` / `financed` | off (default) / on; the file's identifier carries it |
 
-- Both travel in the header's create/update (`onChange('directDebitScheme' | 'financed', …)`, saved by «Guardar»),
-  like the IBAN. They are `editable`, `form: false` in `decisions.json`. Untouched, nothing is sent (the server
-  defaults to Core / off).
-- `financed` stays `required` in the contract, as the AD says (`ISFINANCED` is NOT NULL, default N): the quality
-  gate's `notNullRequiresRequired` invariant forbids overriding it to `false`. Being `form: false`, it is not in the
-  generated form's field list, so it never enters DetailView's save gate: «Guardar» stays enabled on a new
-  remittance with the switch untouched, and the column default N applies.
-- Editable only before processing; afterwards read-only as the same disabled grey input the other read-only header fields use, holding «Core» / «B2B (interempresas)», and «Remesa financiada» as the same switch, disabled (422 `ETGO_RemittanceProcessedNotEditable`).
+- It travels in the header's create/update (`onChange('directDebitScheme', …)`, saved by «Guardar»), like the IBAN.
+  It is `editable`, `form: false` in `decisions.json`. Untouched, nothing is sent (the server defaults to Core).
+- Editable only before processing; afterwards read-only as the same disabled grey input the other read-only header
+  fields use, holding «Core» / «B2B (interempresas)» (422 `ETGO_RemittanceProcessedNotEditable`).
+- **Collection only.** On a **payment** remittance the scheme is **hidden**, not disabled, in every state (new,
+  editable, processed); an unknown direction keeps it hidden too. When the type turns out to be a payment while the
+  form still carries `B2B` from a collection, `RemittanceSepaFileData` resets it to `CORE`, which the server
+  accepts and drops.
+- Financed remittances (Classic Remit for Discount) are not supported in GO.
 - 422 `ETGO_RemittanceSchemeInvalid` and `ETGO_RemittanceOptionsCollectionOnly` map to
   `backendError.remittanceSchemeInvalid` / `backendError.remittanceOptionsCollectionOnly`.
-- `sepaFileData` also answers `directDebitScheme` (`null` on a payment remittance) and `financed`.
+- `sepaFileData` also answers `directDebitScheme` (`null` on a payment remittance).
 
 ### SEPA creditor identifier
 
 REM stores the bank account default and the collection's own identifier separately. A collection
 gets the account default from the server when it is created (the database copies nothing); older collections without a copy take the account's
-first value on confirmation or regeneration. The file uses the remittance's copy, so later changes
+first value on confirmation. The file uses the remittance's copy, so later changes
 to the bank account apply to future collections only. The UI is described under «Datos para el fichero
 SEPA» above; the account's field in [financial-account-management.md](financial-account-management.md).
 
@@ -883,7 +913,7 @@ These need a new column, which the scope rules out, or a later task. None was in
 - `agent-prompts/remittance/spec.md`.
 - `cli/config/regen-windows.json` (entry `remittance`).
 - `tools/app-shell/src/windows/custom/remittance/index.jsx` (route guard), `windows/registry.js`
-  (`customLoaders.remittance`), `menu.json` (Finance, first item).
+  (`customLoaders.remittance`), `menu.json` (Treasury, after `payment-out`).
 - `tools/app-shell/src/lib/statusToneOverride.js` (per-column status tones).
 - `artifacts/remittance/custom/RemittanceBottomPanel.jsx`, `SelectDueItemsModal.jsx` and
   `remittanceDueItemsApi.js` («Seleccionar desde factura»), on the generic
@@ -891,8 +921,8 @@ These need a new column, which the scope rules out, or a later task. None was in
   and `lib/boundedAmount.js`. The shared `InvoicePickerModal.jsx` is back to its pre-ETP-6148
   shape: the optional row props round 2 added for remittance were removed in round 3.
 - ETP-6247: `artifacts/remittance/custom/remittanceFileApi.js` (fileReadiness / confirm /
-  generateFile / attachment download), `RemittanceFileCard.jsx` («Antes de confirmar» / «Fichero
-  SEPA», rendered by `RemittanceSepaFileData.jsx`), `RemittanceConfirmDialog.jsx` (routed from
+  downloadFile, generated on the fly), `RemittanceFileCard.jsx` («Antes de confirmar» / the returned-receipts
+  notice, rendered by `RemittanceSepaFileData.jsx`), `RemittanceConfirmDialog.jsx` (routed from
   `RemittanceProcessConfirmModal.jsx`), and the CT/PT file texts in `RemittanceStatusBanner.jsx`.
 - i18n: `genericLabels.remittanceStatusPe` … `remittanceStatusAn` in `locales/{en_US,es_ES,es_AR}.json`;
   ETP-6247 adds `remittanceFile*`, `remittanceConfirm*`, `remittanceBannerCollectedFile` /
@@ -911,8 +941,8 @@ These need a new column, which the scope rules out, or a later task. None was in
 | Lines total | `remittance-lines-total`, `-label`, `-amount` |
 | Status banner | `remittance-status-banner` (`data-status` = the code) |
 | «Antes de confirmar» | `remittance-file-readiness`, `-loading`, `-ready`, `-problems`, `-error`, `-recheck`; problem list `remittance-file-problems` with groups `remittance-file-problems-org` / `-account` / `-partner-{bpId}` (their links add `-link`) and each sentence `remittance-file-problem` (`data-code`) |
-| «Confirmar» dialog | `remittance-confirm-dialog`, `remittance-confirm-count`, `-total`, `-due-date` (the summary values), `remittance-confirm-grouping-P` / `-GGPD` (the cards), `remittance-confirm-info`, `remittance-confirm-problems-banner`, `remittance-confirmed-dialog` (the success step: `-subtitle`, `-summary`, `-name`, `-status`, `-count`, `-total`, `-type`, `-due-date`, `-account`), `remittance-confirm-irreversible`, `remittance-confirm-checking`, `-check-failed`, `-problems`; the buttons are ActionChoiceModal's: `action-confirm-modal` (primary) and Cancelar (by text) |
-| File actions | `remittance-file-download` (the top-bar button), `menu-action-regenerateFile` (the kebab item), `ConfirmDialog__remittance-regenerate` |
+| «Confirmar» dialog | `remittance-confirm-dialog`, `remittance-confirm-count`, `-total`, `-due-date` (the summary values), `remittance-confirm-grouping-P` / `-GGP` / `-GGPD` (the cards), `remittance-confirm-info`, `remittance-confirm-problems-banner`, `remittance-confirmed-dialog` (the success step: `-subtitle`, `-summary`, `-name`, `-status`, `-count`, `-total`, `-type`, `-due-date`, `-account`), `remittance-confirm-irreversible`, `remittance-confirm-checking`, `-check-failed`, `-problems`; the buttons are ActionChoiceModal's: `action-confirm-modal` (primary) and Cancelar (by text) |
+| File actions | `remittance-file-download` (the top-bar button) |
 | «Confirmar» / «Reactivar» | the generic process buttons; the reactivate confirmation is the shared `ConfirmDialog` (`components/OAuth2ClientDialog.jsx`), which takes no `data-testid` of its own: target its `DialogContent__4aea7f` / `Button__4aea7f`, or the dialog role and its title |
 | Due-item picker | `document-picker-modal`, `-search`, `-select-all`, `-list`, `-row-{id}` (`aria-selected`), `-check-{id}`, `-amount-{id}` (`-input`, `-reset`), `-amount-error-{id}`, `-status`, `-confirm`, `-cancel`; the document link `remittance-due-item-link-{id}`, the due status `remittance-due-status-{id}` |
 | «A remesar» in the grid | `line-in-place-amount-{lineId}` (`-input`, `-reset`) |
@@ -946,8 +976,8 @@ Prerequisites: the `sepa-remittances` flag on, the spec pushed, and at least one
 valid IBAN created while the flag was on (so it has the remittance payment methods).
 
 1. With the flag off, there is no menu entry, `/remittance` shows the access-denied screen, and
-   `GET /sws/neo/remittance/remittance` answers 403. With the flag on, «Remesas» appears as the
-   first entry of Finanzas. A role without the Remittance window grant sees neither the entry
+   `GET /sws/neo/remittance/remittance` answers 403. With the flag on, «Remesas» appears in
+   Tesorería right after Pago, and the breadcrumb reads «Tesorería / Remesas». A role without the Remittance window grant sees neither the entry
    nor the page.
 2. The list shows Fecha, Tipo de remesa, Nombre, Cuenta, Fecha de cargo/abono and Estado. Every
    column sorts and appears in "Filtro por condicionales".
@@ -965,9 +995,10 @@ valid IBAN created while the flag was on (so it has the remittance payment metho
    remove a customer's IBAN or mandate date and «Volver a comprobar» shows it under that customer,
    with a link to the contact. Confirmar opens a dialog with the invoices, the total and the fecha
    de cargo/abono, the grouping and the warning; with a problem its Confirmar is disabled. With
-   everything right, confirming generates the `.xml` without downloading it, the remittance turns Pendiente de envío, a «¡Remesa confirmada!» step offers the file,
-   the banner says what is pending, and the top bar offers «Descargar fichero» and the kebab
-   «Regenerar fichero» (only while PR or SB; it asks first and downloads a new file). Download is only done from the button.
+   everything right, confirming attaches nothing, the remittance turns Pendiente de envío, a «¡Remesa confirmada!» step offers the file,
+   the banner says what is pending, and the top bar offers «Descargar fichero» (the `.xml` is generated at every
+   download; there is no «Regenerar fichero» and nothing appears in «Adjuntos»). After a return, the download
+   adds a notice that the file includes the returned receipts, and the detail shows the same notice.
 6. On a processed remittance, the header fields are locked.
 7. The Líneas tab has no add or edit. While the remittance is pending, a line can be deleted with
    the trash icon or by selecting it; once processed, delete is gone. «Seleccionar desde factura» opens

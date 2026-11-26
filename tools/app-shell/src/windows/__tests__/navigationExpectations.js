@@ -16,14 +16,14 @@ const groups = {
   Purchases: 'purchase-order goods-receipt purchase-invoice return-to-vendor-shipment matched-purchase-invoices invoice-inbox',
   Inventory: 'product product-category price-list warehouse physical-inventory goods-movements internal-consumption report-viewer-inventory',
   // ETP-6389 — Tesorería: Cobro, Pago, Cuentas, an Informes link holding only the aging reports,
-  // and Condiciones de pago (moved from Settings).
-  Treasury: 'payment-in payment-out financial-account report-viewer-treasury payment-term',
-  Finance: 'remittance chart-of-accounts cost-center service-project general-ledger-configuration calendar assets asset-group amortization not-posted-documents manual-journals conversion-rates report-viewer-finance',
+  // and Condiciones de pago (moved from Settings). ETP-6247 — Remesas moved here too, after Pago.
+  Treasury: 'payment-in payment-out remittance financial-account report-viewer-treasury payment-term',
+  Finance: 'chart-of-accounts cost-center service-project general-ledger-configuration calendar assets asset-group amortization not-posted-documents manual-journals report-viewer-finance',
   // ETP-6380 — Impuestos: the fiscal windows out of Finance, an Informes link holding only the Tax
   // Report, and Configuración fiscal (moved from Settings).
   Taxes: 'tax tax-category fiscal-monitor report-viewer-taxes fiscal-config fiscal-models',
   Connections: 'authorize',
-  Settings: 'organization document-sequence business-partner-category user roles api-keys document-templates acct-process-monitor',
+  Settings: 'organization document-sequence business-partner-category user roles api-keys document-templates acct-process-monitor conversion-rates',
 };
 
 // Composition aliases documented in calendar/fiscal-monitor/fiscal-config guides.

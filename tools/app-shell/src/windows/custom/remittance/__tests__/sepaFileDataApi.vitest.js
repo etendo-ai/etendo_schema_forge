@@ -22,7 +22,7 @@ const bodyOf = (apiFetch, call = 0) => JSON.parse(apiFetch.mock.calls[call][1].b
 
 const FULL = {
   remittanceCreditorId: 'ES12000B12345678', remittanceCreditorIdValid: true, accountCreditorId: null, accountCreditorIdValid: null,
-  directDebitScheme: 'B2B', financed: true, collection: true, suggestedCreditorId: null, creditorIdSource: 'remittance',
+  directDebitScheme: 'B2B', collection: true, suggestedCreditorId: null, creditorIdSource: 'remittance',
   accountId: 'acc-1', accountName: 'Santander', iban: 'ES9121000418450200051332', ibanValid: true,
   remittanceIban: 'ES9121000418450200051332', remittanceIbanValid: true, accountIban: null, accountIbanValid: null, ibanSource: 'remittance',
   organizationId: 'org-1', country: 'ES', creditorId: 'ES12000B12345678', creditorIdAvailable: true, missing: [],
@@ -32,7 +32,7 @@ describe('normalizeSepaFileData', () => {
   it('defaults every key for an empty or missing payload', () => {
     const empty = {
       remittanceCreditorId: null, remittanceCreditorIdValid: null, accountCreditorId: null, accountCreditorIdValid: null,
-      directDebitScheme: null, financed: false, collection: null, suggestedCreditorId: null, creditorIdSource: 'missing',
+      directDebitScheme: null, collection: null, suggestedCreditorId: null, creditorIdSource: 'missing',
       accountId: null, accountName: '', organizationId: null, iban: null, ibanValid: false,
       remittanceIban: null, remittanceIbanValid: null, accountIban: null, accountIbanValid: null, ibanSource: 'missing',
       country: null, creditorId: null, creditorIdAvailable: false, missing: [],
@@ -77,9 +77,9 @@ describe('normalizeSepaFileData — IBAN of the remittance', () => {
 });
 
 describe('normalizeSepaFileData — collection options', () => {
-  it('keeps only CORE | B2B as the scheme and a real boolean true as financed', () => {
-    expect(normalizeSepaFileData({ directDebitScheme: 'B2B', financed: true })).toMatchObject({ directDebitScheme: 'B2B', financed: true });
-    expect(normalizeSepaFileData({ directDebitScheme: 'SCT', financed: 'Y' })).toMatchObject({ directDebitScheme: null, financed: false });
+  it('keeps only CORE | B2B as the scheme', () => {
+    expect(normalizeSepaFileData({ directDebitScheme: 'B2B' })).toMatchObject({ directDebitScheme: 'B2B' });
+    expect(normalizeSepaFileData({ directDebitScheme: 'SCT' })).toMatchObject({ directDebitScheme: null });
   });
 });
 

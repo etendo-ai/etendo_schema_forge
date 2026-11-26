@@ -97,7 +97,7 @@
     },
     {
       "group": "Sales",
-      "icon": "TrendingUp",
+      "icon": "ShoppingCart",
       "section": "Commercial",
       "items": [
         {
@@ -298,6 +298,13 @@
           "windowId": "6F8F913FA60F4CBD93DC1D3AA696E76E"
         },
         {
+          "name": "remittance",
+          "label": "Remittance",
+          "favname": "Remittance",
+          "accessWindowId": "FF8080812E71F7C7012E71FD0499001B",
+          "capability": "sepaRemittances"
+        },
+        {
           "name": "financial-account",
           "label": "Accounts",
           "favname": "Accounts",
@@ -348,13 +355,6 @@
       "icon": "Building2",
       "section": "Finance",
       "items": [
-        {
-          "name": "remittance",
-          "label": "Remittance",
-          "favname": "Remittance",
-          "accessWindowId": "FF8080812E71F7C7012E71FD0499001B",
-          "capability": "sepaRemittances"
-        },
         {
           "name": "chart-of-accounts",
           "label": "Chart of Accounts",
@@ -446,12 +446,6 @@
           "favname": "Recurring Invoice",
           "hidden": true,
           "routeOnly": true
-        },
-        {
-          "name": "conversion-rates",
-          "label": "Currency Conversion",
-          "favname": "Currency Conversion",
-          "windowId": "116"
         },
         {
           "name": "report-viewer-finance",
@@ -638,6 +632,12 @@
           "icon": "FileText",
           "featureFlag": "doc-template-selection",
           "capability": "isAdminOrClientAdmin"
+        },
+        {
+          "name": "conversion-rates",
+          "label": "Currency Conversion",
+          "favname": "Currency Conversion",
+          "windowId": "116"
         }
       ]
     },

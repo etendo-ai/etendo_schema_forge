@@ -968,6 +968,24 @@ describe('editing — leaving the panel waits for the saves', () => {
     window.dispatchEvent(after);
     expect(after.defaultPrevented).toBe(false);
   });
+
+  it('does not ask for the dialog while a write is open if the page never had a user gesture', async () => {
+    Object.defineProperty(window.navigator, 'userActivation', { value: { hasBeenActive: false }, configurable: true });
+    try {
+      const release = holdWrites();
+      await mountLoaded();
+      const qty = tid('invoice-inbox-review-line-0-quantity');
+      fireEvent.focus(qty);
+      fireEvent.change(qty, { target: { value: '6' } });
+      fireEvent.blur(qty);
+      const event = new Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(false);
+      release();
+    } finally {
+      delete window.navigator.userActivation;
+    }
+  });
 });
 
 // ── ETP-6050 S2 addenda: tax selector, currency scale, validator codes, error paths ─────────────────

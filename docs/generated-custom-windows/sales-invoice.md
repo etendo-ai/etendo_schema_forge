@@ -141,6 +141,7 @@ import-lines path left it empty.
   - **Currency filter — ETP-4029:** `ImportFromOrderModal.jsx` fetches the invoice's own header (`GET sales-invoice/header/{id}`) alongside the candidate orders and keeps only orders whose `currency` matches the invoice's current currency (orders carry `currency` directly, no order lookup needed). Empty-state message when candidates exist but none match: `noSalesOrdersMatchCurrency`.
 - Send Email recipient resolution: the Send Email modal (`SendDocumentModal`) pre-fills the `Para` field by fetching `GET /sws/neo/contacts/businessPartner/{businessPartner}` when the modal opens, reading `etgoEmail` (`C_BPartner.EM_Etgo_Email`) from the contacts spec. The field is left empty if no email is registered for the business partner. The modal title uses `useMenuLabel()` so it renders in the active UI language (e.g. "Factura de Venta" in Spanish instead of "Invoice").
 - Send Email editable subject/message (ETP-4717): the `Asunto` (subject, auto-derived as `${documentType} #${documentNo} — ${bpName}`) and `Mensaje` fields in the Send Email modal are editable text inputs, not read-only display fields. If the user leaves both untouched, the outgoing command is byte-identical to the legacy payload (no `messageEdits` key is sent). If either is changed, `SendDocumentModal` sends `messageEdits: { subject, message }` alongside the existing `recipientEdits`.
+- **Credit notes are sent as «Factura rectificativa» (ETP-6209, QA pass 2):** the send modal names the document itself in the subject (`${documentType} #${documentNo} — …`) and in the message line, so every sales-invoice send path — the form topbar (`InvoiceTopbarExtra.jsx`), the list row's email action (`windows/custom/sales-invoice/index.jsx`) and the preview panel (`shared/InvoicePreview.jsx`, sales only) — gets its document type from one helper, `salesInvoiceSendDocumentType` (`custom/invoiceSubtype.js`). It returns «Factura rectificativa» / "Credit Note" (`sendDocumentTypeCreditNote`) for a rectificative invoice (`getArSubtype`, the same rule as the list's type badge) and the window label «Factura de Venta» / "Sales Invoice" otherwise. These match the module catalog's `sales-invoice-send.documentType(.creditNote)`, so an app send names the document as an MCP send does; `defaultCopyInSync.vitest.js` checks it.
 - Email history card (ETP-5069): the `EmailsCard` in the preview panel's General tab is no longer a static placeholder. It reads the document's real send history from `GET /sws/neo/documentemailhistory?recordId=<documentId>` (payload `{ result: "<JSON string>" }` — `result` is a STRING the client parses — or `{ error: "<message>" }`), through `useApiFetch` like every other request. Rows are listed newest first with the send timestamp (locale-aware `toLocaleString`), the To recipients, the subject and a `StatusTag`; clicking a row expands CC, sender, message body, the error message and a Download attachment link. Only `SENT` and `DUPLICATE` count as successful (there is no `DELIVERY_FAILED`); every other status renders in the destructive tone and is never presented as sent. `previewCardNoEmailHistory` is kept for the genuinely-empty case and a separate `previewCardEmailHistoryError` copy covers a transport/backend failure, so "nothing was ever sent" and "we could not find out" no longer look alike. A successful send in the panel's own `SendDocumentModal` fires the new optional `onSent` callback (success only, unlike `onClose`, which a plain cancel also triggers) and the panel bumps `refreshSignal`, so the card refetches instead of showing its pre-send state. The `onSend` link keeps its fail-closed contract: with no `onSend` the card exposes no clickable send trigger at all.
 - Send status gating (ETP-4717): `InvoiceTopbarExtra.jsx` renders nothing for the Send action while `documentStatus === 'DR'` (the earlier `isDraft` branch used to render an unconditional `SendDocumentButton` there, which was the bug); once the invoice is `CO`, the button is further gated by `isCompleted` before it renders. This matches the grid row quick-action's `rowQuickActions.actions.email.visibleWhen: "@DocumentStatus@='CO'"` in `decisions.json`, so "Enviar" shows or hides consistently between the list and the detail topbar.
 - **Button order (ETP-5260, also a defect fix):** Copy link → Clone → Send render to the LEFT of Save/Confirm via `SalesInvoiceSecondaryActions.jsx` (wired as `topbarSecondary`, a thin adapter around the shared `DocumentSecondaryActions`); `SalesInvoiceTopbar.jsx` (`topbarRight`) now only nests `InvoiceTopbarExtra` (payment-status badge — a primary/status indicator that stays at the extreme right, after Save/Confirm, per the DF). The Send button used to render inline inside `InvoiceTopbarExtra.jsx` itself (`topbarRight`), gated to `isCompleted` — correct gating, wrong side of Save. It is a **defect fix**, not a straight port: the button moved to `SalesInvoiceSecondaryActions` (same `isCompleted` gate), and dispatches a `sales-invoice:open-send-modal` window event that `InvoiceTopbarExtra.jsx` now listens for, so its existing `SendDocumentModal`/PDF context opens without duplicating it. Clone reuses the `cloneInvoiceError`/`invoiceProcessing` i18n keys the inline call used before ETP-5260. See `docs/ui-customization.md` §3b for the general slot-classification rule.
@@ -394,7 +395,7 @@ already recorded ("Rechazado") is not duplicated. Runtime details:
 `TbaiXmlgeneratorHandler`".
 
 **Manual verification (Europe/Madrid browser timezone).**
-1. Configure SII for an org today (Configuración fiscal), create and confirm an invoice dated today:
+1. Configure SII for an org today (Configuración Fiscal), create and confirm an invoice dated today:
    the preview, the form kebab and the grid row kebab all offer "Enviar a SII" (the form topbar offers no
    send button), and the
    SII status column shows "Pendiente", not "—".
@@ -2002,7 +2003,7 @@ purchase-invoice — see `purchase-invoice.md` for this window's mirror of the s
 AEAT 349 messages this window can raise on save, Confirmar or a SIF send whose Classic text names
 Classic-only UI (e.g. "solapa Facturas Rectificativas", the "Añadir Certificado Digital" process,
 "Verifique en la cabecera del tercero") reach the user reworded with GO's own labels ("pestaña
-Rectificaciones", "pestaña SIF", Configuración fiscal → Certificado digital, Contactos → NIF/CIF,
+Rectificaciones", "pestaña SIF", Configuración Fiscal → Certificado digital, Contactos → NIF,
 pestaña Dirección), in the UI language, and keep their AD_MESSAGE key in `messageKeys` (REST: the
 `error` object; MCP: the root of the error result). Only messages a GO user can trigger are
 reworded. Done server-side at NEO's exit (`ClassicMessageRemap`, `com.etendoerp.go`
@@ -2013,7 +2014,7 @@ this window:
 | System | Keys |
 |---|---|
 | VERI\*FACTU | `ETVFAC_invoice_type_rectifying`, `ETVFAC_reversed_invoice` (Tipo de Factura in the SIF tab vs the Rectificaciones tab), `ETVFAC_Missing_DocType_Config`, `ETVFAC_error_code_idtype` (Clave NIF País Residencia of the contact) |
-| TicketBAI | `TBAI_ConfigNotFound`, `TBAI_CertificateNotValid`, `TBAI_NullCertificate`, `TBAI_SetKey`; on Confirmar or Anular (`ProcessInvoiceTbaiHook`, sales only), the recipient checks `TBAI_EmptyNifCode`, `TBAI_EmptyPostalCode`, `TBAI_EmptyDir` (a contact not marked as Factura Simplificada needs NIF/CIF, and its invoice Dirección needs a postal code and a Primera línea — fixed in Contactos, pestaña Dirección) |
+| TicketBAI | `TBAI_ConfigNotFound`, `TBAI_CertificateNotValid`, `TBAI_NullCertificate`, `TBAI_SetKey`; on Confirmar or Anular (`ProcessInvoiceTbaiHook`, sales only), the recipient checks `TBAI_EmptyNifCode`, `TBAI_EmptyPostalCode`, `TBAI_EmptyDir` (a contact not marked as Factura Simplificada needs a NIF, and its invoice Dirección needs a postal code and a Primera línea — fixed in Contactos, pestaña Dirección) |
 | SII | `AEATSII_EmptyCertificatePath`, `AEATSII_InvoiceManualSending`, `AEATSII_SII_ACCRUAL_DATE_EMPTY` (Fecha incorporación al SII), and the literal `siiMissingInvoiceType` (below) |
 | AEAT 349 | `AEAT349_CINVREV_CHECK` (the Rectificaciones tab mixes Year/Period) |
 
@@ -2881,3 +2882,100 @@ date (ETP-5840) and the default price list stays valid. Without it, the agent of
 `f-foreign-currency-invoice` read currencies, price lists and conversion rates first (22 calls against
 Holded's 11). The text lives in this window's `decisions.json` and in `com.etendoerp.go`'s
 `ETGO_SF_ENTITY` sourcedata; keep both equal.
+
+## Invoices in a confirmed remittance — ETP-6247
+
+**What "remitted" means.** Confirming a remittance makes Classic REM create one payment per due in
+status `REM_SENT` and link the invoice installment to it (a partial remittance links only the
+remitted part). Nothing has moved yet: the invoice's `outstandingAmount` stays full until the bank
+collects the remittance, so **dashboard, KPIs, aging and the "pending" filters do not change** — the
+remitted part is still owed. A **draft** remittance creates no payment and changes nothing here.
+After the remittance is collected the payment moves on (`RPR`/`PPM`, then `RDNC`/`PWNC`), the
+outstanding drops to 0 and the invoice reads «Cobrada» as usual.
+
+**Data (backend, `com.etendoerp.go` `InvoiceRemittance`).**
+- Header record: `etgoRemittedAmt` (`C_Invoice.EM_ETGO_Remitted_Amt`, stored computed column, 0 when
+  nothing is remitted). Returned by the list and the detail reads through this window's `decisions.json`
+  (`readOnly`, `grid: false`, `form: false`, MCP `agentPrompt`), never a form field;
+  the SPA treats an absent field as 0.
+- `paymentPlan` rows: `remittedAmount` and `payableAmount` (decoration of `InvoicePaymentPlanHandler`).
+- `invoicePayments` action rows: `remittanceId` / `remittanceDocumentNo` on every payment a
+  remittance created, and status `REM_SENT` while remitted.
+
+**What the user sees.**
+
+| Case | Grid «Saldo pendiente» | Due-date dot | Topbar badge |
+|---|---|---|---|
+| Fully remitted (`etgoRemittedAmt >= outstandingAmount > 0`) | amber chip «En remesa» (`invoice-remitted`), opens the payments modal; no amount to register | neutral, never the red overdue dot | «En remesa · X» |
+| Partially remitted (`0 < remitted < outstanding`) | the usual amber pending button with only the FREE part («40,00 €»), like any pending invoice; the remitted part is in the payments modal | unchanged (the free part is still owed) | «Pendiente · 40,00 €» (the free part, no remitted suffix) — the topbar works per installment (`classifyInstallment` returns `remitted` when nothing of an installment is free; it is never `overdue`), with the header `etgoRemittedAmt` as the fallback when the plan does not load |
+
+- The payment is shown as **«Remesado»** (amber) — never «Cobro depositado» — in the payments modal, the
+  preview card and the payment sidebar («Cobro confirmado · en remesa»). `paymentDisplayState` returns `remitted` for `REM_SENT`
+  ahead of the processed check; `REM_CANCEL` keeps reading as deposited.
+- **Returned payment (`RPVOID`).** A remittance return voids the collected payment and the invoice
+  gets its outstanding back. Core keeps that payment's (cancelled) schedule details, so it stays in
+  the invoice's payment list. `paymentDisplayState` returns `voided` for `RPVOID`, ahead of the
+  processed check (like `remitted`), so it reads **«Anulado»** (`statusVoid`, destructive tone, the
+  same label and tone as the payment window's own badge) — never «Cobro depositado» — in the payments
+  modal (`PaymentStateTag__voided`), the preview card (`payments-card-state-voided`) and the payment
+  sidebar («Cobro confirmado · anulado», red dot). Its amount is grey, unsigned and struck through.
+  `isPaymentProcessed` counts it (never an editable draft, never reserved against the outstanding),
+  and the modal footer's «N cobros registrados» leaves it out (`countRegisteredPayments`).
+- **This invoice's share — every payment, not only remittances.** The amount a row shows in the
+  invoice payments modal and in the preview card is this invoice's share of the payment, not the
+  payment total: `paymentAmountOnInvoice(p)`, the row's `appliedToInvoice` (the payment's schedule
+  details on THIS invoice, sent by `paymentListItem`; it survives a void), unsigned, falling back to
+  `amount` only when the backend does not send it. That covers three cases alike: a remittance
+  payment grouped by customer (a payment of 55,66 € for two invoices reads 27,83 € on each), a manual
+  payment that covers several invoices, and an overpayment (a collection of 100 € on an 80 € invoice reads
+  80 €; the rest is credit, not this invoice's). Drafts still use `amount`: the draft reservation
+  (`freeToAllocate`, *Drafts reserve what they are going to pay* above) and the draft delete
+  confirmation read the payment's own `amount`.
+- **Payments modal** («Cobros/Pagos de la factura», `InvoicePaymentHistoryModal`) when something is
+  remitted:
+  - an info banner on top (`RemittanceInfoBanner.jsx`, `InvoicePaymentHistoryModal__remittance-banner`):
+    one line per remittance, «En la remesa N · <estado>», then «Se marcará como cobrada cuando se
+    cobre la remesa.». The status is the backend's `remittanceStatusLabel` on the remitted
+    `invoicePayments` row; without it the line reads «En la remesa N». «Ver remesa →» opens
+    `/remittance/{id}`, and only appears with the `sepaRemittances` capability (that route is
+    guarded by the flag);
+  - the summary reads Cliente/Proveedor | Importe total | **En remesa** | **Pendiente de cobro** (the free
+    part; 0 when everything is remitted) instead of «Saldo pendiente»;
+  - the remitted row shows «Remesa N» in the Método column (no link under the number), the
+    «Remesado» chip, and the amount in neutral grey with no sign. No money has moved yet;
+  - fully remitted: no «Añadir cobro» button at all, only «Cerrar». Partially remitted: «Añadir
+    cobro» works for the free part.
+- **Preview card** (`PaymentsCard`): the same compact banner above the list, the same row
+  («Remesa N» as the method, grey amount), «Pendiente de pago» (free part) and «En remesa» rows,
+  and no add action when everything is remitted.
+- **Register payment.** What is offered is the free part: `outstanding − remitted` per installment,
+  minus the drafts as before (`freeToAllocate`). Not the backend's `payableAmount`, which already
+  leaves the drafts out and would subtract them twice. The preview's toolbar action (always rendered)
+  stays disabled with the `cpAddPaymentBlockedByRemittance` tooltip when everything is remitted.
+- **One installment per payment.** The register action applies a payment to ONE installment
+  (`scheduleId`) and, when that installment is partly or fully remitted, refuses anything over its
+  payable part (`InvoiceRemittance.installmentRefusal`). So when the invoice has anything remitted, a
+  new payment targets the first installment with `payableAmount > 0` (`pickPaymentInstallment`) and the
+  amount offered is capped at that installment's `payableAmount` (`resolvePaymentTarget`). Example:
+  free parts 30 + 50 → the modal offers 30 on the first installment, not 80. The installment is handed
+  to `NewPaymentEntryModal` as `scheduleId`. With nothing remitted, nothing changes. Editing a draft
+  keeps the old rule. The payment-window edit launcher (`PaymentEditModalLauncher`) uses
+  `outstanding − etgoRemittedAmt` as its target. A `REM_SENT` payment counts as processed: it is never offered for edit or delete, and is
+  never reserved as a draft.
+- **Errors.** `ETGO_InvoiceInRemittance` (a registration over the free part) and
+  `ETGO_PaymentInRemittance` (reactivating or removing a remitted payment) are mapped in
+  `lib/backendErrors.js`. Their values come as top-level error keys (`remittanceDocumentNo`,
+  `payableAmount`, `currency`), not `messageParams`. `extractBackendMessageParams` turns them into the
+  sentence params, with the amount formatted by `formatCurrency` (the backend text prints «1234.50»).
+  If the remittance number is missing, the backend's own text is shown.
+  When the whole invoice is remitted the backend adds `ETGO_InvoiceFullyInRemittance` to the keys
+  (and `error.fullyRemitted: true`). `translateInvoiceFullyInRemittance` then renders
+  `backendError.invoiceFullyInRemittance` («Esta factura está en la remesa N; quedará saldada cuando se
+  liquide la remesa.») instead of the partial sentence, which would say «solo puedes registrar 0,00 €».
+
+**Not gated by `sepa-remittances`**, on purpose: a `REM_SENT` payment only exists where a remittance was
+confirmed. See the flag entry in `flags-registry.json`.
+
+**Code.** `shared/invoiceRemittance.js` (amount rules), `shared/invoicePaymentBadge.js` (`remitted` /
+`partially-remitted` kinds), `shared/paymentStatuses.js` (`STATUS_REMITTED`, `STATUS_VOIDED`, `paymentAmountOnInvoice`), `shared/RemittanceInfoBanner.jsx`,
+`artifacts/sales-invoice/custom/InvoiceHeaderTable.jsx` (grid), `artifacts/sales-invoice/custom/InvoiceTopbarExtra.jsx` (topbar), `shared/InvoicePaymentHistoryModal.jsx`, `shared/useInvoicePreview.js`, `shared/InvoicePreview.jsx`, `shared/preview-cards/PaymentsCard.jsx`, `shared/PaymentDetailSidebarBase.jsx`, `shared/NewPaymentEntryModal.jsx`.
