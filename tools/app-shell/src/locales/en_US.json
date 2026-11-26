@@ -21706,7 +21706,7 @@
     "backendError.noArInvoiceDocTypeFound": "No AR Invoice document type found.",
     "backendError.noShipmentsProvided": "No shipments were provided.",
     "backendError.shipmentsMustShareBusinessPartner": "All shipments must belong to the same Business Partner.",
-    "backendError.bpMissingPaymentTermsOrMethod": "The Business Partner is missing mandatory Payment Terms or Payment Method.",
+    "backendError.bpMissingPaymentTermsOrMethod": "The contact has no Payment Terms or Payment Method. Fill them in on the contact and try again.",
     "backendError.shipmentPriceListRequired": "No Price List could be resolved for this invoice. Select a tariff, or configure a default Price List for the Business Partner.",
     "backendError.orderNotFound": "Order not found: {orderId}.",
     "backendError.shipmentNotFound": "Shipment not found: {id}.",

@@ -21942,7 +21942,7 @@
     "backendError.noArInvoiceDocTypeFound": "No se encontró ningún tipo de documento de factura de venta.",
     "backendError.noShipmentsProvided": "No se proporcionaron albaranes.",
     "backendError.shipmentsMustShareBusinessPartner": "Todos los albaranes deben pertenecer al mismo Tercero.",
-    "backendError.bpMissingPaymentTermsOrMethod": "Al Tercero le faltan las Condiciones de Pago o la Forma de Pago obligatorias.",
+    "backendError.bpMissingPaymentTermsOrMethod": "El contacto no tiene Condiciones de pago o Método de pago. Complétalos en la ficha del contacto y vuelve a intentarlo.",
     "backendError.shipmentPriceListRequired": "No se pudo resolver una tarifa para esta factura. Selecciona una tarifa o configura una tarifa por defecto para el Tercero.",
     "backendError.orderNotFound": "Pedido no encontrado: {orderId}",
     "backendError.shipmentNotFound": "Albarán no encontrado: {id}",
