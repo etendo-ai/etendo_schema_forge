@@ -24005,6 +24005,8 @@
     "matchRuleFilterActive": "Active",
     "matchRuleFilterInactive": "Inactive",
     "dismiss": "Dismiss",
+    "routeLoadFailed": "Could not load the page. Reload to continue.",
+    "routeLoadReload": "Reload",
     "ellipsis": "...",
     "priceUnit": "€ /",
     "amountPlaceholder": "0.00",

@@ -24243,6 +24243,8 @@
     "matchRuleFilterActive": "Activas",
     "matchRuleFilterInactive": "Inactivas",
     "dismiss": "Descartar",
+    "routeLoadFailed": "No se pudo cargar la página. Recarga para continuar.",
+    "routeLoadReload": "Recargar",
     "ellipsis": "...",
     "priceUnit": "€ /",
     "amountPlaceholder": "0.00",

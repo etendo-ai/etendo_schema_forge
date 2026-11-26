@@ -1,5 +1,5 @@
-import { Suspense, lazy } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Suspense } from 'react';
+import { Navigate, useLocation } from 'react-router-dom';
 import { LogoutRoute } from '@etendo-ai/app-shell-core/auth';
 import { useLogout } from './auth/useLogout.js';
 import WindowLoader from './windows/WindowLoader.jsx';
@@ -20,28 +20,30 @@ import PisCallbackPage from './pages/PisCallbackPage.jsx';
 import ArtifactViewerPage from './pages/ArtifactViewerPage.jsx';
 import { useSupportSession } from './hooks/useSupportSession.js';
 import { isSupportRestrictedRoute } from './lib/supportSession.js';
+import { lazyWithReload } from './lib/lazyWithReload.js';
+import RouteChunkErrorBoundary from './components/RouteChunkErrorBoundary.jsx';
 
-const OnboardingPage = lazy(() => import('./pages/OnboardingPage.jsx'));
-const SmartScanPage = lazy(() => import('./pages/SmartScanPage.jsx'));
-const OAuth2ClientsPage = lazy(() => import('./pages/OAuth2ClientsPage.jsx'));
-const ApiKeysPage = lazy(() => import('./pages/ApiKeysPage.jsx'));
-const DocumentTemplatesPage = lazy(() => import('./pages/DocumentTemplatesPage.jsx'));
-const RolesOverviewPage = lazy(() => import('./pages/RolesOverviewPage.jsx'));
-const AcctProcessMonitorPage = lazy(() => import('./pages/AcctProcessMonitorPage.jsx'));
-const AuthorizePage = lazy(() => import('./pages/AuthorizePage.jsx'));
-const QuickSalesOrderPage = lazy(() => import('./pages/QuickSalesOrderPage.jsx'));
-const QuickPurchaseOrderPage = lazy(() => import('./pages/QuickPurchaseOrderPage.jsx'));
-const UnifiedCalendarPage = lazy(() => import('./pages/UnifiedCalendarPage.jsx'));
-const AppStorePage = lazy(() => import('./pages/AppStorePage.jsx'));
-const UpgradePage = lazy(() => import('./pages/UpgradePage.jsx'));
-const AccountSettingsPage = lazy(() => import('./pages/AccountSettingsPage.jsx'));
-const MyCompaniesPage = lazy(() => import('./pages/MyCompaniesPage.jsx'));
-const InviteAcceptancePage = lazy(() => import('./pages/InviteAcceptancePage.jsx'));
+const OnboardingPage = lazyWithReload(() => import('./pages/OnboardingPage.jsx'));
+const SmartScanPage = lazyWithReload(() => import('./pages/SmartScanPage.jsx'));
+const OAuth2ClientsPage = lazyWithReload(() => import('./pages/OAuth2ClientsPage.jsx'));
+const ApiKeysPage = lazyWithReload(() => import('./pages/ApiKeysPage.jsx'));
+const DocumentTemplatesPage = lazyWithReload(() => import('./pages/DocumentTemplatesPage.jsx'));
+const RolesOverviewPage = lazyWithReload(() => import('./pages/RolesOverviewPage.jsx'));
+const AcctProcessMonitorPage = lazyWithReload(() => import('./pages/AcctProcessMonitorPage.jsx'));
+const AuthorizePage = lazyWithReload(() => import('./pages/AuthorizePage.jsx'));
+const QuickSalesOrderPage = lazyWithReload(() => import('./pages/QuickSalesOrderPage.jsx'));
+const QuickPurchaseOrderPage = lazyWithReload(() => import('./pages/QuickPurchaseOrderPage.jsx'));
+const UnifiedCalendarPage = lazyWithReload(() => import('./pages/UnifiedCalendarPage.jsx'));
+const AppStorePage = lazyWithReload(() => import('./pages/AppStorePage.jsx'));
+const UpgradePage = lazyWithReload(() => import('./pages/UpgradePage.jsx'));
+const AccountSettingsPage = lazyWithReload(() => import('./pages/AccountSettingsPage.jsx'));
+const MyCompaniesPage = lazyWithReload(() => import('./pages/MyCompaniesPage.jsx'));
+const InviteAcceptancePage = lazyWithReload(() => import('./pages/InviteAcceptancePage.jsx'));
 const DevLifecyclePage = import.meta.env.DEV
-  ? lazy(() => import('./pages/DevLifecyclePage.jsx')) : null;
-const PortalPage = lazy(() => import('./pages/PortalPage.jsx'));
-const PortalDecisionPage = lazy(() => import('./pages/PortalDecisionPage.jsx'));
-const SupportAccessPage = lazy(() => import('./pages/SupportAccessPage.jsx'));
+  ? lazyWithReload(() => import('./pages/DevLifecyclePage.jsx')) : null;
+const PortalPage = lazyWithReload(() => import('./pages/PortalPage.jsx'));
+const PortalDecisionPage = lazyWithReload(() => import('./pages/PortalDecisionPage.jsx'));
+const SupportAccessPage = lazyWithReload(() => import('./pages/SupportAccessPage.jsx'));
 
 const LOADING_FALLBACK = <div className="p-8 text-muted-foreground">Loading...</div>;
 
@@ -59,12 +61,28 @@ function SupportRestrictedRoute({ children }) {
   return children;
 }
 
-function lazyRoute(path, Component, extraProps = {}) {
-  const page = (
-    <Suspense fallback={LOADING_FALLBACK} data-testid="Suspense__e8c60d">
-      <Component {...extraProps} data-testid="Component__e8c60d" />
-    </Suspense>
+// Resets on navigation: a failed route must not keep its fallback on the next lazy page.
+function LocationKeyedBoundary({ children }) {
+  const { pathname } = useLocation();
+  return (
+    <RouteChunkErrorBoundary resetKey={pathname} data-testid="RouteChunkErrorBoundary__e8c60d">
+      {children}
+    </RouteChunkErrorBoundary>
   );
+}
+
+function lazyElement(Component, extraProps = {}) {
+  return (
+    <LocationKeyedBoundary data-testid="LocationKeyedBoundary__e8c60d">
+      <Suspense fallback={LOADING_FALLBACK} data-testid="Suspense__e8c60d">
+        <Component {...extraProps} data-testid="Component__e8c60d" />
+      </Suspense>
+    </LocationKeyedBoundary>
+  );
+}
+
+function lazyRoute(path, Component, extraProps = {}) {
+  const page = lazyElement(Component, extraProps);
   return {
     path,
     public: false,
@@ -77,20 +95,20 @@ function lazyRoute(path, Component, extraProps = {}) {
 export function buildRuntimeRoutes({ windowMap, apiBaseUrl }) {
   // ETP-5267 — the Business Partner portal, shared by its paths below.
   const portalElement = (
-    <Suspense fallback={LOADING_FALLBACK} data-testid="Suspense__e8c60d"><PortalPage data-testid="PortalPage__e8c60d" /></Suspense>
+    lazyElement(PortalPage)
   );
   // ETP-6209 Part C — the quotation-decision landing, shared by its four paths below.
   const decisionElement = (
-    <Suspense fallback={LOADING_FALLBACK} data-testid="Suspense__e8c60d"><PortalDecisionPage data-testid="PortalDecisionPage__e8c60d" /></Suspense>
+    lazyElement(PortalDecisionPage)
   );
 
   return [
     { index: true, public: false, element: <Navigate to="/dashboard" replace data-testid="Navigate__e8c60d" /> },
     { path: 'onboarding', public: true, element: (
-        <Suspense fallback={LOADING_FALLBACK} data-testid="Suspense__e8c60d"><OnboardingPage data-testid="OnboardingPage__e8c60d" /></Suspense>
+        lazyElement(OnboardingPage)
       ) },
     { path: 'invite', public: true, element: (
-        <Suspense fallback={LOADING_FALLBACK} data-testid="Suspense__e8c60d"><InviteAcceptancePage data-testid="InviteAcceptancePage__e8c60d" /></Suspense>
+        lazyElement(InviteAcceptancePage)
       ) },
     // Registered UNCONDITIONALLY, and public: the Business Partner who opens this link has no
     // Etendo account and no session — the token in the path is the whole credential, validated
@@ -121,13 +139,13 @@ export function buildRuntimeRoutes({ windowMap, apiBaseUrl }) {
     // blank fallback, and it says nothing a probe could learn from.
     { path: 'portal', public: true, element: portalElement },
     { path: 'login', public: true, element: (
-        <Suspense fallback={LOADING_FALLBACK} data-testid="Suspense__e8c60d"><OnboardingPage data-testid="OnboardingPage__e8c60d" /></Suspense>
+        lazyElement(OnboardingPage)
       ) },
     { path: 'logout', public: true, element: <RuntimeLogoutRoute data-testid="RuntimeLogoutRoute__e8c60d" /> },
     // ETP-5351 — Classic's support handoff (`#t=<ticket>`). Public: the visitor has no GO session
     // yet, the ticket is the credential. A static path, so it outranks `:windowName` below.
     { path: 'support-access', public: true, element: (
-        <Suspense fallback={LOADING_FALLBACK} data-testid="Suspense__e8c60d"><SupportAccessPage data-testid="SupportAccessPage__e8c60d" /></Suspense>
+        lazyElement(SupportAccessPage)
       ) },
     { path: 'financial-account/bank-connection-callback', public: true, element: <BankConnectionCallbackPage data-testid="BankConnectionCallbackPage__e8c60d" /> },
     { path: 'financial-account/pis-callback', public: true, element: <PisCallbackPage data-testid="PisCallbackPage__e8c60d" /> },

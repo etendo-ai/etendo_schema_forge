@@ -8,6 +8,7 @@ import { initFeatureFlags } from './lib/flags/index.js';
 import { bootSupportSession, isSupportModeActive } from './lib/supportSession.js';
 import { installGtm, resolveGtmId } from './lib/marketing/gtm.js';
 import { detectBasePath } from './lib/neoBaseUrl.js';
+import { installPreloadErrorReload } from './lib/lazyWithReload.js';
 import { isPortalPath } from './lib/portal/portalLinkSession.js';
 import { installVitePreloadRecovery } from './lib/vitePreloadRecovery.js';
 
@@ -42,6 +43,8 @@ installNeoRequestDedupe();
 
 // ETP-6441 — one reload per session when a lazy chunk arrives truncated.
 installVitePreloadRecovery();
+// ETP-6400 — a stale build (chunks removed by a deploy) reloads once per 10 s window.
+installPreloadErrorReload();
 
 // Fire-and-forget: never rejects, and flags resolve to their declared defaults
 // until (or unless) the provider becomes ready.
@@ -59,6 +62,9 @@ import { ErrorBoundary, StaticErrorPage } from './components/errors/ErrorBoundar
 import { ICON_DEFAULTS } from './lib/iconDefaults.js';
 import './index.css';
 
+
+// A stale build asks for hashed chunks a deploy removed: Vite reports it here. Reload once.
+installPreloadErrorReload();
 
 if (import.meta.env.VITE_APP_TITLE) {
   document.title = import.meta.env.VITE_APP_TITLE;

@@ -554,3 +554,19 @@ request that is not an API call at all: reading a `blob:` URL from a local PDF p
 `/jsreport/*` container proxy, which takes no Etendo bearer token.
 
 Do not reach for either to silence the guardrail on a real backend call.
+
+## Stale-build chunk failures (ETP-6400)
+
+After a deploy removes the old hashed chunks, an open tab asks for files that no longer exist
+and a lazy page (e.g. onboarding) stays on "Loading..." forever. The app-shell handles it in
+`tools/app-shell/src/lib/lazyWithReload.js`:
+
+- A chunk load failure (`isChunkLoadError`) reloads the page **once**: the mark lives in
+  `sessionStorage` under `go:chunk-reload` and is honoured for 10 s. A second failure inside the
+  window, or no usable storage, lets the error through so it can never loop.
+- `main.jsx` installs `vite:preloadError` through `installPreloadErrorReload()` with the same policy.
+- Every lazy route in `runtime-routes.jsx` MUST use `lazyWithReload`/`lazyElement`, not bare
+  `lazy()`; `RouteChunkErrorBoundary` shows a message and a reload button when the chunk still
+  cannot load. It only handles chunk errors; any other render error reaches the next boundary up.
+- Infra follow-up: the S3 sync that publishes the SPA should not use `--delete` right after a deploy,
+  so the previous build's chunks stay available for open tabs.
