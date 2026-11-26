@@ -54,6 +54,7 @@ import {
   countBouncePairs,
   buildDiscardedPairRows,
   isDiscardedOutflow,
+  pairableRejections,
 } from '../bouncePairs.js';
 
 const MODULE_URL = pathToFileURL(
@@ -1396,5 +1397,135 @@ describe('buildDiscardedPairRows (one row per discarded pair, anchored on the ou
     assert.deepEqual(pairKeys(buildDiscardedPairRows([pending, partnerPending, D3])), [['D3', null], ['X1', null]]);
     assert.deepEqual(buildDiscardedPairRows(null), []);
     assert.deepEqual(buildDiscardedPairRows(undefined), []);
+  });
+});
+
+// --- "Revisar en el panel": the modal row's outflow and the right list (ETP-6359) ---------
+
+describe('bouncePanelModel — defaultOriginalId (the outflow the modal row showed)', () => {
+  const line = { id: 'L-IN3', date: '2026-03-04', amount: 80, state: BOUNCE_STATE,
+    bouncePair: { role: 'bounce', ambiguous: true, candidates: [{ line: CAND_A }, { line: CAND_B }] } };
+  const ai = (probabilities, recommendedLineId, none = 0) => ({ 'L-IN3': { probabilities, none, recommendedLineId } });
+
+  it('an ambiguous pair with no pick and no AI data opens on it, flagged defaultPreselected', () => {
+    const m = bouncePanelModel(line, { defaultOriginalId: 'L-OUT-B' });
+    assert.equal(m.chosenId, 'L-OUT-B');
+    assert.equal(m.other, CAND_B);
+    assert.equal(m.defaultPreselected, true);
+    assert.equal(m.explicitPick, false);
+    assert.equal('aiPreselected' in m, false);
+    assert.deepEqual(m.discard, { statementLineId: 'L-OUT-B', counterpartLineId: 'L-IN3' });
+    assert.equal(m.net, 0);
+    // The panel's "Elige la salida original." sentence needs a selectable model with nothing chosen.
+    assert.equal(m.selectable && !m.chosenId, false);
+  });
+
+  it('is ignored when it is not one of the options (no flag, nothing chosen)', () => {
+    for (const id of ['nope', 'L-OUT', null, undefined]) {
+      const m = bouncePanelModel(line, { defaultOriginalId: id });
+      assert.equal(m.chosenId, null, String(id));
+      assert.equal(m.discard, null);
+      assert.equal('defaultPreselected' in m, false);
+    }
+  });
+
+  it('loses to an explicit pick', () => {
+    const m = bouncePanelModel(line, { defaultOriginalId: 'L-OUT-B', chosenOriginalId: 'L-OUT-A' });
+    assert.equal(m.chosenId, 'L-OUT-A');
+    assert.equal(m.explicitPick, true);
+    assert.equal('defaultPreselected' in m, false);
+  });
+
+  it('loses to the AI recommendation, which stays the AI preselection', () => {
+    const m = bouncePanelModel(line, {
+      defaultOriginalId: 'L-OUT-A', aiAssessments: ai({ 'L-OUT-A': 10, 'L-OUT-B': 85 }, 'L-OUT-B', 5),
+    });
+    assert.equal(m.chosenId, 'L-OUT-B');
+    assert.equal(m.aiPreselected, true);
+    assert.equal('defaultPreselected' in m, false);
+  });
+
+  it('applies on an AI-rated pair without a recommendation (60/40), even to the less probable outflow', () => {
+    for (const id of ['L-OUT-B', 'L-OUT-A']) {
+      const m = bouncePanelModel(line, {
+        defaultOriginalId: id, aiAssessments: ai({ 'L-OUT-A': 40, 'L-OUT-B': 60 }, null),
+      });
+      assert.equal(m.chosenId, id);
+      assert.equal(m.defaultPreselected, true);
+      assert.equal(m.aiPreselected, false);
+      assert.equal(m.aiPercent, null);
+      assert.deepEqual(m.percents, { 'L-OUT-B': 60, 'L-OUT-A': 40 });
+    }
+  });
+
+  it('changes nothing on a single-original pair (already chosen) nor on an original / candidate line', () => {
+    const single = { ...BOUNCE, state: BOUNCE_STATE,
+      bouncePair: { role: 'bounce', confidence: 'review', counterpartLine: ORIGINAL } };
+    const m = bouncePanelModel(single, { defaultOriginalId: 'L-OUT-B' });
+    assert.equal(m.chosenId, 'L-OUT');
+    assert.equal('defaultPreselected' in m, false);
+    const candidate = { ...CAND_A, state: BOUNCE_STATE,
+      bouncePair: { role: 'candidate', ambiguous: true, counterpartLine: { id: 'L-IN3', amount: 80 } } };
+    assert.equal('defaultPreselected' in bouncePanelModel(candidate, { defaultOriginalId: 'L-OUT-B' }), false);
+  });
+
+  it('"No es un rechazo" never reports it as counterpartLineId; the same outflow picked explicitly does', () => {
+    const preselected = bouncePanelModel(line, { defaultOriginalId: 'L-OUT-B' });
+    assert.deepEqual(dismissPairPayload('acc', line, preselected), {
+      financialAccountId: 'acc', statementLineId: 'L-IN3',
+    });
+    const picked = bouncePanelModel(line, { chosenOriginalId: 'L-OUT-B' });
+    assert.deepEqual(dismissPairPayload('acc', line, picked), {
+      financialAccountId: 'acc', statementLineId: 'L-IN3', counterpartLineId: 'L-OUT-B',
+    });
+  });
+});
+
+describe('pairableRejections (the right list of "Posibles rechazos" for a selected rejection)', () => {
+  const entry = (key, amount, date) => ({ key, anchor: { id: key, amount, date } });
+  const SEL = entry('SEL', 80, '2026-05-10');
+  const SAME = entry('SAME', 80, '2026-05-20');
+  const OTHER_AMOUNT = entry('OTHER-AMOUNT', 45, '2026-05-12');
+  const CENTS = entry('CENTS', 80.01, '2026-05-12');
+  const SAME_SIGN = entry('SAME-SIGN', -80, '2026-05-12');
+  const FAR = entry('FAR', 80, '2026-08-01'); // 90 days after 2026-05-03
+  const ENTRIES = [SEL, SAME, OTHER_AMOUNT, CENTS, SAME_SIGN, FAR];
+  const keys = (rows) => rows.map((e) => e.key);
+  const OUT_MAY = { id: 'O-MAY', amount: -80, date: '2026-05-03' };
+  const OUT_JUL = { id: 'O-JUL', amount: -80, date: '2026-07-20' };
+
+  it('with a chosen outflow keeps only the rejections it pairs with: exact amount, opposite sign, 60-day window', () => {
+    assert.deepEqual(keys(pairableRejections(ENTRIES, { other: OUT_MAY, rows: [OUT_MAY, OUT_JUL] }, 'SEL')), ['SEL', 'SAME']);
+  });
+
+  it('the chosen outflow wins over the other rows of the pair', () => {
+    // With O-JUL chosen, FAR fits and SAME (61 days before it) no longer does, although O-MAY would
+    // take it; SEL stays only because it is the selected one.
+    assert.deepEqual(keys(pairableRejections(ENTRIES, { other: OUT_JUL, rows: [OUT_MAY, OUT_JUL] }, 'SEL')), ['SEL', 'FAR']);
+  });
+
+  it('with no outflow chosen, keeps those pairable with ANY of the selected rejection\'s own outflows', () => {
+    assert.deepEqual(keys(pairableRejections(ENTRIES, { other: null, rows: [OUT_MAY] }, 'SEL')), ['SEL', 'SAME']);
+    assert.deepEqual(keys(pairableRejections(ENTRIES, { other: null, rows: [OUT_MAY, OUT_JUL] }, 'SEL')), ['SEL', 'SAME', 'FAR']);
+  });
+
+  it('always lists the selected rejection, even one its outflows cannot take', () => {
+    assert.deepEqual(keys(pairableRejections(ENTRIES, { other: OUT_MAY, rows: [OUT_MAY] }, 'OTHER-AMOUNT')),
+      ['SEL', 'SAME', 'OTHER-AMOUNT']);
+  });
+
+  it('with no model, or nothing to match against, lists every rejection', () => {
+    assert.equal(pairableRejections(ENTRIES, null, 'SEL'), ENTRIES);
+    assert.equal(pairableRejections(ENTRIES, undefined, undefined), ENTRIES);
+    assert.equal(pairableRejections(ENTRIES, { other: null, rows: [] }, 'SEL'), ENTRIES);
+    assert.equal(pairableRejections(ENTRIES, { other: null }, 'SEL'), ENTRIES);
+  });
+
+  it('works on a real bounce model of an ambiguous pair (its candidates) and after a default preselection', () => {
+    const bounce = { id: 'SEL', amount: 80, date: '2026-05-10', state: BOUNCE_STATE,
+      bouncePair: { role: 'bounce', ambiguous: true, candidates: [{ line: OUT_MAY }, { line: OUT_JUL }] } };
+    assert.deepEqual(keys(pairableRejections(ENTRIES, bouncePanelModel(bounce), 'SEL')), ['SEL', 'SAME', 'FAR']);
+    const onMay = bouncePanelModel(bounce, { defaultOriginalId: 'O-MAY' });
+    assert.deepEqual(keys(pairableRejections(ENTRIES, onMay, 'SEL')), ['SEL', 'SAME']);
   });
 });

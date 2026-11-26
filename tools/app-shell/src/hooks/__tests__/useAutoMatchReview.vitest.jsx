@@ -101,12 +101,15 @@ describe('useAutoMatchReview', () => {
 
   it('startReview focuses the pair bounce line with an increasing seq', () => {
     const { result } = renderHook(() => useAutoMatchReview(GROUPS));
+    // ETP-6359 — the request carries the outflow the modal row shows, for the panel to preselect.
+    const shown = result.current.selection.pairOutflow(AMBIGUOUS).line;
+    expect(shown).toBeTruthy();
     act(() => result.current.startReview(AMBIGUOUS));
-    expect(result.current.focus).toEqual({ lineId: 'B3', seq: 1 });
-    expect(result.current.panel.focus).toEqual({ lineId: 'B3', seq: 1 });
+    expect(result.current.focus).toEqual({ lineId: 'B3', seq: 1, outflow: shown });
+    expect(result.current.panel.focus).toEqual({ lineId: 'B3', seq: 1, outflow: shown });
     // A second request for the same line is a new request.
     act(() => result.current.startReview(AMBIGUOUS));
-    expect(result.current.focus).toEqual({ lineId: 'B3', seq: 2 });
+    expect(result.current.focus).toEqual({ lineId: 'B3', seq: 2, outflow: shown });
   });
 
   it('ignores startReview for a group without a bounce line', () => {
@@ -494,6 +497,19 @@ describe('useAutoMatchReview — the outflow picked in the panel', () => {
     act(() => result.current.pickOutflow('B3', { id: 'C2' }));
     rerender({ groups: [...GROUPS], active: false });
     expect(result.current.picks.size).toBe(0);
+  });
+
+  it('startReview sends the outflow the row shows now, and none for a row left without one (blocked)', () => {
+    const { result } = renderHook(() => useAutoMatchReview(SHARED, { bounceAiAssessments: SHARED_AI }));
+    act(() => result.current.selection.toggle(SA));
+    // SB now shows SO2 (SA holds SO1): that is what travels.
+    act(() => result.current.startReview(SB));
+    expect(result.current.focus).toEqual({ lineId: 'SB-B', seq: 1, outflow: O2 });
+    act(() => result.current.selection.toggle(SB));
+    expect(result.current.selection.pairOutflow(SC).blocked).toBe(true);
+    act(() => result.current.startReview(SC));
+    expect(result.current.focus).toEqual({ lineId: 'SB-C', seq: 2 });
+    expect(result.current.focus).not.toHaveProperty('outflow');
   });
 
   it('a dismissed pair ("No es un rechazo") frees the outflow it held for the other rows', () => {

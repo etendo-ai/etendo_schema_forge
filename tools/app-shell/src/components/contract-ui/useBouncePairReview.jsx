@@ -9,9 +9,9 @@ import {
 import {
   BOUNCE_STATE, DISCARDED_STATE, bouncePanelModel, buildBounceOutflows, buildBouncePairRows,
   buildDiscardedPairRows, countBouncePairs, countsWithDismissedPairs,
-  dismissPairPayload, pendingLinesStatusParam, withDismissedPairs,
+  dismissPairPayload, pairChoiceSource, pendingLinesStatusParam, rowAsGroup, withDismissedPairs,
 } from './bouncePairs.js';
-import { CHOICE_SOURCE_AI, CHOICE_SOURCE_USER, isAiStaleError } from './bounceAi.js';
+import { isAiStaleError } from './bounceAi.js';
 import { visibleStatusCodes } from './reconciliationStatusFilter.js';
 import { BounceDismissedNotice, BouncePairPanel } from './BouncePairPanel.jsx';
 
@@ -41,14 +41,17 @@ function failureText(err, ui, fallbackKey) {
 }
 
 /**
- * The `choiceSource` of a discard (ETP-6359), ONE rule with the automatch modal (`pairChoiceSource`,
- * bouncePairs.js): 'user' for an outflow the user picked here, even the AI-recommended one or with no
- * AI data; 'ai' while the AI's preselection stands; null (the field is left out) otherwise. (A
- * discard always has a chosen outflow, so an AI-rated pair is either picked or preselected here.)
+ * The `choiceSource` of a discard (ETP-6359): the automatch modal's own rule (`pairChoiceSource`,
+ * bouncePairs.js) applied to the rejection's pair and the outflow the panel discards it with: 'user'
+ * for an outflow the user picked here, even the AI-recommended one or with no AI data; 'ai' when it
+ * is the AI recommendation; with AI data, 'user' for any other one (e.g. the outflow preselected
+ * from the modal row on "Revisar en el panel"); null (the field is left out) without AI data and
+ * without a pick. Only the rejection's panel chooses an outflow: from an original / candidate line
+ * nothing travels, as before.
  */
-function discardChoiceSource(model) {
-  if (model.explicitPick) return CHOICE_SOURCE_USER;
-  return model.aiPreselected ? CHOICE_SOURCE_AI : null;
+function discardChoiceSource(model, line, assessments) {
+  if (model.role !== 'bounce') return null;
+  return pairChoiceSource(rowAsGroup(line), model.other, assessments, model.explicitPick ? model.other : null);
 }
 
 /**
@@ -72,6 +75,15 @@ function withDiscardedCounts(defaultCounts, discardedCounts) {
   const out = { ...defaultCounts, discarded: discardedCounts.discarded };
   if (discardedCounts.discardedPairs != null) out.discardedPairs = discardedCounts.discardedPairs;
   return out;
+}
+
+/**
+ * The outflow a rejection opens on from "Revisar en el panel" (`focusDefault`, ETP-6359): its id
+ * when `line` is the rejection that request landed on, else null.
+ */
+function focusDefaultFor(focusDefault, line) {
+  if (!focusDefault || focusDefault.lineId !== line?.id) return null;
+  return focusDefault.outflowId;
 }
 
 /** The id of the left-panel row of a line, as `StatementLinesPanel` renders it. */
@@ -191,10 +203,13 @@ export function useBounceLines({
  * active filter is one with its own request (`Descartadas`, `status=discarded`): leaving it reloads
  * the lines, and the discarded ones on screen cannot hold the bounce line, so the search waits for
  * that reload.
+ *
+ * `onLanded(line, request)` is told once the line is selected (ETP-6359: the request may carry the
+ * `outflow` the modal row showed).
  */
 function useFocusRequest({
   focus, onFocusConsumed, lines, loading, status, setStatus, setSearch, dateRange, setDateRange,
-  selectLine,
+  selectLine, onLanded,
 }) {
   const pendingRef = useRef(null);
   // `widened`: the date range was already opened once for this request. `reloaded`: a reload was
@@ -228,6 +243,7 @@ function useFocusRequest({
     if (line) {
       pendingRef.current = null;
       selectLine(line);
+      onLanded?.(line, pending);
       scrollLineIntoView(line.id);
       onFocusConsumed?.();
       return;
@@ -240,7 +256,7 @@ function useFocusRequest({
     }
     pendingRef.current = null;
     onFocusConsumed?.();
-  }, [focus, lines, loading, dateRange, setDateRange, selectLine, onFocusConsumed]);
+  }, [focus, lines, loading, dateRange, setDateRange, selectLine, onFocusConsumed, onLanded]);
 }
 
 /**
@@ -268,8 +284,15 @@ export function useBouncePairPanel({
   // automatch brings new assessments. Without it the radio would stay pre-checked and every retry
   // would send choiceSource 'ai' and get the same 409.
   const [aiInvalidated, setAiInvalidated] = useState(() => new Set());
+  // ETP-6359 — the outflow the modal row showed when the user chose "Revisar en el panel" (the
+  // request's `outflow`): that rejection opens on it unless a pick or the AI's recommendation says
+  // otherwise (`defaultOriginalId` of bouncePanelModel). Only for that visit: dropped when the
+  // selection leaves that rejection, on a fresh automatch answer, after a discard and after a stale
+  // AI refusal, so a rejection selected directly later opens as always.
+  const [focusDefault, setFocusDefault] = useState(null);
   useEffect(() => {
     setAiInvalidated((prev) => (prev.size === 0 ? prev : new Set()));
+    setFocusDefault(null);
   }, [freshAssessments]);
   const aiAssessments = useMemo(() => {
     if (!freshAssessments || aiInvalidated.size === 0) return freshAssessments;
@@ -292,18 +315,26 @@ export function useBouncePairPanel({
     return { lineId, originalId: original?.id ?? null, original };
   }, [onPick, ownChosen, sharedPicks, selectedLine?.id]);
 
+  const onLanded = useCallback((line, request) => {
+    setFocusDefault({ lineId: line.id, outflowId: request?.outflow?.id ?? null });
+  }, []);
   useFocusRequest({
     focus: review?.focus ?? null,
     onFocusConsumed: review?.onFocusConsumed,
-    lines, loading, status, setStatus, setSearch, dateRange, setDateRange, selectLine,
+    lines, loading, status, setStatus, setSearch, dateRange, setDateRange, selectLine, onLanded,
   });
+  const selectedId = selectedLine?.id ?? null;
+  useEffect(() => {
+    if (focusDefault && focusDefault.lineId !== selectedId) setFocusDefault(null);
+  }, [focusDefault, selectedId]);
 
   const model = useMemo(() => bouncePanelModel(selectedLine, {
     discardedLines,
     chosenOriginalId: chosen.lineId === selectedLine?.id ? chosen.originalId : null,
     chosenOriginalLine: chosen.lineId === selectedLine?.id ? chosen.original : null,
     aiAssessments,
-  }), [selectedLine, discardedLines, chosen, aiAssessments]);
+    defaultOriginalId: focusDefaultFor(focusDefault, selectedLine),
+  }), [selectedLine, discardedLines, chosen, aiAssessments, focusDefault]);
 
   const refresh = useCallback(() => {
     reloadLines?.();
@@ -361,9 +392,8 @@ export function useBouncePairPanel({
 
   const onDiscard = useCallback(async () => {
     if (windowReadOnly || !model?.discard) return;
-    // `choiceSource` travels only when the AI rated this pair: 'ai' while its preselection stands,
-    // 'user' for an explicit pick. Without AI data the body is exactly what it always was.
-    const choiceSource = discardChoiceSource(model);
+    // One rule with the automatch modal (`discardChoiceSource` → `pairChoiceSource`).
+    const choiceSource = discardChoiceSource(model, selectedLine, aiAssessments);
     const aiDiscard = model.aiPreselected;
     const bounceLineId = model.discard.counterpartLineId;
     try {
@@ -382,6 +412,7 @@ export function useBouncePairPanel({
       } else {
         toast.success(ui('financeReconcileBounceToastDiscarded'));
       }
+      setFocusDefault(null);
       refresh();
     } catch (err) {
       if (isAiStaleError(err)) {
@@ -389,13 +420,17 @@ export function useBouncePairPanel({
         // reload, so the panel shows the current proposal, and the AI default of this rejection
         // is dropped for good (until a fresh automatch).
         setAiInvalidated((prev) => new Set(prev).add(bounceLineId));
+        // The outflow the modal row showed came from the same stale suggestion: drop it too, so the
+        // user chooses again.
+        setFocusDefault(null);
         toast.error(translateBackendErrorBody(err?.body, ui, null) || ui(AI_STALE_I18N_KEY));
         refresh();
         return;
       }
       toast.error(failureText(err, ui, 'financeReconcileBounceToastDiscardError'));
     }
-  }, [windowReadOnly, model, discardPair, accountId, ui, refresh, undoDiscard]);
+  }, [windowReadOnly, model, discardPair, accountId, ui, refresh, undoDiscard, selectedLine,
+    aiAssessments]);
 
   const onRestore = useCallback(async () => {
     if (windowReadOnly || !selectedLine?.id) return;

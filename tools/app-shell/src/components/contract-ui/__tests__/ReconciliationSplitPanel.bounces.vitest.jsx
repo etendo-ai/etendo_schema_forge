@@ -786,13 +786,43 @@ describe('ReconciliationSplitPanel — the "Revisar en el panel" focus request',
     expect(r.onFocusConsumed).toHaveBeenCalledTimes(1);
   });
 
+  // ETP-6359 (user report) — an ambiguous pair with no AI recommendation sent from the modal opens on
+  // the outflow its modal row showed, and the right list keeps only the rejections of that amount.
+  it('a request with the modal row\'s outflow preselects it, narrows the rejections and discards with it', async () => {
+    const r = review({ lineId: 'B3', seq: 1, outflow: C2_SHORT });
+    renderPanel({ bounceReview: r });
+    await waitFor(() => expect(r.onFocusConsumed).toHaveBeenCalledTimes(1));
+    expect(screen.getByTestId('recon-line-radio-B3')).toBeChecked();
+    expect(screen.getByTestId('recon-bounce-radio-C2')).toBeChecked();
+    expect(screen.getByTestId('recon-bounce-radio-C1')).not.toBeChecked();
+    // The footer names it: "Salida seleccionada" with C2's date.
+    expect(screen.getByTestId('recon-bounce-total-other-meta').textContent).toBe(formatDate('2026-10-03', 'es-ES'));
+    // Only the 80 rejection: B1 (120) cannot be paired with C2.
+    expect(screen.queryAllByTestId(/^recon-line-row-/).map((el) => el.dataset.testid)).toEqual(['recon-line-row-B3']);
+    fireEvent.click(screen.getByTestId('recon-bounce-discard'));
+    // No AI data and no pick: choiceSource is left out, as the modal row would send it.
+    await waitFor(() => expect(discardPairMock).toHaveBeenCalledWith({
+      financialAccountId: 'ACC-1', statementLineId: 'C2', counterpartLineId: 'B3',
+    }));
+  });
+
+  it('a rejection selected directly opens on no outflow, its rejections still narrowed to its outflows', async () => {
+    renderPanel();
+    await screen.findByTestId('recon-line-row-B3');
+    selectStatus('financeReconcileFilterStatusPending', 'financeReconcileFilterStatusBounce');
+    fireEvent.click(screen.getByTestId('recon-outflow-row-C1'));
+    expect(screen.getByTestId('recon-line-radio-B3')).toBeChecked();
+    expect(screen.queryAllByTestId(/^recon-line-row-/).map((el) => el.dataset.testid)).toEqual(['recon-line-row-B3']);
+  });
+
   it('a second request with the lines loaded and the filter already on Posibles rechazos selects the line', async () => {
     const r = review({ lineId: 'B3', seq: 1 });
     const { rerender } = renderPanel({ bounceReview: r });
     await waitFor(() => expect(r.onFocusConsumed).toHaveBeenCalledTimes(1));
     expect(screen.getByTestId('recon-line-radio-B3')).toBeChecked();
-    // The user moves on to another line; nothing reloads, the filter stays on Posibles rechazos.
-    fireEvent.click(screen.getByTestId('recon-line-radio-B1'));
+    // The user moves on to another pair (B3's right list only holds the rejections its outflows can
+    // take, so through an outflow of the other amount); nothing reloads, the filter stays.
+    fireEvent.click(screen.getByTestId('recon-outflow-row-O1'));
     expect(screen.getByTestId('recon-line-radio-B1')).toBeChecked();
     const callsBefore = pending.calls.length;
     const filtersBefore = lastCall();
@@ -1428,6 +1458,120 @@ describe('ReconciliationSplitPanel — discarding with the AI suggestion', () =>
     expect(dismissPairMock).toHaveBeenCalledWith({
       financialAccountId: 'ACC-1', statementLineId: 'B3', counterpartLineId: 'C1',
     });
+  });
+});
+
+// ── "Revisar en el panel" with the outflow the modal row showed, on an AI-rated pair (ETP-6359) ──
+
+describe('ReconciliationSplitPanel — the modal row\'s outflow preselected on an AI-rated pair', () => {
+  const staleError = () => Object.assign(new Error('stale'), {
+    status: 409,
+    code: 'BOUNCE_AI_SUGGESTION_STALE',
+    body: { code: 'BOUNCE_AI_SUGGESTION_STALE', error: { messageKeys: ['ETGO_BounceAiSuggestionStale'] } },
+  });
+
+  /** Lands on B3 from the modal with `outflow` (the row's outflow) and the given AI layer. */
+  async function landFromModal(outflow, aiAssessments) {
+    const r = { ...aiReview(aiAssessments), focus: { lineId: 'B3', seq: 1, outflow } };
+    const utils = renderPanel({ bounceReview: r });
+    await waitFor(() => expect(r.onFocusConsumed).toHaveBeenCalledTimes(1));
+    expect(screen.getByTestId('recon-line-radio-B3')).toBeChecked();
+    return utils;
+  }
+
+  it('60/40: pre-checks the row\'s outflow, drops the "choose" sentence, lists 1 rejection, discards as "user"', async () => {
+    await landFromModal(C2_SHORT, AI_60_40);
+    expect(screen.getByTestId('recon-bounce-radio-C2')).toBeChecked();
+    expect(screen.getByTestId('recon-bounce-radio-C1')).not.toBeChecked();
+    const notice = screen.getByTestId('recon-bounce-notice');
+    expect(notice).not.toHaveTextContent('financeReconcileBounceNoticeChoose');
+    expect(notice).not.toHaveTextContent('financeReconcileBounceNoticeAi');
+    expect(screen.getByTestId('recon-rejections-title')).toHaveTextContent('financeReconcileBounceViewRejections:{"count":1}');
+    expect(screen.getByTestId('recon-bounce-discard')).toBeEnabled();
+    fireEvent.click(screen.getByTestId('recon-bounce-discard'));
+    // An AI-rated pair discarded with an outflow that is not the AI's recommendation: 'user'.
+    await waitFor(() => expect(discardPairMock).toHaveBeenCalledWith({
+      financialAccountId: 'ACC-1', statementLineId: 'C2', counterpartLineId: 'B3', choiceSource: 'user',
+    }));
+  });
+
+  it('85/10: the AI recommendation wins over the row\'s outflow and still discards as "ai"', async () => {
+    await landFromModal(C1_SHORT, AI_85_10);
+    expect(screen.getByTestId('recon-bounce-radio-C2')).toBeChecked();
+    expect(screen.getByTestId('recon-bounce-radio-C1')).not.toBeChecked();
+    fireEvent.click(screen.getByTestId('recon-bounce-discard'));
+    await waitFor(() => expect(discardPairMock).toHaveBeenCalledWith({
+      financialAccountId: 'ACC-1', statementLineId: 'C2', counterpartLineId: 'B3', choiceSource: 'ai',
+    }));
+  });
+
+  it('a stale refusal clears the preselection: nothing checked, the "choose" sentence back, discard disabled', async () => {
+    discardPairMock.mockRejectedValueOnce(staleError());
+    await landFromModal(C2_SHORT, AI_60_40);
+    expect(screen.getByTestId('recon-bounce-radio-C2')).toBeChecked();
+    fireEvent.click(screen.getByTestId('recon-bounce-discard'));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('T(backendError.bounceAiSuggestionStale)'));
+    await waitFor(() => expect(screen.getByTestId('recon-bounce-radio-C2')).not.toBeChecked());
+    expect(screen.getByTestId('recon-bounce-radio-C1')).not.toBeChecked();
+    expect(screen.getByTestId('recon-bounce-notice')).toHaveTextContent('financeReconcileBounceNoticeChoose');
+    expect(screen.getByTestId('recon-bounce-discard')).toBeDisabled();
+    expect(discardPairMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('"No es un rechazo" over the preselected outflow reports no counterpartLineId', async () => {
+    await landFromModal(C2_SHORT, null);
+    expect(screen.getByTestId('recon-bounce-radio-C2')).toBeChecked();
+    fireEvent.click(screen.getByTestId('recon-bounce-dismiss'));
+    expect(dismissPairMock).toHaveBeenCalledWith({ financialAccountId: 'ACC-1', statementLineId: 'B3' });
+  });
+
+  it('leaving the rejection forgets the preselection: selecting it directly again preselects nothing', async () => {
+    await landFromModal(C2_SHORT, null);
+    expect(screen.getByTestId('recon-bounce-radio-C2')).toBeChecked();
+    // Back to Pendientes (every line listed), another rejection, then B3 again by its own radio.
+    selectStatus('financeReconcileFilterStatusBounce', 'financeReconcileFilterStatusPending');
+    await selectLineRow('B1');
+    expect(screen.getByTestId('recon-line-radio-B1')).toBeChecked();
+    await selectLineRow('B3');
+    expect(screen.getByTestId('recon-bounce-radio-C1')).not.toBeChecked();
+    expect(screen.getByTestId('recon-bounce-radio-C2')).not.toBeChecked();
+    expect(screen.getByTestId('recon-bounce-notice')).toHaveTextContent('financeReconcileBounceNoticeChoose');
+    expect(screen.getByTestId('recon-bounce-discard')).toBeDisabled();
+  });
+
+  it('a fresh automatch answer (new assessments) forgets the preselection', async () => {
+    const { rerender } = await landFromModal(C2_SHORT, AI_60_40);
+    expect(screen.getByTestId('recon-bounce-radio-C2')).toBeChecked();
+    rerender(
+      <ReconciliationSplitPanel
+        accountId="ACC-1"
+        currency="EUR"
+        amountTolerance={5}
+        bounceReview={aiReview({ B3: { ...AI_60_40.B3 } })} />,
+    );
+    await waitFor(() => expect(screen.getByTestId('recon-bounce-radio-C2')).not.toBeChecked());
+    expect(screen.getByTestId('recon-line-radio-B3')).toBeChecked();
+    expect(screen.getByTestId('recon-bounce-discard')).toBeDisabled();
+  });
+
+  it('a successful discard forgets the preselection: the rejection, still listed, opens on nothing', async () => {
+    await landFromModal(C2_SHORT, null);
+    fireEvent.click(screen.getByTestId('recon-bounce-discard'));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('financeReconcileBounceToastDiscarded'));
+    // The fake does not drop the pair on reload, so B3 is still selected: no outflow is checked.
+    await waitFor(() => expect(screen.getByTestId('recon-bounce-radio-C2')).not.toBeChecked());
+    expect(screen.getByTestId('recon-bounce-discard')).toBeDisabled();
+    expect(discardPairMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('an explicit pick over the preselection is the one discarded, as "user"', async () => {
+    await landFromModal(C2_SHORT, null);
+    fireEvent.click(screen.getByTestId('recon-bounce-radio-C1'));
+    expect(screen.getByTestId('recon-bounce-radio-C1')).toBeChecked();
+    fireEvent.click(screen.getByTestId('recon-bounce-discard'));
+    await waitFor(() => expect(discardPairMock).toHaveBeenCalledWith({
+      financialAccountId: 'ACC-1', statementLineId: 'C1', counterpartLineId: 'B3', choiceSource: 'user',
+    }));
   });
 });
 

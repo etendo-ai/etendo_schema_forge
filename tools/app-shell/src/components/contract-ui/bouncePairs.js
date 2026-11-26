@@ -381,7 +381,10 @@ export function dismissPairPayload(financialAccountId, line, model) {
   // A free pick (an outflow that is not one of the pair's own originals / candidates, maybe the
   // original of ANOTHER pair) is not sent either: the backend's KPI lookup would find no proposed
   // pair for it.
-  const picked = model?.aiPreselected ? null : model?.other ?? null;
+  // ETP-6359 — nor the outflow the modal row showed and the panel preselected on "Revisar en el
+  // panel" (`defaultPreselected`): the user did not choose it either.
+  const preselected = model?.aiPreselected || model?.defaultPreselected;
+  const picked = preselected ? null : model?.other ?? null;
   const own = model?.role === 'bounce'
     ? pairOriginalLines(rowAsGroup(line)).some((l) => l?.id === picked?.id)
     : true;
@@ -575,14 +578,20 @@ export function countsWithDismissedPairs(counts, lines, dismissedKeys) {
  * view lets the user pair the rejection with any outflow of the same amount).
  *
  * @param {object|null} line the selected row
+ * `defaultOriginalId` (ETP-6359) is the outflow the automatch modal row showed when the user chose
+ * "Revisar en el panel": an ambiguous pair with no explicit pick and no AI recommendation opens on
+ * it (`defaultPreselected`), as the modal showed it. Ignored when it is not one of the options.
+ *
  * @param {{ discardedLines?: Array<object>, chosenOriginalId?: string|null,
- *   chosenOriginalLine?: object|null, aiAssessments?: Record<string, object>|null }} [options]
+ *   chosenOriginalLine?: object|null, aiAssessments?: Record<string, object>|null,
+ *   defaultOriginalId?: string|null }} [options]
  * @returns {object|null}
  */
 export function bouncePanelModel(
   line,
   {
     discardedLines = [], chosenOriginalId = null, chosenOriginalLine = null, aiAssessments = null,
+    defaultOriginalId = null,
   } = {},
 ) {
   if (!line) return null;
@@ -590,7 +599,9 @@ export function bouncePanelModel(
   const pair = line.state === BOUNCE_STATE ? line.bouncePair : null;
   if (!pair) return null;
   if (pair.role === 'bounce') {
-    return bounceRoleModel(line, pair, { chosenOriginalId, chosenOriginalLine, aiAssessments });
+    return bounceRoleModel(line, pair, {
+      chosenOriginalId, chosenOriginalLine, aiAssessments, defaultOriginalId,
+    });
   }
   const bounce = pair.counterpartLine ?? null;
   return {
@@ -617,7 +628,9 @@ export function bouncePanelModel(
  * flagged by `aiPreselected`. A single-original pair shows its percentage but is never
  * preselected. Without an assessment the model is exactly what it was.
  */
-function bounceRoleModel(line, pair, { chosenOriginalId, chosenOriginalLine, aiAssessments }) {
+function bounceRoleModel(line, pair, {
+  chosenOriginalId, chosenOriginalLine, aiAssessments, defaultOriginalId = null,
+}) {
   const ambiguous = isAmbiguousPair(pair);
   const assessment = aiAssessmentFor(aiAssessments, line.id);
   const baseOptions = ambiguous
@@ -634,10 +647,9 @@ function bounceRoleModel(line, pair, { chosenOriginalId, chosenOriginalLine, aiA
   // of a non-ambiguous pair changes nothing (and must not report a 'user' choice).
   const explicitPick = chosen != null && (ambiguous || chosen.id !== options[0]?.id);
   let aiPreselected = false;
+  let defaultPreselected = false;
   if (!chosen && ambiguous) {
-    const aiId = aiDefaultChoice(assessment, options);
-    chosen = options.find((o) => o.id === aiId) ?? null;
-    aiPreselected = chosen != null;
+    ({ chosen, aiPreselected, defaultPreselected } = ambiguousDefault(options, assessment, defaultOriginalId));
   } else if (!chosen) {
     chosen = options[0] ?? null;
   }
@@ -654,6 +666,7 @@ function bounceRoleModel(line, pair, { chosenOriginalId, chosenOriginalLine, aiA
     reason: bounceReason(pair, chosen, line),
     discard: chosen ? { statementLineId: chosen.id, counterpartLineId: line.id } : null,
     net: pairNet(line, chosen),
+    ...(defaultPreselected ? { defaultPreselected } : {}),
   };
   if (!assessment) return model;
   // Shown percentages: all null when "none" wins (one rule with the modal, see aiNoneWins).
@@ -667,6 +680,19 @@ function bounceRoleModel(line, pair, { chosenOriginalId, chosenOriginalLine, aiA
     aiPreselected,
     aiPercent: aiPreselected ? percents[chosen.id] : null,
   };
+}
+
+/**
+ * The outflow an ambiguous pair opens on with no explicit pick (ETP-6359): the AI's recommendation
+ * (`aiPreselected`), else the outflow the automatch modal row showed on "Revisar en el panel"
+ * (`defaultPreselected`), else none (the user must choose).
+ */
+function ambiguousDefault(options, assessment, defaultOriginalId) {
+  const aiId = aiDefaultChoice(assessment, options);
+  const ai = options.find((o) => o.id === aiId) ?? null;
+  if (ai) return { chosen: ai, aiPreselected: true, defaultPreselected: false };
+  const shown = options.find((o) => o.id === defaultOriginalId) ?? null;
+  return { chosen: shown, aiPreselected: false, defaultPreselected: shown != null };
 }
 
 /** Whether `partner`'s discard link points back at `line` (what makes the two a restorable pair). */
@@ -898,6 +924,24 @@ export function buildBounceOutflows(lines, { query = '' } = {}) {
  */
 export function countBouncePairs(lines) {
   return buildBouncePairRows(lines).length;
+}
+
+/**
+ * The rejections the "Posibles rechazos" view lists on the right for a selected rejection
+ * (ETP-6359): those that can be paired ({@link canPairOutflow}) with the chosen outflow
+ * (`model.other`) or, while none is chosen, with any of the selected rejection's own outflows
+ * (`model.rows`, its original or candidates). The selected one is always listed. With no model
+ * (no rejection selected) or nothing to match, every rejection.
+ *
+ * @param {Array<{ key: string, anchor: object }>} entries the pair rows ({@link buildBouncePairRows})
+ * @param {object|null} model the selected rejection's {@link bouncePanelModel}
+ * @param {string|null|undefined} selectedKey the selected entry's key
+ * @returns {Array<object>}
+ */
+export function pairableRejections(entries, model, selectedKey) {
+  const outflows = model?.other ? [model.other] : (model?.rows ?? []);
+  if (outflows.length === 0) return entries;
+  return entries.filter((e) => e.key === selectedKey || outflows.some((o) => canPairOutflow(o, e.anchor)));
 }
 
 /**

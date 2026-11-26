@@ -226,7 +226,8 @@ export function useAutoMatchSelection(groups, aiAssessments = null, { dismissedK
  * - `selection` — the modal's checks ({@link useAutoMatchSelection}), owned here so they outlive a
  *   close of the modal while the suggestions do not reload;
  * - `startReview(group)` — "Revisar en el panel": asks the panel to select the pair's bounce line
- *   (`focus`, consumed by the panel with `consumeFocus`). The host closes the modal; there is no
+ *   (`focus`, consumed by the panel with `consumeFocus`), with the outflow the modal row shows
+ *   (`focus.outflow`, ETP-6359), which the panel preselects. The host closes the modal; there is no
  *   way back other than the Automatch button, which reopens it;
  * - `dismissedKeys` / `dismiss` — pairs the user said are not a bounce ("No es un rechazo"). Since
  *   ETP-6359 the backend persists that and never proposes the pair again; these keys only hide the
@@ -333,11 +334,17 @@ export function useAutoMatchReview(groups, { active = true, bounceAiAssessments 
     [isChecked, toggle, setMany, isCheckable, pairOutflow, assessments, invalidateAi],
   );
 
+  // Read through a ref so `startReview` stays stable across checks.
+  const pairOutflowRef = useRef(pairOutflow);
+  pairOutflowRef.current = pairOutflow;
   const startReview = useCallback((group) => {
     const lineId = group?.counterpartLine?.id;
     if (!lineId) return;
+    // ETP-6359 — the outflow the modal row shows travels with the request: the panel opens the
+    // rejection on it (unless a pick or the AI's recommendation says otherwise).
+    const outflow = pairOutflowRef.current?.(group)?.line ?? null;
     // `seq` makes a second request for the same line a new request.
-    setFocus((prev) => ({ lineId, seq: (prev?.seq ?? 0) + 1 }));
+    setFocus((prev) => ({ lineId, seq: (prev?.seq ?? 0) + 1, ...(outflow ? { outflow } : {}) }));
     const key = group?.groupKey;
     if (key) {
       setSentToPanelKeys((prev) => {

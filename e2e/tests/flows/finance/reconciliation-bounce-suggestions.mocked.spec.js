@@ -71,8 +71,10 @@ import { login } from '../../helpers/auth.js';
  *      first in detector order) with its percentage, and a tick excludes the pair with THAT outflow
  *      (`choiceSource` 'ai' / 'user', none without AI data); the panel sorts the options, pre-checks the
  *      recommended one (badge + notice) and `discardPair` carries `choiceSource` 'ai' / 'user';
- *      "Deshacer" posts `restorePair`; a 409 stale answer shows its toast; 60/40 pre-checks nothing;
- *      without the field nothing changes (last describe of the file).
+ *      "Deshacer" posts `restorePair`; a 409 stale answer shows its toast; without a recommendation
+ *      (60/40, or no AI data at all) "Revisar en el panel" opens on the outflow the modal row showed,
+ *      a preselection that discards as 'user' on an AI-rated pair and with no `choiceSource` without
+ *      AI data (last describe of the file).
  *
  * Mock mode only (run against plain `make dev`, not `make dev-mock`). Every route is installed AFTER
  * `login()` so it beats the generic `**\/sws\/**` stub (Playwright matches in reverse order).
@@ -678,13 +680,13 @@ test.describe('Reconciliation — bounce-pair suggestions (mocked)', () => {
 
     const panel = page.getByTestId('recon-bounce-panel');
     await expect(panel).toBeVisible();
-    await expect(panel.getByTestId('recon-bounce-discard')).toBeDisabled();
+    // No AI data: the panel opens on the outflow the modal row showed (the first candidate).
+    await expectOpensOn(panel, AMB_CAND_1, AMB_CAND_2);
     // Each candidate row shows its bank reference; the footer opens with the selected bounce.
     await expect(panel.getByTestId(`recon-bounce-ref-${AMB_CAND_1.id}`)).toHaveText(`Ref. ${AMB_CAND_1.referenceNo}`);
     await expect(panel.getByTestId(`recon-bounce-ref-${AMB_CAND_2.id}`)).toHaveText(`Ref. ${AMB_CAND_2.referenceNo}`);
     await expect(panel.getByTestId('recon-bounce-total-selected')).toContainText('Rechazo seleccionado');
     await expect(panel.getByTestId('recon-bounce-total-selected-meta')).toContainText(`Ref. ${AMB_BOUNCE.referenceNo}`);
-    await expect(panel.getByTestId('recon-bounce-total-other-meta')).toHaveCount(0);
     // The clipped description reveals its full text on hover.
     await panel.getByTestId(`recon-bounce-desc-${AMB_CAND_1.id}`).hover();
     await expect(page.getByTestId(`recon-bounce-desc-${AMB_CAND_1.id}-tooltip`)).toContainText(AMB_LONG_DESC);
@@ -1031,6 +1033,19 @@ async function reviewPairInPanel(page, key) {
   const panel = page.getByTestId('recon-bounce-panel');
   await expect(panel).toBeVisible();
   return panel;
+}
+
+/**
+ * The panel opened from the modal on `outflow`, the one the modal row showed (ETP-6359): its radio
+ * checked and `other` not, the footer naming it and "Descartar par" enabled. A preselection, not a
+ * pick: the notice does not ask to choose.
+ */
+async function expectOpensOn(panel, outflow, other) {
+  await expect(panel.getByTestId(`recon-bounce-radio-${outflow.id}`)).toBeChecked();
+  await expect(panel.getByTestId(`recon-bounce-radio-${other.id}`)).not.toBeChecked();
+  await expect(panel.getByTestId('recon-bounce-total-other-meta')).toContainText(`Ref. ${outflow.referenceNo}`);
+  await expect(panel.getByTestId('recon-bounce-notice')).not.toContainText('Elige la salida original');
+  await expect(panel.getByTestId('recon-bounce-discard')).toBeEnabled();
 }
 
 /** How many times the page has read the lines and the suggestions so far. */
@@ -1500,9 +1515,9 @@ test.describe('Reconciliation — AI suggestion on bank rejections (mocked)', ()
     await expect(page.getByRole('button', { name: 'Deshacer' })).toHaveCount(0);
   });
 
-  test('60/40: the modal shows the most probable outflow, the panel shows both percentages and pre-checks nothing', async ({ page }) => {
+  test('60/40: the modal shows the most probable outflow; the panel shows both percentages, opens on that outflow and discards it as "user"', async ({ page }) => {
     await login(page);
-    await installMocks(page, { ai: AI_60_40 });
+    const { posts } = await installMocks(page, { ai: AI_60_40 });
     await openReconciliation(page);
 
     // No recommendation: the modal row shows the most probable candidate (60 %), unchecked but tickable.
@@ -1514,11 +1529,17 @@ test.describe('Reconciliation — AI suggestion on bank rejections (mocked)', ()
     expect(await outflowOrder(page)).toEqual(DATE_ORDERED_OUTFLOWS);
     await expect(panel.getByTestId(`recon-bounce-ai-pct-${AMB_CAND_2.id}`)).toHaveText('60 %');
     await expect(panel.getByTestId(`recon-bounce-ai-pct-${AMB_CAND_1.id}`)).toHaveText('40 %');
-    await expect(panel.getByTestId(`recon-bounce-radio-${AMB_CAND_1.id}`)).not.toBeChecked();
-    await expect(panel.getByTestId(`recon-bounce-radio-${AMB_CAND_2.id}`)).not.toBeChecked();
+    // The modal row's outflow (60 %) is preselected: not an AI recommendation (no badge).
+    await expectOpensOn(panel, AMB_CAND_2, AMB_CAND_1);
     await expect(panel.locator('[data-testid^="recon-bounce-ai-badge-"]')).toHaveCount(0);
-    await expect(panel.getByTestId('recon-bounce-notice')).toContainText('Elige la salida original');
-    await expect(panel.getByTestId('recon-bounce-discard')).toBeDisabled();
+
+    const post = requestsOf(page, 'discardPair');
+    await panel.getByTestId('recon-bounce-discard').click();
+    await post;
+    // An AI-rated pair discarded with an outflow the AI did not recommend: a user choice.
+    expect(posts.discardPair).toEqual([{
+      financialAccountId: ACCOUNT_ID, statementLineId: AMB_CAND_2.id, counterpartLineId: AMB_BOUNCE.id, choiceSource: 'user',
+    }]);
   });
 
   test('a 409 stale answer shows the translated toast and leaves the panel usable', async ({ page }) => {
@@ -1550,7 +1571,7 @@ test.describe('Reconciliation — AI suggestion on bank rejections (mocked)', ()
     expect(posts.dismissPair).toEqual([{ financialAccountId: ACCOUNT_ID, statementLineId: AMB_BOUNCE.id }]);
   });
 
-  test('without bounceAiAssessments: no percentage, nothing pre-checked, and the user\'s pick posts choiceSource "user"', async ({ page }) => {
+  test('without bounceAiAssessments: no percentage, the modal row\'s outflow pre-checked, and the user\'s pick posts choiceSource "user"', async ({ page }) => {
     await login(page);
     const { posts } = await installMocks(page);
     await openReconciliation(page);
@@ -1560,9 +1581,7 @@ test.describe('Reconciliation — AI suggestion on bank rejections (mocked)', ()
     const panel = await reviewAmbiguousInPanel(page);
     expect(await outflowOrder(page)).toEqual(DATE_ORDERED_OUTFLOWS);
     await expect(panel.locator('[data-testid^="recon-bounce-ai-pct-"]')).toHaveCount(0);
-    await expect(panel.getByTestId(`recon-bounce-radio-${AMB_CAND_1.id}`)).not.toBeChecked();
-    await expect(panel.getByTestId(`recon-bounce-radio-${AMB_CAND_2.id}`)).not.toBeChecked();
-    await expect(panel.getByTestId('recon-bounce-discard')).toBeDisabled();
+    await expectOpensOn(panel, AMB_CAND_1, AMB_CAND_2);
 
     await panel.getByTestId(`recon-bounce-radio-${AMB_CAND_2.id}`).check();
     const post = requestsOf(page, 'discardPair');
@@ -1572,6 +1591,29 @@ test.describe('Reconciliation — AI suggestion on bank rejections (mocked)', ()
     // Never "ai" without AI data; the explicit pick is a user choice (one rule with the modal).
     expect(posts.discardPair[0].choiceSource).toBe('user');
   });
+  test('without bounceAiAssessments: "Revisar en el panel" opens on the modal row\'s outflow, lists only its rejection and discards it with no choiceSource', async ({ page }) => {
+    await login(page);
+    const { posts } = await installMocks(page);
+    await openReconciliation(page);
+    // The modal row of the ambiguous pair shows the first candidate (detector order).
+    await expect(shownOutflow(page)).toContainText(AMB_CAND_1.referenceNo);
+    const panel = await reviewAmbiguousInPanel(page);
+
+    await expectOpensOn(panel, AMB_CAND_1, AMB_CAND_2);
+    await expect(panel.getByTestId('recon-bounce-total-net')).toContainText('+0,00');
+    // The right list keeps only the rejections that outflow can take: the +80 one.
+    await expect(page.getByTestId('recon-rejections-title')).toHaveText('Rechazos (1)');
+    expect(await rejectionRows(page)).toEqual([`recon-line-row-${AMB_BOUNCE.id}`]);
+
+    const post = requestsOf(page, 'discardPair');
+    await panel.getByTestId('recon-bounce-discard').click();
+    await post;
+    // A preselection is not a pick and there is no AI data: the body carries no choiceSource.
+    expect(posts.discardPair).toEqual([{
+      financialAccountId: ACCOUNT_ID, statementLineId: AMB_CAND_1.id, counterpartLineId: AMB_BOUNCE.id,
+    }]);
+  });
+
   // The host re-reads the automatch after a refused discard (`onReconcileSuccess`), so what the
   // panel offers next is whatever that FRESH answer carries.
   test('a 409 stale answer reloads the panel: a fresh answer without AI brings "Elige la salida original" back, and the pick posts "user", never "ai"', async ({ page }) => {
@@ -1891,7 +1933,8 @@ test.describe('Reconciliation — AI "none" outweighing the candidates (mocked)'
     const panel = await reviewAmbiguousInPanel(page);
     await expect(panel.locator('[data-testid^="recon-bounce-ai-pct-"]')).toHaveCount(0);
     await expect(panel.getByTestId(`recon-bounce-radio-${AMB_CAND_2.id}`)).not.toHaveAttribute('aria-describedby', /.+/);
-    await expect(panel.getByTestId('recon-bounce-notice')).toContainText('Elige la salida original');
+    // The panel opens on that same outflow, the one the modal row showed.
+    await expectOpensOn(panel, AMB_CAND_1, AMB_CAND_2);
   });
 
   test('a tie with the best candidate still shows the percentage (modal and panel)', async ({ page }) => {

@@ -32,7 +32,8 @@ import {
   STATUS_CODES, countForStatus, matchesStatus,
 } from './reconciliationStatusFilter.js';
 import {
-  BOUNCE_STATE, DISCARDED_STATE, canPairOutflow, isBounceReviewLine, pendingLinesStatusParam,
+  BOUNCE_STATE, DISCARDED_STATE, canPairOutflow, isBounceReviewLine, pairableRejections,
+  pendingLinesStatusParam,
 } from './bouncePairs.js';
 import { pairBadgeAndReason } from './AutoMatchBounceSection.jsx';
 import {
@@ -831,15 +832,13 @@ function PairTablesView({
   // The selected rejection (its bounce line) any outflow can be paired with; null while none is.
   const bounce = model && model.mode === BOUNCE_STATE && model.role === 'bounce' ? parts.line : null;
 
-  // The outflow the pair currently uses (explicit pick > AI default > the single original) drives
-  // the right list, like a selected line drives the right panel in the normal view: only the
-  // rejections it can be paired with are listed (the selected one always is). Another amount is
-  // reached by clicking an outflow on the left (re-targeting below); there is no "show all" toggle.
-  const selectedOutflow = bounce ? model.other : null;
-  const filtering = !!selectedOutflow;
-  const shownEntries = filtering
-    ? entries.filter((e) => e.key === selectedEntry?.key || canPairOutflow(selectedOutflow, e.anchor))
-    : entries;
+  // The outflow the pair currently uses (explicit pick > AI default > the outflow the modal row
+  // showed > the single original) drives the right list, like a selected line drives the right
+  // panel in the normal view: only the rejections it can be paired with are listed (the selected one
+  // always is). While no outflow is chosen, the selected rejection's own outflows narrow it the same
+  // way (`pairableRejections`). Another amount is reached by clicking an outflow on the left
+  // (re-targeting below); there is no "show all" toggle.
+  const shownEntries = pairableRejections(entries, bounce ? model : null, selectedEntry?.key);
 
   // Any outflow can be clicked (ETP-6359). For the selected rejection it becomes an EXPLICIT pick,
   // also one the detector did not offer for it. When the selected rejection cannot be paired with
