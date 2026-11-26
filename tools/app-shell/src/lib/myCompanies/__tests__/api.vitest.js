@@ -4,7 +4,7 @@ import { fetchCompanyEnvironments, fetchMyInvitations } from '../api.js';
 
 const apiFetchMock = vi.fn();
 
-vi.mock('@etendosoftware/app-shell-core/auth/api', () => ({
+vi.mock('@etendo-ai/app-shell-core/auth/api', () => ({
   apiFetch: (...args) => apiFetchMock(...args),
 }));
 

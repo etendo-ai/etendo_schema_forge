@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { CircleNotchIcon, EnvelopeSimpleOpenIcon, FileTextIcon, ProhibitIcon, WarningCircleIcon } from '@phosphor-icons/react';
 import { useUI } from '@/i18n';
 import { Button } from '@/components/ui/button';
 import { usePortalApiFetch } from '@/lib/portal/usePortalApiFetch.js';
+import {
+  clearPortalSession, portalPath, rememberPortalLink, rememberPortalSession, resolvePortalRoute,
+} from '@/lib/portal/portalLinkSession.js';
 import { usePortalFavicon } from './portal/usePortalFavicon.js';
 import {
   PORTAL_ERROR,
@@ -14,8 +17,10 @@ import {
   fetchPortalLogoBlob,
   renewPortalLink,
   resolvePortalBaseUrl,
+  sendPortalEtendoClick,
 } from '@/lib/portal/portalApi.js';
 import PortalShell from './portal/PortalShell.jsx';
+import { PortalClientContext, PortalEtendoClickContext } from './portal/PortalBits.jsx';
 import PortalHomeView from './portal/PortalHomeView.jsx';
 import PortalDocumentListView from './portal/PortalDocumentListView.jsx';
 import PortalDocumentDetailView from './portal/PortalDocumentDetailView.jsx';
@@ -52,10 +57,15 @@ import {
  * was sent recently). A customer who is blocked or inactive, or whose supplier's plan expired,
  * gets "contact the company" and no reason.
  *
- * The token is deliberately left in the address bar. The link is meant to be bookmarkable
- * (plan §1/§4.6), and scrubbing it would break the bookmark; what §5.4 forbids is the token
- * appearing in a *query string* on the wire, which is why every request sends it in the
- * `X-Portal-Token` header instead — see `lib/portal/portalApi.js`.
+ * **The token never stays in the address bar (ETP-6209, QA CP-43).** Third-party tags (GTM,
+ * Google Analytics, HubSpot) read `location`, and the token is a password. Links are
+ * `/portal/{adClientId}/{token}`; `main.jsx`'s first import (`lib/portal/scrubPortalUrl.boot.js`)
+ * moves the token into this tab's sessionStorage and rewrites the URL to `/portal/{adClientId}`
+ * before anything else runs, so a reload keeps working for the session. A pre-CP-43
+ * `/portal/{token}` link becomes `/portal`, then `/portal/{adClientId}` once `/me` names the
+ * tenant. The price: the token-free URL is not a bookmark — a new tab needs the email link again.
+ * On the wire the token rides the `X-Portal-Token` header, never a query string (§5.4) — see
+ * `lib/portal/portalApi.js`.
  */
 
 /** The screens this page can be on. */
@@ -301,7 +311,7 @@ function resolvePortalLocation(requested, identity) {
  */
 function portalViewBody({
   current, isMobile, apiFetch, token, identity, logoUrl, home, months, onMonthsChange, onNavigate,
-  onInvalid,
+  onInvalid, origin = null,
 }) {
   if (current.view !== 'list' && current.view !== 'doc') {
     return (
@@ -332,7 +342,7 @@ function portalViewBody({
           kind={current.kind}
           group={current.group ?? null}
           identity={identity}
-          kindCount={home?.tiles?.[current.kind]?.count}
+          logoUrl={logoUrl}
           onNavigate={onNavigate}
           onInvalid={onInvalid}
           data-testid="PortalDocumentListView__3db5f6" />
@@ -348,6 +358,7 @@ function portalViewBody({
           presentation={isMobile ? 'page' : 'drawer'}
           identity={identity}
           logoUrl={logoUrl}
+          origin={origin}
           onNavigate={onNavigate}
           onInvalid={onInvalid}
           data-testid="PortalDocumentDetailView__3db5f6" />
@@ -357,8 +368,23 @@ function portalViewBody({
 }
 
 export default function PortalPage() {
-  // The token arrives as a path segment because an email link cannot carry a header.
-  const { token = '' } = useParams();
+  // The token arrives as a path segment because an email link cannot carry a header; the boot
+  // scrub has already moved it into sessionStorage (CP-43), so it is normally read from there.
+  const params = useParams();
+  const route = resolvePortalRoute(params);
+  const { token } = route;
+  // A token still in the address bar is a new email click: a new KPI session (ETP-6209). The real
+  // guard is the boot scrub (`scrubPortalTokenFromLocation`, first import of main.jsx), which
+  // clears it on every page load with a token. This is its in-page twin, like the inUrl effect
+  // below: a token the boot scrub never saw (an in-app navigation to a token URL). Cleared during
+  // render, so before the first request reads it, and once per token.
+  const sessionClearedFor = useRef(null);
+  if (route.inUrl && route.token && sessionClearedFor.current !== route.token) {
+    sessionClearedFor.current = route.token;
+    clearPortalSession();
+  }
+  const routerNavigate = useNavigate();
+  const location = useLocation();
   const ui = useUI();
   // Desktop opens a document as a drawer over its list; mobile keeps the full-page detail.
   const isMobile = usePortalIsMobile();
@@ -368,7 +394,7 @@ export default function PortalPage() {
   // (which already points at `/sws/neo`). Memoized because `apiFetch` is memoized on it.
   // Outside the app's session scope: see `usePortalApiFetch` for why (ETP-6209).
   const baseUrl = useMemo(() => resolvePortalBaseUrl(), []);
-  const apiFetch = usePortalApiFetch(baseUrl);
+  const apiFetch = usePortalApiFetch(baseUrl, { clientId: route.clientId });
 
   const [view, setView] = useState(VIEW.loading);
   const [identity, setIdentity] = useState(null);
@@ -436,6 +462,7 @@ export default function PortalPage() {
     fetchPortalIdentity(apiFetch, trimmed).then((loadedIdentity) => {
       if (!active) return null;
       setIdentity(loadedIdentity);
+      rememberPortalSession(loadedIdentity.sessionId);
       if (loadedIdentity.state === PORTAL_LINK_STATE.expired) {
         renewOnce();
         return null;
@@ -477,6 +504,20 @@ export default function PortalPage() {
 
   const trimmedToken = token.trim();
 
+  // CP-43 — a token still in the address bar (an in-app navigation the boot scrub never saw) is
+  // moved to sessionStorage and the URL rewritten without it; and a pre-CP-43 link, which names no
+  // tenant, is completed with the one `/me` reports. Both replace the history entry, so neither
+  // back nor forward ever lands on a URL with the token.
+  const tenantId = identity?.clientId ?? null;
+  useEffect(() => {
+    if (!trimmedToken) return;
+    const clientId = route.clientId ?? tenantId;
+    const missingTenant = !route.clientId && Boolean(tenantId);
+    if (!route.inUrl && !missingTenant) return;
+    rememberPortalLink({ clientId, token: trimmedToken });
+    routerNavigate(portalPath(clientId, location.search.replace(/^\?/, '')), { replace: true });
+  }, [route.inUrl, route.clientId, tenantId, trimmedToken, location.search, routerNavigate]);
+
   // A data read answering 401 after /me said "valid" means the link changed state mid-session
   // (expired, or the customer was blocked): re-run /me once, so the expired path renews and the
   // unavailable path shows its own screen. Only a token that is still refused after that re-check
@@ -505,10 +546,19 @@ export default function PortalPage() {
   const requested = readPortalView(searchParams);
   const { current, entryHidden } = resolvePortalLocation(requested, identity);
 
-  const navigate = useCallback((target) => {
+  // ETP-6209 KPIs: a document open says where it came from (`origin`: home, search, list,
+  // related…) in the router's navigation STATE, never in the URL; the detail sends it as
+  // `?origin=`. Back / forward / reload replay the state; the backend dedupes per session.
+  const navigate = useCallback((target, origin = null) => {
     recheckedRef.current = false;
-    setSearchParams(writePortalView(target));
+    setSearchParams(writePortalView(target), origin ? { state: { portalOrigin: origin } } : undefined);
   }, [setSearchParams]);
+  // The open's origin: the navigation's, else `link` when the page landed on the link's own document.
+  const openOrigin = location.state?.portalOrigin ?? (requested ? null : 'link');
+  // Clicks on the etendo.ai links (Isa: count clicks only): fire-and-forget, see sendPortalEtendoClick.
+  const onEtendoClick = useCallback((reference, where) => {
+    sendPortalEtendoClick(apiFetch, trimmedToken, { reference, location: where });
+  }, [apiFetch, trimmedToken]);
 
   const statusScreen = portalStatusScreen(view, ui, identity?.tenantName,
     () => setAttempt((value) => value + 1));
@@ -526,9 +576,13 @@ export default function PortalPage() {
     onMonthsChange: changeMonths,
     onNavigate: navigate,
     onInvalid: showInvalid,
+    origin: openOrigin,
   });
 
+  // The portal's tenant id for the etendo.ai links' `portal_ref` (never the token).
   return (
+    <PortalClientContext.Provider value={route.clientId ?? tenantId}>
+    <PortalEtendoClickContext.Provider value={onEtendoClick}>
     <PortalShell
       identity={identity}
       logoUrl={logoUrl}
@@ -547,5 +601,7 @@ export default function PortalPage() {
       )}
       {body}
     </PortalShell>
+    </PortalEtendoClickContext.Provider>
+    </PortalClientContext.Provider>
   );
 }

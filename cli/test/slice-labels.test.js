@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 
-// ETP-4300: the slicer itself now lives in @etendosoftware/schema-forge-cli (core).
+// ETP-4300: the slicer itself now lives in @etendo-ai/schema-forge-cli (core).
 // This is the CONSUME-SIDE test: it imports the slicer through the published package
 // export and re-runs the behavioural checks, proving schema_forge consumes it correctly.
 // The unit tests over the source live in the core repo (cli/test/slice-labels.test.js).
@@ -12,17 +12,17 @@ import { strict as assert } from 'node:assert';
 let slicer = null;
 let sharedMod = null;
 try {
-  slicer = await import('@etendosoftware/schema-forge-cli/slice-labels');
-  sharedMod = await import('@etendosoftware/schema-forge-cli/src/shared-label-columns.js');
+  slicer = await import('@etendo-ai/schema-forge-cli/slice-labels');
+  sharedMod = await import('@etendo-ai/schema-forge-cli/src/shared-label-columns.js');
 } catch {
   // Export not available yet (pre-publish); suites below are skipped.
 }
 
 const skip = slicer && sharedMod
   ? false
-  : '@etendosoftware/schema-forge-cli/slice-labels export not resolvable yet (pre-publish)';
+  : '@etendo-ai/schema-forge-cli/slice-labels export not resolvable yet (pre-publish)';
 
-describe('slice-labels (consumed from @etendosoftware/schema-forge-cli)', { skip }, () => {
+describe('slice-labels (consumed from @etendo-ai/schema-forge-cli)', { skip }, () => {
   const {
     stableStringify,
     sha256,

@@ -1,6 +1,6 @@
 // @covers tools/app-shell/src/components/reports/dynamic/useReportQuery.js
 import { act, renderHook } from '@testing-library/react';
-import { NetworkError } from '@etendosoftware/app-shell-core/auth';
+import { NetworkError } from '@etendo-ai/app-shell-core/auth';
 
 const apiFetchMock = vi.fn();
 vi.mock('@/auth/useApiFetch.js', () => ({ useApiFetch: () => apiFetchMock }));

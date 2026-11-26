@@ -2,7 +2,7 @@ import {
   clearActiveFeature,
   getSessionAccountId,
   setActiveFeature,
-} from '@etendosoftware/app-shell-core/auth';
+} from '@etendo-ai/app-shell-core/auth';
 import { track, setContext } from '../observability.js';
 import { OBSERVABILITY_EVENTS, buildObservabilityEvent } from './events.js';
 import { getSessionIdentity } from '../sessionIdentity.js';

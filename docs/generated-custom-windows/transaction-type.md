@@ -10,7 +10,7 @@ Predates the `cli/config/regen-windows.json` convention — see [match-rule](mat
 
 ## Interaction model
 
-- **No UI surface of its own**: no AD menu, no React route, no wired frontend (the artifact is backend-only in `registry.js`/`menu.json`; the validator's `BACKEND_ONLY_ARTIFACTS` set — published in `@etendosoftware/schema-forge-cli`'s `validate-pipeline.js` post-split — exempts it from the F3 "contract without registry entry" rule).
+- **No UI surface of its own**: no AD menu, no React route, no wired frontend (the artifact is backend-only in `registry.js`/`menu.json`; the validator's `BACKEND_ONLY_ARTIFACTS` set — published in `@etendo-ai/schema-forge-cli`'s `validate-pipeline.js` post-split — exempts it from the F3 "contract without registry entry" rule).
 - **Backed by** the new core-style table `ETGO_Transaction_Type` (search key `Value` + `Name`), exposed as a NEO Headless **W spec** (`transaction-type`) with a technical AD window/tab that carries **no menu entry** — it exists only so NEO can serve the selector list and the create endpoint.
 - **Where it is used**: the match-rule `transactionType` field is a FK (`ETGO_Transaction_Type_ID`) rendered as a searchable, inline-creatable selector.
 

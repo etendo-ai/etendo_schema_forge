@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
-import { useAuthOptional } from '@etendosoftware/app-shell-core/auth';
+import { useAuthOptional } from '@etendo-ai/app-shell-core/auth';
 import { page } from '../observability.js';
 import { resolveFeature as defaultResolveFeature } from '../featureCatalog.js';
 import { enterFeature } from './featureUsage.js';

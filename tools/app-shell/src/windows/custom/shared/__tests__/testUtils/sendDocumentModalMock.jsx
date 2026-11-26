@@ -14,9 +14,9 @@
 //   vi.mock('@/components/contract-ui/SendDocumentModal.jsx', () => ({
 //     default: SendDocumentModalMock,
 //   }));
-export function SendDocumentModalMock({ onClose, onSent, documentNo }) {
+export function SendDocumentModalMock({ onClose, onSent, documentNo, documentType }) {
   return (
-    <div data-testid="send-modal" data-docno={documentNo}>
+    <div data-testid="send-modal" data-docno={documentNo} data-document-type={documentType}>
       <button data-testid="send-modal-close" onClick={onClose}>
         Close Send
       </button>

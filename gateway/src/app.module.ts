@@ -3,7 +3,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { rateLimitConfig } from './public-api/public-api-throttler.guard.ts';
 import { PublicApiController } from './public-api/public-api.controller.ts';
 import { schemaProvider } from './schema/schema.provider.ts';
-import { TokenExchangeService, CachedTokenExchangeService, PublicApiKeyGuard } from '@etendosoftware/api-gateway-core';
+import { TokenExchangeService, CachedTokenExchangeService, PublicApiKeyGuard } from '@etendo-ai/api-gateway-core';
 
 @Module({
   imports: [ThrottlerModule.forRoot([rateLimitConfig()])],

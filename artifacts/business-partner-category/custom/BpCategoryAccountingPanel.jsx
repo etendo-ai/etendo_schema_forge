@@ -5,7 +5,7 @@ import { AccountSelect, useAccountSelectorPages } from '@/components/contract-ui
 import { useUI, useLabel } from '@/i18n';
 import { useApiFetch } from '@/auth/useApiFetch.js';
 import { extractErrorMessage } from '@/hooks/useEntity.js';
-import { rememberRecordVersion } from '@etendosoftware/app-shell-core/lib/recordVersions.js';
+import { rememberRecordVersion } from '@etendo-ai/app-shell-core/lib/recordVersions.js';
 import { SquareCheckbox } from '@/windows/custom/shared/SquareCheckbox.jsx';
 import {
   ACCOUNT_SECTIONS, accountSelectorUrl, countCheckedTypes, isChecked,

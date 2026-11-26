@@ -2,7 +2,7 @@
 import {
   FEATURE_HEADER, featureRequestHeaders, getActiveFeature, resetSessionCredentials,
   setSessionCredentials,
-} from '@etendosoftware/app-shell-core/auth';
+} from '@etendo-ai/app-shell-core/auth';
 import { enterFeature, leaveFeature, resetFeatureUsageForTests } from '../featureUsage.js';
 import { clearSessionIdentity, setSessionIdentity } from '../../sessionIdentity.js';
 

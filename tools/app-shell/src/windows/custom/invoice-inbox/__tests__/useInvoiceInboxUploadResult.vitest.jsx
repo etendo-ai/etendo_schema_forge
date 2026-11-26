@@ -9,7 +9,7 @@ import {
 import { appendUploadLog, readUploadLog, uploadLogKey } from '../invoiceInboxUploadLog.js';
 
 let mockAuth = null;
-vi.mock('@etendosoftware/app-shell-core/auth', async (importOriginal) => ({
+vi.mock('@etendo-ai/app-shell-core/auth', async (importOriginal) => ({
   ...(await importOriginal()),
   useAuthOptional: () => mockAuth,
 }));

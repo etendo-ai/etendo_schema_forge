@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { useAuthOptional, notifyAmbientUnauthorized } from '@etendosoftware/app-shell-core/auth';
+import { useAuthOptional, notifyAmbientUnauthorized } from '@etendo-ai/app-shell-core/auth';
 import { clearStoredDateRange } from '@/components/dashboard/DashboardDateRangeContext.jsx';
 import { reset } from '../lib/observability.js';
 import { pushLogout } from '../lib/marketing/dataLayer.js';

@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useUI, useMenuLabel } from '@/i18n';
 import { useGlobalSearch } from '@/components/global-search/GlobalSearchContext.jsx';
 import { useAuth } from '@/auth/AuthContext.jsx';
-import { useFeatureFlag, ACCT_PROCESS_MONITOR, PUBLIC_API_KEYS, PROOF_OF_CONCEPT_MENU, UNIFIED_CALENDAR_POC, DOC_TEMPLATE_SELECTION } from '@/lib/flags';
+import { useFeatureFlag, PUBLIC_API_KEYS, PROOF_OF_CONCEPT_MENU, UNIFIED_CALENDAR_POC, DOC_TEMPLATE_SELECTION } from '@/lib/flags';
 import { useVectorSearchContracts } from '@/hooks/useVectorSearchContracts.js';
 import { useRecentSearches } from '@/hooks/useRecentSearches.js';
 import { useVectorSearch } from '@/hooks/useVectorSearch.js';
@@ -41,6 +41,7 @@ import {
   ClockIcon,
   SparkleIcon,
   WalletIcon,
+  SealPercentIcon,
 } from '@phosphor-icons/react';
 
 const ICON_MAP = {
@@ -53,6 +54,7 @@ const ICON_MAP = {
   FolderKanban: KanbanIcon,
   Settings: GearIcon,
   Wallet: WalletIcon,
+  BadgePercent: SealPercentIcon,
 };
 
 function HighlightedQuery({ text, query }) {
@@ -107,7 +109,6 @@ export function CommandPalette({ reportAccess = null } = {}) {
   // ETP-5351 — the palette reads menu.json directly, so the support-mode menu rule is applied here
   // too, not only to the sidebar's menuGroups.
   const { isSupportMode } = useSupportSession();
-  const accountingProcessMonitorEnabled = useFeatureFlag(ACCT_PROCESS_MONITOR);
   const publicApiKeysEnabled = useFeatureFlag(PUBLIC_API_KEYS);
   const docTemplateSelectionEnabled = useFeatureFlag(DOC_TEMPLATE_SELECTION);
   const proofOfConceptMenuEnabled = useFeatureFlag(PROOF_OF_CONCEPT_MENU);
@@ -381,7 +382,6 @@ export function CommandPalette({ reportAccess = null } = {}) {
     return item.targets.some((target) => requestedVectorSearchTargetKeys.includes(target));
   });
   const featureFlagValues = {
-    [ACCT_PROCESS_MONITOR]: accountingProcessMonitorEnabled,
     [PUBLIC_API_KEYS]: publicApiKeysEnabled,
     [DOC_TEMPLATE_SELECTION]: docTemplateSelectionEnabled,
     [PROOF_OF_CONCEPT_MENU]: proofOfConceptMenuEnabled,

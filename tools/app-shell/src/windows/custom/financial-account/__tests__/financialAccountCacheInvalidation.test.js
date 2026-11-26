@@ -24,7 +24,7 @@ describe('financialAccountCacheInvalidation — hook', () => {
   });
 
   it('reads the optional shared data cache from app-shell-core', () => {
-    assert.match(src, /import\s*\{[^}]*useOptionalDataCache[^}]*\}\s*from\s*'@etendosoftware\/app-shell-core\/data'/);
+    assert.match(src, /import\s*\{[^}]*useOptionalDataCache[^}]*\}\s*from\s*'@etendo-ai\/app-shell-core\/data'/);
     assert.match(src, /useOptionalDataCache\(\)\?\.cache/);
   });
 

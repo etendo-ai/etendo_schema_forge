@@ -71,7 +71,7 @@ before(async () => {
 
   ({ loadMixpanel } = await import('../observability/sdk.js'));
   ({ createMixpanelProvider } = await import('../observability/providers/mixpanel.js'));
-  ({ createTelemetryGateway } = await import('@etendosoftware/app-shell-core/observability/gateway'));
+  ({ createTelemetryGateway } = await import('@etendo-ai/app-shell-core/observability/gateway'));
   ({ SAFE_EVENT_PROPERTY_KEYS } = await import('../observability/payload.js'));
 });
 

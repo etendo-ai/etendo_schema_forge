@@ -69,7 +69,7 @@ carries it. It is read when the request is dispatched: a read carries the featur
 issued; a queued write (serialised per record) carries the one current when it leaves the queue.
 
 Tooling note: `auth/featureContext.js` and the `X-Etendo-Feature` header in `apiFetch` ship in the
-published `@etendosoftware/app-shell-core` 0.3.122 (schema_forge_core PR #431), which this app pins.
+published `@etendo-ai/app-shell-core` 0.3.122 and later (schema_forge_core PR #431), which this app pins at 0.3.125.
 No `LOCAL_CORE=1` build is needed.
 
 ## 4. Backend context (com.etendoerp.go)
@@ -172,7 +172,7 @@ credentials were available, so it has not been created or rendered. The Mixpanel
 
 | Evidence | Status |
 |---|---|
-| Deterministic tests (menu, direct URL, missing context, tabs, concurrency, identity switch/logout, failure/rollback, MDC cleanup, trusted origins) | Done: core `featureContext.test.js` (schema_forge_core, released in 0.3.122), app-shell `featureCatalog.vitest.js`, `featureUsage.vitest.js`, `ObservabilityRouteTracker.vitest.jsx`, backend `NeoRequestContextFilterTest` |
+| Deterministic tests (menu, direct URL, missing context, tabs, concurrency, identity switch/logout, failure/rollback, MDC cleanup, trusted origins) | Done: core `featureContext.test.js` (schema_forge_core, released in 0.3.122, pinned at 0.3.125), app-shell `featureCatalog.vitest.js`, `featureUsage.vitest.js`, `ObservabilityRouteTracker.vitest.jsx`, backend `NeoRequestContextFilterTest` |
 | Live RUM resource -> Java APM trace -> CloudWatch-forwarded log | **Pending**: needs Datadog credentials, the Java agent on Tomcat and the Forwarder |
 | Dashboard rendered with live data | **Pending** (definition committed) |
 | Product Analytics server intake for server-side funnel steps | Optional follow-up, not included |

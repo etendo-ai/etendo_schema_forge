@@ -48,7 +48,8 @@ export const header = [
     "eTGOCurrencyRate": "USD",
     "eTGOTbaiStatus": "DR",
     "eTGODeliveryStatus": "DR",
-    "eTGODueDate": "2026-01-15"
+    "eTGODueDate": "2026-01-15",
+    "etgoRemittedAmt": 38907
   },
   {
     "id": "mock-header-002",
@@ -97,7 +98,8 @@ export const header = [
     "eTGOCurrencyRate": "EUR",
     "eTGOTbaiStatus": "CO",
     "eTGODeliveryStatus": "CO",
-    "eTGODueDate": "2026-01-16"
+    "eTGODueDate": "2026-01-16",
+    "etgoRemittedAmt": 9306
   },
   {
     "id": "mock-header-003",
@@ -146,7 +148,8 @@ export const header = [
     "eTGOCurrencyRate": "GBP",
     "eTGOTbaiStatus": "VO",
     "eTGODeliveryStatus": "VO",
-    "eTGODueDate": "2026-01-17"
+    "eTGODueDate": "2026-01-17",
+    "etgoRemittedAmt": 11544
   },
   {
     "id": "mock-header-004",
@@ -195,7 +198,8 @@ export const header = [
     "eTGOCurrencyRate": "USD",
     "eTGOTbaiStatus": "IP",
     "eTGODeliveryStatus": "IP",
-    "eTGODueDate": "2026-01-18"
+    "eTGODueDate": "2026-01-18",
+    "etgoRemittedAmt": 11872
   },
   {
     "id": "mock-header-005",
@@ -244,7 +248,8 @@ export const header = [
     "eTGOCurrencyRate": "EUR",
     "eTGOTbaiStatus": "DR",
     "eTGODeliveryStatus": "DR",
-    "eTGODueDate": "2026-01-19"
+    "eTGODueDate": "2026-01-19",
+    "etgoRemittedAmt": 48460
   },
   {
     "id": "mock-header-006",
@@ -293,7 +298,8 @@ export const header = [
     "eTGOCurrencyRate": "GBP",
     "eTGOTbaiStatus": "CO",
     "eTGODeliveryStatus": "CO",
-    "eTGODueDate": "2026-01-20"
+    "eTGODueDate": "2026-01-20",
+    "etgoRemittedAmt": 45418
   },
   {
     "id": "mock-header-007",
@@ -342,7 +348,8 @@ export const header = [
     "eTGOCurrencyRate": "USD",
     "eTGOTbaiStatus": "VO",
     "eTGODeliveryStatus": "VO",
-    "eTGODueDate": "2026-01-21"
+    "eTGODueDate": "2026-01-21",
+    "etgoRemittedAmt": 33840
   },
   {
     "id": "mock-header-008",
@@ -391,7 +398,8 @@ export const header = [
     "eTGOCurrencyRate": "EUR",
     "eTGOTbaiStatus": "IP",
     "eTGODeliveryStatus": "IP",
-    "eTGODueDate": "2026-01-22"
+    "eTGODueDate": "2026-01-22",
+    "etgoRemittedAmt": 25716
   },
   {
     "id": "mock-header-009",
@@ -440,7 +448,8 @@ export const header = [
     "eTGOCurrencyRate": "GBP",
     "eTGOTbaiStatus": "DR",
     "eTGODeliveryStatus": "DR",
-    "eTGODueDate": "2026-01-23"
+    "eTGODueDate": "2026-01-23",
+    "etgoRemittedAmt": 44780
   },
   {
     "id": "mock-header-010",
@@ -489,7 +498,8 @@ export const header = [
     "eTGOCurrencyRate": "USD",
     "eTGOTbaiStatus": "CO",
     "eTGODeliveryStatus": "CO",
-    "eTGODueDate": "2026-01-24"
+    "eTGODueDate": "2026-01-24",
+    "etgoRemittedAmt": 12483
   },
   {
     "id": "mock-header-011",
@@ -538,7 +548,8 @@ export const header = [
     "eTGOCurrencyRate": "EUR",
     "eTGOTbaiStatus": "VO",
     "eTGODeliveryStatus": "VO",
-    "eTGODueDate": "2026-01-25"
+    "eTGODueDate": "2026-01-25",
+    "etgoRemittedAmt": 46022
   },
   {
     "id": "mock-header-012",
@@ -587,7 +598,8 @@ export const header = [
     "eTGOCurrencyRate": "GBP",
     "eTGOTbaiStatus": "IP",
     "eTGODeliveryStatus": "IP",
-    "eTGODueDate": "2026-01-26"
+    "eTGODueDate": "2026-01-26",
+    "etgoRemittedAmt": 38634
   }
 ];
 
@@ -1109,7 +1121,7 @@ export const exchangeRates = [
     "id": "mock-exchangeRates-001",
     "currency": "USD",
     "toCurrency": "USD",
-    "rate": 761,
+    "rate": 99.44,
     "foreignAmount": 38907,
     "headerId": "mock-header-001"
   },
@@ -1117,7 +1129,7 @@ export const exchangeRates = [
     "id": "mock-exchangeRates-002",
     "currency": "EUR",
     "toCurrency": "EUR",
-    "rate": 544,
+    "rate": 96.94,
     "foreignAmount": 9306,
     "headerId": "mock-header-002"
   },
@@ -1125,7 +1137,7 @@ export const exchangeRates = [
     "id": "mock-exchangeRates-003",
     "currency": "GBP",
     "toCurrency": "GBP",
-    "rate": 215,
+    "rate": 12.48,
     "foreignAmount": 11544,
     "headerId": "mock-header-003"
   },
@@ -1133,7 +1145,7 @@ export const exchangeRates = [
     "id": "mock-exchangeRates-004",
     "currency": "USD",
     "toCurrency": "USD",
-    "rate": 568,
+    "rate": 96.31,
     "foreignAmount": 11872,
     "headerId": "mock-header-004"
   },
@@ -1141,7 +1153,7 @@ export const exchangeRates = [
     "id": "mock-exchangeRates-005",
     "currency": "EUR",
     "toCurrency": "EUR",
-    "rate": 679,
+    "rate": 31.27,
     "foreignAmount": 48460,
     "headerId": "mock-header-005"
   },
@@ -1149,7 +1161,7 @@ export const exchangeRates = [
     "id": "mock-exchangeRates-006",
     "currency": "GBP",
     "toCurrency": "GBP",
-    "rate": 861,
+    "rate": 76.52,
     "foreignAmount": 45418,
     "headerId": "mock-header-006"
   },
@@ -1157,7 +1169,7 @@ export const exchangeRates = [
     "id": "mock-exchangeRates-007",
     "currency": "USD",
     "toCurrency": "USD",
-    "rate": 281,
+    "rate": 2.66,
     "foreignAmount": 33840,
     "headerId": "mock-header-007"
   },
@@ -1165,7 +1177,7 @@ export const exchangeRates = [
     "id": "mock-exchangeRates-008",
     "currency": "EUR",
     "toCurrency": "EUR",
-    "rate": 639,
+    "rate": 10.03,
     "foreignAmount": 25716,
     "headerId": "mock-header-008"
   },
@@ -1173,7 +1185,7 @@ export const exchangeRates = [
     "id": "mock-exchangeRates-009",
     "currency": "GBP",
     "toCurrency": "GBP",
-    "rate": 916,
+    "rate": 93.97,
     "foreignAmount": 44780,
     "headerId": "mock-header-009"
   },
@@ -1181,7 +1193,7 @@ export const exchangeRates = [
     "id": "mock-exchangeRates-010",
     "currency": "USD",
     "toCurrency": "USD",
-    "rate": 980,
+    "rate": 1.1,
     "foreignAmount": 12483,
     "headerId": "mock-header-010"
   },
@@ -1189,7 +1201,7 @@ export const exchangeRates = [
     "id": "mock-exchangeRates-011",
     "currency": "EUR",
     "toCurrency": "EUR",
-    "rate": 997,
+    "rate": 79.99,
     "foreignAmount": 46022,
     "headerId": "mock-header-011"
   },
@@ -1197,7 +1209,7 @@ export const exchangeRates = [
     "id": "mock-exchangeRates-012",
     "currency": "GBP",
     "toCurrency": "GBP",
-    "rate": 320,
+    "rate": 53.61,
     "foreignAmount": 38634,
     "headerId": "mock-header-012"
   }

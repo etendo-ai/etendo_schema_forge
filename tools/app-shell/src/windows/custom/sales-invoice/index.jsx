@@ -4,6 +4,7 @@ import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { todayCalendarISO } from '@/lib/dateOnly.js';
 import { ListView } from '@/components/contract-ui/ListView.jsx';
 import { useUI, useMenuLabel } from '@/i18n';
+import { salesInvoiceSendDocumentType } from '@generated/sales-invoice/custom/invoiceSubtype.js';
 import { useWindowAccess, WindowAccessGuard } from '@/auth/AuthContext.jsx';
 import BulkDocumentAction, { buildPostActions, postRowFilter } from '@/components/contract-ui/BulkDocumentAction';
 import CopyLinkButton from '@/components/contract-ui/CopyLinkButton';
@@ -349,7 +350,7 @@ export default function SalesInvoiceWindow(props) {
       {sifModal}
       {emailRow && createPortal(
         <SendDocumentModal
-          documentType={tMenu('Sales Invoice')}
+          documentType={salesInvoiceSendDocumentType(emailRow, { tMenu, ui })}
           documentNo={emailRow.documentNo}
           bpName={emailRow['businessPartner$_identifier']}
           bPartnerId={emailRow.businessPartner}

@@ -21,8 +21,8 @@ const STATUS_BANNERS = {
 };
 
 // ETP-6247 — a remittance settled by GO's «Cobrada» (markCollected sets EM_Etar_Automaticprocess
-// = Y; it stays N until then) was confirmed first, and «Confirmar» generated its SEPA file: the
-// Cobrada/Pagada banner says so and where to download it.
+// = Y; it stays N until then) was confirmed first: the Cobrada/Pagada banner says where its SEPA file
+// is downloaded. The file is not stored; «Descargar fichero» generates it on the fly.
 const FILE_BANNER_KEYS = {
   CT: 'remittanceBannerCollectedFile',
   PT: 'remittanceBannerPaidFile',

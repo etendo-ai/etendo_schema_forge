@@ -39,7 +39,8 @@ const RECORD = { id: 'rem-1', dueDate: '2026-12-15', processed: false };
 const CONFIRM = {
   name: 'confirm', label: 'confirm', confirmModal: true,
   params: [{ key: 'grouping', type: 'select', label: 'remittanceGrouping', defaultValue: 'P',
-    options: [{ value: 'P', label: 'remittanceGroupingNone' }, { value: 'GGPD', label: 'remittanceGroupingByBpAndDueDate' }] }],
+    options: [{ value: 'P', label: 'remittanceGroupingNone' }, { value: 'GGP', label: 'remittanceGroupingByBp' },
+      { value: 'GGPD', label: 'remittanceGroupingByBpAndDueDate' }] }],
 };
 const SUMMARY = { invoiceCount: 3, lineCount: 4, totalAmount: 1202.3, currency: 'EUR', dueDate: '2026-12-01' };
 
@@ -56,10 +57,11 @@ function deferred() {
 }
 
 /** Routes the remittance spec calls: fileReadiness, the lines summary and confirm. */
-function routes({ readiness = data({ ready: true, summary: SUMMARY }), lines = data([{ amount: 1202.3, id: 4 }]), confirm = data({ status: 'PR', attachmentId: 'att-1', fileName: 'remesa.xml' }), sepa = data({ accountName: 'Banco', iban: 'ES9121000418450200051332' }) } = {}) {
+function routes({ readiness = data({ ready: true, summary: SUMMARY }), lines = data([{ amount: 1202.3, id: 4 }]), confirm = data({ status: 'PR', fileName: 'remesa.xml' }), sepa = data({ accountName: 'Banco', iban: 'ES9121000418450200051332' }), download = data({ fileName: 'remesa.xml', contentType: 'application/xml', content: '<Document/>', returnedCount: 0 }) } = {}) {
   mockApiFetch.mockImplementation((url) => {
     if (url.endsWith('/action/fileReadiness')) return readiness.promise ?? Promise.resolve(readiness);
     if (url.endsWith('/action/confirm')) return Promise.resolve(confirm);
+    if (url.endsWith('/action/downloadFile')) return Promise.resolve(download);
     if (url.endsWith('/action/sepaFileData')) return Promise.resolve(sepa);
     if (url.startsWith('/lines?')) return Promise.resolve(lines);
     return Promise.reject(new Error(`unexpected ${url}`));
@@ -203,6 +205,7 @@ describe('RemittanceConfirmDialog — grouping and confirm', () => {
     expect(screen.getByTestId('remittance-confirm-grouping-P')).toBeChecked();
     expect(screen.getByRole('radiogroup')).toHaveAccessibleName('remittanceGrouping');
     expect(screen.getByRole('dialog')).toHaveTextContent('remittanceGroupingNoneDescription');
+    expect(screen.getByRole('dialog')).toHaveTextContent('remittanceGroupingByBpDescription');
     expect(screen.getByRole('dialog')).toHaveTextContent('remittanceGroupingByBpAndDueDateDescription');
     await act(async () => { fireEvent.click(submit()); });
     expect(JSON.parse(confirmCalls()[0][1].body)).toEqual({ fieldValues: { grouping: 'P' } });
@@ -215,6 +218,18 @@ describe('RemittanceConfirmDialog — grouping and confirm', () => {
     fireEvent.click(screen.getByTestId('remittance-confirm-grouping-GGPD'));
     await act(async () => { fireEvent.click(submit()); });
     expect(JSON.parse(confirmCalls()[0][1].body)).toEqual({ fieldValues: { grouping: 'GGPD' } });
+  });
+
+  // ETP-6247 — «Agrupar por cliente»: one payment per business partner whatever the due date.
+  it('offers the three groupings in order and posts GGP when «Agrupar por cliente» is picked', async () => {
+    routes();
+    await renderDialog();
+    const cards = screen.getAllByTestId(/^remittance-confirm-grouping-/).map((el) => el.dataset.testid);
+    expect(cards).toEqual(['remittance-confirm-grouping-P', 'remittance-confirm-grouping-GGP', 'remittance-confirm-grouping-GGPD']);
+    expect(screen.getByTestId('remittance-confirm-grouping-GGP')).toHaveTextContent('remittanceGroupingByBp');
+    fireEvent.click(screen.getByTestId('remittance-confirm-grouping-GGP'));
+    await act(async () => { fireEvent.click(submit()); });
+    expect(JSON.parse(confirmCalls()[0][1].body)).toEqual({ fieldValues: { grouping: 'GGP' } });
   });
 
   it('Enter on a grouping card confirms with it, but not while the check is pending or has problems', async () => {
@@ -241,8 +256,8 @@ describe('RemittanceConfirmDialog — grouping and confirm', () => {
   });
 
   const CONFIRMED_RECORD = { ...RECORD, documentNo: 'R-1', name: 'Remesa marzo', financialAccount: 'acc-1', 'remittanceType$_identifier': 'SEPA CORE' };
-  const confirmNow = async (props = {}) => {
-    routes();
+  const confirmNow = async (props = {}, routeOptions = {}) => {
+    routes(routeOptions);
     const view = await renderDialog({ record: CONFIRMED_RECORD, ...props });
     await act(async () => { fireEvent.click(submit()); });
     return view;
@@ -254,7 +269,7 @@ describe('RemittanceConfirmDialog — grouping and confirm', () => {
     expect(screen.getByTestId('remittance-confirmed-subtitle')).toHaveTextContent('remittanceConfirmedSubtitle');
     expect(screen.queryByTestId('remittance-confirm-dialog')).toBeNull();
     expect(toast.success).not.toHaveBeenCalled();
-    expect(mockRootFetch.mock.calls.some(([url]) => url.includes('/attachments/file/'))).toBe(false);
+    expect(mockApiFetch.mock.calls.some(([url]) => url.endsWith('/action/downloadFile'))).toBe(false);
     expect(mockDownloadBlobAsFile).not.toHaveBeenCalled();
     expect(onRefresh).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
@@ -303,17 +318,19 @@ describe('RemittanceConfirmDialog — grouping and confirm', () => {
   });
 
   it('the success step uses one neutral subtitle (the status is PR for collections and payments alike)', async () => {
-    routes({ confirm: data({ status: 'PR', attachmentId: 'att-1', fileName: 'p.xml' }) });
+    routes({ confirm: data({ status: 'PR', fileName: 'p.xml' }) });
     await renderDialog({ record: CONFIRMED_RECORD });
     await act(async () => { fireEvent.click(submit()); });
     expect(screen.getByTestId('remittance-confirmed-subtitle')).toHaveTextContent('remittanceConfirmedSubtitle');
     expect(screen.queryByText('remittanceConfirmedSubtitlePayment')).toBeNull();
   });
 
-  it('«Descargar fichero» downloads through the root apiFetch and keeps the modal open', async () => {
+  it('«Descargar fichero» generates the file on the fly (downloadFile, no attachment) and keeps the modal open', async () => {
     const { onRefresh, onClose } = await confirmNow();
+    expect(screen.getByTestId('action-confirm-modal')).toBeEnabled();
     await act(async () => { fireEvent.click(screen.getByTestId('action-confirm-modal')); });
-    expect(mockRootFetch).toHaveBeenCalledWith('/sws/neo/attachments/file/att-1');
+    expect(mockApiFetch.mock.calls.some(([url]) => url === '/remittance/rem-1/action/downloadFile')).toBe(true);
+    expect(mockRootFetch.mock.calls.some(([url]) => url.includes('/attachments'))).toBe(false);
     expect(mockDownloadBlobAsFile).toHaveBeenCalledWith(expect.any(Blob), 'remesa.xml');
     expect(screen.getByTestId('remittance-confirmed-dialog')).toBeInTheDocument();
     expect(onRefresh).not.toHaveBeenCalled();
@@ -321,8 +338,7 @@ describe('RemittanceConfirmDialog — grouping and confirm', () => {
   });
 
   it('a failed download shows the translated error and leaves the button usable', async () => {
-    mockRootFetch.mockResolvedValue({ ok: false, status: 500, json: async () => ({}) });
-    await confirmNow();
+    await confirmNow({}, { download: { ok: false, status: 500, json: async () => ({}) } });
     await act(async () => { fireEvent.click(screen.getByTestId('action-confirm-modal')); });
     expect(screen.getByRole('alert')).toHaveTextContent('remittanceFileDownloadError');
     expect(mockDownloadBlobAsFile).not.toHaveBeenCalled();
@@ -341,14 +357,13 @@ describe('RemittanceConfirmDialog — grouping and confirm', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('a confirm that attached no file still succeeds, with its own toast', async () => {
-    routes({ confirm: data({ status: 'CT' }) });
-    const { onRefresh, onClose } = await renderDialog();
+  it('a confirm without a file name still reaches the success step and offers the download', async () => {
+    routes({ confirm: data({ status: 'PR' }) });
+    await renderDialog({ record: CONFIRMED_RECORD });
     await act(async () => { fireEvent.click(submit()); });
-    expect(mockRootFetch).not.toHaveBeenCalled();
-    expect(toast.success).toHaveBeenCalledWith('remittanceConfirmSuccessNoFile');
-    expect(onRefresh).toHaveBeenCalled();
-    expect(onClose).toHaveBeenCalled();
+    expect(screen.getByTestId('remittance-confirmed-dialog')).toBeInTheDocument();
+    expect(screen.getByTestId('action-confirm-modal')).toBeEnabled();
+    expect(toast.success).not.toHaveBeenCalled();
   });
 
   it('a 422 ETGO_RemittanceFileNotReady lists error.problems and stays open', async () => {

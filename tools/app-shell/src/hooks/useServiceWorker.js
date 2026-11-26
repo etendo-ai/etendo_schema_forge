@@ -115,7 +115,7 @@ export function useServiceWorker({ onUpdateAvailable } = {}) {
       handleControllerChange,
     );
     document.addEventListener('focusout', handleFocusOut);
-    // Dispatched by @etendosoftware/etendo-go-core's OnboardingFlow right
+    // Dispatched by @etendo-ai/etendo-go-core's OnboardingFlow right
     // before a post-login window.location.href redirect (see Guard 3 above).
     window.addEventListener('etendo-go:navigating', handleNavigatingAway);
 

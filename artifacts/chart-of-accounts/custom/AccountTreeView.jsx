@@ -29,7 +29,7 @@ import { useApiFetch } from '@/auth/useApiFetch.js';
 // place that normally remembers each row's `updated` concurrency token. Without this, the
 // grid's inline active toggle (runInlineToggleRequest) PATCHes with no remembered token and
 // the backend correctly refuses it with 400 missing_updated, no matter how fresh the row is.
-import { rememberRecordVersions } from '@etendosoftware/app-shell-core/lib/recordVersions.js';
+import { rememberRecordVersions } from '@etendo-ai/app-shell-core/lib/recordVersions.js';
 // A tree needs its FULL leaf list upfront to know which top-level folders exist —
 // it can't discover them via ListView's incremental "scroll near bottom, load a bit
 // more" pagination (ListView only fetches one BATCH_SIZE page per `data` prop, and

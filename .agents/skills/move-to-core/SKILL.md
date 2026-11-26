@@ -3,7 +3,7 @@ name: move-to-core
 description: >
   Build a migration PLAN for moving a generic/shared piece of the functional
   app-shell (a component, hook, or lib) from etendo_schema_forge into the
-  schema_forge_core package (@etendosoftware/app-shell-core). Maps the dependency
+  schema_forge_core package (@etendo-ai/app-shell-core). Maps the dependency
   closure, decides what else must move, plans the shims, the package exports, the
   i18n handling, the version bump and the two-repo branch coordination — then
   emits a step-by-step plan. The HUMAN decides WHAT goes to core (it usually
@@ -56,11 +56,11 @@ canonical pattern):
 
 ```js
 // tools/app-shell/src/components/ui/button.jsx
-export * from '@etendosoftware/app-shell-core/components/ui/button.jsx';
+export * from '@etendo-ai/app-shell-core/components/ui/button.jsx';
 // tools/app-shell/src/auth/AuthContext.jsx
-export * from '@etendosoftware/app-shell-core/auth';
+export * from '@etendo-ai/app-shell-core/auth';
 // tools/app-shell/src/i18n/index.js
-export * from '@etendosoftware/app-shell-core/i18n';
+export * from '@etendo-ai/app-shell-core/i18n';
 ```
 
 This is why moving a file to core does **not** have to touch its consumers: leave a
@@ -68,7 +68,7 @@ shim at the old `@/…` path and every `@/…` import keeps resolving.
 
 ## Two developer profiles (matters for validation)
 
-- **Default / servers / CI:** use the **published** `@etendosoftware/app-shell-core`.
+- **Default / servers / CI:** use the **published** `@etendo-ai/app-shell-core`.
   A core change is only visible here after **publish + version bump** in functional's
   `package.json`.
 - **Core developer (opt-in, `LOCAL_CORE`):** `make dev-local-core` and
@@ -78,16 +78,16 @@ shim at the old `@/…` path and every `@/…` import keeps resolving.
 ⚠️ **Two verified `LOCAL_CORE` gotchas that will bite mid-move:**
 1. **Manual browser test = `make dev-local-core`, NOT `make dev`.** Right after the
    move, the moved subpaths are not published yet, so plain `make dev` (published
-   package) throws `Failed to resolve import "@etendosoftware/app-shell-core/<subpath>"`
+   package) throws `Failed to resolve import "@etendo-ai/app-shell-core/<subpath>"`
    / `Missing "…" specifier`. `make dev-local-core` aliases the package to local core
-   source (a catch-all `@etendosoftware/app-shell-core/(.*)` → core `src/$1`) so the
+   source (a catch-all `@etendo-ai/app-shell-core/(.*)` → core `src/$1`) so the
    shims resolve. Tell the human to use it for manual testing until the preview is
    published + pinned.
 2. **`LOCAL_CORE` may be wired into `vite.config.js` but NOT `vitest.config.js`.** The
    two configs have independent `alias` blocks. If the functional test suite is to run
    the re-angled Y tests against local core source, mirror the `LOCAL_CORE`-gated
    aliases into `tools/app-shell/vitest.config.js` too (bare + `/(.*)` catch-all for
-   `@etendosoftware/app-shell-core`, plus pin `react`/`react-dom` to this repo's
+   `@etendo-ai/app-shell-core`, plus pin `react`/`react-dom` to this repo's
    node_modules). Without this, the shims can't resolve under vitest and Y stays red.
    **You MUST also copy `resolve.dedupe`** (the full ~22-package list: react,
    react-dom, react-router-dom, sonner, lucide-react, clsx, cmdk, next-themes,
@@ -155,17 +155,17 @@ Write the list explicitly. Note for each: its destination path in core
 ### 5. Plan the shims (default strategy)
 For **each** moved file, plan a thin re-export left at the original `@/…` path:
 ```js
-export * from '@etendosoftware/app-shell-core/<subpath>';
+export * from '@etendo-ai/app-shell-core/<subpath>';
 ```
 ⚠️ **`export *` does NOT re-export a `default`.** If the moved file has a
 `export default …` (most components/hooks do; pure-function libs like `gridQuery.js`
 usually don't), add a second line or a consumer that imports the default breaks:
 ```js
-export { default } from '@etendosoftware/app-shell-core/<subpath>';
+export { default } from '@etendo-ai/app-shell-core/<subpath>';
 ```
 Grep the file for `export default` to decide. This keeps all consumers untouched.
 (Alternative, only if the human asks: rewrite consumers to import from
-`@etendosoftware/app-shell-core/…` directly and delete the shims — cleaner long-term,
+`@etendo-ai/app-shell-core/…` directly and delete the shims — cleaner long-term,
 more churn now. Default is **shim**.)
 
 ### 6. Plan the package `exports` additions
@@ -210,7 +210,7 @@ Then, for each component/hook **X** with tests **Y** that test its code:
    config defines it). Core runs vitest — Z must be green there.
 2. **Keep Y in functional, but re-angle it to pull from the PACKAGE.** Y stops testing
    the local source (which no longer exists — only the shim does) and instead imports
-   through the shim / `@etendosoftware/app-shell-core`. Now Y tests **from the import
+   through the shim / `@etendo-ai/app-shell-core`. Now Y tests **from the import
    angle**: that the published package + the shim + functional's own wiring (real i18n
    dictionary, aliases, build) resolve and behave. This is the only place the real
    dictionary and the published component are exercised together — it guards the
@@ -278,7 +278,7 @@ package** mechanism (`schema_forge_core/.github/workflows/publish-preview.yml`):
    to open the run): a **commit status** `alpha: <version>` pinned to the SHA, and a
    **sticky PR comment** with the precise pin snippet. Grab that version.
 5. **functional branch** (`feature/ETP-XXXX`, same ticket): delete originals, add
-   shims, and **pin `@etendosoftware/app-shell-core` to that preview version** from
+   shims, and **pin `@etendo-ai/app-shell-core` to that preview version** from
    the PR comment/status, `npm install`, keep functional-owned tests. Validate
    functional against the **published preview**.
 6. **Real release later:** the actual `latest` version is cut by the core's
@@ -315,7 +315,7 @@ the plan.
 - <ui/*, i18n, auth, …>
 
 ## Shims to leave in functional (same @/ path)
-- <path> → export * from '@etendosoftware/app-shell-core/<subpath>'
+- <path> → export * from '@etendo-ai/app-shell-core/<subpath>'
 - …
 
 ## package.json exports to add (core)
@@ -368,7 +368,7 @@ Real result of running this procedure on the shared conditional-filter builder:
     `@/` mock paths (`@/i18n`, `@/lib/gridQuery`, `@/hooks/useDistinctValues.js`,
     `../DistinctValuesList.jsx`) to core's convention.
   - *Re-angle in functional (Y):* keep a copy that imports through the shim /
-    `@etendosoftware/app-shell-core` and renders with the **real** dictionary — the
+    `@etendo-ai/app-shell-core` and renders with the **real** dictionary — the
     only place "Empieza por" (the translated `opStartsWith`) is exercised end-to-end;
     guards the exports map + shim + version pin.
   - *Functional guard untouched:* `etp4532-starts-with-key.test.js` (locale JSON is

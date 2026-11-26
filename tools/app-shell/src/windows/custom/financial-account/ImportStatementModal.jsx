@@ -15,15 +15,15 @@ import { formatCurrency } from '@/lib/formatCurrency.js';
 import { formatCalendarDate } from '@/lib/dateOnly.js';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
-import { buildTemplateCsv } from '@etendosoftware/app-shell-core/lib/import/buildTemplateCsv.js';
-import { buildTemplateXlsx } from '@etendosoftware/app-shell-core/lib/import/buildTemplateXlsx.js';
+import { buildTemplateCsv } from '@etendo-ai/app-shell-core/lib/import/buildTemplateCsv.js';
+import { buildTemplateXlsx } from '@etendo-ai/app-shell-core/lib/import/buildTemplateXlsx.js';
 import { downloadBlobAsFile } from '@/windows/custom/shared/pdfUtils.js';
 // The shared, already-tested formatter, replacing a local copy that divided by 1024 and
 // rounded to whole KB — so every file under ~512 bytes read "0 KB", which is most
 // statement CSVs. This one picks its unit, so 281 bytes reads "281 B".
 import { formatBytes } from '@/lib/formatBytes.js';
-import { ImportColumnMapping } from '@etendosoftware/app-shell-core/components/import/ImportColumnMapping.jsx';
-import { ImportReviewQueue, buildErrorsCsv } from '@etendosoftware/app-shell-core/components/import/ImportReviewQueue.jsx';
+import { ImportColumnMapping } from '@etendo-ai/app-shell-core/components/import/ImportColumnMapping.jsx';
+import { ImportReviewQueue, buildErrorsCsv } from '@etendo-ai/app-shell-core/components/import/ImportReviewQueue.jsx';
 import { bankStatementFieldLabel } from './bankStatementImportFields.js';
 import {
   buildStatementCreatePayload,

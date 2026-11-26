@@ -1,5 +1,5 @@
 import menuConfig from '@/menu.json';
-import { buildFeatureKey } from '@etendosoftware/app-shell-core/auth';
+import { buildFeatureKey } from '@etendo-ai/app-shell-core/auth';
 
 /**
  * ETP-5646 — the canonical spec of "what is a feature" for usage analytics.

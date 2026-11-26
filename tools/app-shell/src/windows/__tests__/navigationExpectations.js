@@ -16,11 +16,14 @@ const groups = {
   Purchases: 'purchase-order goods-receipt purchase-invoice return-to-vendor-shipment matched-purchase-invoices invoice-inbox',
   Inventory: 'product product-category price-list warehouse physical-inventory goods-movements internal-consumption report-viewer-inventory',
   // ETP-6389 — Tesorería: Cobro, Pago, Cuentas, an Informes link holding only the aging reports,
-  // and Condiciones de pago (moved from Settings).
-  Treasury: 'payment-in payment-out financial-account report-viewer-treasury payment-term',
-  Finance: 'remittance chart-of-accounts cost-center service-project general-ledger-configuration calendar assets asset-group amortization not-posted-documents manual-journals fiscal-monitor conversion-rates fiscal-models tax tax-category report-viewer-finance',
+  // and Condiciones de pago (moved from Settings). ETP-6247 — Remesas moved here too, after Pago.
+  Treasury: 'payment-in payment-out remittance financial-account report-viewer-treasury payment-term',
+  Finance: 'chart-of-accounts cost-center service-project general-ledger-configuration calendar assets asset-group amortization not-posted-documents manual-journals conversion-rates report-viewer-finance',
+  // ETP-6380 — Impuestos: the fiscal windows out of Finance, an Informes link holding only the Tax
+  // Report, and Configuración fiscal (moved from Settings).
+  Taxes: 'tax tax-category fiscal-monitor report-viewer-taxes fiscal-config fiscal-models',
   Connections: 'authorize',
-  Settings: 'organization document-sequence business-partner-category user roles api-keys document-templates acct-process-monitor fiscal-config',
+  Settings: 'organization document-sequence business-partner-category user roles api-keys document-templates acct-process-monitor',
 };
 
 // Composition aliases documented in calendar/fiscal-monitor/fiscal-config guides.
@@ -48,12 +51,8 @@ const exceptions = {
   // sepa-remittances flag (capability) and the window grant, like invoice-inbox above.
   remittance: { accessWindowId: 'FF8080812E71F7C7012E71FD0499001B', capability: 'sepaRemittances' },
   // ETP-5269. Synthetic destination (runtime-routes.jsx), no AD window of its own.
-  // Additionally hidden behind the `acct-process-monitor` feature flag. That gate lives in
-  // SideMenu and is invisible to buildMenuGroups — the boundary this catalog measures — so here
-  // it is an ordinary capability-gated Settings entry, exactly like `roles` above. `flag` is
-  // metadata for the one spec that DOES cross the flag boundary (SideMenu.vitest.jsx enables
-  // every flag declared here); nothing else in this module reads it.
-  'acct-process-monitor': { capability: 'isAdminOrClientAdmin', flag: 'acct-process-monitor' },
+  // GA (ETP-6425): an ordinary capability-gated Settings entry, exactly like `roles` above.
+  'acct-process-monitor': { capability: 'isAdminOrClientAdmin' },
   // Tax Report AD window: core-maps/ad-menu-cache.json (typed window entry),
   // app-shell-functional-flows.md, "Role-gated custom pages".
   'fiscal-models': { windowId: '3E8FEA1EA7404D979306C9EE7FD2E7E8' },
@@ -70,6 +69,13 @@ const exceptions = {
     path: 'report-viewer?category=treasury',
     requiresGroupReport: true,
     reportIds: ['aging-receivable', 'aging-payable'],
+  },
+  // ETP-6380 — same shape as Treasury: revealed by a grant on the Tax Report, not by the anchor.
+  'report-viewer-taxes': {
+    accessWindowId: 'D647D118F5014D00AF47A636B2CD0DD3',
+    path: 'report-viewer?category=taxes',
+    requiresGroupReport: true,
+    reportIds: ['tax-report'],
   },
 };
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useAuthOptional } from '@etendosoftware/app-shell-core/auth';
+import { useAuthOptional } from '@etendo-ai/app-shell-core/auth';
 import { fetchRowsByIdChunked } from './invoiceInboxApi.js';
 import {
   readUploadLog, removeFromUploadLog, subscribeUploadLog, uploadLogKey,

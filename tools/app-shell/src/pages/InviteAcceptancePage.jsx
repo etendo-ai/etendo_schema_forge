@@ -20,9 +20,9 @@ import {
   RegisterStep,
   PasswordStrengthChecklist,
   isStrongPassword,
-} from '@etendosoftware/etendo-go-core/onboarding';
-import { fetchEnvironments, loginAccount, AUTH_ERROR_UI_KEYS } from '@etendosoftware/etendo-go-core/onboarding/api';
-import { LAST_ENVIRONMENT_KEY } from '@etendosoftware/etendo-go-core/onboarding/state';
+} from '@etendo-ai/etendo-go-core/onboarding';
+import { fetchEnvironments, loginAccount, AUTH_ERROR_UI_KEYS } from '@etendo-ai/etendo-go-core/onboarding/api';
+import { LAST_ENVIRONMENT_KEY } from '@etendo-ai/etendo-go-core/onboarding/state';
 import { useAuthOptional } from '@/auth/AuthContext.jsx';
 import { useApiFetch } from '@/auth/useApiFetch.js';
 import { useLogout } from '@/auth/useLogout.js';

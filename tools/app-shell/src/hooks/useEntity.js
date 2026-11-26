@@ -17,7 +17,7 @@ import { incrementSurveyCounter } from '@/lib/surveys/survey-state.js';
 import { isInvoiceSpec, isOrderSpec } from '@/lib/surveys/surveys.js';
 import { emitSurveyTrigger } from '@/lib/surveys/survey-engine.js';
 import { isEmailField, getEmailFieldError, getWebsiteFieldError, getPhoneFieldError } from '@/components/contract-ui/recipientEdits.js';
-import { createQueryKey, useOptionalDataCache } from '@etendosoftware/app-shell-core/data';
+import { createQueryKey, useOptionalDataCache } from '@etendo-ai/app-shell-core/data';
 import {
     getContactsTextFieldError,
     getContactsTaxIdError,
@@ -38,7 +38,7 @@ import { useApiFetch } from '@/auth/useApiFetch.js';
 // ETP-5073 / DOC-04: the optimistic-locking token is remembered here (the one place every
 // record and every list row is parsed) and injected by apiFetch on the way out, so no call
 // site has to thread `updated` through by hand.
-import { rememberRecordVersion, forgetRecordVersion } from '@etendosoftware/app-shell-core/lib/recordVersions.js';
+import { rememberRecordVersion, forgetRecordVersion } from '@etendo-ai/app-shell-core/lib/recordVersions.js';
 // ETP-5073 / DOC-04: the conflict prompt is a dialog, not a toast — it is a blocking decision
 // with a destructive option. See lib/saveConflict.js for why the toast was abandoned.
 import { openSaveConflict, dismissSaveConflict } from '@/lib/saveConflict.js';
@@ -1471,6 +1471,12 @@ export function useEntity(entity, childEntity, {
     const [sortColumn, setSortColumn] = useState(initialSortColumn);
     const [sortDirection, setSortDirection] = useState(initialSortDirection);
     const startRowRef = useRef(0);
+    // ETP-6166: monotonic id of the current page-0 list load. Two loads can overlap (e.g. on
+    // remount a list fetch without `criteria` is followed by one with the restored filter once
+    // the Table reports its columns); only the latest may write `items`, otherwise whichever
+    // response resolves last wins and an unfiltered page can overwrite the filtered one.
+    // loadMore captures it too, so a page of a superseded query is never appended.
+    const listSeqRef = useRef(0);
     const sampleRowRef = useRef(null);
     // Keys returned by the backend /defaults endpoint for the current new-record session.
     const backendDefaultKeysRef = useRef(new Set());
@@ -1629,6 +1635,9 @@ export function useEntity(entity, childEntity, {
     // Shared list loader. `force=false` (mount) reuses a fresh cached page;
     // `force=true` (explicit refresh) always reaches the backend.
     const loadList = useCallback((force) => {
+        const seq = listSeqRef.current + 1;
+        listSeqRef.current = seq;
+        const isCurrent = () => listSeqRef.current === seq;
         startRowRef.current = 0;
         setHasMore(true);
         setLoading(true);
@@ -1655,6 +1664,7 @@ export function useEntity(entity, childEntity, {
 
         runQuery(buildListKey(), fetcher, { force })
             .then(({ rows, meta }) => {
+                if (!isCurrent()) return;
                 setItems(rows);
                 setMeta(meta);
                 startRowRef.current = rows.length;
@@ -1662,6 +1672,7 @@ export function useEntity(entity, childEntity, {
                 setLoading(false);
             })
             .catch((e) => {
+                if (!isCurrent()) return;
                 console.error('refresh error', e);
                 setItems([]);
                 setMeta(null);
@@ -1694,6 +1705,8 @@ export function useEntity(entity, childEntity, {
         if (!hasMore || loadingMore || loading) return;
         setLoadingMore(true);
         const start = startRowRef.current;
+        const listSeqAtStart = listSeqRef.current;
+        const isCurrentList = () => listSeqRef.current === listSeqAtStart;
 
         const colDef = columnDefs[sortColumn] || { key: sortColumn };
         const sortKey = resolveBackendSort(colDef, sortDirection);
@@ -1711,6 +1724,7 @@ export function useEntity(entity, childEntity, {
                 return res.json();
             })
             .then(data => {
+                if (!isCurrentList()) { setLoadingMore(false); return; }
                 const rows = normalizeRows(data?.response?.data ?? (Array.isArray(data) ? data : []), entity);
                 setItems(prev => [...prev, ...rows]);
                 // Aggregates are computed over the whole collection server-side, so each
@@ -1722,8 +1736,9 @@ export function useEntity(entity, childEntity, {
                 setLoadingMore(false);
             })
             .catch((e) => {
-                console.error('loadMore error', e);
                 setLoadingMore(false);
+                if (!isCurrentList()) return;
+                console.error('loadMore error', e);
                 setHasMore(false);
             });
     }, [entity, sortColumn, sortDirection, hasMore, loadingMore, loading, baseFilter, columnFilters, columnDefs, trailingFilter, apiFetch]);

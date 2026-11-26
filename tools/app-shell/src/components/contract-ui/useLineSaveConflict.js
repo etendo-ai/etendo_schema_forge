@@ -16,7 +16,7 @@ import { useCallback } from 'react';
 import { toast } from 'sonner';
 import { extractBackendErrorCode } from '@/lib/backendErrors.js';
 import { openSaveConflict, dismissSaveConflict } from '@/lib/saveConflict.js';
-import { rememberRecordVersion } from '@etendosoftware/app-shell-core/lib/recordVersions.js';
+import { rememberRecordVersion } from '@etendo-ai/app-shell-core/lib/recordVersions.js';
 
 /**
  * True when the server refused this write because the record moved on under the caller.
