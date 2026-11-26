@@ -16,6 +16,7 @@ import {
   buildMovementsQuery,
   buildTypeLabelOrder,
   formatProcessTime,
+  movementDateTime,
   isMovementsSortKey,
   isStorableProduct,
   isUnfilteredMovements,
@@ -32,7 +33,7 @@ const parse = (path) => {
   return { route, params, criteria: params.has('criteria') ? JSON.parse(params.get('criteria')) : [] };
 };
 
-const TIE_DESC = '-movementDate,-transactionProcessDate,-id';
+const TIE_DESC = '-transactionProcessDate,-id';
 
 describe('productMovements (ETP-5889)', () => {
   describe('isStorableProduct', () => {
@@ -93,8 +94,8 @@ describe('productMovements (ETP-5889)', () => {
     it('turns the default period (last 7 days) into 7 calendar days, both ends included', () => {
       expect(DEFAULT_MOVEMENTS_PERIOD).toEqual({ presetId: 'last7' });
       expect(buildMovementsCriteria({ dateRange: DEFAULT_MOVEMENTS_PERIOD })).toEqual([
-        { fieldName: 'movementDate', operator: 'greaterOrEqual', value: '2026-10-22' },
-        { fieldName: 'movementDate', operator: 'lessOrEqual', value: '2026-10-28' },
+        { fieldName: 'transactionProcessDate', operator: 'greaterOrEqual', value: '2026-10-22' },
+        { fieldName: 'transactionProcessDate', operator: 'lessOrEqual', value: '2026-10-28' },
       ]);
     });
 
@@ -104,8 +105,8 @@ describe('productMovements (ETP-5889)', () => {
         warehouseId: 'wh-1',
       });
       expect(criteria).toEqual([
-        { fieldName: 'movementDate', operator: 'greaterOrEqual', value: '2026-01-05' },
-        { fieldName: 'movementDate', operator: 'lessOrEqual', value: '2026-01-20' },
+        { fieldName: 'transactionProcessDate', operator: 'greaterOrEqual', value: '2026-01-05' },
+        { fieldName: 'transactionProcessDate', operator: 'lessOrEqual', value: '2026-01-20' },
         { fieldName: 'etgoWarehouse', operator: 'equals', value: 'wh-1' },
       ]);
     });
@@ -116,7 +117,7 @@ describe('productMovements (ETP-5889)', () => {
       const { route, params, criteria } = parse(buildMovementsQuery({ productId: 'p1' }));
       expect(route).toBe('/transactions');
       expect(params.get('parentId')).toBe('p1');
-      expect(params.get('_sortBy')).toBe(`-movementDate,-transactionProcessDate,-id`);
+      expect(params.get('_sortBy')).toBe('-transactionProcessDate,-id');
       expect(params.get('_startRow')).toBe('0');
       expect(params.get('_endRow')).toBe('49');
       expect(criteria).toEqual([]);
@@ -144,13 +145,13 @@ describe('productMovements (ETP-5889)', () => {
 
     it('falls back to the default sort for an unknown column', () => {
       expect(parse(buildMovementsQuery({ productId: 'p1', sort: { key: 'stockAfter', direction: 'asc' } })).params.get('_sortBy'))
-        .toBe('movementDate,transactionProcessDate,id');
+        .toBe('transactionProcessDate,id');
     });
 
-    it('breaks the ties of the date sort by processing time and id, in the direction of the sort', () => {
+    it('sorts by the process date (TrxProcessDate) and breaks its ties by id, in the direction of the sort', () => {
       const sortBy = (direction) => parse(buildMovementsQuery({ productId: 'p1', sort: { key: 'date', direction } })).params.get('_sortBy');
-      expect(sortBy('desc')).toBe('-movementDate,-transactionProcessDate,-id');
-      expect(sortBy('asc')).toBe('movementDate,transactionProcessDate,id');
+      expect(sortBy('desc')).toBe('-transactionProcessDate,-id');
+      expect(sortBy('asc')).toBe('transactionProcessDate,id');
     });
 
     it('breaks the ties of any other column with the most recent movement first, whatever the direction', () => {
@@ -358,6 +359,19 @@ describe('productMovements (ETP-5889)', () => {
       expect(signedQuantity(0, format)).toBe('0');
       expect(signedQuantity(null, format)).toBe('—');
       expect(signedQuantity('abc', format)).toBe('—');
+    });
+  });
+
+  describe('movementDateTime (the one date of the tab: TrxProcessDate)', () => {
+    it('is the process timestamp as stored, wall clock, with no zone conversion', () => {
+      expect(movementDateTime({ movementDate: '2026-01-01', etgoProcessTime: '2026-04-16T10:48:59' })).toBe('2026-04-16T10:48:59');
+    });
+    it.each([[undefined], [null], [''], ['garbage'], [20260416]])('falls back to the movement date for %s', (processTime) => {
+      expect(movementDateTime({ movementDate: '2026-01-01', etgoProcessTime: processTime })).toBe('2026-01-01');
+    });
+    it('is null when the row carries neither', () => {
+      expect(movementDateTime({})).toBeNull();
+      expect(movementDateTime(null)).toBeNull();
     });
   });
 
