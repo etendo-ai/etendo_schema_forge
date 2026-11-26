@@ -262,6 +262,13 @@ describe('registry', () => {
         expect(names(filterMenuGroupsByAccess(smartScan(), null, { isAdminOrClientAdmin: false }, legacyAnchorOnly))).toEqual([]);
       });
 
+      it('lets the feature grant decide when the legacy window is not in the role menu tree', () => {
+        const monitor = () => [{ group: 'Taxes', items: [{ name: 'fiscal-monitor', windowId: 'FEF7', accessFeature: 'fiscal-monitor' }] }];
+        const caps = { isAdminOrClientAdmin: false };
+        expect(names(filterMenuGroupsByAccess(monitor(), new Set(['OTHER']), caps, { 'fiscal-monitor': 'read-only' }))).toEqual(['fiscal-monitor']);
+        expect(names(filterMenuGroupsByAccess(monitor(), new Set(['OTHER']), caps, {}))).toEqual([]);
+      });
+
       it('exempts admin/client-admin like the accessWindowId axis', () => {
         expect(names(filterMenuGroupsByAccess(smartScan(), null, { isAdminOrClientAdmin: true }, {}))).toEqual(['smart-scan']);
       });

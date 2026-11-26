@@ -56,6 +56,8 @@ const exceptions = {
   // Tax Report AD window: core-maps/ad-menu-cache.json (typed window entry),
   // app-shell-functional-flows.md, "Role-gated custom pages".
   'fiscal-models': { windowId: '3E8FEA1EA7404D979306C9EE7FD2E7E8' },
+  // ETP-4802 — the real SII Monitor window id stays for the roles matrix; the sidebar gate is the GO feature.
+  'fiscal-monitor': { windowId: 'FEF76C3E0F104F06A89AAD15A4A4A35C', accessFeature: 'fiscal-monitor' },
   // OBUIAPP permission documented in app-shell-functional-flows.md. The AD
   // cache omits this namespace; its "Not Posted Documents" row has null IDs.
   'not-posted-documents': { obuiappProcessId: 'D6AB95CE52D34E1599590526115E26C6' },

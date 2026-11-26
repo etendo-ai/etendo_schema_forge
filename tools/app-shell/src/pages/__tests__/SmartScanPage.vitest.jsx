@@ -1,3 +1,4 @@
+// @covers tools/app-shell/src/pages/SmartScanPage.jsx
 // ETP-5116 — SmartScanPage had zero real access control (any authenticated
 // user, any role, could reach it by URL regardless of the menu). This suite
 // covers the useWindowAccess()/WindowAccessGuard gate added to close that

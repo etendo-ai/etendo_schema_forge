@@ -228,6 +228,12 @@ export function filterMenuGroupsByAccess(groups, allowedIds, capabilities = null
             const hasWindowAccess = windowAccess && windowAccess[accessKey] !== undefined;
             if (!hasWindowAccess && !groupHasAccessibleReport) return false;
           }
+          // a GO feature's own grant decides the entry: its legacy window may not be in the role's
+          // menu tree (a role granted only through a GO Access row, e.g. fiscal-monitor, whose
+          // windowId is the real SII Monitor window)
+          if (item.accessFeature && (capabilities?.isAdminOrClientAdmin || windowAccess?.[item.accessFeature] !== undefined)) {
+            return true;
+          }
           if (!allowedIds) return true;
           const ids = itemIds(item);
           return ids.length === 0 || ids.some(id => allowedIds.has(String(id)));
