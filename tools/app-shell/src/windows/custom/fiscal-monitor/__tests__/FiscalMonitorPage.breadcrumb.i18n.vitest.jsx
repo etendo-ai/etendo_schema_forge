@@ -19,6 +19,7 @@ const realUiEs = makeRealUI(esES);
 const realUiEn = makeRealUI(enUS);
 
 let activeUi = realUiEs;
+let activeProfile = 'sii';
 
 const stableApiFetch = vi.fn(() => Promise.resolve({ ok: true, json: async () => ({ response: { data: [] } }) }));
 
@@ -47,7 +48,7 @@ vi.mock('../useFiscalMonitor.js', () => ({
   useFiscalMonitor: () => ({
     loading: false,
     error: null,
-    profile: 'sii',
+    profile: activeProfile,
     kpis: { sii: { issued: 2, received: 1, issuedPrevious: 0, receivedPrevious: 0 } },
     siiParentId: 'parent-1',
     tbaiValidationResults: [],
@@ -116,6 +117,7 @@ const baseProps = {
 
 beforeEach(() => {
   setMetaMock.mockClear();
+  activeProfile = 'sii';
 });
 
 describe('FiscalMonitorPage — breadcrumb against the real locale dictionary (ETP-4945)', () => {
@@ -140,5 +142,34 @@ describe('FiscalMonitorPage — breadcrumb against the real locale dictionary (E
 
     const lastCall = setMetaMock.mock.calls.at(-1)[0];
     expect(lastCall.breadcrumb).toBe('Taxes / Fiscal Monitor');
+  });
+
+  // ETP-6380 CP-3 — with no fiscal system the profile has no label, so the title used to be ''.
+  // TopBar renders its left block (title AND breadcrumb) only when the title is truthy, so the
+  // whole "Impuestos / Monitor fiscal" header vanished. The title now falls back to the window name.
+  it.each([
+    ['unconfigured', realUiEs, 'Monitor fiscal', 'Impuestos / Monitor fiscal', 'No hay sistema fiscal configurado para esta organización.'],
+    [null, realUiEs, 'Monitor fiscal', 'Impuestos / Monitor fiscal', 'No hay sistema fiscal configurado para esta organización.'],
+    ['unconfigured', realUiEn, 'Fiscal Monitor', 'Taxes / Fiscal Monitor', 'No fiscal system configured for this organization.'],
+  ])('keeps a title and breadcrumb when the profile is %s', async (profile, ui, title, breadcrumb, emptyText) => {
+    activeProfile = profile;
+    activeUi = ui;
+    render(<FiscalMonitorPage {...baseProps} />);
+    await waitFor(() => {
+      expect(screen.getByText(emptyText)).toBeInTheDocument();
+    });
+
+    const lastCall = setMetaMock.mock.calls.at(-1)[0];
+    expect(lastCall.title).toBe(title);
+    expect(lastCall.breadcrumb).toBe(breadcrumb);
+  });
+
+  it('keeps the profile label as the title when a fiscal system is configured', async () => {
+    activeUi = realUiEs;
+    render(<FiscalMonitorPage {...baseProps} />);
+    await waitFor(() => {
+      expect(screen.getByTestId('sii-section')).toBeInTheDocument();
+    });
+    expect(setMetaMock.mock.calls.at(-1)[0].title).toBe('SII');
   });
 });
