@@ -17,13 +17,14 @@ import { RUN_PREFIX } from './env.ts';
 export interface LeftBehind { path: string; reason: string }
 
 const leftBehind: LeftBehind[] = [];
+// Flagged, never spliced out of `created`: scoped() works with indices into that array.
+const kept = new Set<string>();
 const deactivated: string[] = [];
 const MAX_PASSES = 3;
 
 /** Declares a record the API cannot delete (e.g. a completed order) so no delete is attempted on it. */
 export function keepAsLeftover(path: string, reason: string): void {
-  const index = created.lastIndexOf(path);
-  if (index >= 0) created.splice(index, 1);
+  kept.add(path);
   leftBehind.push({ path, reason });
 }
 
@@ -60,7 +61,7 @@ async function tryDeactivate(path: string): Promise<boolean> {
  * or added to the left-behind report. Never throws.
  */
 export async function cleanupFrom(mark: number): Promise<void> {
-  let pending = created.splice(mark).reverse();
+  let pending = created.splice(mark).reverse().filter((path) => !kept.has(path));
   const lastStatus = new Map<string, number | string>();
   for (let pass = 0; pass < MAX_PASSES && pending.length; pass += 1) {
     const next: string[] = [];

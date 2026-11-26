@@ -255,11 +255,11 @@ export function describeOrderFlow(kind: 'sales-order' | 'purchase-order'): void 
 
       it('completes the order: 200, and it reads back with document_status CO', async () => {
         const res = await api('POST', `${kind}/${completable.id}/actions/complete`);
+        markCompleted(res, itemPath(completable));
         expectStatus(res, 200);
         assert.equal(res.json.data.id, completable.id, 'the answer is the order re-read after the action');
         assert.equal(res.json.data.attributes.document_status, 'CO', 'the answer shows the new status');
         assert.notEqual(res.json.meta?.alreadyApplied, true, 'the first completion really ran');
-        keepAsLeftover(itemPath(completable), 'completed order: Etendo cannot delete it and the API publishes no void action');
 
         const reread = await api('GET', itemPath(completable));
         expectStatus(reread, 200);
@@ -344,14 +344,19 @@ export async function findForeignCurrency(
   expectStatus(rates, 200);
   // Validity is a date-time since ETP-6365; compare calendar days, as the order date has no time.
   const day = (value: string) => value.slice(0, 10);
-  const match = (rates.json.data as Array<{ attributes: Record<string, any> }>).find(({ attributes: a }) =>
-    a.currency === orgCurrency && a.to_currency && a.to_currency !== orgCurrency && Number(a.multiple_rate_by) > 0
+  if (num(rates.json.meta?.page?.total) > 100) return 'the tenant has more than 100 conversion rates: the first page cannot tell which one applies, so the foreign-currency checks are skipped';
+  const candidates = (rates.json.data as Array<{ attributes: Record<string, any> }>).filter(({ attributes: a }) =>
+    a.currency === orgCurrency && a.to_currency && a.to_currency !== orgCurrency && a.multiple_rate_by != null && Number(a.multiple_rate_by) > 0
     && (!a.valid_from_date || day(a.valid_from_date) <= orderDate)
     && (!a.valid_to_date || day(a.valid_to_date) >= orderDate));
-  if (!match) {
+  if (!candidates.length) {
     return `the tenant has no conversion rate from the organization currency (${orgCurrency}) valid on ${orderDate}: `
       + 'add one (Currency > Conversion Rates) to run the foreign-currency order checks';
   }
+  // Several rates valid on the same day (other currencies, or overlapping ranges): which one Etendo
+  // applies is not decidable from the list, so the test would be comparing against a guess.
+  if (candidates.length > 1) return `${candidates.length} conversion rates from ${orgCurrency} are valid on ${orderDate}: the applied one is ambiguous, foreign-currency checks skipped`;
+  const match = candidates[0];
 
   const products = await api('GET', `product?page[size]=${MAX_PRODUCT_CANDIDATES}`);
   expectStatus(products, 200);
@@ -374,6 +379,17 @@ export async function findForeignCurrency(
 // completed order of the last block cannot be removed: it is reported as left behind.
 
 const CENT = 0.01;
+
+/**
+ * Declares a completed order (and its lines) as left behind right after the complete answer, before any
+ * assertion can throw. A refusal (4xx) leaves a draft, which the cleanup deletes; a success or an
+ * unknown outcome (5xx: the action may have been applied) is kept.
+ */
+function markCompleted(res: { status: number }, orderPath: string, linePaths: string[] = []): void {
+  if (res.status >= 400 && res.status < 500) return;
+  keepAsLeftover(orderPath, 'completed order: Etendo cannot delete it and the API publishes no void action');
+  for (const path of linePaths) keepAsLeftover(path, 'line of a completed order');
+}
 const SNAKE_CASE = /^[a-z][a-z0-9]*(_[a-z0-9]+)*$/;
 const num = (value: unknown) => Number(value);
 const sum = (values: number[]) => values.reduce((total, value) => total + value, 0);
@@ -383,6 +399,7 @@ interface Ctx { contactId: string; addressId: string; productId: string; warehou
 
 export function describeOrderDocumentRules(kind: 'sales-order' | 'purchase-order'): void {
   describe(`${kind} document rules`, () => {
+    after(cleanupCreated);
     const ctx = {} as Ctx;
     const orderDate = new Date().toISOString().slice(0, 10);
     const draft = (extra: Record<string, unknown> = {}) => createDraftOrder(kind, ctx, { payment_method: ctx.paymentMethodId, ...extra });
@@ -463,10 +480,10 @@ export function describeOrderDocumentRules(kind: 'sales-order' | 'purchase-order
         return rates.json.data as Array<{ attributes: Record<string, any> }>;
       };
       const rateOn = (rates: Awaited<ReturnType<typeof fetchRates>>, from: ForeignCurrencySetup, day: string): number | undefined => {
-        const match = rates.find(({ attributes: a }) =>
-          a.currency === from.orgCurrency && a.to_currency === from.currencyId && Number(a.multiple_rate_by) > 0
+        const matches = rates.filter(({ attributes: a }) =>
+          a.currency === from.orgCurrency && a.to_currency === from.currencyId && a.multiple_rate_by != null && Number(a.multiple_rate_by) > 0
           && (!a.valid_from_date || a.valid_from_date.slice(0, 10) <= day) && (!a.valid_to_date || a.valid_to_date.slice(0, 10) >= day));
-        return match ? Number(match.attributes.multiple_rate_by) : undefined;
+        return matches.length === 1 ? Number(matches[0].attributes.multiple_rate_by) : undefined; // several candidates: ambiguous, the day is not used
       };
 
       it('changing currency without sending currency_rate recalculates it, and back to the organization currency sets 1', async (t) => {
@@ -568,10 +585,9 @@ export function describeOrderDocumentRules(kind: 'sales-order' | 'purchase-order
 
       it('completes the order: 200 and CO', async () => {
         const res = await api('POST', `${kind}/${orderId}/actions/complete`);
+        markCompleted(res, `${kind}/${orderId}`, lines.map((line) => line.path));
         expectStatus(res, 200);
         assert.equal(res.json.data.attributes.document_status, 'CO');
-        keepAsLeftover(`${kind}/${orderId}`, 'completed order: Etendo cannot delete it and the API publishes no void action');
-        for (const line of lines) keepAsLeftover(line.path, 'line of a completed order');
       });
 
       it('the total and every line amount are unchanged between DR and CO, and the total is still the sum of the lines', async () => {

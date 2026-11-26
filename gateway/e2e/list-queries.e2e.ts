@@ -20,12 +20,10 @@ const keyOf = (label: string) => `${RUN_PREFIX}-${label}`;
 async function expectInvalidQuery(query: string, parameter?: string, resource = 'product-category'): Promise<void> {
   const error = expectErrorDocument(await api('GET', `${resource}?${query}`), 400, 'invalid_query_parameter');
   assert.ok(error.source?.parameter, `source.parameter names the offending parameter of ${query}`);
-  if (parameter) {
-    const named = String(error.source.parameter);
-    assert.ok(named === parameter || parameter.startsWith(named) || named.startsWith(parameter), `source.parameter ${named} names ${parameter} (${query})`);
-  }
+  if (parameter) assert.equal(error.source.parameter, parameter, `source.parameter of ${query}`);
 }
 
+const decoded = (url: string | null) => (url === null ? null : decodeURIComponent(url));
 const searchKeys = (res: { json: any }): string[] => (res.json.data as any[]).map((r) => r.attributes.search_key);
 
 describe('list queries on product-category', () => {
@@ -41,7 +39,7 @@ describe('list queries on product-category', () => {
       expectStatus(res, 200);
       assert.deepEqual(searchKeys(res), [keyOf('pg-a'), keyOf('pg-b')]);
       assert.deepEqual(res.json.meta.page, { number: 1, size: 2, total: 3 });
-      const { links } = res.json;
+      const links = Object.fromEntries(Object.entries(res.json.links).map(([name, url]) => [name, decoded(url as string | null)])) as Record<string, string | null> & { self: string; first: string; next: string; last: string };
       assert.match(links.self, /^\/api\/v1\/product-category\?/, 'links are root-relative');
       assert.ok(links.self.includes('page[number]=1') && links.self.includes('page[size]=2'), 'page[size] is always explicit in links');
       assert.ok(links.self.includes(RUN_PREFIX) && links.self.includes('sort=search_key'), 'links keep the client filter and sort');
@@ -56,7 +54,7 @@ describe('list queries on product-category', () => {
       expectStatus(res, 200);
       assert.deepEqual(searchKeys(res), [keyOf('pg-c')]);
       assert.deepEqual(res.json.meta.page, { number: 2, size: 2, total: 3 });
-      assert.ok(res.json.links.prev.includes('page[number]=1'));
+      assert.ok(decoded(res.json.links.prev)!.includes('page[number]=1'));
       assert.equal(res.json.links.next, null, 'no next page on the last page');
 
       const first = await api('GET', `product-category?${SCOPE}&sort=search_key&page[size]=2`);
@@ -82,7 +80,7 @@ describe('list queries on product-category', () => {
       expectStatus(res, 200);
       assert.deepEqual(res.json.data, []);
       assert.equal(res.json.meta.page.total, 3);
-      assert.ok(res.json.links.prev.includes('page[number]=2'), 'prev points at the last page');
+      assert.ok(decoded(res.json.links.prev)!.includes('page[number]=2'), 'prev points at the last page');
       assert.equal(res.json.links.next, null);
     });
 
@@ -209,11 +207,12 @@ describe('list queries on product-category', () => {
 });
 
 describe('number filters on conversion-rates (read-only reference data)', () => {
-  it('gt and lt on multiple_rate_by return only matching rows', async () => {
+  it('gt and lte on multiple_rate_by return only matching rows and partition the non-null rows', async (t) => {
     const all = await api('GET', 'conversion-rates?page[size]=100');
     expectStatus(all, 200);
-    const rates = (all.json.data as any[]).map((r) => Number(r.attributes.multiple_rate_by)).filter(Number.isFinite);
-    if (rates.length < 2) return; // nothing to partition on this tenant; the string/boolean/date operators are covered above
+    if (all.json.meta.page.total > 100) return t.skip('more than 100 conversion rates: the first page is not the whole set');
+    const rates = (all.json.data as any[]).map((r) => r.attributes.multiple_rate_by).filter((v) => v !== null && v !== undefined).map(Number);
+    if (rates.length < 2) return t.skip('fewer than two conversion rates with a value on this tenant: nothing to partition; string, boolean and date operators are covered above');
     const pivot = [...rates].sort((a, b) => a - b)[Math.floor(rates.length / 2)];
     const above = await api('GET', `conversion-rates?filter[multiple_rate_by][gt]=${pivot}&page[size]=100`);
     expectStatus(above, 200);
@@ -221,7 +220,7 @@ describe('number filters on conversion-rates (read-only reference data)', () => 
     const upTo = await api('GET', `conversion-rates?filter[multiple_rate_by][lte]=${pivot}&page[size]=100`);
     expectStatus(upTo, 200);
     for (const row of upTo.json.data) assert.ok(Number(row.attributes.multiple_rate_by) <= pivot, `${row.attributes.multiple_rate_by} <= ${pivot}`);
-    assert.equal(above.json.meta.page.total + upTo.json.meta.page.total, all.json.meta.page.total, 'gt and lte partition the rows');
+    assert.equal(above.json.meta.page.total + upTo.json.meta.page.total, rates.length, 'gt and lte partition the rows that have a value');
   });
 
   it('a number operator takes a decimal with a point and refuses an exponent or NaN', async () => {

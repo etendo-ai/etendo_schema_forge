@@ -58,11 +58,23 @@ export async function expectPatchWithEtag(spec: LifecycleSpec): Promise<void> {
  * PUT is published next to PATCH on every writable resource (the manifest lists it in `operations`)
  * and follows the same If-Match rules (docs/public-api.md 4.2, 4.5): the current ETag applies the
  * write and answers a new ETag, none or `*` is 428, a stale one is 412 and changes nothing.
+ * The OpenAPI lists the required fields on PUT bodies, so `requiredFields` are sent too (omitted fields
+ * are kept, as with PATCH; the server does not reject their omission today, see docs 4.2).
  * Needs `staleEtag` (set by expectPatchWithEtag) for the 412 check.
  */
-export async function expectPutWithEtag(spec: LifecycleSpec, attributes: Record<string, unknown>, staleAttributes: Record<string, unknown>): Promise<void> {
+export async function expectPutWithEtag(
+  spec: LifecycleSpec,
+  changed: Record<string, unknown>,
+  staleChanged: Record<string, unknown>,
+  /** Attributes the OpenAPI lists as `required` on the PUT body of this resource: sent with their current value. */
+  requiredFields: string[] = [],
+): Promise<void> {
+  const current = (await readWithEtag(itemPath(spec))).res.json.data.attributes;
+  const carried = Object.fromEntries(requiredFields.map((field) => [field, current[field]]));
+  const attributes = changed;
+  const staleAttributes = staleChanged;
   const put = (attrs: Record<string, unknown>, ifMatch?: string) => api('PUT', itemPath(spec), {
-    body: resource(spec.type, attrs, undefined, spec.id),
+    body: resource(spec.type, { ...carried, ...attrs }, undefined, spec.id),
     headers: ifMatch === undefined ? {} : { 'If-Match': ifMatch },
   });
   expectErrorDocument(await put(attributes), 428);

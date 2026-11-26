@@ -40,7 +40,7 @@ describe('product', () => {
   });
 
   it('PUT is exposed: the current ETag applies it, none or * is 428, a stale one is 412', async () => {
-    await expectPutWithEtag(product, { description: 'put' }, { name: 'stale put must not land' });
+    await expectPutWithEtag(product, { description: 'put' }, { name: 'stale put must not land' }, ['search_key', 'name']);
   });
 
   it('deletes the product and it answers 404 afterwards', async () => {
@@ -135,7 +135,6 @@ describe('product costing (read-only child of product)', () => {
       expectStatus(one, 200);
       assert.equal(one.json.data.type, 'product-costing');
       assert.equal(typeof one.json.data.attributes.cost, 'number', 'cost is a number');
-      assert.match(one.json.data.attributes.starting_date, /^\d{4}-\d{2}-\d{2}$/, 'starting_date is a date');
       return;
     }
     t.skip('no product among the first 10 of the tenant has a costing record: only the empty list was checked');

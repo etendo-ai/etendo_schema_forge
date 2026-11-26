@@ -142,11 +142,27 @@ describe('scoped', () => {
   });
 });
 
+describe('keepAsLeftover inside a scope', () => {
+  test('flagging a record created before the scope does not shift the scope mark: what the body created is still removed', async () => {
+    handler = () => ({ status: 204 });
+    created.push('sales-order/shared');
+    await cleanup.scoped(async () => {
+      cleanup.keepAsLeftover('sales-order/shared', 'completed order');
+      created.push('product/p1');
+    });
+    assert.deepEqual(calls, ['DELETE product/p1'], 'the scoped record is deleted, the flagged one is not touched');
+    await cleanup.cleanupFrom(0);
+    assert.deepEqual(calls, ['DELETE product/p1'], 'the file-level cleanup skips the flagged record too');
+    assert.deepEqual(created, []);
+    assert.match(captureReport().join('\n'), /sales-order\/shared: completed order/);
+  });
+});
+
 describe('reportLeftBehind', () => {
   test('prints nothing when the run left nothing, and clears the report once printed', async () => {
     assert.deepEqual(captureReport(), []);
     handler = () => ({ status: 422 });
-    created.push('sales-order/o1');
+    created.push('sales-order/report-1');
     await cleanup.cleanupFrom(0);
     assert.equal(captureReport().length, 1);
     assert.deepEqual(captureReport(), [], 'printing clears the report');
