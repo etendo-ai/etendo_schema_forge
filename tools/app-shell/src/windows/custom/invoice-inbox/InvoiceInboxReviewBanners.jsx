@@ -6,6 +6,7 @@ import { confirmFailedDetail, errorCodeLabelKey } from './invoiceInboxMessages.j
 import {
   computeTotals, currencyScale, isSettledStatus, reviewBanners, totalMismatch,
 } from './invoiceInboxReviewModel.js';
+import { ambiguousCurrencyNotices, unavailableCurrencyCode } from './invoiceInboxCurrency.js';
 import { ReviewBanner } from './InvoiceInboxReviewParts.jsx';
 import InvoiceInboxInvoiceLink from './InvoiceInboxInvoiceLink.jsx';
 
@@ -28,6 +29,7 @@ export default function InvoiceInboxReviewBanners({ review }) {
   const ui = useUI();
   const banners = reviewBanners(review);
   const header = review.document?.header;
+  const unavailableCode = unavailableCurrencyCode(review.document);
   if (!banners.length) return null;
   return (
     <div className="flex flex-col gap-2.5" data-testid="invoice-inbox-review-banners">
@@ -89,15 +91,16 @@ export default function InvoiceInboxReviewBanners({ review }) {
               </ReviewBanner>
             );
           case 'blocker': {
+            const unavailable = banner.blocker === 'exchangeRate' && unavailableCode;
             const [titleKey, bodyKey] = BLOCKER_LABEL_KEYS[banner.blocker];
             return (
               <ReviewBanner
                 key={`blocker-${banner.blocker}`}
                 tone="destructive"
                 testId={`invoice-inbox-review-banner-blocker-${banner.blocker}`}
-                title={ui(titleKey)}
+                title={unavailable ? ui('invoiceInboxBlockerCurrencyUnavailable', { code: unavailableCode }) : ui(titleKey)}
                 data-testid="ReviewBanner__838958">
-                {ui(bodyKey)}
+                {unavailable ? ui('invoiceInboxBlockerCurrencyUnavailableBody') : ui(bodyKey)}
               </ReviewBanner>
             );
           }
@@ -160,6 +163,33 @@ export function InvoiceInboxReviewMismatchBanner({ review, currency }) {
         doc: formatMoney(currency, mismatch.document, scale),
       })}
     </ReviewBanner>
+  );
+}
+
+/**
+ * ETP-6051 — the document printed only an ambiguous currency symbol ("$"), so the default currency
+ * was used: one warning per symbol asking the user to check it. Not dismissible: it is a property
+ * of the document, not of the editing session.
+ *
+ * @param {{document: object, currency: string}} props `currency` is the ISO code that was used.
+ */
+export function InvoiceInboxReviewCurrencyNotices({ document, currency }) {
+  const ui = useUI();
+  const notices = ambiguousCurrencyNotices(document);
+  if (!notices.length) return null;
+  return (
+    <div className="flex flex-col gap-2.5" data-testid="invoice-inbox-review-currency-notices">
+      {notices.map(({ symbol }) => (
+        <ReviewBanner
+          key={`currency-symbol-${symbol}`}
+          tone="warning"
+          testId="invoice-inbox-review-currency-symbol-ambiguous"
+          title={ui('invoiceInboxCurrencyAmbiguousTitle')}
+          data-testid="ReviewBanner__currency-ambiguous">
+          {ui('invoiceInboxCurrencyAmbiguousBody', { symbol, iso: currency ?? '' })}
+        </ReviewBanner>
+      ))}
+    </div>
   );
 }
 

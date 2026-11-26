@@ -12,6 +12,7 @@ import {
   fetchPortalHome,
   fetchPortalIdentity,
   fetchPortalLogoBlob,
+  groupPortalSearchResults,
   renewPortalLink,
   requestPortalDecision,
   resolvePortalBaseUrl,
@@ -421,19 +422,60 @@ describe('searchPortalDocuments', () => {
     assert.equal(new URL(calls[0].path, 'http://portal').searchParams.get('q'), 'PR/00');
     // A quotation carries its generated order, when there is one in scope.
     assert.deepEqual(
-      found.map((doc) => [doc.kind, doc.id, doc.orderId, doc.orderNo]),
+      found.documents.map((doc) => [doc.kind, doc.id, doc.orderId, doc.orderNo]),
       [['QUOTATION', 'q-1', 'ord-1', 'PV/0007']],
     );
+    // An older backend without `groups`: the flat matches are grouped by kind here.
+    assert.deepEqual(found.groups.map((g) => [g.kind, g.count, g.documents.length]), [['QUOTATION', null, 1]]);
   });
 
   for (const query of ['', '   ', null]) {
     it(`resolves ${JSON.stringify(query)} to no matches without a request`, async () => {
       const { fetchImpl, calls } = recordingFetch(() => jsonResponse({}));
 
-      assert.deepEqual(await searchPortalDocuments(fetchImpl, TOKEN, query), []);
+      assert.deepEqual(await searchPortalDocuments(fetchImpl, TOKEN, query), { documents: [], groups: [] });
       assert.equal(calls.length, 0);
     });
   }
+});
+
+// ETP-6209 — the search grouped by document kind: the server's `groups` win (their order, their
+// per-kind `count`); without them the flat `documents` are grouped in first-appearance order.
+describe('groupPortalSearchResults', () => {
+  it('takes the server groups as sent, normalising kind, count and rows, dropping empty ones', () => {
+    const groups = groupPortalSearchResults({
+      documents: [{ kind: 'INVOICE', id: 'i-1' }],
+      groups: [
+        { kind: 'invoice', count: '12', documents: [{ kind: 'INVOICE', id: 'i-1', documentNo: 'FV/1' }] },
+        { kind: 'ORDER', count: 0, documents: [] },
+        { kind: 'QUOTATION', documents: [{ kind: 'QUOTATION', id: 'q-1' }] },
+      ],
+    });
+
+    assert.deepEqual(
+      groups.map((g) => [g.kind, g.count, g.documents.map((d) => d.id)]),
+      [['INVOICE', 12, ['i-1']], ['QUOTATION', null, ['q-1']]],
+    );
+    assert.equal(groups[0].documents[0].documentNo, 'FV/1');
+  });
+
+  it('groups the flat documents by kind, newest-first order kept, when no groups are sent', () => {
+    const groups = groupPortalSearchResults({
+      documents: [
+        { kind: 'INVOICE', id: 'i-2' }, { kind: 'QUOTATION', id: 'q-1' }, { kind: 'INVOICE', id: 'i-1' },
+      ],
+    });
+
+    assert.deepEqual(
+      groups.map((g) => [g.kind, g.count, g.documents.map((d) => d.id)]),
+      [['INVOICE', null, ['i-2', 'i-1']], ['QUOTATION', null, ['q-1']]],
+    );
+  });
+
+  it('answers no groups for an empty or malformed body', () => {
+    assert.deepEqual(groupPortalSearchResults({}), []);
+    assert.deepEqual(groupPortalSearchResults(null), []);
+  });
 });
 
 describe('fetchPortalDocument', () => {

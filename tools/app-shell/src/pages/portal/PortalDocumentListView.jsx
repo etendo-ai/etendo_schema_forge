@@ -17,6 +17,125 @@ import {
 
 const SEARCH_DEBOUNCE_MS = 300;
 
+/** The opening range: all time on a search from the URL, else the rolling last month (D-2). */
+function initialRange(search) {
+  return search ? null : defaultPortalRange();
+}
+
+/** Whether two picker values name the same calendar days (presets and `null` compare as is). */
+function sameCalendarRange(a, b) {
+  if (!a || !b || !('from' in a) || !('from' in b)) return a === b;
+  return toCalendarParam(a.from) === toCalendarParam(b.from) && toCalendarParam(a.to) === toCalendarParam(b.to);
+}
+
+/**
+ * What a new `kind` / `search` prop does to the list's own state. `changed`: either prop differs
+ * from the one last rendered. `reset`: start over from the defaults — a new kind, or a new search
+ * from the URL; a search that went away (a document opened over the list, then closed) keeps the
+ * customer's search and filters.
+ */
+function listPropsChange(shown, kind, search) {
+  const kindChanged = shown.kind !== kind;
+  return {
+    changed: kindChanged || shown.search !== search,
+    reset: kindChanged || Boolean(search),
+  };
+}
+
+/**
+ * The range the list asks for and whether the date button is "active". A state tab (CP-18b) shows
+ * all time unless the customer picked a range on that very tab; the others show `range`. Active,
+ * as in the app's toolbar, when the range is not the tab's default (all time on a state tab, the
+ * rolling last month on the others).
+ */
+function listDateState({ group, range, stateRange }) {
+  if (isAllTimeGroup(group)) {
+    const effectiveRange = stateRange.group === group ? stateRange.range : null;
+    return { effectiveRange, dateActive: effectiveRange != null };
+  }
+  return { effectiveRange: range, dateActive: !sameCalendarRange(range, defaultPortalRange()) };
+}
+
+/** The segmented status tabs: the kind's customer-facing groups, the selected one from the URL. */
+function PortalStatusTabs({ tabs, group, onSelect, mobile }) {
+  const ui = useUI();
+  const tabLabel = usePortalTabLabel();
+  return (
+    <div
+      role="tablist"
+      aria-label={ui('portalColStatus')}
+      // Never wraps (M1): on a narrow phone the segmented control scrolls sideways with no visible
+      // scrollbar, as the app's horizontal rails do (`PendingTasksRail`).
+      className={cn('flex overflow-x-auto p-1', mobile ? 'gap-1 rounded-xl bg-[#F3F5F9]' : 'gap-0.5 rounded-lg bg-muted')}
+      style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+    >
+      {tabs.map((tab) => {
+        const selected = (group ?? null) === tab.code;
+        return (
+          <button
+            key={tab.code ?? 'all'}
+            type="button"
+            role="tab"
+            aria-selected={selected}
+            onClick={() => onSelect(tab.code)}
+            className={cn(
+              'rounded-lg font-medium text-foreground',
+              'shrink-0 whitespace-nowrap',
+              mobile ? 'h-8 px-3 text-sm font-normal leading-6' : 'h-8 px-3',
+              selected ? 'bg-card shadow-sm' : '',
+              mobile && selected ? 'font-medium' : '',
+            )}
+            data-testid={`portal-status-tab-${(tab.code ?? 'all').toLowerCase()}${mobile ? '-mobile' : ''}`}
+          >
+            {tabLabel(tab)}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** "Mostrando X de Y" + "Cargar más", or "Todos los registros cargados"; nothing on an empty list. */
+function ListFooter({ shown, total, onLoadMore, loadingMore }) {
+  const ui = useUI();
+  if (shown === 0) return null;
+  const hasMore = shown < total;
+  return (
+    <div className="flex flex-col items-center gap-2" data-testid="portal-pagination">
+      {/* Desktop shows nothing once everything is loaded, as the Figma's table ends on its totals. */}
+      <p className={cn('text-sm text-muted-foreground md:text-xs', hasMore ? '' : 'md:hidden')}>
+        {hasMore
+          ? ui('portalShowingDocuments', { shown, total })
+          : ui('portalAllLoaded')}
+      </p>
+      {hasMore ? (
+        <Button variant="outline" onClick={onLoadMore} disabled={loadingMore} data-testid="portal-load-more">
+          {ui('portalLoadMore')}
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+/** The list's error, or its empty state once loaded; nothing otherwise. */
+function ListState({ failed, empty }) {
+  const ui = useUI();
+  if (failed) {
+    return (
+      <p className="text-sm text-destructive" role="alert" data-testid="portal-list-error">
+        {ui('portalLoadErrorDescription')}
+      </p>
+    );
+  }
+  if (!empty) return null;
+  return (
+    <div className="flex flex-col items-center px-6 py-12 text-center" data-testid="portal-list-empty">
+      <p className="font-medium">{ui('portalListEmpty')}</p>
+      <p className="mt-1 text-sm text-muted-foreground">{ui('portalListEmptyHint')}</p>
+    </div>
+  );
+}
+
 /**
  * One document kind's list (design Listado / Movil-Listado).
  *
@@ -28,7 +147,10 @@ const SEARCH_DEBOUNCE_MS = 300;
  * payment state and outstanding; shipments carry no amounts. A totals row closes the table and
  * "Todos los registros cargados" the list. Checkboxes and "Descargar seleccionados" are out (PO
  * answer: bulk download is a performance risk; a document downloads from its detail), and so are
- * the advanced "Filtros"; the funnel carries the document-type quick filter (CP-16).
+ * the advanced "Filtros". The status is filtered by the tabs alone; the other quick filters —
+ * document type (CP-16) and date range — are the app list toolbar's own controls
+ * (`PortalListFilters.jsx`, ETP-6209), in the funnel's panel on mobile. A `search` from the URL
+ * (`q`) opens the list on that search, all time.
  *
  * **Every figure refers to the set shown** (QA 24/11 f): the header's count chip, "Mostrando X de
  * Y" and the totals row all come from the current query (kind, tab, type, range, search). The
@@ -36,18 +158,20 @@ const SEARCH_DEBOUNCE_MS = 300;
  * overdue invoices) — and say so in their tooltip.
  */
 export default function PortalDocumentListView({
-  apiFetch, token, kind, group = null, identity = null, logoUrl = null, onNavigate, onInvalid,
+  apiFetch, token, kind, group = null, search: initialSearch = null, identity = null, logoUrl = null,
+  onNavigate, onInvalid,
 }) {
   const ui = useUI();
-  const tabLabel = usePortalTabLabel();
-  // The range of the period tabs (Todos, Pagado, Aceptado…): the rolling last month by default.
-  const [range, setRange] = useState(() => defaultPortalRange());
+  // The range of the period tabs (Todos, Pagado, Aceptado…): the rolling last month by default —
+  // all time when the list opens on a search ("Ver todos en …" of Inicio's search, ETP-6209),
+  // whose hits are not limited to a period, so the list shows what the search found.
+  const [range, setRange] = useState(() => initialRange(initialSearch));
   // A range the customer picked while on a state tab, for that tab only (QA pass 3).
   const [stateRange, setStateRange] = useState({ group: null, range: null });
-  // CP-16: the document type inside the kind (invoice / credit note), from the funnel.
+  // CP-16: the document type inside the kind (invoice / credit note), from the type selector.
   const [subtype, setSubtype] = useState(null);
-  const [searchInput, setSearchInput] = useState('');
-  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState(initialSearch ?? '');
+  const [search, setSearch] = useState(initialSearch ?? '');
   const [page, setPage] = useState(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
@@ -63,14 +187,21 @@ export default function PortalDocumentListView({
   // first commit — on mount too — and its fresh `defaultPortalRange()` object changed the query, so
   // every list was requested twice (QA pass 3: each GET /documents went out twice). Now the first
   // commit already holds the final state, and a mount or a kind change sends one request.
-  const [shownKind, setShownKind] = useState(kind);
-  if (shownKind !== kind) {
-    setShownKind(kind);
-    setRange(defaultPortalRange());
-    setStateRange({ group: null, range: null });
-    setSubtype(null);
-    setSearchInput('');
-    setSearch('');
+  // The same for a new search from the URL (`q`, ETP-6209): "Ver todos en …" of Inicio's search
+  // opens the list on that search even when this kind's list is already mounted. A `q` that goes
+  // away (a document opened over the list, then closed) changes nothing: the customer's own search
+  // and filters stay as they were.
+  const [shown, setShown] = useState({ kind, search: initialSearch });
+  const change = listPropsChange(shown, kind, initialSearch);
+  if (change.changed) {
+    setShown({ kind, search: initialSearch });
+    if (change.reset) {
+      setRange(initialRange(initialSearch));
+      setStateRange({ group: null, range: null });
+      setSubtype(null);
+      setSearchInput(initialSearch ?? '');
+      setSearch(initialSearch ?? '');
+    }
   }
 
   // CP-18b + QA pass 3: a "state" tab (Vencido, Pendiente, Bajo evaluación, En proceso) lists
@@ -79,8 +210,7 @@ export default function PortalDocumentListView({
   // by an effect: entering the tab sends one request, and going back to a period tab restores the
   // range the customer had there.
   const allTimeTab = isAllTimeGroup(group);
-  const stateTabRange = stateRange.group === group ? stateRange.range : null;
-  const effectiveRange = allTimeTab ? stateTabRange : range;
+  const { effectiveRange, dateActive } = listDateState({ group, range, stateRange });
   const changeRange = useCallback((next) => {
     if (allTimeTab) setStateRange({ group, range: next });
     else setRange(next);
@@ -141,7 +271,6 @@ export default function PortalDocumentListView({
 
   const documents = page?.documents ?? [];
   const totalCount = page?.totalCount ?? 0;
-  const hasMore = documents.length < totalCount;
   const plural = ui(PORTAL_KIND_META[kind].pluralKey);
   // The document keeps this list's tab, so closing it returns here as it was.
   const open = (document) => onNavigate({
@@ -150,40 +279,6 @@ export default function PortalDocumentListView({
   const selectGroup = (code) => onNavigate(code ? { view: 'list', kind, group: code } : { view: 'list', kind });
 
   const tabs = [{ code: null, labelKey: 'portalStatusAll' }, ...(PORTAL_KIND_GROUPS[kind] ?? [])];
-  const renderTabs = (mobile) => (
-    <div
-      role="tablist"
-      aria-label={ui('portalColStatus')}
-      // Never wraps (M1): on a narrow phone the segmented control scrolls sideways with no visible
-      // scrollbar, as the app's horizontal rails do (`PendingTasksRail`).
-      className={cn('flex overflow-x-auto p-1', mobile ? 'gap-1 rounded-xl bg-[#F3F5F9]' : 'gap-0.5 rounded-lg bg-muted')}
-      style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-    >
-      {tabs.map((tab) => {
-        const selected = (group ?? null) === tab.code;
-        return (
-          <button
-            key={tab.code ?? 'all'}
-            type="button"
-            role="tab"
-            aria-selected={selected}
-            onClick={() => selectGroup(tab.code)}
-            className={cn(
-              'rounded-lg font-medium text-foreground',
-              'shrink-0 whitespace-nowrap',
-              mobile ? 'h-8 px-3 text-sm font-normal leading-6' : 'h-8 px-3',
-              selected ? 'bg-card shadow-sm' : '',
-              mobile && selected ? 'font-medium' : '',
-            )}
-            data-testid={`portal-status-tab-${(tab.code ?? 'all').toLowerCase()}${mobile ? '-mobile' : ''}`}
-          >
-            {tabLabel(tab)}
-          </button>
-        );
-      })}
-    </div>
-  );
-
   const searchPill = (mobile) => (
     <PortalSearchPill
       value={searchInput}
@@ -193,38 +288,6 @@ export default function PortalDocumentListView({
       className={mobile ? 'flex-1' : undefined}
       data-testid="PortalSearchPill__c7f7d2" />
   );
-
-  const footer = documents.length > 0 ? (
-    <div className="flex flex-col items-center gap-2" data-testid="portal-pagination">
-      {/* Desktop shows nothing once everything is loaded, as the Figma's table ends on its totals. */}
-      <p className={cn('text-sm text-muted-foreground md:text-xs', hasMore ? '' : 'md:hidden')}>
-        {hasMore
-          ? ui('portalShowingDocuments', { shown: documents.length, total: totalCount })
-          : ui('portalAllLoaded')}
-      </p>
-      {hasMore ? (
-        <Button variant="outline" onClick={loadMore} disabled={loadingMore} data-testid="portal-load-more">
-          {ui('portalLoadMore')}
-        </Button>
-      ) : null}
-    </div>
-  ) : null;
-
-  let state = null;
-  if (failed) {
-    state = (
-      <p className="text-sm text-destructive" role="alert" data-testid="portal-list-error">
-        {ui('portalLoadErrorDescription')}
-      </p>
-    );
-  } else if (!loading && documents.length === 0) {
-    state = (
-      <div className="flex flex-col items-center px-6 py-12 text-center" data-testid="portal-list-empty">
-        <p className="font-medium">{ui('portalListEmpty')}</p>
-        <p className="mt-1 text-sm text-muted-foreground">{ui('portalListEmptyHint')}</p>
-      </div>
-    );
-  }
 
   return (
     <>
@@ -246,16 +309,13 @@ export default function PortalDocumentListView({
           {searchPill(true)}
           <PortalMobileFilters
             kind={kind}
-            tabs={tabs}
-            group={group}
-            onGroup={selectGroup}
             subtype={subtype}
             onSubtype={setSubtype}
             range={effectiveRange}
             onRange={changeRange}
             data-testid="PortalMobileFilters__c7f7d2" />
         </div>
-        {renderTabs(true)}
+        <PortalStatusTabs tabs={tabs} group={group} onSelect={selectGroup} mobile data-testid="PortalStatusTabs__c7f7d2" />
       </header>
 
       <PortalDesktopHeader
@@ -281,10 +341,13 @@ export default function PortalDocumentListView({
           onRange={changeRange}
           subtype={subtype}
           onSubtype={setSubtype}
+          dateActive={dateActive}
           onRefresh={() => setReload((value) => value + 1)}
           data-testid="DesktopToolbar__c7f7d2" />
 
-        <div className="md:px-3">{state}</div>
+        <div className="md:px-3">
+          <ListState failed={failed} empty={!loading && documents.length === 0} data-testid="ListState__c7f7d2" />
+        </div>
 
         {documents.length > 0 ? (
           <>
@@ -311,7 +374,14 @@ export default function PortalDocumentListView({
           </>
         ) : null}
 
-        <div className="md:py-3">{footer}</div>
+        <div className="md:py-3">
+          <ListFooter
+            shown={documents.length}
+            total={totalCount}
+            onLoadMore={loadMore}
+            loadingMore={loadingMore}
+            data-testid="ListFooter__c7f7d2" />
+        </div>
       </PortalMain>
       {cardActions.popups}
     </>

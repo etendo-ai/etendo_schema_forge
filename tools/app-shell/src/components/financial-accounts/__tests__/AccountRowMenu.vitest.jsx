@@ -450,6 +450,23 @@ describe('AccountRowMenu — "Sincronizar ahora" and the shared bank-sync state'
     expect(item.className).toMatch(/data-\[disabled\]:pointer-events-none/);
   });
 
+  it('disables disconnect and delete-connection while a sync of the account runs, and re-enables them after', async () => {
+    renderInWindow();
+    await act(async () => { sibling.bankSync.startSync('acc-1'); });
+    openMenu();
+
+    expect(await screen.findByTestId('account-row-menu-disconnect-acc-1')).toHaveAttribute('data-disabled');
+    expect(screen.getByTestId('account-row-menu-delete-connection-acc-1')).toHaveAttribute('data-disabled');
+  });
+
+  it('keeps disconnect and delete-connection enabled while idle', async () => {
+    renderInWindow();
+    openMenu();
+
+    expect(await screen.findByTestId('account-row-menu-disconnect-acc-1')).not.toHaveAttribute('data-disabled');
+    expect(screen.getByTestId('account-row-menu-delete-connection-acc-1')).not.toHaveAttribute('data-disabled');
+  });
+
   it('is offered again once the sync finishes', async () => {
     renderInWindow();
     await act(async () => { sibling.bankSync.startSync('acc-1'); });

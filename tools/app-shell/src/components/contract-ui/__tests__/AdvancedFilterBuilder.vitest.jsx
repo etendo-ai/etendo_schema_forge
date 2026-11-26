@@ -1,3 +1,4 @@
+// @covers tools/app-shell/src/components/contract-ui/AdvancedFilterBuilder.jsx
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
@@ -34,18 +35,6 @@ vi.mock('@/components/ui/select.jsx', () => ({
   ),
   SelectContent: ({ children }) => <>{children}</>,
   SelectItem: ({ children, value }) => <option value={value}>{children}</option>,
-}));
-
-// Mock dependencies
-vi.mock('@/lib/gridQuery', () => ({
-  resolveFilterMode: (col) => {
-    if (col.type === 'date') return 'date';
-    if (col.type === 'number' || col.type === 'amount') return 'numeric';
-    if (col.type === 'status') return 'enumLabel';
-    if (col.type === 'boolean') return 'booleanLabel';
-    return 'text';
-  },
-  getDisplayText: () => '',
 }));
 
 // Mutable holder so individual tests can inject the distinct endpoint values.

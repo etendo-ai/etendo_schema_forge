@@ -606,7 +606,7 @@ describe('registry', () => {
 
     it('lists its entries in order for an admin', () => {
       const result = run({ capabilities: { isAdminOrClientAdmin: true }, allowedIds: null, reportAccess: {} });
-      expect(taxesNames(result)).toEqual(['tax', 'tax-category', 'fiscal-monitor', 'report-viewer-taxes', 'fiscal-config', 'fiscal-models']);
+      expect(taxesNames(result)).toEqual(['tax', 'tax-category', 'fiscal-monitor', 'fiscal-config', 'fiscal-models', 'report-viewer-taxes']);
     });
 
     it('hides the Taxes Reports link with the anchor window but no Tax Report grant', () => {
@@ -626,7 +626,7 @@ describe('registry', () => {
         .map(g => ({ ...g, items: g.items.filter(i => isSearchableMenuItem(i)) }));
       const result = filterMenuGroups(groups, 'impuestos', translate);
       const taxes = result.find(g => g.group === 'Taxes');
-      expect(taxes.items.map(i => i.name)).toEqual(['tax', 'tax-category', 'fiscal-monitor', 'report-viewer-taxes', 'fiscal-config', 'fiscal-models']);
+      expect(taxes.items.map(i => i.name)).toEqual(['tax', 'tax-category', 'fiscal-monitor', 'fiscal-config', 'fiscal-models', 'report-viewer-taxes']);
       // A moved window is found under Taxes, not under its old group.
       const byName = filterMenuGroups(groups, 'Fiscal Configuration', translate);
       expect(byName.map(g => g.group)).toEqual(['Taxes']);

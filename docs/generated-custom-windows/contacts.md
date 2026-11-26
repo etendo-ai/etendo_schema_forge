@@ -177,7 +177,7 @@ The Contacts window should let users maintain a shared business-partner master r
 - `modules/com.etendoerp.go/src-test/src/com/etendoerp/go/schemaforge/ContactNameSyncHandlerTest.java` contains 14 JUnit 5 unit tests (>80 % coverage) for `ContactNameSyncHandler`: happy paths (first-name-only change, last-name-only, both changed, trimming, null partial names), isPerson guards (false, null), no-changes guard, blank-name guard, isValidEvent guards (TriggerHandler disabled, wrong entity), and getObservedEntities caching. Uses `MockedStatic<ModelProvider>` and `MockedStatic<TriggerHandler>`; resets the static `entities` field via reflection in `@BeforeEach`.
 - `tools/app-shell/src/lib/apiError.js` is the shared utility for parsing non-ok fetch Responses into human-readable error messages. It supports NEO Headless format (`{error: {message}}`), Etendo JsonDataService format (`{response: {error: {message|string}}}`), top-level `{message}`, and falls back to `Error ${status}` for non-JSON bodies. `ContactsTable.jsx` is the only place in the app-shell that still imports it (its own `confirmDelete`), and that path is unreachable dead code for this window (see the `ContactsTable.jsx` bullet above) — bulk delete never uses it (it goes through `extractErrorMessage` from `useEntity.js` in the generic `useBulkRowDelete`, see above).
 - `tools/app-shell/src/components/contract-ui/DataTable.jsx` now accepts `clearSelectionTrigger` (number, default 0); a `useEffect` watching it resets the internal `selectedRows` Set when the value increments. `ListView.jsx` owns a `clearSelectionCounter` state, increments it as part of its `clearSelection` callback, and passes it as `clearSelectionTrigger`. This ensures checkboxes are visually cleared when the X button is pressed, not just the parent's array state.
-- `tools/app-shell/src/lib/__tests__/apiError.test.js`, `tools/app-shell/src/components/ui/__tests__/checkbox.test.js`, `tools/app-shell/src/components/ui/__tests__/custom-icons.test.js`, and a new `buildCriteria` describe block in `tools/app-shell/src/lib/__tests__/gridQuery.test.js` provide automated regression coverage for the ETP-3660 additions.
+- `tools/app-shell/src/lib/__tests__/apiError.test.js`, `tools/app-shell/src/components/ui/__tests__/checkbox.test.js`, `tools/app-shell/src/components/ui/__tests__/custom-icons.test.js`, and a new `buildCriteria` describe block in schema_forge_core `packages/app-shell-core/src/lib/__tests__/gridQuery.test.js` provide automated regression coverage for the ETP-3660 additions.
 - `tools/app-shell/src/windows/custom/contacts/__tests__/ContactsFinancialPanel.test.js` (ETP-3660) — 9 source-read assertions covering `CreditLimitStepper` debounce behavior (debounceRef declaration, clearTimeout before scheduling, 400 ms delay, null reset after firing, useEffect cleanup on unmount, absence of the old direct `setTimeout(onBlur, 0)`), the `<hr>` separator presence, and `BillingPreferencesForm` props wiring.
 - `tools/app-shell/src/components/ui/__tests__/add-line-button-hide-chevron.test.js` (ETP-3660) — 5 source-read assertions verifying the `hideChevron` prop default, the `!hideChevron` guard around divider and dropdown, full `borderRadius: 7` when chevron is hidden, primary button always rendered, and `DIVIDER_STYLE` rendered only inside the `!hideChevron` block.
 - No contacts-window-specific E2E test was found in the current repo. Generic route-loading and shared entity-flow evidence lives in `docs/generated-custom-windows/app-shell-functional-flows.md`, including registry-backed window loading and shared child-refresh/defaults behavior.
@@ -1984,3 +1984,31 @@ is the customer portal link (contacts action `portalLink`, com.etendoerp.go
 first pilots of MCP test `w-portal-link` the agent handed over the record URL instead. The text lives
 in this window's `decisions.json` and in `com.etendoerp.go`'s `ETGO_SF_ENTITY` sourcedata; keep both
 equal.
+
+## ETP-6225 — Import: phones with spaces, and the phone error on its column
+
+**The `isPhone` flag.** `window.import.fields[etgoPhone]` declares `"isPhone": true`. The core import
+dialog (`@etendo-ai/app-shell-core`, `lib/import/normalizePhone.js`) only normalizes the columns that
+declare it, never by guessing from the field name. On those columns it removes whitespace before the
+review-time check and before sending: `+34 910 565 400` is sent as `+34910565400`, and a numeric Excel
+cell comes back as plain digits (no `.0`, no exponent). A leading apostrophe is kept, so
+`'+34 910 565 400` is still refused. Without the flag none of this runs, and every spaced phone reached
+the backend as typed. QA pass 2 caught exactly that: the core change had shipped, but this window never
+declared the flag. `importTemplateRoundTrip.vitest.js` now fails if the flag is dropped. The contact
+person's `phone` (`AD_User.Phone`, `headerScope: contact`) deliberately has no flag: the backend applies
+no 15-character rule to it.
+
+The review-time message is the `importErrorInvalidPhone` key, in `en_US`, `es_ES` and `es_AR`. The core
+PR used the key without adding it, so the cell showed the English fallback until the manual QA of this fix.
+
+**Server side.** `BusinessPartnerHandler` (com.etendoerp.go) also strips whitespace from an incoming
+`etgoPhone` (`stripPhoneWhitespace`) before the format check and before the value is stored. That covers
+every channel (form, import, `/batch`, MCP): `+34 (910) 565-400` is accepted and stored as
+`+34(910)565-400` (15 characters). A persisted phone is compared without its spaces too, so a legacy
+`+34 910 565 400` sent back unchanged by an edit form is still treated as unchanged. A rejected phone,
+NIF, email or website comes back as a 400 keyed by field (`response.errors.<field>`), and the import
+review marks that column in red with the message instead of showing a generic row error.
+
+**Export.** The CSV export writes the phone without spaces and without a leading `'`. Formula
+neutralization still applies to real formula payloads (`docs/security/csv-neutralization-fixtures.md`
+in com.etendoerp.go), so an exported file re-imports unchanged.

@@ -104,13 +104,20 @@ function useInboxFileIntake(enqueue, ui) {
   }, [enqueue, ui]);
 }
 
+/** Long enough to read a result: success 6 s, warning and error 10 s (the global default is ~4 s), dismissable. */
+const TOAST_SUCCESS_MS = 6000;
+const TOAST_PROBLEM_MS = 10000;
+function toastOptions(tone) {
+  return { duration: tone === 'success' ? TOAST_SUCCESS_MS : TOAST_PROBLEM_MS, closeButton: true };
+}
+
 /** Shows the outcome of a discard batch. `reasonText` is already translated (a network error). */
 function showDiscardToast(result, ui) {
   if (!result.total) return;
   const { tone, key, params, reason } = discardToast(result);
   const reasonParam = reason ? { reason: reason.reasonText ?? ui(reason.reasonKey) } : {};
   // `tone` is a sonner method name: success, warning or error.
-  toast[tone](ui(key, { ...params, ...reasonParam }));
+  toast[tone](ui(key, { ...params, ...reasonParam }), toastOptions(tone));
 }
 
 /**
@@ -137,7 +144,7 @@ function showConfirmToast(result, ui) {
   if (!result.total) return;
   const { tone, text } = confirmToastText(result, ui);
   // `tone` is a sonner method name: success, warning or error.
-  toast[tone](text);
+  toast[tone](text, toastOptions(tone));
 }
 
 /**

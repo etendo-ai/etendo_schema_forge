@@ -1,6 +1,6 @@
 // @covers tools/app-shell/src/components/contract-ui/DataTable.cellRenderers.jsx
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 
 const statusLabelMock = vi.fn((raw, _dict, _translate, enumLabels) => {
   if (enumLabels?.[raw] != null) return `enum:${enumLabels[raw]}`;
@@ -557,6 +557,42 @@ describe('renderMultiFieldCell', () => {
     expect(chip.parentElement.className).toBe(
       'inline-flex max-w-full items-center px-2 py-0.5 bg-[hsl(var(--muted))] rounded-full text-xs text-[hsl(var(--muted-foreground))] leading-4 w-fit',
     );
+  });
+
+  // ETP-5572 — the identifier chip clipped a long searchKey with no way to read it; it now
+  // reveals the full value in a tooltip, as the title does, and only when it was clipped.
+  it('reveals a clipped identifier in a tooltip', () => {
+    const long = 'TEST-QA-5492-STOCK-CERO-CON-PRECIO-Y-COSTE';
+    renderCell(renderMultiFieldCell({
+      row: { id: '1', name: 'Widget A', searchKey: long },
+      col: { key: 'name', type: 'multiField', title: 'name', subtitle: 'searchKey' },
+      token: 'tok',
+      apiBaseUrl: '/api',
+    }));
+
+    const chip = screen.getByTestId('TruncatedText__mf5572');
+    expect(chip).not.toHaveClass('w-full');
+    Object.defineProperty(chip, 'scrollWidth', { configurable: true, value: 400 });
+    Object.defineProperty(chip, 'clientWidth', { configurable: true, value: 120 });
+    fireEvent.focus(chip);
+
+    expect(screen.getByTestId('TruncatedText__mf5572-tooltip')).toHaveTextContent(long);
+  });
+
+  it('keeps a fitting identifier without a tooltip', () => {
+    renderCell(renderMultiFieldCell({
+      row: { id: '1', name: 'Widget A', searchKey: 'SKU-1' },
+      col: { key: 'name', type: 'multiField', title: 'name', subtitle: 'searchKey' },
+      token: 'tok',
+      apiBaseUrl: '/api',
+    }));
+
+    const chip = screen.getByTestId('TruncatedText__mf5572');
+    Object.defineProperty(chip, 'scrollWidth', { configurable: true, value: 40 });
+    Object.defineProperty(chip, 'clientWidth', { configurable: true, value: 120 });
+    fireEvent.focus(chip);
+
+    expect(screen.queryByTestId('TruncatedText__mf5572-tooltip')).toBeNull();
   });
 
   it('omits the subtitle chip when row[col.subtitle] is absent', () => {

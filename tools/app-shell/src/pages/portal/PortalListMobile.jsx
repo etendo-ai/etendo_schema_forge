@@ -1,7 +1,6 @@
 import { useCallback, useState } from 'react';
 import {
-  CalendarBlankIcon, CalendarCheckIcon, CalendarXIcon, CheckIcon, DotsThreeVerticalIcon, FileTextIcon,
-  FunnelIcon,
+  CalendarBlankIcon, CalendarCheckIcon, CalendarXIcon, DotsThreeVerticalIcon, FileTextIcon, FunnelIcon,
 } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { useUI } from '@/i18n';
@@ -11,6 +10,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { DateRangePopoverContent } from '@/components/ui/date-range-popover';
+import { PortalTypeSelect } from './PortalListFilters.jsx';
 import {
   PORTAL_ERROR, fetchPortalDocument, fetchPortalDocumentPdf,
 } from '@/lib/portal/portalApi.js';
@@ -18,7 +18,7 @@ import { portalPdfFileName } from '@/lib/portal/portalInvoices.js';
 import { saveBlobAsFile } from '@/lib/portal/portalDownload.js';
 import {
   PortalDate, PortalDocumentStatus, PortalInvoiceTypeBadge, PortalMoney, PortalRowBadge,
-  PORTAL_ROW_FOCUS, usePortalTabLabel,
+  PORTAL_ROW_FOCUS,
 } from './PortalBits.jsx';
 import {
   PORTAL_ACCEPT_ENABLED, PORTAL_KIND_SUBTYPES, canOfferDecision, quotationValidity,
@@ -32,38 +32,19 @@ import { isCompletedStatus } from '../../lib/docStatus.js';
  * app's (PO decision), through the same badges and tab labels as desktop.
  */
 
-/** One option row of the filter sheet, with the check of the committed value. */
-function FilterOption({ selected, onSelect, testId, children }) {
-  return (
-    <button
-      type="button"
-      aria-pressed={selected}
-      onClick={onSelect}
-      className={cn(
-        'flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm leading-5',
-        selected ? 'bg-[#F3F5F9] font-medium text-[#1B1A1F]' : 'text-[#40465C]',
-      )}
-      data-testid={testId}
-    >
-      <CheckIcon size={16} className={selected ? 'opacity-100' : 'opacity-0'} aria-hidden="true" data-testid="Check__f2a7c1" />
-      {children}
-    </button>
-  );
-}
-
 /**
- * The mobile funnel (QA CP-37, redesign 2026-11-25): the same quick filters as desktop — the
- * document type of a kind that mixes types, the status (the list's tabs) and the date range (the
- * app's own range picker) — in one sheet under the button.
+ * The mobile funnel (QA CP-37, redesign 2026-11-25; ETP-6209 product decision): the same quick
+ * filters as desktop and as the app's list toolbar — the document type of a kind that mixes types
+ * as the toolbar's selector button, and the date range as the shared picker in its compact layout
+ * (preset pills; "Personalizado" stacks the two calendars), so nothing is wider than the panel from
+ * 320px up. The status is not here: the status tabs under the search already filter it.
  */
 export function PortalMobileFilters({
-  kind, tabs, group, onGroup, subtype = null, onSubtype, range, onRange,
+  kind, subtype = null, onSubtype, range, onRange,
 }) {
   const ui = useUI();
-  const tabLabel = usePortalTabLabel();
   const [open, setOpen] = useState(false);
-  const subtypes = PORTAL_KIND_SUBTYPES[kind] ?? null;
-  const section = 'px-2 pb-1 pt-2 text-xs font-semibold leading-4 text-[#6B7280]';
+  const section = 'px-1 pb-1 pt-2 text-xs font-semibold leading-4 text-[#6B7280]';
   return (
     <Popover open={open} onOpenChange={setOpen} data-testid="Popover__f2a7c1">
       <PopoverTrigger asChild data-testid="PopoverTrigger__f2a7c1">
@@ -79,43 +60,22 @@ export function PortalMobileFilters({
       </PopoverTrigger>
       <PopoverContent
         align="end"
-        className="max-h-[70vh] w-[calc(100vw-32px)] max-w-sm overflow-y-auto p-2"
+        collisionPadding={16}
+        className="max-h-[min(80vh,var(--radix-popover-content-available-height))] w-[calc(100vw-32px)] max-w-sm overflow-y-auto overflow-x-hidden p-2"
         data-testid="portal-list-filters-mobile-panel"
       >
-        {subtypes ? (
-          <div role="group" aria-label={ui('documentType')}>
-            <p className={section}>{ui('documentType')}</p>
-            {[{ code: null, labelKey: 'portalStatusAll' }, ...subtypes].map((option) => (
-              <FilterOption
-                key={option.code ?? 'all'}
-                selected={(subtype ?? null) === option.code}
-                onSelect={() => onSubtype?.(option.code)}
-                testId={`portal-list-subtype-${(option.code ?? 'all').toLowerCase()}-mobile`}
-                data-testid="FilterOption__f2a7c1">
-                {ui(option.labelKey)}
-              </FilterOption>
-            ))}
+        {PORTAL_KIND_SUBTYPES[kind] ? (
+          <div className="flex flex-wrap items-center gap-2 border-b border-[#E3E7EC] px-1 pb-2" data-testid="portal-list-filters-mobile-selects">
+            <PortalTypeSelect kind={kind} subtype={subtype} onSubtype={onSubtype} suffix="-mobile" data-testid="PortalTypeSelect__f2a7c1" />
           </div>
         ) : null}
-        <div role="group" aria-label={ui('portalColStatus')}>
-          <p className={section}>{ui('portalColStatus')}</p>
-          {tabs.map((tab) => (
-            <FilterOption
-              key={tab.code ?? 'all'}
-              selected={(group ?? null) === tab.code}
-              onSelect={() => onGroup(tab.code)}
-              testId={`portal-list-filter-${(tab.code ?? 'all').toLowerCase()}-mobile`}
-              data-testid="FilterOption__f2a7c1">
-              {tabLabel(tab)}
-            </FilterOption>
-          ))}
-        </div>
         <div role="group" aria-label={ui('portalDateRange')} data-testid="portal-list-filters-mobile-range">
           <p className={section}>{ui('portalDateRange')}</p>
           <DateRangePopoverContent
             value={range}
             onChange={onRange}
             onClose={() => setOpen(false)}
+            layout="compact"
             data-testid="DateRangePopoverContent__f2a7c1" />
         </div>
       </PopoverContent>

@@ -21,7 +21,7 @@ const groups = {
   Finance: 'chart-of-accounts cost-center service-project general-ledger-configuration calendar assets asset-group amortization not-posted-documents manual-journals report-viewer-finance',
   // ETP-6380 — Impuestos: the fiscal windows out of Finance, an Informes link holding only the Tax
   // Report, and Configuración fiscal (moved from Settings).
-  Taxes: 'tax tax-category fiscal-monitor report-viewer-taxes fiscal-config fiscal-models',
+  Taxes: 'tax tax-category fiscal-monitor fiscal-config fiscal-models report-viewer-taxes',
   Connections: 'authorize',
   Settings: 'organization document-sequence business-partner-category user roles api-keys document-templates acct-process-monitor conversion-rates',
 };
@@ -91,8 +91,6 @@ export const defaultNavigation = Object.entries(groups).flatMap(([group, names])
 export const optionalNavigation = [
   { name: 'quick-sales-order', group: 'Proof of Concept', path: 'quick-sales-order', proof: true },
   { name: 'quick-purchase-order', group: 'Proof of Concept', path: 'quick-purchase-order', proof: true },
-  // Unified Calendar PoC: inside the Proof of Concept group (`proof`) AND behind its own item flag.
-  { name: 'unified-calendar', group: 'Proof of Concept', path: 'unified-calendar', proof: true, flag: 'unified-calendar-poc' },
   { name: 'app-store', group: 'Marketplace', path: 'app-store', marketplace: true },
   { name: 'spike-hello-app', group: 'Marketplace', path: 'spike-hello-app', marketplace: true, app: 'spike-hello-app' },
   { name: 'quick-order-sales', group: 'Sales', path: 'quick-order-sales', app: 'quick-order' },

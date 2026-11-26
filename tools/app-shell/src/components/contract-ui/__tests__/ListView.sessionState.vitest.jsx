@@ -82,7 +82,7 @@ vi.mock('@/hooks/useWindowFilterPresets', () => ({
   useWindowFilterPresets: () => ({ presets: {}, savePreset: vi.fn(), deletePreset: vi.fn() }),
 }));
 
-vi.mock('@/lib/gridQuery', () => ({
+vi.mock('@etendo-ai/app-shell-core/lib/gridQuery.js', () => ({
   // Like the real builder, nothing comes out until the Table has reported its columns
   // (the real one drops every condition whose column it does not know) — ETP-6166.
   buildAdvancedFilterCriteria: (advancedFilter, columns) =>

@@ -268,7 +268,8 @@ export function toCalendarParam(date) {
  * (`/portal/:token`) and never here.
  *
  * - `{ view: 'home' }`
- * - `{ view: 'list', kind, group? }` — `group` one of the kind's tabs ({@link PORTAL_KIND_GROUPS})
+ * - `{ view: 'list', kind, group?, q? }` — `group` one of the kind's tabs ({@link PORTAL_KIND_GROUPS});
+ *   `q` the search the list opens on (ETP-6209: "Ver todos en …" of Inicio's search), trimmed
  * - `{ view: 'doc', kind, id, group? }` — `group`: the list tab the document was opened from
  */
 export function readPortalView(searchParams) {
@@ -279,7 +280,10 @@ export function readPortalView(searchParams) {
   const id = searchParams.get('id');
   const group = searchParams.get('group');
   if (view === 'list' && PORTAL_KIND_META[kind]) {
-    return isPortalGroup(kind, group) ? { view: 'list', kind, group } : { view: 'list', kind };
+    const q = searchParams.get('q')?.trim();
+    return {
+      view: 'list', kind, ...(isPortalGroup(kind, group) ? { group } : {}), ...(q ? { q } : {}),
+    };
   }
   // A document keeps the list tab it was opened from (the list stays underneath it on desktop).
   if (view === 'doc' && PORTAL_KIND_META[kind] && id) {
@@ -289,12 +293,17 @@ export function readPortalView(searchParams) {
   return null;
 }
 
-/** The search string of a view (see {@link readPortalView}): view, kind, id and group only. */
+/**
+ * The search string of a view (see {@link readPortalView}): view, kind, id, group and — on a list
+ * only — the search `q`. Nothing else, so no token or stray field ever reaches the URL.
+ */
 export function writePortalView(target) {
   const params = new URLSearchParams();
   params.set('view', target.view);
   if (target.kind) params.set('kind', target.kind);
   if (target.id) params.set('id', target.id);
   if (target.group) params.set('group', target.group);
+  const q = target.view === 'list' ? String(target.q ?? '').trim() : '';
+  if (q) params.set('q', q);
   return params;
 }

@@ -39,7 +39,7 @@ import { ScrollPane } from '@etendo-ai/app-shell-core/components/ui/scroll-pane.
 import { useWindowImportDialog } from './useWindowImportDialog.js';
 import { useListToolbarTabsFit } from './useListToolbarTabsFit.js';
 import SegmentedTabs from './SegmentedTabs.jsx';
-import { buildAdvancedFilterCriteria, extractQueryParamConditions } from '@/lib/gridQuery';
+import { buildAdvancedFilterCriteria, extractQueryParamConditions } from '@etendo-ai/app-shell-core/lib/gridQuery.js';
 import { useCapabilitiesSafe } from '@/hooks/useCapabilitiesSafe.js';
 import { isCapabilityVisible } from '@/lib/capabilityVisibility.js';
 import {

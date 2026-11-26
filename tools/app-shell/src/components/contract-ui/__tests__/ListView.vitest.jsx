@@ -109,10 +109,10 @@ vi.mock('../ListFilterBar.jsx', () => ({
     return <div data-testid="list-filter-bar" />;
   },
 }));
-vi.mock('@/lib/gridQuery', () => ({
+vi.mock('@etendo-ai/app-shell-core/lib/gridQuery.js', () => ({
   buildAdvancedFilterCriteria: () => null,
   // ETP-5188 — real no-op contract (see `extractQueryParamConditions` in
-  // `@/lib/gridQuery.js`): with no `toQueryParams`-declaring column intercepting any
+  // `@etendo-ai/app-shell-core/lib/gridQuery.js`): with no `toQueryParams`-declaring column intercepting any
   // row (this suite's fixtures only use plain columns), it hands back the advancedFilter
   // unchanged as `conditions` and no `extraParams`.
   extractQueryParamConditions: (advancedFilter) => ({ conditions: advancedFilter, extraParams: null }),
