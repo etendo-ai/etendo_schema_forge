@@ -14,7 +14,10 @@ import { getSessionIdentity } from '../sessionIdentity.js';
  * (or null). It does three things, all keyed by the same stable feature key:
  *   1. binds the key to this tab for first-party NEO requests (`X-Etendo-Feature`, attribution);
  *   2. puts it in the observability context, so RUM views, actions, errors and resources carry it;
- *   3. emits `feature_opened` ONCE when the feature changes (menu click, link or direct URL).
+ *   3. emits `feature_opened` ONCE when the feature changes (menu click, link or direct URL), once the
+ *      session identity is known (a direct URL opens before it: the event waits, then goes out with
+ *      the `source` of the route that produced it). `source` is `direct_url` for the first route the
+ *      module sees, so a deep link that passes through `/login` first is reported as `navigation`.
  *
  * Moving inside a feature (list -> record, query or hash change) is not an open. Leaving for a
  * non-feature route and coming back is. An identity switch or logout forgets the last feature, so
@@ -25,12 +28,16 @@ let lastKey = null;
 let lastAccount = null;
 let lastClient = null;
 let firstRoute = true;
+// An open waits here until the session identity is known: the event is sent once, with the
+// `source` of the route that produced it, and business events before then would be dropped.
+let pendingOpen = null;
 
 export function resetFeatureUsageForTests() {
   lastKey = null;
   lastAccount = null;
   lastClient = null;
   firstRoute = true;
+  pendingOpen = null;
   clearActiveFeature();
 }
 
@@ -39,6 +46,7 @@ export function leaveFeature() {
   lastKey = null;
   lastAccount = null;
   lastClient = null;
+  pendingOpen = null;
   clearActiveFeature();
   return setContext({ featureKey: undefined });
 }
@@ -66,10 +74,16 @@ export function enterFeature(feature, { emit = defaultEmit } = {}) {
   const key = feature.key;
   // Binding follows the account silently, so it never starts a second open.
   setActiveFeature(key, account);
-  if (key === lastKey) return;
-  lastKey = key;
-  Promise.resolve(setContext({ featureKey: key })).catch(() => {});
-  emit({ featureKey: key, source });
+  if (key !== lastKey) {
+    lastKey = key;
+    Promise.resolve(setContext({ featureKey: key })).catch(() => {});
+    pendingOpen = { featureKey: key, source };
+  }
+  if (pendingOpen && account !== null && client !== null) {
+    const open = pendingOpen;
+    pendingOpen = null;
+    emit(open);
+  }
 }
 
 function defaultEmit({ featureKey, source }) {

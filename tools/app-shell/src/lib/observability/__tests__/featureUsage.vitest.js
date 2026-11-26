@@ -23,6 +23,9 @@ describe('feature usage (ETP-5646)', () => {
     resetFeatureUsageForTests();
     clearSessionIdentity();
     resetSessionCredentials();
+    // Opens wait for a known identity; tests that are not about that start signed in.
+    setSessionIdentity({ clientId: 'C' });
+    setSessionCredentials({ mode: 'cookie', accountId: 'A' });
   });
 
   it('counts a menu or in-app open once and ignores moves inside the same feature', () => {
@@ -51,7 +54,7 @@ describe('feature usage (ETP-5646)', () => {
   it('attributes first-party requests to the active feature (missing context sends nothing)', () => {
     expect(featureRequestHeaders({ url: '/x' })).toEqual({});
     enterFeature(feature('window.sales-order'), { emit });
-    expect(featureRequestHeaders({ url: '/x' })).toEqual({ [FEATURE_HEADER]: 'window.sales-order' });
+    expect(featureRequestHeaders({ url: '/x', scope: 'A' })).toEqual({ [FEATURE_HEADER]: 'window.sales-order' });
   });
 
   it('on identity switch the new user is counted again and the old feature stops labelling', () => {
@@ -66,7 +69,24 @@ describe('feature usage (ETP-5646)', () => {
     expect(featureRequestHeaders({ url: '/x', scope: 'B' })).toEqual({ [FEATURE_HEADER]: 'window.sales-order' });
   });
 
+  it('a direct URL opened before the session holds its open, then sends it once through the real track', async () => {
+    const { track } = await import('../../observability.js');
+    clearSessionIdentity();
+    resetSessionCredentials();
+    track.mockClear();
+    enterFeature(feature('window.sales-order'));
+    expect(track).not.toHaveBeenCalled();
+    setSessionIdentity({ clientId: 'A' });
+    setSessionCredentials({ mode: 'cookie', accountId: 'A' });
+    enterFeature(feature('window.sales-order'));
+    enterFeature(feature('window.sales-order'));
+    expect(track).toHaveBeenCalledTimes(1);
+    expect(track.mock.calls[0][1]).toMatchObject({ featureKey: 'window.sales-order', source: 'direct_url' });
+  });
+
   it('direct URL, identity resolves later, then a move inside the feature: exactly one open', () => {
+    clearSessionIdentity();
+    resetSessionCredentials();
     enterFeature(feature('window.sales-order'), { emit });
     setSessionIdentity({ clientId: 'A' });
     setSessionCredentials({ mode: 'cookie', accountId: 'A' });

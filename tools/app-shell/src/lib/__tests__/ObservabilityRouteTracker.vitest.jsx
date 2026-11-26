@@ -1,3 +1,4 @@
+// @covers tools/app-shell/src/lib/observability/RouteTracker.jsx
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Link, MemoryRouter, Route, Routes } from 'react-router-dom';
