@@ -3483,6 +3483,11 @@ threads `documentDateField` into the header `<Form>` calls; no generator change 
   selected option is not the org currency (`isOrgCurrency` from `currencyOptions`; the former
   `rate === 1` sentinel is gone). A manual rate is kept until the reference date or the
   currency changes.
+- **`allowRateEdit` prop (default `true`).** `false` hides the pencil, so the user can only choose
+  among the options and the system rate always applies. A window that has no custom rate passes it:
+  the invoice inbox review (`InvoiceInboxReviewForm.jsx`, `CurrencyField`) lists the currencies with a
+  conversion on the invoice date through its own `currencyOptions` action and commits a pick as a
+  `setCurrency` edit. Every other window keeps the default and is unchanged.
 - **Recalculation.** The header callout on `currency`, the declared `documentDateField` and
   `accountingDate` returns the recalculated `eTGOCurrencyRate` (or `null`).
   `applyCalloutFieldUpdates` applies it through `isCurrencyRateRecalcTarget`
@@ -3746,7 +3751,7 @@ set in between. Build the next params from a ref updated on every render instead
 **What it does:** opts one column's advanced-filter condition OUT of the generic `criteria=` JSON
 mechanism entirely, translating it instead into a raw `key=value[&key=value]` query-string segment
 appended to the list request. Declared as a `toQueryParams` function on the column metadata object
-(see the column-metadata shape documented at the top of `tools/app-shell/src/lib/gridQuery.js`).
+(see the column-metadata shape documented at the top of `@etendo-ai/app-shell-core/lib/gridQuery.js`).
 
 **When to use it instead of `col.buildCriteria`:** `buildCriteria` still produces SmartClient
 criteria JSON — an alternate shape within the same `criteria=` mechanism. `toQueryParams` is for a
@@ -3768,7 +3773,7 @@ the hook actually produced a segment. (This was a real ETP-5188 bug during devel
 early-return used to key off whether ANY segment was produced across the whole conditions array, so
 a hook legitimately returning `null` for one operator let that condition leak straight back into
 `criteria=` — exactly what this mechanism exists to prevent. Fixed before shipping; the regression
-is now pinned in `gridQuery.vitest.jsx`.)
+is now pinned in schema_forge_core `packages/app-shell-core/src/lib/__tests__/gridQuery.vitest.test.jsx`.)
 
 **Requires `filterable: true`** on the column — a `type: 'custom'` column with no
 `column`/`backendFilterKey` is otherwise silently dropped from the advanced-filter field list

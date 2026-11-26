@@ -156,6 +156,7 @@ export const CONFIRM_FAILED_DETAIL_KEYS = Object.freeze({
   step_failed: 'invoiceInboxConfirmDetailStepFailed',
   search_key_exists: 'invoiceInboxConfirmDetailSearchKeyExists',
   refused: 'invoiceInboxConfirmDetailRefused',
+  step_refused_status: 'invoiceInboxConfirmDetailStepRefusedStatus',
 });
 
 /** The failed step of a `step_failed` / `search_key_exists` detail, by `params.step`. */
@@ -196,6 +197,7 @@ export function confirmFailedDetail(ui, info, legacy = null) {
     const missing = Array.isArray(params.missing) && params.missing.length > 0 ? ` (${params.missing.join(', ')})` : '';
     return ui(key, { step: stepText(ui, params), reason: params.reason ?? '', missing });
   }
+  if (code === 'step_refused_status') return ui(key, { step: stepText(ui, params), status: params.status ?? '' });
   return ui(key, { ...params });
 }
 

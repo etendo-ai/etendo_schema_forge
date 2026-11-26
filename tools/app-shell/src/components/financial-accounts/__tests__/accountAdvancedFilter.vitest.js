@@ -1,3 +1,5 @@
+// @covers tools/app-shell/src/components/financial-accounts/accountAdvancedFilter.js
+// @covers tools/app-shell/src/windows/custom/financial-account/advancedFilterApply.js
 // Cuentas list — advanced ("by conditions") filter (ETP-5113).
 //
 // The module owns three things and each is covered below:
@@ -52,7 +54,7 @@ import {
   NUMBER_OPERATORS,
   OPERATORS,
 } from '@/windows/custom/financial-account/advancedFilterApply';
-import { resolveFilterMode } from '@/lib/gridQuery.js';
+import { resolveFilterMode } from '@etendo-ai/app-shell-core/lib/gridQuery.js';
 
 const ui = (key) => key; // identity translator
 

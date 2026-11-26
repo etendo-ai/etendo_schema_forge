@@ -1,5 +1,8 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { MagnifyingGlassIcon } from '@phosphor-icons/react';
 import { InlineSearchCombo } from '@/components/contract-ui/InlineSearchCombo.jsx';
+import ProductSearchDrawer from '@/components/contract-ui/ProductSearchDrawer.jsx';
+import { buildLineSelectorContext } from '@/lib/selectorContext.js';
 import { deriveSelectorUrl } from '@/components/copilot/ocr/ocrQuery.js';
 
 /**
@@ -56,5 +59,61 @@ export function EntityPicker({ kind, apiBaseUrl, value = null, label = '', place
       clearOnType={false}
       onChange={(id, name, option) => { if (id) onPick({ id, name, option: option ?? {} }); }}
       data-testid={`EntityPicker__${fieldKey}`} />
+  );
+}
+
+/**
+ * ETP-6051 — the product picker of a MANUAL line: the shared `ProductSearchDrawer` over the very selector
+ * the purchase-invoice lines use, with that window's context (price list, document date, purchase side,
+ * `currency`, `priceCurrency` = the organization's, the rate), so it lists only the products of the price
+ * list and shows each one's list price and, underneath, the converted one. It opens on the committed value
+ * (`value` / `valueLabel`). Picking sends the same `selectProduct` the OCR lines use; the server prices the
+ * line. `pricing` is `manualPricingOf(review, header)`.
+ *
+ * @param {{apiBaseUrl: string, pricing: object, value?: string|null, label?: string, placeholder?: string,
+ *   fieldKey: string, onPick: (pick: {id: string, name: string, option: object}) => void}} props
+ */
+export function ManualProductPicker({ apiBaseUrl, pricing, value = null, label = '', placeholder = '', fieldKey, onPick }) {
+  const [open, setOpen] = useState(false);
+  const { priceListId, orgIso, docIso, rate, invoiceDate } = pricing;
+  const selectorUrl = useMemo(
+    () => deriveSelectorUrl(apiBaseUrl, PURCHASE_INVOICE, 'lines', 'M_Product_ID'),
+    [apiBaseUrl],
+  );
+  const selectorContext = useMemo(() => ({
+    ...buildLineSelectorContext({
+      windowCategory: 'purchases',
+      headerRecord: { invoiceDate, priceList: priceListId, eTGOCurrencyRate: rate },
+    }),
+    ...(docIso ? { currency: docIso } : {}),
+    ...(orgIso ? { priceCurrency: orgIso } : {}),
+  }), [invoiceDate, priceListId, rate, docIso, orgIso]);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="flex h-9 w-full items-center gap-2 rounded-md border border-input bg-card px-2.5 text-left text-sm transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus-ring"
+        data-testid={`ManualProductPicker__${fieldKey}`}>
+        <MagnifyingGlassIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" data-testid={`Search__${fieldKey}`} />
+        {label
+          ? <span className="min-w-0 flex-1 truncate text-foreground">{label}</span>
+          : <span className="min-w-0 flex-1 truncate text-muted-foreground">{placeholder}</span>}
+      </button>
+      <ProductSearchDrawer
+        open={open}
+        onClose={() => setOpen(false)}
+        onSelect={(item) => {
+          setOpen(false);
+          const id = item?.id ?? '';
+          if (id) onPick({ id, name: item.label || item.name || item._identifier || '', option: item });
+        }}
+        selectorUrl={selectorUrl}
+        selectorContext={selectorContext}
+        value={value}
+        valueLabel={label}
+        title={placeholder}
+        data-testid={`ProductSearchDrawer__${fieldKey}`} />
+    </>
   );
 }
