@@ -30,6 +30,10 @@ import { documentPeriodDate } from '@/lib/periodNotAvailable.js';
  * @param {string} config.confirmLabelKey            i18n key for the plain confirm button
  * @param {string} config.confirmWithInvoiceLabelKey i18n key for the confirm-with-invoice button
  * @param {string} config.testId      data-testid for the rendered ConfirmInOutModal
+ * @param {boolean} [config.validateInvoiceBeforeConfirm] ETP-6179 CP-12 — the window's
+ *   createReturnInvoice accepts a `validateOnly` dry run on the draft, so it is asked before
+ *   completing (ConfirmInOutModal `validateInvoiceFirst`). Same flag and meaning as on
+ *   ConfirmWithCreditButtonBase; leave it off where the backend does not read the key.
  * @returns {Function} a `{ base, headers, token, recordId, data, onConfirmed, onClose }` component
  */
 export function buildReturnRowConfirmModal(config) {
@@ -59,6 +63,7 @@ export function buildReturnRowConfirmModal(config) {
         rectifiableInvoicesUrl={rectifiableInvoicesUrl}
         token={token}
         periodDate={documentPeriodDate(data)}
+        validateInvoiceFirst={Boolean(config.validateInvoiceBeforeConfirm)}
         title={ui(config.titleKey)}
         docInfo={{ bpName: data?.['businessPartner$_identifier'], documentNo: data?.documentNo }}
         infoRowPre={ui(config.infoRowPreKey)}

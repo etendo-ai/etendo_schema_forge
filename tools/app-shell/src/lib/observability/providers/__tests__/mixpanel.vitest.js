@@ -392,3 +392,82 @@ describe('createMixpanelProvider — trusted context keys', () => {
     for (const key of TRUSTED_CONTEXT_KEYS) expect(SAFE_EVENT_PROPERTY_KEYS.has(key)).toBe(true);
   });
 });
+
+// ETP-6363 — marketing's cookie banner: Mixpanel waits for the Analytics category.
+describe('createMixpanelProvider — consent', () => {
+  function withBanner(options = {}) {
+    let emit;
+    const consent = vi.fn((listener) => { emit = listener; });
+    const client = makeClient({ reset: vi.fn() });
+    const loader = vi.fn().mockResolvedValue({ default: client });
+    const onConsentWithdrawn = vi.fn();
+    const provider = createMixpanelProvider({
+      hostname: PROD_HOST, enabled: true, token: 'tok', loader, consent, onConsentWithdrawn, ...options,
+    });
+    return { provider, client, loader, onConsentWithdrawn, emit: (granted) => emit(granted), consent };
+  }
+
+  it('stays off, without downloading the SDK, until the visitor accepts the Analytics cookies', () => {
+    const { provider, loader } = withBanner();
+    expect(provider.enabled()).toBe(false);
+    expect(loader).not.toHaveBeenCalled();
+  });
+
+  it('turns on when the visitor accepts, and stays off when they refuse', () => {
+    const accepted = withBanner();
+    accepted.emit(true);
+    expect(accepted.provider.enabled()).toBe(true);
+
+    const refused = withBanner();
+    refused.emit(false);
+    expect(refused.provider.enabled()).toBe(false);
+  });
+
+  it('stops for the page load and removes its cookies when the visitor withdraws consent', async () => {
+    const { provider, client, emit, onConsentWithdrawn } = withBanner();
+    emit(true);
+    await provider.init();
+    emit(false);
+    await vi.waitFor(() => expect(onConsentWithdrawn).toHaveBeenCalledTimes(1));
+    expect(provider.enabled()).toBe(false);
+    emit(true);
+    expect(provider.enabled()).toBe(false);
+    await provider.track('after_withdrawal');
+    expect(client.track).not.toHaveBeenCalled();
+  });
+
+  it('needs no banner where none is shown: a developer opting in from their machine', () => {
+    const { provider, consent } = withBanner({ hostname: 'localhost', allowLocal: 'true' });
+    expect(provider.enabled).toBe(true);
+    expect(consent).not.toHaveBeenCalled();
+  });
+
+  it('leaves a provider that is not configured off, as a plain switch', () => {
+    const { provider, consent } = withBanner({ enabled: false });
+    expect(provider.enabled).toBe(false);
+    expect(consent).not.toHaveBeenCalled();
+  });
+});
+
+// ETP-6363 — the flag evaluations were 72 % of the project's volume.
+describe('createMixpanelProvider — feature-flag events', () => {
+  it.each(['feature_flag_evaluated', 'feature_flags_diagnostic'])('does not send %s', async (eventName) => {
+    const client = makeClient();
+    const provider = createMixpanelProvider({
+      hostname: PROD_HOST, enabled: true, token: 'tok', loader: vi.fn().mockResolvedValue({ default: client }),
+    });
+    await provider.track(eventName, { flag: 'x' });
+    await provider.track('onboarding_step', { step_number: 1 });
+    expect(client.track).toHaveBeenCalledTimes(1);
+    expect(client.track.mock.calls[0][0]).toBe('onboarding_step');
+  });
+
+  it('sets its cookie on the parent domain, shared with the website', async () => {
+    const client = makeClient();
+    const provider = createMixpanelProvider({
+      hostname: PROD_HOST, enabled: true, token: 'tok', loader: vi.fn().mockResolvedValue({ default: client }),
+    });
+    await provider.init();
+    expect(client.init.mock.calls[0][1].cross_subdomain_cookie).toBe(true);
+  });
+});

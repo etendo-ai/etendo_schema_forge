@@ -1,6 +1,9 @@
+// @covers tools/app-shell/src/windows/custom/shared/paymentStatuses.js
 import { describe, it, expect } from 'vitest';
 
-import { isPaymentProcessed, paymentDisplayState } from '../paymentStatuses';
+import {
+  isPaymentProcessed, isPaymentVoided, paymentAmountOnInvoice, paymentDisplayState,
+} from '../paymentStatuses';
 
 /**
  * The four surfaces that show a payment — the invoice's payment modal, the invoice preview card,
@@ -38,10 +41,60 @@ describe('paymentDisplayState', () => {
     expect(paymentDisplayState(payment)).toBe('draft');
   });
 
+  // ETP-6247 — REM_SENT is the payment of a confirmed remittance the bank has not collected yet. It
+  // is processed, so before this it fell through to "deposited" and read "Cobro depositado" in green.
+  it('reads REM_SENT as remitted, ahead of the processed check', () => {
+    expect(paymentDisplayState({ status: 'REM_SENT', processed: true })).toBe('remitted');
+    expect(paymentDisplayState({ status: 'REM_SENT', processed: false })).toBe('remitted');
+  });
+
+  it('keeps REM_CANCEL (settled in remittance) as deposited', () => {
+    expect(paymentDisplayState({ status: 'REM_CANCEL', processed: true })).toBe('deposited');
+  });
+
+  it('counts a remitted payment as processed: the remittance owns it, it is never a draft', () => {
+    expect(isPaymentProcessed({ status: 'REM_SENT', processed: false })).toBe(true);
+  });
+
+  // ETP-6247 — a remittance RETURN voids the collected payment (RPVOID). It keeps `processed`, so
+  // before this it fell through to "deposited" and read "Cobro depositado" on a pending invoice.
+  it('reads RPVOID as voided, ahead of the processed check — never deposited', () => {
+    expect(paymentDisplayState({ status: 'RPVOID', processed: true })).toBe('voided');
+    expect(paymentDisplayState({ status: 'RPVOID', processed: false })).toBe('voided');
+    expect(isPaymentVoided({ status: 'RPVOID', processed: true })).toBe(true);
+    expect(isPaymentVoided({ status: 'RPR', processed: true })).toBe(false);
+  });
+
+  it('counts a voided payment as processed: it is never an editable draft', () => {
+    expect(isPaymentProcessed({ status: 'RPVOID', processed: false })).toBe(true);
+  });
+
   it('keeps "in progress" separate from "still a draft": a PPM payment is processed', () => {
     // The distinction the delete-draft button and the row-click navigation depend on. Folding PPM
     // into the draft bucket would offer to delete a payment the bank has already committed to.
     expect(isPaymentProcessed({ status: 'PPM', processed: true })).toBe(true);
     expect(isPaymentProcessed({ status: 'RPAP', processed: false })).toBe(false);
+  });
+});
+
+describe('paymentAmountOnInvoice', () => {
+  // ETP-6247 — a remittance grouped by customer pays several invoices with ONE payment: on an
+  // invoice the row must show that invoice's share, not the payment's total.
+  it("prefers the invoice's share (appliedToInvoice) over the payment total", () => {
+    expect(paymentAmountOnInvoice({ amount: '55.66', appliedToInvoice: '27.83' })).toBeCloseTo(27.83);
+  });
+
+  it('is unsigned: a credit-note consumption arrives negative', () => {
+    expect(paymentAmountOnInvoice({ amount: '50', appliedToInvoice: -20 })).toBe(20);
+  });
+
+  it('falls back to the payment amount when the backend sends no share', () => {
+    expect(paymentAmountOnInvoice({ amount: '12.5' })).toBe(12.5);
+    expect(paymentAmountOnInvoice({ amount: '12.5', appliedToInvoice: null })).toBe(12.5);
+    expect(paymentAmountOnInvoice({ amount: '12.5', appliedToInvoice: '' })).toBe(12.5);
+  });
+
+  it('reads a missing payment as 0', () => {
+    expect(paymentAmountOnInvoice(undefined)).toBe(0);
   });
 });

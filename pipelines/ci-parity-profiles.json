@@ -47,7 +47,7 @@
       "alwaysSource": [
         {
           "name": "com.etendoerp.go",
-          "url": "git@github.com:etendosoftware/com.etendoerp.go.git",
+          "url": "git@github.com:etendo-ai/com.etendoerp.go.git",
           "reason": "The runtime module under test. Cloned unconditionally by pipelines/Jenkinsfile:211-218 (GO_MODULE_SSH), so it appears in no extra-modules list."
         },
         {
@@ -78,7 +78,7 @@
       "alwaysSource": [
         {
           "name": "com.etendoerp.go",
-          "url": "git@github.com:etendosoftware/com.etendoerp.go.git",
+          "url": "git@github.com:etendo-ai/com.etendoerp.go.git",
           "reason": "Cloned unconditionally by pipelines/Jenkinsfile:211-218 (GO_MODULE_SSH)."
         }
       ],
@@ -104,7 +104,7 @@
       "alwaysSource": [
         {
           "name": "com.etendoerp.go",
-          "url": "git@github.com:etendosoftware/com.etendoerp.go.git",
+          "url": "git@github.com:etendo-ai/com.etendoerp.go.git",
           "reason": "The module the job builds; not listed in its own extra-modules file."
         }
       ],

@@ -41,6 +41,9 @@ export default function ConfirmWithCreditButtonBase({
   cardDesc: cardDescProp,
   extraActions,
   extraPortals,
+  // ETP-6179 CP-12: the window's createReturnInvoice accepts a `validateOnly` dry run on the draft,
+  // so the confirm modal asks it before completing the return (see ConfirmInOutModal).
+  validateInvoiceBeforeConfirm = false,
 }) {
   const navigate = useNavigate();
   const resultNavigatedRef = useRef(false);
@@ -114,6 +117,7 @@ export default function ConfirmWithCreditButtonBase({
           rectifiableInvoicesUrl={rectifiableInvoicesUrl}
           token={token}
           periodDate={documentPeriodDate(data)}
+          validateInvoiceFirst={validateInvoiceBeforeConfirm}
           title={confirmModalTitle}
           docInfo={{ bpName: data?.['businessPartner$_identifier'], documentNo: data?.documentNo }}
           infoRowPre={infoRowPre}

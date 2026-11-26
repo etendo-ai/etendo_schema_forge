@@ -12,10 +12,12 @@ import {
   fetchPortalHome,
   fetchPortalIdentity,
   fetchPortalLogoBlob,
+  groupPortalSearchResults,
   renewPortalLink,
   requestPortalDecision,
   resolvePortalBaseUrl,
   searchPortalDocuments,
+  sendPortalEtendoClick,
 } from '../portalApi.js';
 
 /**
@@ -165,6 +167,10 @@ describe('fetchPortalIdentity', () => {
       email: 'cliente@uno.es',
       tenantName: 'Acme SA',
       hasLogo: true,
+      // CP-43: the link's tenant, when the backend names it.
+      clientId: null,
+      // ETP-6209 KPIs: the session the backend minted, when it sends one.
+      sessionId: null,
     });
   });
 
@@ -179,6 +185,8 @@ describe('fetchPortalIdentity', () => {
       email: null,
       tenantName: null,
       hasLogo: false,
+      clientId: null,
+      sessionId: null,
     });
   });
 
@@ -193,6 +201,8 @@ describe('fetchPortalIdentity', () => {
       email: null,
       tenantName: null,
       hasLogo: false,
+      clientId: null,
+      sessionId: null,
     });
   });
 
@@ -363,6 +373,10 @@ describe('fetchPortalHome', () => {
       invoicesThisYear: { total: 0, upToDate: 0 },
       // The period asked for, when the backend does not echo one.
       chart: { months: 6, currency: null, bars: [] },
+      // CP-47: no converted figures from an unreadable body.
+      convertedBalance: null,
+      convertedOverdue: null,
+      convertedPaidThisYear: null,
     });
   });
 
@@ -408,19 +422,60 @@ describe('searchPortalDocuments', () => {
     assert.equal(new URL(calls[0].path, 'http://portal').searchParams.get('q'), 'PR/00');
     // A quotation carries its generated order, when there is one in scope.
     assert.deepEqual(
-      found.map((doc) => [doc.kind, doc.id, doc.orderId, doc.orderNo]),
+      found.documents.map((doc) => [doc.kind, doc.id, doc.orderId, doc.orderNo]),
       [['QUOTATION', 'q-1', 'ord-1', 'PV/0007']],
     );
+    // An older backend without `groups`: the flat matches are grouped by kind here.
+    assert.deepEqual(found.groups.map((g) => [g.kind, g.count, g.documents.length]), [['QUOTATION', null, 1]]);
   });
 
   for (const query of ['', '   ', null]) {
     it(`resolves ${JSON.stringify(query)} to no matches without a request`, async () => {
       const { fetchImpl, calls } = recordingFetch(() => jsonResponse({}));
 
-      assert.deepEqual(await searchPortalDocuments(fetchImpl, TOKEN, query), []);
+      assert.deepEqual(await searchPortalDocuments(fetchImpl, TOKEN, query), { documents: [], groups: [] });
       assert.equal(calls.length, 0);
     });
   }
+});
+
+// ETP-6209 — the search grouped by document kind: the server's `groups` win (their order, their
+// per-kind `count`); without them the flat `documents` are grouped in first-appearance order.
+describe('groupPortalSearchResults', () => {
+  it('takes the server groups as sent, normalising kind, count and rows, dropping empty ones', () => {
+    const groups = groupPortalSearchResults({
+      documents: [{ kind: 'INVOICE', id: 'i-1' }],
+      groups: [
+        { kind: 'invoice', count: '12', documents: [{ kind: 'INVOICE', id: 'i-1', documentNo: 'FV/1' }] },
+        { kind: 'ORDER', count: 0, documents: [] },
+        { kind: 'QUOTATION', documents: [{ kind: 'QUOTATION', id: 'q-1' }] },
+      ],
+    });
+
+    assert.deepEqual(
+      groups.map((g) => [g.kind, g.count, g.documents.map((d) => d.id)]),
+      [['INVOICE', 12, ['i-1']], ['QUOTATION', null, ['q-1']]],
+    );
+    assert.equal(groups[0].documents[0].documentNo, 'FV/1');
+  });
+
+  it('groups the flat documents by kind, newest-first order kept, when no groups are sent', () => {
+    const groups = groupPortalSearchResults({
+      documents: [
+        { kind: 'INVOICE', id: 'i-2' }, { kind: 'QUOTATION', id: 'q-1' }, { kind: 'INVOICE', id: 'i-1' },
+      ],
+    });
+
+    assert.deepEqual(
+      groups.map((g) => [g.kind, g.count, g.documents.map((d) => d.id)]),
+      [['INVOICE', null, ['i-2', 'i-1']], ['QUOTATION', null, ['q-1']]],
+    );
+  });
+
+  it('answers no groups for an empty or malformed body', () => {
+    assert.deepEqual(groupPortalSearchResults({}), []);
+    assert.deepEqual(groupPortalSearchResults(null), []);
+  });
 });
 
 describe('fetchPortalDocument', () => {
@@ -458,6 +513,8 @@ describe('fetchPortalDocument', () => {
 
     assert.deepEqual(document.decision, {
       canDecide: false, blockedReason: 'expired', acceptAvailable: true, email: 'contact@acme.com',
+      // CP-45: falls back to the one address when the backend lists no recipients.
+      confirmationRecipients: ['contact@acme.com'],
     });
   });
 });
@@ -553,7 +610,7 @@ describe('requestPortalDecision', () => {
 
     const result = await requestPortalDecision(fetchImpl, TOKEN, 'q/1', { decision: 'ACCEPT' });
 
-    assert.deepEqual(result, { ok: true, email: 'contact@acme.com' });
+    assert.deepEqual(result, { ok: true, email: 'contact@acme.com', recipients: ['contact@acme.com'] });
     assert.equal(calls[0].path, '/sws/portal/quotations/q%2F1/decision');
     assert.deepEqual(calls[0].options, {
       method: 'POST',
@@ -659,7 +716,7 @@ describe('fetchPortalDecision / confirmPortalDecision', () => {
         state: 'confirmed', appliedNow: true, decision: 'REJECT', reasonCode: 'OTHER',
         reasonText: 'Ya no', documentNo: 'PR/0001', tenantName: 'Acme SA',
         portalToken: null, quotationId: null,
-        date: null, grandTotal: null, currency: null, documentStatus: null,
+        date: null, grandTotal: null, currency: null, documentStatus: null, clientId: null,
       },
     ],
     [
@@ -668,7 +725,7 @@ describe('fetchPortalDecision / confirmPortalDecision', () => {
       {
         state: 'confirmed', appliedNow: true, decision: 'ACCEPT', reasonCode: null, reasonText: null,
         documentNo: null, tenantName: null, portalToken: 'tok-new', quotationId: 'q-1',
-        date: null, grandTotal: null, currency: null, documentStatus: null,
+        date: null, grandTotal: null, currency: null, documentStatus: null, clientId: null,
       },
     ],
     [
@@ -677,7 +734,7 @@ describe('fetchPortalDecision / confirmPortalDecision', () => {
       {
         state: 'confirmed', appliedNow: false, decision: null, reasonCode: null, reasonText: null,
         documentNo: null, tenantName: null, portalToken: null, quotationId: null,
-        date: null, grandTotal: null, currency: null, documentStatus: null,
+        date: null, grandTotal: null, currency: null, documentStatus: null, clientId: null,
       },
     ],
     [
@@ -686,7 +743,7 @@ describe('fetchPortalDecision / confirmPortalDecision', () => {
       {
         state: 'not_pending', appliedNow: false, decision: null, reasonCode: null, reasonText: null,
         documentNo: null, tenantName: null, portalToken: null, quotationId: null,
-        date: null, grandTotal: null, currency: null, documentStatus: null,
+        date: null, grandTotal: null, currency: null, documentStatus: null, clientId: null,
       },
     ],
   ]) {
@@ -723,3 +780,58 @@ describe('fetchPortalDecision / confirmPortalDecision', () => {
     });
   }
 });
+
+// ETP-6209 KPIs — fixed vocabularies in the query string, never anything about the customer.
+describe('KPI wiring', () => {
+  const blobResponse = () => ({ ...jsonResponse({}), blob: async () => new Blob(['%PDF']) });
+
+  it('sends where a document open came from, and nothing for an unknown origin', async () => {
+    const { fetchImpl, calls } = recordingFetch(() => jsonResponse({}));
+    await fetchPortalDocument(fetchImpl, TOKEN, 'INVOICE', 'inv-1', { origin: 'home' });
+    await fetchPortalDocument(fetchImpl, TOKEN, 'INVOICE', 'inv-1', { origin: 'tracking-pixel' });
+    await fetchPortalDocument(fetchImpl, TOKEN, 'INVOICE', 'inv-1');
+
+    assert.deepEqual(calls.map((c) => c.path), [
+      '/sws/portal/documents/invoice/inv-1?origin=home',
+      '/sws/portal/documents/invoice/inv-1',
+      '/sws/portal/documents/invoice/inv-1',
+    ]);
+  });
+
+  it('says why the printable is asked for', async () => {
+    const { fetchImpl, calls } = recordingFetch(() => blobResponse());
+    await fetchPortalDocumentPdf(fetchImpl, TOKEN, 'INVOICE', 'inv-1', { purpose: 'preview' });
+    await fetchPortalDocumentPdf(fetchImpl, TOKEN, 'INVOICE', 'inv-1', { purpose: 'download', origin: 'list' });
+    await fetchPortalDocumentPdf(fetchImpl, TOKEN, 'INVOICE', 'inv-1');
+
+    assert.deepEqual(calls.map((c) => c.path), [
+      '/sws/portal/documents/invoice/inv-1/pdf?purpose=preview',
+      '/sws/portal/documents/invoice/inv-1/pdf?purpose=download&origin=list',
+      '/sws/portal/documents/invoice/inv-1/pdf',
+    ]);
+  });
+
+  it('counts an etendo.ai click with keepalive and the token in its header, swallowing failures', async () => {
+    const { fetchImpl, calls } = recordingFetch(() => { throw new TypeError('Failed to fetch'); });
+
+    assert.doesNotThrow(() => sendPortalEtendoClick(fetchImpl, TOKEN, { reference: 'startFree', location: 'rail' }));
+    await new Promise((resolve) => { setTimeout(resolve, 0); });
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].path, '/sws/portal/events/etendo-click');
+    assert.equal(calls[0].options.method, 'POST');
+    assert.equal(calls[0].options.keepalive, true);
+    assert.equal(calls[0].options.headers['X-Portal-Token'], TOKEN);
+    assert.deepEqual(JSON.parse(calls[0].options.body), { reference: 'startFree', location: 'rail' });
+    assert.ok(!calls[0].path.includes(TOKEN));
+  });
+
+  it('sends nothing for an unknown reference or location, or without a token', () => {
+    const { fetchImpl, calls } = recordingFetch(() => jsonResponse({}));
+    sendPortalEtendoClick(fetchImpl, TOKEN, { reference: 'other', location: 'rail' });
+    sendPortalEtendoClick(fetchImpl, TOKEN, { reference: 'learnMore', location: 'footer' });
+    sendPortalEtendoClick(fetchImpl, '', { reference: 'learnMore', location: 'header' });
+    assert.equal(calls.length, 0);
+  });
+});
+

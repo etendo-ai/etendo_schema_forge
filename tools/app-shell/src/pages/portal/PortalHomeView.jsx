@@ -1,5 +1,4 @@
 import {
-  ArrowRightIcon,
   ArrowUpRightIcon,
   CalendarBlankIcon,
   CaretDownIcon,
@@ -7,7 +6,9 @@ import {
   ChartBarHorizontalIcon,
   ChartBarIcon,
   CheckIcon,
+  CoinsIcon,
   FileTextIcon,
+  MagnifyingGlassIcon,
   SmileyIcon,
 } from '@phosphor-icons/react';
 import { useEffect, useState } from 'react';
@@ -21,14 +22,19 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { formatCurrency, formatGroupedNumber } from '@/lib/formatCurrency.js';
+import { buildBalanceDisplay } from '@/components/currency-summary';
 import { niceScale } from '@/lib/dashboardNumberFormat.js';
 import { formatCalendarDate } from '@/lib/dateOnly.js';
 import {
   PORTAL_CHART_MONTHS, PORTAL_ERROR, searchPortalDocuments,
 } from '@/lib/portal/portalApi.js';
-import { PORTAL_KIND_ICONS, PortalMobileBrandBar } from './PortalShell.jsx';
+import {
+  GlobalSearchEmpty, GlobalSearchGroup, GlobalSearchItem, GlobalSearchList,
+} from '@/components/global-search/GlobalSearchPrimitives.jsx';
+import { PORTAL_KIND_ICONS, PortalLogoTile } from './PortalShell.jsx';
 import {
   PortalDate, PortalDesktopHeader, PortalMain, PortalMoney, PortalRowBadge, PortalSearchPill,
+  PortalConvertedAmount, portalShowsConverted, PortalCreatedWithTile,
   PortalSection, PortalTag, PORTAL_DASHBOARD_SECTION_TITLE, PORTAL_ROW_FOCUS, usePortalLocale,
 } from './PortalBits.jsx';
 import { PORTAL_HIGHLIGHTS, PORTAL_KIND_META, documentLabelKey } from './portalPresentation.js';
@@ -58,10 +64,14 @@ export default function PortalHomeView({
   const balances = home?.balances ?? [];
   const tiles = home?.tiles ?? {};
   const recent = home?.recent ?? [];
-  const open = (document) => onNavigate({ view: 'doc', kind: document.kind, id: document.id });
+  // ETP-6209 KPIs: an open says where it came from (navigation state, never the URL).
+  const openFrom = (origin) => (document) => onNavigate({ view: 'doc', kind: document.kind, id: document.id }, origin);
   // "Ver todos" opens the list of the newest document's kind: the recent list mixes every kind,
   // and that is the list it most likely continues.
   const viewAll = () => onNavigate({ view: 'list', kind: recent[0]?.kind ?? 'INVOICE' });
+
+  // "Ver todos en …" of the search: that kind's list, opened on the same search (ETP-6209).
+  const searchInKind = (kind) => onNavigate({ view: 'list', kind, q: search.input.trim() });
 
   const searchBox = (
     <PortalSearchPill
@@ -71,17 +81,16 @@ export default function PortalHomeView({
       label={ui('portalSearch')}
       testId="portal-global-search"
       data-testid="PortalSearchPill__beaeb4">
-      <SearchResults search={search} onOpen={open} data-testid="SearchResults__beaeb4" />
+      <SearchResults
+        search={search}
+        onOpen={openFrom('search')}
+        onSeeAll={searchInKind}
+        data-testid="SearchResults__beaeb4" />
     </PortalSearchPill>
   );
 
   return (
     <>
-      <PortalMobileBrandBar
-        identity={identity}
-        logoUrl={logoUrl}
-        onSearch={() => setMobileSearchOpen((value) => !value)}
-        data-testid="PortalMobileBrandBar__beaeb4" />
       <PortalDesktopHeader
         title={ui('portalPageTitle')}
         breadcrumb={ui('portalPageTitle')}
@@ -90,9 +99,19 @@ export default function PortalHomeView({
         data-testid="PortalDesktopHeader__beaeb4" />
 
       <PortalMain
-        className="overflow-y-auto px-6 pb-28 pt-6 md:gap-4 md:rounded-xl md:p-2"
+        className="overflow-y-auto bg-[#F3F5F9] px-6 pb-28 pt-6 md:gap-4 md:rounded-xl md:p-2"
         testId="portal-home"
         data-testid="PortalMain__beaeb4">
+        {/* Mobile (redesign 2026-11-25): the dark summary at the top, scrolling with the page. */}
+        <MobileHomeSummary
+          identity={identity}
+          logoUrl={logoUrl}
+          balances={balances}
+          converted={home?.convertedBalance ?? null}
+          convertedOverdue={home?.convertedOverdue ?? null}
+          onSearch={() => setMobileSearchOpen((value) => !value)}
+          onNavigate={onNavigate}
+          data-testid="MobileHomeSummary__beaeb4" />
         {mobileSearchOpen ? <div className="md:hidden">{searchBox}</div> : null}
 
         <Greeting
@@ -100,11 +119,6 @@ export default function PortalHomeView({
           months={months}
           onMonthsChange={onMonthsChange}
           data-testid="Greeting__beaeb4" />
-
-        <MobilePendingHero
-          balances={balances}
-          onNavigate={onNavigate}
-          data-testid="MobilePendingHero__beaeb4" />
 
         {/* Desktop, from both Figma frames: at the 1440px design width the four tiles are 205px
             and "Requiere tu atención" hugs them (901px), "Tu saldo" takes the rest — 259px with the
@@ -115,14 +129,21 @@ export default function PortalHomeView({
             same height: grid items stretch); it never stretches to the window; the body scrolls. */}
         <div className="flex flex-wrap items-start gap-3 md:grid md:grid-cols-[minmax(0,901fr)_minmax(258px,259fr)] md:items-stretch md:gap-4 md:group-data-[rail=collapsed]/shell:grid-cols-[minmax(0,901fr)_minmax(258px,443fr)]">
           <section
-            className="min-w-0 flex-[2_1_560px] overflow-hidden md:flex md:min-h-[226px] md:flex-col md:rounded-lg md:border md:border-border"
+            className="-mx-6 min-w-0 flex-[2_1_560px] md:mx-0 md:flex md:min-h-[226px] md:flex-col md:overflow-hidden md:rounded-lg md:border md:border-border"
             aria-label={ui('portalAttentionTitle')}
             data-testid="portal-tiles"
           >
+            {/* Mobile (redesign 2026-11-25): the title, then the tiles in one horizontal row. */}
+            <h2 className="px-4 pb-2 text-base font-medium leading-6 text-[#2C3142] md:hidden [font-family:inherit]">
+              {ui('portalAttentionTitle')}
+            </h2>
             <div className="hidden h-10 items-center border-b border-border bg-muted px-3 py-2 md:flex">
               <h2 className={PORTAL_DASHBOARD_SECTION_TITLE}>{ui('portalAttentionTitle')}</h2>
             </div>
-            <div className="grid grid-cols-2 gap-3 md:min-h-0 md:flex-1 md:grid-cols-4 md:gap-4 md:p-4">
+            <div
+              className="flex gap-2 overflow-x-auto px-4 pb-1 md:grid md:min-h-0 md:flex-1 md:grid-cols-4 md:gap-4 md:overflow-visible md:p-4"
+              style={{ scrollbarWidth: 'none' }}
+            >
               {TILE_ORDER.map((kind) => (
                 <KindTile
                   key={kind}
@@ -142,6 +163,8 @@ export default function PortalHomeView({
             data-testid="PortalSection__beaeb4">
             <Balance
               balances={balances}
+              converted={home?.convertedBalance ?? null}
+              convertedPaid={home?.convertedPaidThisYear ?? null}
               paid={home?.paidThisYear ?? []}
               data-testid="Balance__beaeb4" />
           </PortalSection>
@@ -176,11 +199,14 @@ export default function PortalHomeView({
                 </button>
               </>
             )}
-            className="rounded-xl md:flex md:min-h-[320px] md:flex-col"
+            // Mobile (redesign): the title and "Ver todos" sit above a white rounded card.
+            className="overflow-visible rounded-none border-0 bg-transparent md:flex md:min-h-[320px] md:flex-col md:overflow-hidden md:rounded-lg md:border md:bg-card"
+            headerClassName="h-auto border-0 bg-transparent px-0 pb-2 md:border-b md:bg-muted"
+            titleClassName="max-md:text-base max-md:font-medium max-md:normal-case max-md:leading-6 max-md:tracking-normal max-md:text-[#2C3142]"
             testId="portal-recent"
             variant="dashboard"
             data-testid="PortalSection__beaeb4">
-            <RecentDocuments recent={recent} onOpen={open} data-testid="RecentDocuments__beaeb4" />
+            <RecentDocuments recent={recent} onOpen={openFrom('home')} data-testid="RecentDocuments__beaeb4" />
           </PortalSection>
 
           <PortalSection
@@ -203,6 +229,7 @@ export default function PortalHomeView({
 /** The header search across every kind, debounced; 401 ends on the page's re-check. */
 function usePortalSearch(apiFetch, token, onInvalid) {
   const [input, setInput] = useState('');
+  // `null` until a query is sent; then `{ documents, groups }` (searchPortalDocuments).
   const [results, setResults] = useState(null);
 
   useEffect(() => {
@@ -213,12 +240,12 @@ function usePortalSearch(apiFetch, token, onInvalid) {
     }
     let active = true;
     const timer = setTimeout(() => {
-      searchPortalDocuments(apiFetch, token, query).then((documents) => {
-        if (active) setResults(documents);
+      searchPortalDocuments(apiFetch, token, query).then((found) => {
+        if (active) setResults(found);
       }).catch((error) => {
         if (!active) return;
         if (error?.code === PORTAL_ERROR.invalidLink) onInvalid();
-        else setResults([]);
+        else setResults({ documents: [], groups: [] });
       });
     }, SEARCH_DEBOUNCE_MS);
     return () => {
@@ -230,30 +257,64 @@ function usePortalSearch(apiFetch, token, onInvalid) {
   return { input, setInput, results };
 }
 
-function SearchResults({ search, onOpen }) {
+/**
+ * The search's dropdown, as the app's global search draws its results (ETP-6209: the
+ * `GlobalSearch*` primitives of `CommandPalette`): one group per document kind, headed by the
+ * kind's plural name, with its matching documents and a last "Ver todos en <kind>" item that opens
+ * that kind's list on the same search — the portal's "which window to go into". A kind the bundle
+ * does not know is left out.
+ */
+function SearchResults({ search, onOpen, onSeeAll }) {
   const ui = useUI();
   if (search.results == null) return null;
+  const groups = (search.results.groups ?? []).filter((group) => PORTAL_KIND_META[group.kind]);
   return (
     <div
-      className="absolute inset-x-0 top-full z-30 mt-1.5 overflow-hidden rounded-lg border border-border bg-card py-1 shadow-lg"
+      className="absolute inset-x-0 top-full z-30 mt-1.5 overflow-hidden rounded-lg border border-border bg-card shadow-lg"
       data-testid="portal-search-results"
     >
-      {search.results.length === 0 ? (
-        <p className="px-3.5 py-3 text-sm text-muted-foreground">{ui('portalSearchNoResults')}</p>
-      ) : search.results.map((document) => (
-        <button
-          key={`${document.kind}:${document.id}`}
-          type="button"
-          onClick={() => onOpen(document)}
-          className={`flex w-full cursor-pointer items-center gap-2.5 px-3.5 py-2 text-left text-sm hover:bg-muted ${PORTAL_ROW_FOCUS}`}
-          data-testid="portal-search-result"
-        >
-          <span className="min-w-0 flex-1 truncate">
-            {ui(documentLabelKey(document))} <span className="text-muted-foreground">{document.documentNo}</span>
-          </span>
-          <PortalRowBadge document={document} data-testid="PortalRowBadge__beaeb4" />
-        </button>
-      ))}
+      <GlobalSearchList className="max-h-[min(480px,60vh)]" data-testid="GlobalSearchList__beaeb4">
+        {groups.length === 0 ? (
+          <GlobalSearchEmpty data-testid="GlobalSearchEmpty__beaeb4">{ui('portalSearchNoResults')}</GlobalSearchEmpty>
+        ) : groups.map((group) => {
+          const kindKey = group.kind.toLowerCase();
+          const plural = ui(PORTAL_KIND_META[group.kind].pluralKey);
+          // "See all in Invoices" / "Ver todos en facturas": Spanish lowercases the kind mid-sentence.
+          return (
+            <GlobalSearchGroup
+              key={group.kind}
+              heading={plural}
+              data-testid={`portal-search-group-${kindKey}`}>
+              {group.documents.map((document) => (
+                <GlobalSearchItem
+                  key={`${document.kind}:${document.id}`}
+                  onSelect={() => onOpen(document)}
+                  className={`gap-2.5 ${PORTAL_ROW_FOCUS}`}
+                  data-testid="portal-search-result"
+                >
+                  <span className="min-w-0 flex-1 truncate">
+                    {ui(documentLabelKey(document))} <span className="text-muted-foreground">{document.documentNo}</span>
+                  </span>
+                  <PortalRowBadge document={document} data-testid="PortalRowBadge__beaeb4" />
+                </GlobalSearchItem>
+              ))}
+              <GlobalSearchItem
+                onSelect={() => onSeeAll(group.kind)}
+                className={`text-muted-foreground ${PORTAL_ROW_FOCUS}`}
+                data-testid={`portal-search-see-all-${kindKey}`}
+              >
+                <MagnifyingGlassIcon size={16} aria-hidden="true" className="shrink-0" data-testid="MagnifyingGlass__beaeb4" />
+                <span className="min-w-0 flex-1 truncate">{ui('portalSearchSeeAllIn', { kind: plural, kindLower: plural.toLocaleLowerCase() })}</span>
+                {group.count != null ? (
+                  <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs tabular-nums" data-testid="portal-search-group-count">
+                    {group.count}
+                  </span>
+                ) : null}
+              </GlobalSearchItem>
+            </GlobalSearchGroup>
+          );
+        })}
+      </GlobalSearchList>
     </div>
   );
 }
@@ -262,7 +323,7 @@ function SearchResults({ search, onOpen }) {
 function Greeting({ identity, months, onMonthsChange }) {
   const ui = useUI();
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="hidden flex-wrap items-center justify-between gap-3 md:flex">
       <div className="flex items-center gap-3">
         <div className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground md:flex">
           <SmileyIcon size={20} aria-hidden="true" data-testid="Smiley__beaeb4" />
@@ -311,50 +372,129 @@ function Greeting({ identity, months, onMonthsChange }) {
   );
 }
 
-/** Mobile only: the design's dark "Pendiente de pago" card, one per currency owed. */
-function MobilePendingHero({ balances, onNavigate }) {
+/** «Tienes N facturas pendientes de pago.», or that nothing is pending. */
+function pendingSentence(ui, pendingCount) {
+  if (pendingCount <= 0) return ui('portalNothingPending');
+  const key = pendingCount === 1 ? 'portalPendingInvoicesSentence_one' : 'portalPendingInvoicesSentence_plural';
+  return ui(key, { count: pendingCount });
+}
+
+/**
+ * Mobile only (designer's redesign, 2026-11-25): the dark summary at the top of Inicio.
+ * - The header: the company's round logo, its name and "Portal del cliente", and the search button.
+ * - The greeting card: "Hola, <cliente>" and how many invoices are pending payment.
+ * - "Total pendiente": one figure; the converted "≈" one when the customer owes in several
+ *   currencies (CP-47).
+ * - The overdue badge and "Desde el …" (`overdue` / `overdueSince` of `/home`), per currency. Under
+ *   the converted total, ONE badge with the converted overdue figure («≈ 847,00 € vencidos»,
+ *   `convertedOverdue`), with no date (it would mix currencies); without that figure (a rate is
+ *   missing) the badge is left out. Without a converted total, each currency keeps its own total.
+ *   Only an overdue amount above zero is shown.
+ * - "Ver facturas pendientes": opens the invoices list on its "pending" tab.
+ */
+function MobileHomeSummary({
+  identity, logoUrl, balances, converted = null, convertedOverdue = null, onSearch, onNavigate,
+}) {
   const ui = useUI();
   const bcpLocale = usePortalLocale();
+  const pendingCount = balances.reduce((sum, balance) => sum + balance.pendingCount, 0);
+  const showConverted = portalShowsConverted(balances, converted);
   const viewPending = () => onNavigate({ view: 'list', kind: 'INVOICE', group: 'pending' });
+  const totals = showConverted
+    ? [{ key: 'converted', amount: <PortalConvertedAmount converted={converted} testId="portal-pending-hero-converted" data-testid="PortalConvertedAmount__beaeb4" /> }]
+    : balances.map((balance) => ({ key: balance.currency || 'none', amount: formatCurrency(balance.currency, balance.outstanding) }));
+  let overdue = balances
+    .filter((balance) => balance.overdue > 0)
+    .map((balance) => ({
+      key: balance.currency || 'none',
+      amount: formatCurrency(balance.currency, balance.overdue),
+      since: balance.overdueSince,
+    }));
+  if (showConverted) {
+    // The same "≈" text as the converted total (`buildBalanceDisplay`, behind `AmountText`).
+    overdue = convertedOverdue && convertedOverdue.amount > 0
+      ? [{
+        key: 'converted',
+        amount: buildBalanceDisplay(convertedOverdue.currency, convertedOverdue.amount, {
+          approximate: convertedOverdue.approximate === true,
+        }).text,
+        since: null,
+      }]
+      : [];
+  }
+  const name = identity?.businessPartnerName;
   return (
     <section
-      className="flex flex-col gap-4 rounded-2xl bg-foreground p-6 text-background md:hidden"
+      className="-mx-6 -mt-6 flex flex-col gap-5 rounded-b-[32px] bg-[#141414] px-4 pb-5 pt-4 text-white md:hidden"
       data-testid="portal-pending-hero"
     >
-      {balances.length === 0 ? (
-        <span className="text-sm opacity-80">{ui('portalNothingPending')}</span>
-      ) : balances.map((balance) => (
-        <div key={balance.currency || 'none'} className="flex flex-col gap-4">
-          <div className="flex items-center justify-between">
-            <span className="text-sm opacity-80">{ui('portalPendingPayment')}</span>
-            <span className="rounded-lg bg-[hsl(var(--accent-highlight))] px-2.5 py-0.5 text-[13px] font-medium leading-[18px] text-[hsl(var(--accent-highlight-foreground))]">
-              {ui(balance.pendingCount === 1 ? 'portalInvoicesCount_one' : 'portalInvoicesCount_plural',
-                { count: balance.pendingCount })}
-            </span>
-          </div>
-          {/* The card's key figure, set in the app's heading face by the global h1–h6 rule. */}
-          <h3 className="text-[44px] font-bold leading-[52px] tabular-nums">
-            {formatCurrency(balance.currency, balance.outstanding)}
-          </h3>
-          {balance.overdue > 0 ? (
-            <span className="text-sm text-[var(--status-destructive-bg)]">
-              {ui('portalOverdueSince', {
-                amount: formatCurrency(balance.currency, balance.overdue),
-                date: formatCalendarDate(balance.overdueSince, bcpLocale),
-              })}
-            </span>
+      <header className="flex items-center gap-3" data-testid="portal-mobile-topbar">
+        <PortalLogoTile identity={identity} logoUrl={logoUrl} size="lg" round decorative data-testid="PortalLogoTile__beaeb4" />
+        <span className="flex min-w-0 flex-1 flex-col">
+          {identity?.tenantName ? (
+            <span className="truncate text-sm font-semibold leading-6" data-testid="portal-mobile-tenant-name">{identity.tenantName}</span>
           ) : null}
+          <span className="truncate text-xs leading-4 text-white/50">{ui('portalPageTitle')}</span>
+        </span>
+        {/* Deviation (marketing undecided): the compact Etendo link stays on the mobile header. */}
+        <PortalCreatedWithTile data-testid="PortalCreatedWithTile__beaeb4" />
+        <button
+          type="button"
+          aria-label={ui('portalSearch')}
+          onClick={onSearch}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-[1.1px] border-white/20 text-white/50"
+          data-testid="portal-mobile-search"
+        >
+          <MagnifyingGlassIcon size={20} aria-hidden="true" data-testid="MagnifyingGlass__beaeb4" />
+        </button>
+      </header>
+
+      <div className="flex flex-col rounded-lg bg-white/5 px-3 py-2" data-testid="portal-mobile-greeting">
+        {name ? (
+          <span className="truncate text-xs leading-4 text-white/50" data-testid="portal-greeting-mobile">{ui('portalGreeting', { name })}</span>
+        ) : null}
+        <span className="text-base font-medium leading-6">
+          {pendingSentence(ui, pendingCount)}
+        </span>
+      </div>
+
+      {totals.length > 0 ? (
+        <div className="flex flex-col gap-1">
+          <span className="text-xs leading-4 text-white/80">{ui('portalTotalPending')}</span>
+          {totals.map(({ key, amount }) => (
+            <div key={key} className="flex items-center gap-3">
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/10" aria-hidden="true">
+                <CoinsIcon size={24} data-testid="Coins__beaeb4" />
+              </span>
+              <span className="min-w-0 truncate text-5xl font-normal leading-[48px] tabular-nums" data-testid="portal-pending-hero-total">
+                {amount}
+              </span>
+            </div>
+          ))}
+          {overdue.map(({ key, amount, since }) => (
+            <div key={key} className="mt-2 flex flex-wrap items-center gap-2" data-testid="portal-pending-hero-overdue-row">
+              <span className="rounded-full bg-[rgba(245,61,107,0.1)] px-2 text-sm leading-5 text-[#F76489]" data-testid="portal-pending-hero-overdue">
+                {ui('portalOverdueAmount', { amount })}
+              </span>
+              {since ? (
+                <span className="inline-flex items-center gap-1 text-xs leading-4 text-white/80" data-testid="portal-pending-hero-since">
+                  <CalendarBlankIcon size={14} className="text-[#81848F]" aria-hidden="true" data-testid="CalendarBlank__beaeb4" />
+                  {ui('portalSinceDate', { date: formatCalendarDate(since, bcpLocale) })}
+                </span>
+              ) : null}
+            </div>
+          ))}
         </div>
-      ))}
-      {balances.length > 0 ? (
+      ) : null}
+
+      {pendingCount > 0 ? (
         <button
           type="button"
           onClick={viewPending}
-          className="flex h-[52px] items-center justify-center gap-2 rounded-[10px] bg-primary font-medium text-primary-foreground"
+          className="flex h-10 w-full items-center justify-center rounded-full bg-[#325CFF] text-sm font-medium leading-6 text-white"
           data-testid="portal-view-pending-invoices"
         >
           {ui('portalViewPendingInvoices')}
-          <ArrowRightIcon className="h-4 w-4" aria-hidden="true" data-testid="ArrowRight__beaeb4" />
         </button>
       ) : null}
     </section>
@@ -367,7 +507,7 @@ function MobilePendingHero({ balances, onNavigate }) {
  * per currency, green for paid and red for pending. The overdue detail ("… vencidos desde …")
  * belongs to the mobile card only, as on the Movil-Inicio board.
  */
-function Balance({ balances, paid }) {
+function Balance({ balances, paid, converted = null, convertedPaid = null }) {
   const ui = useUI();
   // One badge per currency; several sit side by side and wrap (never stacked into a clipped column).
   const badge = 'whitespace-nowrap rounded-lg border px-2 text-sm leading-7 tabular-nums';
@@ -380,6 +520,8 @@ function Balance({ balances, paid }) {
       {count}
     </span>
   );
+  const paidTone = `${badge} border-[#B2EECC] bg-[#EEFBF4] text-[#17663A]`;
+  const pendingTone = `${badge} border-[#FBB1C4] bg-[#FEF0F4] text-[#D50B3E]`;
   return (
     <div className="flex flex-col gap-4 p-3">
       <div className="flex flex-col gap-2" data-testid="portal-balance-paid">
@@ -388,17 +530,13 @@ function Balance({ balances, paid }) {
           {countPill(paid.reduce((sum, entry) => sum + entry.count, 0), 'portal-balance-paid-count')}
         </span>
         <span className="flex flex-wrap gap-2">
-        {paid.length === 0 ? (
-          <span className={`${badge} border-border text-muted-foreground`}>—</span>
-        ) : paid.map((entry) => (
-          <span
-            key={entry.currency || 'none'}
-            className={`${badge} border-[#B2EECC] bg-[#EEFBF4] text-[#17663A]`}
-            data-testid="portal-balance-paid-amount"
-          >
-            {formatCurrency(entry.currency, entry.paid)}
-          </span>
-        ))}
+          <BalanceAmounts
+            entries={paid.map((entry) => ({ currency: entry.currency, amount: entry.paid }))}
+            converted={convertedPaid}
+            toneClass={paidTone}
+            emptyClass={`${badge} border-border text-muted-foreground`}
+            testId="portal-balance-paid-amount"
+            data-testid="BalanceAmounts__beaeb4" />
         </span>
       </div>
       <div className="h-px bg-border" />
@@ -408,21 +546,44 @@ function Balance({ balances, paid }) {
           {countPill(balances.reduce((sum, balance) => sum + balance.pendingCount, 0), 'portal-balance-pending-count')}
         </span>
         <span className="flex flex-wrap gap-2">
-        {balances.length === 0 ? (
-          <span className={`${badge} border-border text-muted-foreground`} data-testid="portal-balance-empty">—</span>
-        ) : balances.map((balance) => (
-          <span
-            key={balance.currency || 'none'}
-            className={`${badge} border-[#FBB1C4] bg-[#FEF0F4] text-[#D50B3E]`}
-            data-testid="portal-balance-outstanding"
-          >
-            {formatCurrency(balance.currency, balance.outstanding)}
-          </span>
-        ))}
+          <BalanceAmounts
+            entries={balances.map((balance) => ({ currency: balance.currency, amount: balance.outstanding }))}
+            converted={converted}
+            toneClass={pendingTone}
+            emptyClass={`${badge} border-border text-muted-foreground`}
+            emptyTestId="portal-balance-empty"
+            testId="portal-balance-outstanding"
+            data-testid="BalanceAmounts__beaeb4" />
         </span>
       </div>
     </div>
   );
+}
+
+/**
+ * The amount badges of one "Tu saldo" figure: a dash when there is none, ONE converted "≈" badge
+ * when the figure spans several currencies and the backend converted it (QA 24/11 CP-47: the app
+ * never shows a sum per currency), else one badge per currency.
+ */
+function BalanceAmounts({ entries, converted, toneClass, emptyClass, emptyTestId, testId }) {
+  if (entries.length === 0) {
+    return <span className={emptyClass} data-testid={emptyTestId}>—</span>;
+  }
+  if (portalShowsConverted(entries, converted)) {
+    return (
+      <span className={toneClass}>
+        <PortalConvertedAmount
+          converted={converted}
+          testId={`${testId}-converted`}
+          data-testid="PortalConvertedAmount__beaeb4" />
+      </span>
+    );
+  }
+  return entries.map((entry) => (
+    <span key={entry.currency || 'none'} className={toneClass} data-testid={testId}>
+      {formatCurrency(entry.currency, entry.amount)}
+    </span>
+  ));
 }
 
 /** The tile figure's desktop size by its number of digits (the design's 60px up to three). */
@@ -445,11 +606,11 @@ function KindTile({ kind, tile, onNavigate }) {
     <button
       type="button"
       onClick={() => onNavigate(target)}
-      className={`flex min-w-0 flex-col gap-2 rounded-xl border border-border bg-card p-[18px] text-left hover:border-primary md:h-full md:min-h-0 md:justify-between md:gap-0 md:rounded-lg md:p-3 md:shadow-sm ${PORTAL_ROW_FOCUS}`}
+      className={`flex h-[124px] w-[152px] shrink-0 flex-col justify-between rounded-xl border border-[#E3E7EC] bg-white p-3 text-left shadow-[0_1px_2px_rgba(27,26,31,0.05)] hover:border-primary md:h-full md:min-h-0 md:w-auto md:shrink md:gap-0 md:rounded-lg md:border-border md:bg-card md:shadow-sm ${PORTAL_ROW_FOCUS}`}
       data-testid={`portal-tile-${kind.toLowerCase()}`}
     >
-      <span className="flex items-center gap-2 text-sm text-muted-foreground md:text-xs">
-        <span className="hidden h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted md:flex">
+      <span className="flex items-center gap-2 text-xs leading-4 text-[#555B6D] md:text-muted-foreground">
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#F3F5F9] md:bg-muted">
           <Icon size={16} aria-hidden="true" data-testid="Icon__beaeb4" />
         </span>
         {ui(PORTAL_KIND_META[kind].pluralKey)}
@@ -459,7 +620,7 @@ function KindTile({ kind, tile, onNavigate }) {
         // The design's 60px fits three digits in the narrowest tile (1280px, rail expanded); a
         // longer figure steps down so it never overflows its tile.
         className={cn(
-          "text-[44px] font-medium leading-[48px] md:leading-[60px] md:[font-family:'Plus_Jakarta_Sans','Inter',sans-serif]",
+          "text-[30px] font-medium leading-8 text-[#1B1A1F] [font-family:'Plus_Jakarta_Sans','Inter',sans-serif] md:leading-[60px] md:text-foreground",
           TILE_FIGURE_SIZES[Math.min(String(figure).length, 5)] ?? 'md:text-[60px]',
         )}
         data-testid="portal-tile-count"
@@ -470,8 +631,13 @@ function KindTile({ kind, tile, onNavigate }) {
         <PortalTag
           tone={highlight.tone}
           palette="figma"
-          className="max-w-full self-start whitespace-normal font-normal md:rounded-full"
-          data-testid="PortalTag__beaeb4">{ui(highlight.labelKey)}</PortalTag>
+          className="max-w-full self-start truncate rounded-full font-normal md:whitespace-normal"
+          // One wording on both viewports (PO decision, 2026-11-25): the tiles' own copy («Por
+          // responder», «Vencida», «En curso», «Este mes»); the list tabs and badges keep the app's
+          // status labels (CP-16).
+          data-testid="portal-tile-status">
+          <span className="truncate">{ui(highlight.labelKey)}</span>
+        </PortalTag>
       ) : (
         <span className="text-xs text-muted-foreground">{ui('portalTileTotal')}</span>
       )}
@@ -486,9 +652,9 @@ function RecentDocuments({ recent, onOpen }) {
     return <p className="px-4 py-6 text-sm text-muted-foreground">{ui('portalNoDocumentsYet')}</p>;
   }
   return (
-    <ul className="md:py-1">
+    <ul className="rounded-xl bg-white px-4 md:rounded-none md:bg-transparent md:px-0 md:py-1">
       {recent.map((document) => (
-        <li key={`${document.kind}:${document.id}`} className="border-b border-border last:border-b-0 md:border-b-0">
+        <li key={`${document.kind}:${document.id}`} className="border-b border-[#E3E7EC] last:border-b-0 md:border-b-0">
           {/* Desktop (spec of 2026-11-17): the kind, then its pills packed after it — the number
               (document icon, muted surface), the status as the app labels it, and the amount (a
               shipment has none, so no pill) — and the caret at the far right. */}
@@ -529,24 +695,25 @@ function RecentDocuments({ recent, onOpen }) {
           <button
             type="button"
             onClick={() => onOpen(document)}
-            className={`flex w-full cursor-pointer items-center gap-3.5 px-[18px] py-4 text-left md:hidden ${PORTAL_ROW_FOCUS}`}
+            className={`flex w-full cursor-pointer items-center gap-3 py-3 text-left md:hidden ${PORTAL_ROW_FOCUS}`}
             data-testid="portal-recent-document-mobile"
           >
             <span className="flex min-w-0 flex-1 flex-col">
-              <span className="truncate font-medium">{ui(documentLabelKey(document))} {document.documentNo}</span>
-              <span className="text-sm text-muted-foreground">
+              <span className="truncate text-sm font-medium leading-6 text-[#1B1A1F]">{ui(documentLabelKey(document))} {document.documentNo}</span>
+              <span className="text-xs leading-4 text-[#6B7280]">
                 {document.kind === 'INVOICE' && document.dueDate
                   ? <>{ui('portalDueOnPrefix')} <PortalDate value={document.dueDate} data-testid="PortalDate__beaeb4" /></>
                   : <PortalDate value={document.date} data-testid="PortalDate__beaeb4" />}
               </span>
             </span>
-            <span className="flex flex-col items-end gap-1">
+            <span className="flex flex-col items-end">
               <PortalMoney
                 currency={document.currency}
                 value={document.grandTotal}
-                className="font-semibold tabular-nums"
+                className="text-sm font-medium leading-6 tabular-nums text-[#1B1A1F]"
                 data-testid="PortalMoney__beaeb4" />
-              <PortalRowBadge document={document} useServerOverdue data-testid="PortalRowBadge__beaeb4" />
+              {/* The status as coloured text, without a badge (redesign 2026-11-25). */}
+              <PortalRowBadge document={document} useServerOverdue palette="text" data-testid="PortalRowBadge__beaeb4" />
             </span>
           </button>
         </li>

@@ -162,7 +162,8 @@ describe('ETP-4995 — the downloaded CSV template round-trips', () => {
       const requiredTargets = config.fields.filter((f) => f.required).map((f) => f.target);
       const emailTargets = config.fields.filter((f) => f.isEmail).map((f) => f.target);
       const numericTargets = config.fields.filter((f) => f.isNumeric).map((f) => f.target);
-      const { errors } = validateRow(row, { requiredTargets, emailTargets, numericTargets });
+      const phoneTargets = config.fields.filter((f) => f.isPhone).map((f) => f.target);
+      const { errors } = validateRow(row, { requiredTargets, emailTargets, numericTargets, phoneTargets });
       assert.deepEqual(errors, [], `${window}: sample row must validate`);
     }
   });
@@ -189,15 +190,21 @@ describe('ETP-4995 — the downloaded CSV template round-trips', () => {
 
     const requiredTargets = config.fields.filter((f) => f.required).map((f) => f.target);
     const emailTargets = config.fields.filter((f) => f.isEmail).map((f) => f.target);
-    const { valid, errors } = validateRow(row, { requiredTargets, emailTargets });
+    // ETP-6225: the phone normalization only runs on columns the window declares `isPhone`, so
+    // this reads the flag from decisions.json — dropping it would send "+34 910 000 001" as typed.
+    const phoneTargets = config.fields.filter((f) => f.isPhone).map((f) => f.target);
+    assert.deepEqual(phoneTargets, ['etgoPhone']);
+    const { valid, errors } = validateRow(row, { requiredTargets, emailTargets, phoneTargets });
     assert.deepEqual(errors, [], 'template row must pass preview validation');
     assert.ok(valid);
 
     const ops = await buildOperations(row, {
       spec: 'contacts', entity: 'businessPartner', descriptorName: 'contacts', token: 'tok-template',
       targets: config.fields.map((f) => f.target),
+      phoneTargets,
     });
     const bp = ops.find((op) => op.entity === 'businessPartner');
+    assert.equal(bp.body.etgoPhone, '+34910000001');
     assert.equal(bp.body.oBTIKTaxIDKey, '1');   // AD default, not ''
     assert.equal(bp.body.etgoIsperson, 'N');    // AD default, not ''
     assert.equal(bp.body.name, 'Acme Iberia SL');

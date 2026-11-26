@@ -45,6 +45,7 @@ export default defineConfig({
         { find: /^@etendo-ai\/etendo-go-core\/onboarding\/password-policy$/, replacement: resolve(CORE_ETENDO_GO_SRC, 'onboarding/passwordPolicy.js') },
         { find: /^@etendo-ai\/etendo-go-core\/onboarding\/password-strength-checklist$/, replacement: resolve(CORE_ETENDO_GO_SRC, 'onboarding/components/PasswordStrengthChecklist.jsx') },
         { find: /^@etendo-ai\/etendo-go-core\/onboarding\/oauth-return-to$/, replacement: resolve(CORE_ETENDO_GO_SRC, 'onboarding/oauthReturnTo.js') },
+        { find: /^@etendo-ai\/etendo-go-core\/onboarding\/hubspot-attribution$/, replacement: resolve(CORE_ETENDO_GO_SRC, 'onboarding/hubspotAttribution.js') },
         { find: /^@etendo-ai\/etendo-go-core\/onboarding$/, replacement: resolve(CORE_ETENDO_GO_SRC, 'onboarding/index.js') },
         { find: /^@etendo-ai\/etendo-go-core\/(.*)$/, replacement: resolve(CORE_ETENDO_GO_SRC, '$1') },
         // packages/app-shell-core is aliased straight to raw source above, so its own

@@ -14,14 +14,80 @@ export const ROW_LIFT_SHADOW = 'hover:shadow-[0_4px_6px_-2px_rgba(18,18,23,0.05)
 export const ROW_LIFT_SHADOW_STATIC = 'shadow-[0_4px_6px_-2px_rgba(18,18,23,0.05),0_10px_15px_-3px_rgba(18,18,23,0.08)]';
 
 /**
- * Figma "Fila / State=Hover" has NO borders: a lifted TABLE row hides both lines that
- * touch it — its own `border-b` and the previous row's `border-b` (its top line in a
- * collapsed-border table), reached through `:has(+ tr:hover)`. Resting rows keep their
- * separators. Table rows only. (ETP-5600 QA pass 2: replaces the former inset top
- * separator, which stacked on the previous row's border and drew a double line that
- * thinned out under the opaque quick-actions band.)
+ * The borders of a lifted TABLE row on hover: its own `border-b` turns transparent (the
+ * Shadows/lg falls over that edge), while the line ABOVE it — the previous row's `border-b`
+ * in the collapsed-border grid — stays, so a hovered row keeps a single grey top line.
+ * Resting rows keep their separators. Table rows only.
+ *
+ * History: ETP-5600 pass 1 redrew the top line as an inset cell shadow, which stacked on the
+ * previous row's border into a double line that thinned out under the opaque quick-actions
+ * band; QA pass 2 then hid both lines (`[&:has(+tr:hover)]:border-transparent`, the Figma
+ * "Fila / State=Hover" frame). ETP-6209 (product decision) restores the top line by keeping
+ * the previous row's own border, so there is exactly one 1px line and nothing to stack.
  */
-export const ROW_LIFT_HOVER_NO_BORDERS = 'hover:border-transparent [&:has(+tr:hover)]:border-transparent';
+export const ROW_LIFT_HOVER_BORDERS = 'hover:border-transparent';
+
+/**
+ * The composited `bg-muted/50` tint, for a row that tints on hover: a clickable row under
+ * `hoverStyle="tint"`, or any non-clickable row (TableRow's own base `hover:bg-muted/50`).
+ */
+export const ROW_TINT_HOVER_BG = '[--row-hover-bg:color-mix(in_srgb,hsl(var(--muted))_50%,hsl(var(--card)))]';
+
+/**
+ * Whether a row raises on hover. `'tint'` is the only opt-out of the lift; `'elevated'`
+ * (pre-ETP-5600 name) and anything else lift — only a clickable row, though. `'lift-always'`
+ * (ETP-5526) lifts every row, for a grid whose rows have no click target of their own but
+ * expose hover actions (the attachments table).
+ */
+export function rowLifts(hoverStyle, clickable) {
+  if (hoverStyle === 'lift-always') return true;
+  return Boolean(clickable) && hoverStyle !== 'tint';
+}
+
+/**
+ * The hover / cursor / selection classes of one list row (Figma "Fila"), shared by every list:
+ * DataTable's `getRowClassName` and the hand-built tables that must read like it (the customer
+ * portal's document table, ETP-6209). Meant for a core `TableRow`, whose base classes
+ * (`border-b border-border-subtle transition-colors hover:bg-muted/50`) it overrides through
+ * `cn()`. The row height is the caller's.
+ *
+ * - `lift` (default): transparent at rest; on hover an opaque card background plus
+ *   Shadows/lg, raised with `z-10`, instant (no colour transition), its own bottom line hidden
+ *   and the line above kept ({@link ROW_LIFT_HOVER_BORDERS}).
+ * - `tint`: the translucent `bg-muted/50` wash.
+ * - `lift-always`: the lift on every row, clickable or not.
+ *
+ * A selection colour (`selectionClass`) always wins over the hover background; a lifted row
+ * still gets the shadow. `selectedLine` (an inline-lines focused row) never lifts. Every row
+ * sets `--row-hover-bg` to its hovered background for the quick-actions fade.
+ *
+ * @param {{ clickable?: boolean, hoverStyle?: string, selectionClass?: string,
+ *   selectedLine?: boolean }} [options]
+ * @returns {string}
+ */
+export function listRowClassName({
+  clickable = false, hoverStyle = 'lift', selectionClass = '', selectedLine = false,
+} = {}) {
+  const liftRow = rowLifts(hoverStyle, clickable);
+  let hoverClass = '';
+  if (liftRow && !selectedLine) {
+    hoverClass = [
+      'hover:z-10', ROW_LIFT_SHADOW, ROW_LIFT_HOVER_BORDERS,
+      selectionClass ? '' : 'hover:bg-card [--row-hover-bg:hsl(var(--card))]',
+    ].filter(Boolean).join(' ');
+  } else if (!selectedLine && !selectionClass) {
+    // A non-clickable row still tints through TableRow's base `hover:bg-muted/50`, so it only
+    // needs the matching `--row-hover-bg` for the quick-actions fade to end on it.
+    hoverClass = clickable ? `hover:bg-muted/50 ${ROW_TINT_HOVER_BG}` : ROW_TINT_HOVER_BG;
+  }
+  return [
+    'group/row',
+    liftRow ? 'relative transition-none' : 'transition-colors',
+    clickable ? 'cursor-pointer' : 'cursor-default',
+    selectionClass,
+    hoverClass,
+  ].filter(Boolean).join(' ');
+}
 
 /**
  * Minimum width (px) of the list "Sticky Acciones" band. ETP-5600 (review W1): it is a

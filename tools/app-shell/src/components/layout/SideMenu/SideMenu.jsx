@@ -38,7 +38,9 @@ import { Button } from '@/components/ui/button.jsx';
 import { TruncatedText } from '@/components/ui/truncated-text';
 import { UserAvatarButton } from '@/components/UserAvatarButton.jsx';
 import {
-  SidebarSimpleIcon,
+  ArrowLineLeft,
+  ArrowLineRight,
+  ShoppingCart,
   CaretRightIcon,
   CaretDownIcon,
   HeadsetIcon,
@@ -53,7 +55,6 @@ import {
   Star,
   IdentificationCard,
   ShareNetwork,
-  ChartLineUp,
   Receipt,
   Bank,
   Wallet,
@@ -73,7 +74,7 @@ import {
 import { cn } from '@/lib/utils.js';
 import { useMenuLabel, useUI, useLocaleSwitch } from '@/i18n';
 import { useFavorites } from '@/components/layout/FavoritesContext';
-import { useFeatureFlag, PROOF_OF_CONCEPT_MENU, ACCT_PROCESS_MONITOR, PUBLIC_API_KEYS, UNIFIED_CALENDAR_POC, DOC_TEMPLATE_SELECTION } from '@/lib/flags';
+import { useFeatureFlag, PROOF_OF_CONCEPT_MENU, PUBLIC_API_KEYS, DOC_TEMPLATE_SELECTION } from '@/lib/flags';
 import { useEnvironmentSwitch } from '@/hooks/useEnvironmentSwitch.js';
 import { useSupportSession } from '@/hooks/useSupportSession.js';
 import { isSupportRestrictedMenuItem } from '@/lib/supportSession.js';
@@ -86,13 +87,25 @@ import {
 import menuConfig from '@/menu.json';
 import { useFirstStepsProgressOptional } from '@/pages/first-steps/FirstStepsContext.jsx';
 
+// Thin-line stroke for every rail icon, active or not (Figma Navigation Rail).
+const RAIL_ICON_WEIGHT = 'light';
+
+// Active option card shared by sub-items, popover items and direct links: normal weight, white
+// card with a border and rounded corners. Inactive entries keep a transparent border so the
+// layout and hit targets do not shift.
+function getActiveOptionClass(isActive) {
+  return isActive
+    ? 'rounded-md border bg-card text-foreground border-border-control'
+    : 'rounded-md border border-transparent hover:bg-muted/50';
+}
+
 const ICON_MAP = {
   ClipboardCheck,
   Home:           House,
   Star,
   Contact2:       IdentificationCard,
   Share2:         ShareNetwork,
-  TrendingUp:     ChartLineUp,
+  ShoppingCart,
   Receipt,
   Building2:      Bank,
   Wallet,
@@ -174,7 +187,7 @@ function CollapsedGroupPopover({
           )}
         >
           <GroupIcon
-            weight={isGroupActive ? 'fill' : 'regular'}
+            weight={RAIL_ICON_WEIGHT}
             className="h-5 w-5"
             data-testid="GroupIcon__247c75" />
         </button>
@@ -204,10 +217,9 @@ function CollapsedGroupPopover({
                 key={item.name}
                 to={`/${itemPath}`}
                 className={cn(
-                  'flex w-full items-center px-3 py-2 text-sm transition-colors',
-                  isItemActive
-                    ? 'bg-card text-foreground font-semibold shadow-sm ring-1 ring-border-control'
-                    : 'text-foreground hover:bg-muted/50'
+                  'mx-2 flex w-[calc(100%-1rem)] items-center px-3 py-2 text-sm transition-colors',
+                  getActiveOptionClass(isItemActive),
+                  !isItemActive && 'text-foreground'
                 )}
                 data-testid={`menu-item-${item.slug || item.name?.replace(/\s+/g, '-').toLowerCase()}`}>
                 {tMenu(item.label)}
@@ -346,14 +358,12 @@ function ExpandedDirectLink({ group, singleItem, Icon, showSectionLabel, section
         <GuardedNavLink
           to={`/${itemPath}`}
           className={cn(
-            'flex w-full items-center gap-2.5 px-3 py-1.5 text-sm transition-colors border-l-[3px] border-transparent',
-            isActive
-              ? 'bg-card text-foreground font-medium shadow-sm ring-1 ring-border-control'
-              : 'hover:bg-muted/50'
+            'flex w-full items-center gap-2.5 px-3 py-1.5 text-sm transition-colors',
+            getActiveOptionClass(isActive)
           )}
           data-testid={`menu-item-${singleItem.slug || singleItem.name?.replace(/\s+/g, '-').toLowerCase()}`}>
           <Icon
-            weight={isActive ? 'fill' : 'regular'}
+            weight={RAIL_ICON_WEIGHT}
             className={cn('h-5 w-5 shrink-0', !isActive && 'text-muted-foreground')}
             data-testid="Icon__247c75" />
           <span className={cn('flex-1 text-left truncate', !isActive && 'text-text-primary')}>
@@ -366,17 +376,10 @@ function ExpandedDirectLink({ group, singleItem, Icon, showSectionLabel, section
   );
 }
 
-function getGroupHeaderClass(isGroupActive, isOpen) {
-  if (isGroupActive && !isOpen) {
-    return 'bg-card text-foreground font-medium border-border-control shadow-sm';
-  } else {
-    if (isGroupActive) {
-      return 'bg-card font-medium hover:bg-muted/50 border-border-control';
-    } else {
-      return 'hover:bg-muted/50 border-transparent';
-    }
-  }
-}
+// The parent group is never highlighted in the expanded rail; only the open
+// state (see `openGroups`) and the active item mark where the user is. Same 1px
+// transparent border as the option cards so every top-level row lines up.
+const GROUP_HEADER_CLASS = 'border border-transparent hover:bg-muted/50';
 
 function ExpandedGroupSection({
   group,
@@ -385,7 +388,6 @@ function ExpandedGroupSection({
   sectionLabel,
   groupLabel,
   isOpen,
-  isGroupActive,
   onToggle,
   emptyFavoritesLabel,
   visibleItems,
@@ -411,15 +413,15 @@ function ExpandedGroupSection({
           aria-expanded={!!isOpen}
           data-testid={`menu-group-${group.group.replace(/\s+/g, '-').toLowerCase()}`}
           className={cn(
-            'flex w-full items-center gap-2.5 px-3 py-1.5 text-sm transition-colors border-l-[3px]',
-            getGroupHeaderClass(isGroupActive, isOpen)
+            'flex w-full items-center gap-2.5 px-3 py-1.5 text-sm transition-colors',
+            GROUP_HEADER_CLASS
           )}
         >
           <Icon
-            weight={isGroupActive ? 'fill' : 'regular'}
-            className={cn('h-5 w-5 shrink-0', !isGroupActive && 'text-muted-foreground')}
+            weight={RAIL_ICON_WEIGHT}
+            className="h-5 w-5 shrink-0 text-muted-foreground"
             data-testid="Icon__247c75" />
-          <span className={cn('flex-1 text-left truncate', !(isGroupActive && !isOpen) && 'text-text-primary')}>
+          <span className="flex-1 text-left truncate text-text-primary">
             {groupLabel}
           </span>
           <CaretDownIcon
@@ -445,9 +447,8 @@ function ExpandedGroupSection({
                 <button
                   type="button"
                   onClick={onShowMoreFavorites}
-                  className="relative flex w-full items-center pl-[52px] pr-4 py-1.5 text-sm text-muted-foreground hover:bg-muted/50 transition-colors"
+                  className="flex w-full items-center pl-[52px] pr-4 py-1.5 text-sm text-muted-foreground hover:bg-muted/50 transition-colors"
                 >
-                  <span className="absolute left-[33px] top-0 bottom-0 w-px bg-[hsl(var(--border-subtle))]" />
                   <span className="flex-1 text-left">{andNMoreLabel}</span>
                   <CaretDownIcon className="h-3.5 w-3.5 shrink-0" data-testid="ChevronDown__247c75" />
                 </button>
@@ -669,12 +670,8 @@ export default function SideMenu({
   // This is visual gating only. The windows remain protected by normal AD role
   // filtering; the flag merely stops offering this internal menu section.
   const showProofOfConceptMenu = useFeatureFlag(PROOF_OF_CONCEPT_MENU);
-  // ETP-5269. Item-level flag gating, where Proof of Concept above gates a whole group. Visual
-  // only: the route is registered unconditionally and SFAcctProcessMonitor enforces admin access.
-  const showAcctProcessMonitor = useFeatureFlag(ACCT_PROCESS_MONITOR);
   const showPublicApiKeys = useFeatureFlag(PUBLIC_API_KEYS);
   const showDocTemplateSelection = useFeatureFlag(DOC_TEMPLATE_SELECTION);
-  const showUnifiedCalendarPoc = useFeatureFlag(UNIFIED_CALENDAR_POC);
   // Unconditional since ETP-4966: owning more than one environment is a shipped
   // capability, so the switcher is always available. The hook already returns an
   // empty list for a session that cannot list environments, which is what keeps
@@ -698,7 +695,6 @@ export default function SideMenu({
   }, []);
 
   const featureFlagValues = useMemo(() => ({
-    [ACCT_PROCESS_MONITOR]: showAcctProcessMonitor,
     [PUBLIC_API_KEYS]: showPublicApiKeys,
     [DOC_TEMPLATE_SELECTION]: showDocTemplateSelection,
     // ETP-5436 — an item can now ALSO declare featureFlag: PROOF_OF_CONCEPT_MENU (e.g.
@@ -707,10 +703,7 @@ export default function SideMenu({
     // with showProofOfConceptMenu's group-level gate above, or an item inside an unlocked
     // group would still be filtered out here as if the flag were unset.
     [PROOF_OF_CONCEPT_MENU]: showProofOfConceptMenu,
-    // Unified Calendar PoC — item-level flag. It sits inside the Proof of Concept group, so it is
-    // visible only when BOTH proof-of-concept-menu (group gate above) and this flag are on.
-    [UNIFIED_CALENDAR_POC]: showUnifiedCalendarPoc,
-  }), [showAcctProcessMonitor, showPublicApiKeys, showProofOfConceptMenu, showUnifiedCalendarPoc]);
+  }), [showPublicApiKeys, showDocTemplateSelection, showProofOfConceptMenu]);
 
   // Applied to Favorites TOO. Favorites are rebuilt from the user's own saved list rather than
   // from menuGroups, so returning early for that group let a favourited flag-gated item stay
@@ -882,9 +875,9 @@ export default function SideMenu({
               onClick={onToggle}
               aria-label={ui('collapseMenu')}
               data-testid="sidebar-collapse"
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground transition-colors"
             >
-              <SidebarSimpleIcon className="h-4 w-4" data-testid="PanelLeftClose__247c75" />
+              <ArrowLineLeft className="h-4 w-4" data-testid="PanelLeftClose__247c75" />
             </button>
             <div className="absolute bottom-0 left-3 right-3 border-t border-border/50" />
           </div>
@@ -902,9 +895,9 @@ export default function SideMenu({
                   onClick={onToggle}
                   aria-label={ui('expandMenu')}
                   data-testid="sidebar-expand"
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground transition-colors"
                 >
-                  <SidebarSimpleIcon className="h-5 w-5" data-testid="PanelLeftOpen__247c75" />
+                  <ArrowLineRight className="h-5 w-5" data-testid="PanelLeftOpen__247c75" />
                 </button>
               </TooltipTrigger>
               <TooltipContent side="right" data-testid="TooltipContent__247c75">{ui('expandMenu')}</TooltipContent>
@@ -947,7 +940,7 @@ export default function SideMenu({
                           )}
                           data-testid={`menu-item-${singleItem.slug || singleItem.name?.replace(/\s+/g, '-').toLowerCase()}`}>
                           <Icon
-                            weight={isItemActive || isGroupActive ? 'fill' : 'regular'}
+                            weight={RAIL_ICON_WEIGHT}
                             className="h-5 w-5"
                             data-testid="Icon__247c75" />
                           <FirstStepsCountBadge
@@ -1012,20 +1005,12 @@ export default function SideMenu({
                   key={item.name}
                   to={`/${itemPath}`}
                   className={cn(
-                    'relative flex w-full items-center pl-[52px] pr-4 py-1.5 text-sm transition-colors',
-                    isItemActive
-                      ? 'bg-card text-foreground font-semibold shadow-sm ring-1 ring-border-control'
-                      : 'text-text-primary hover:bg-muted/50'
+                    'mx-2 flex w-[calc(100%-1rem)] items-center pl-[44px] pr-3 py-1.5 text-sm transition-colors',
+                    getActiveOptionClass(isItemActive),
+                    !isItemActive && 'text-text-primary'
                   )}
                   data-testid={`menu-item-${item.slug || item.name?.replace(/\s+/g, '-').toLowerCase()}`}>
-                  <span className={cn(
-                    'absolute left-[33px] top-0 bottom-0 w-px',
-                    isItemActive ? 'bg-card/40' : 'bg-[hsl(var(--border-subtle))]'
-                  )} />
-                  {isItemActive && (
-                    <span className="absolute left-[33px] right-2 top-0 bottom-0 bg-card" />
-                  )}
-                  <span className="relative z-10">
+                  <span>
                     {isFavorites
                       ? (item.labels?.[locale] || tMenu(favNameMap[item.path || item.name] || item.label))
                       : tMenu(item.label)}
@@ -1039,10 +1024,9 @@ export default function SideMenu({
                 <GuardedNavLink
                   key={item.name}
                   to={`/${itemPath}`}
-                  className="relative flex w-full items-center pl-[52px] pr-4 py-1.5 text-sm text-text-primary hover:bg-muted/50 transition-colors"
+                  className="mx-2 flex w-[calc(100%-1rem)] items-center rounded-md border border-transparent pl-[44px] pr-3 py-1.5 text-sm text-text-primary hover:bg-muted/50 transition-colors"
                   data-testid="NavLink__247c75">
-                  <span className="absolute left-[33px] top-0 bottom-0 w-px bg-[hsl(var(--border-subtle))]" />
-                  <span className="relative z-10">
+                  <span>
                     {item.labels?.[locale] || tMenu(favNameMap[itemPath] || item.label)}
                   </span>
                 </GuardedNavLink>
@@ -1059,7 +1043,6 @@ export default function SideMenu({
                 sectionLabel={tMenu(g.section)}
                 groupLabel={tMenu(g.group)}
                 isOpen={isOpen}
-                isGroupActive={isGroupActive}
                 onToggle={() => toggleGroup(g.group)}
                 emptyFavoritesLabel={ui('noFavoritesYet')}
                 visibleItems={visibleSubItems}

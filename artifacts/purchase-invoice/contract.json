@@ -1,8 +1,8 @@
 {
-  "version": "0.11.0",
+  "version": "0.13.0",
   "generatedAt": "2026-09-17T15:12:05.434Z",
-  "updatedAt": "2026-11-23T13:46:17.092Z",
-  "checksum": "8787594a3fb2ae25",
+  "updatedAt": "2026-11-25T19:12:10.978Z",
+  "checksum": "c3edc68695463378",
   "frontendContract": {
     "window": {
       "id": "183",
@@ -1779,6 +1779,47 @@
             "validation": {
               "maxLength": 0
             }
+          },
+          {
+            "name": "etgoRemittedAmt",
+            "apiKey": "etgoRemittedAmt",
+            "column": "EM_Etgo_Remitted_Amt",
+            "label": "EM_Etgo_Remitted_Amt",
+            "type": "amount",
+            "tsType": "number",
+            "visibility": "readOnly",
+            "required": false,
+            "grid": false,
+            "form": false,
+            "computed": {
+              "mode": "stored",
+              "refresh": "synchronous"
+            },
+            "validation": {
+              "maxLength": 22
+            }
+          },
+          {
+            "name": "etgoImportDua",
+            "apiKey": "etgoImportDua",
+            "column": "EM_Etgo_Import_Dua",
+            "label": "EM_Etgo_Import_Dua",
+            "type": "boolean",
+            "tsType": "boolean",
+            "visibility": "editable",
+            "required": true,
+            "grid": false,
+            "form": false,
+            "sourceRequired": true,
+            "derivation": {
+              "type": "computed",
+              "source": "N"
+            },
+            "defaultValue": "N",
+            "validation": {
+              "required": true,
+              "maxLength": 1
+            }
           }
         ],
         "searchableFields": [
@@ -1953,6 +1994,13 @@
           },
           {
             "name": "etvfacSentToVerifac",
+            "derivation": {
+              "type": "computed",
+              "source": "N"
+            }
+          },
+          {
+            "name": "etgoImportDua",
             "derivation": {
               "type": "computed",
               "source": "N"
@@ -3935,6 +3983,13 @@
                 }
               },
               {
+                "value": "REM_SENT",
+                "name": "Remitted",
+                "labels": {
+                  "es_ES": "Remitted"
+                }
+              },
+              {
                 "value": "PPM",
                 "name": "Payment Made",
                 "labels": {
@@ -3946,6 +4001,13 @@
                 "name": "Payment Received",
                 "labels": {
                   "es_ES": "Cobrado"
+                }
+              },
+              {
+                "value": "REM_CANCEL",
+                "name": "Settled in Remittance",
+                "labels": {
+                  "es_ES": "Settled in Remittance"
                 }
               },
               {
@@ -6941,6 +7003,22 @@
             "type": "button",
             "visibility": "discarded",
             "required": false
+          },
+          {
+            "name": "etgoRemittedAmt",
+            "apiKey": "etgoRemittedAmt",
+            "column": "EM_Etgo_Remitted_Amt",
+            "type": "amount",
+            "visibility": "readOnly",
+            "required": false
+          },
+          {
+            "name": "etgoImportDua",
+            "apiKey": "etgoImportDua",
+            "column": "EM_Etgo_Import_Dua",
+            "type": "boolean",
+            "visibility": "editable",
+            "required": true
           }
         ],
         "namedFilters": [
@@ -11415,6 +11493,14 @@
         "description": "Default value for 'dueAmount' in header should be a string"
       },
       {
+        "id": "t-default-value-type-header-etgoImportDua",
+        "category": "default-value-type",
+        "entity": "header",
+        "field": "etgoImportDua",
+        "runner": "node",
+        "description": "Default value for 'etgoImportDua' in header should be a string"
+      },
+      {
         "id": "t-default-value-type-header-etsgDateOperation",
         "category": "default-value-type",
         "entity": "header",
@@ -12557,6 +12643,22 @@
         "field": "eTGODueDate",
         "runner": "node",
         "description": "Field 'eTGODueDate' should be present in header"
+      },
+      {
+        "id": "t-field-presence-header-etgoImportDua",
+        "category": "field-presence",
+        "entity": "header",
+        "field": "etgoImportDua",
+        "runner": "node",
+        "description": "Field 'etgoImportDua' should be present in header"
+      },
+      {
+        "id": "t-field-presence-header-etgoRemittedAmt",
+        "category": "field-presence",
+        "entity": "header",
+        "field": "etgoRemittedAmt",
+        "runner": "node",
+        "description": "Field 'etgoRemittedAmt' should be present in header"
       },
       {
         "id": "t-field-presence-header-eTGOTbaiStatus",
@@ -13885,6 +13987,22 @@
         "field": "eTGODueDate",
         "runner": "node",
         "description": "Field 'eTGODueDate' should have type 'string' in header"
+      },
+      {
+        "id": "t-field-type-header-etgoImportDua",
+        "category": "field-type",
+        "entity": "header",
+        "field": "etgoImportDua",
+        "runner": "node",
+        "description": "Field 'etgoImportDua' should have type 'boolean' in header"
+      },
+      {
+        "id": "t-field-type-header-etgoRemittedAmt",
+        "category": "field-type",
+        "entity": "header",
+        "field": "etgoRemittedAmt",
+        "runner": "node",
+        "description": "Field 'etgoRemittedAmt' should have type 'number' in header"
       },
       {
         "id": "t-field-type-header-eTGOTbaiStatus",
@@ -19180,15 +19298,15 @@
       }
     ],
     "summary": {
-      "total": 1032,
+      "total": 1037,
       "byCategory": {
         "action-endpoint": 26,
         "crud-flags": 13,
-        "default-value-type": 41,
+        "default-value-type": 42,
         "displaylogic-evaluable": 28,
         "displaylogic-valid": 28,
-        "field-presence": 166,
-        "field-type": 166,
+        "field-presence": 168,
+        "field-type": 168,
         "readonlylogic-evaluable": 76,
         "readonlylogic-valid": 76,
         "rule-declared": 23,
@@ -19198,7 +19316,7 @@
         "visibility": 13
       },
       "byRunner": {
-        "node": 1032,
+        "node": 1037,
         "junit": 0
       }
     }

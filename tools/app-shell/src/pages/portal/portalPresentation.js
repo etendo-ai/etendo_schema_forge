@@ -42,21 +42,26 @@ export const PORTAL_KIND_META = Object.freeze({
  * label. "All" is the implicit first tab. The mapping is recorded in the plan (§B.4). Labels are
  * the app's own status keys (PO answer: the same status names as the app), the ones its badges
  * use; only "delivered" keeps a portal key, as the app has no status of that name.
+ *
+ * `statusCode` (QA 24/11 CP-16): a group that stands for one document status is named exactly as
+ * the app names that status (the AD list translation through `statusLabel`, e.g. UE "Bajo
+ * evaluación", VO "Anulada"), so the tab and the badges of its rows read the same. `labelKey` is
+ * the fallback.
  */
 export const PORTAL_KIND_GROUPS = Object.freeze({
   QUOTATION: [
-    { code: 'awaiting', labelKey: 'statusUnderEvaluation' },
-    { code: 'accepted', labelKey: 'statusAccepted' },
-    { code: 'rejected', labelKey: 'statusRejected' },
+    { code: 'awaiting', statusCode: 'UE', labelKey: 'docStatusUe' },
+    { code: 'accepted', statusCode: 'ETGO_AC', labelKey: 'statusAccepted' },
+    { code: 'rejected', statusCode: 'CJ', labelKey: 'statusRejected' },
   ],
   ORDER: [
     { code: 'inProgress', labelKey: 'statusInProcess' },
-    { code: 'completed', labelKey: 'statusComplete' },
-    { code: 'voided', labelKey: 'statusVoid' },
+    { code: 'completed', statusCode: 'CO', labelKey: 'statusComplete' },
+    { code: 'voided', statusCode: 'VO', labelKey: 'statusVoid' },
   ],
   SHIPMENT: [
     { code: 'delivered', labelKey: 'portalGroupDelivered' },
-    { code: 'voided', labelKey: 'statusVoid' },
+    { code: 'voided', statusCode: 'VO', labelKey: 'statusVoid' },
   ],
   INVOICE: [
     { code: 'pending', labelKey: 'statusPending' },
@@ -64,6 +69,24 @@ export const PORTAL_KIND_GROUPS = Object.freeze({
     { code: 'paid', labelKey: 'statusPaid' },
   ],
 });
+
+/**
+ * The document types inside a kind that mixes them (QA 24/11 CP-16: "tipo" is one of the app's
+ * quick filters): invoices and credit notes share the invoice list. The labels are the row badge's
+ * (`PortalInvoiceTypeBadge`), so the filter names a type exactly as the rows show it. The code is
+ * sent as the list's `subtype` query parameter.
+ */
+export const PORTAL_KIND_SUBTYPES = Object.freeze({
+  INVOICE: Object.freeze([
+    { code: 'invoice', labelKey: 'invoicesTab' },
+    { code: 'creditNote', labelKey: 'rectificativeInvoicesTab' },
+  ]),
+});
+
+/** Whether `subtype` is one of `kind`'s document types. */
+export function isPortalSubtype(kind, subtype) {
+  return Boolean(subtype) && (PORTAL_KIND_SUBTYPES[kind] ?? []).some((s) => s.code === subtype);
+}
 
 /** Whether `group` is one of `kind`'s tabs. */
 export function isPortalGroup(kind, group) {
@@ -96,12 +119,42 @@ export function quotationValidity(document) {
 }
 
 /**
+ * Whether the portal offers Aceptar / Rechazar on a quotation (ETP-6209 Part C; QA 24/11 CP-49).
+ *
+ * The backend decides (the row's `canDecide`, and `decision.canDecide` on a detail: pending, not expired, AND
+ * emailed to the address this link was sent to); the browser only refuses on top of it, never
+ * grants: a quotation already answered or whose validity date is past shows no buttons even if an
+ * answer said otherwise. A missing flag is `false`.
+ */
+export function canOfferDecision(document) {
+  if (document?.kind !== 'QUOTATION') return false;
+  // A list row carries only its own `canDecide`; a detail also carries the `decision` block, and
+  // then both must agree.
+  if (document.canDecide !== true) return false;
+  if (document.decision != null && document.decision.canDecide !== true) return false;
+  if (!(isNotApprovedStatus(document.documentStatus) || isCompletedStatus(document.documentStatus))) {
+    return false;
+  }
+  return quotationValidity(document)?.state !== 'expired';
+}
+
+/**
  * Whether the portal offers "Aceptar" (ETP-6209 Part C, PO answer to Q1: a confirmed accept moves
  * the quotation to `ETGO_AC` "Aceptado", still convertible in the app). Kept as a switch with the
  * backend's `PortalDecisionService.ACCEPT_AVAILABLE` (reported as `decision.acceptAvailable`);
  * the button shows only when both are on.
  */
 export const PORTAL_ACCEPT_ENABLED = true;
+
+/**
+ * Addresses as one phrase: "a", "a y b", "a, b y c" (`conjunction` is the locale's "y" / "and").
+ * The confirmation goes to every To recipient of the original send, never the CC (QA CP-45).
+ */
+export function joinRecipients(recipients, conjunction) {
+  const list = (recipients ?? []).filter(Boolean);
+  if (list.length <= 1) return list[0] ?? '';
+  return `${list.slice(0, -1).join(', ')} ${conjunction} ${list[list.length - 1]}`;
+}
 
 /** The fixed reject reasons (PO spec), with the API codes; "Otros" requires a text. */
 export const PORTAL_REJECT_REASONS = Object.freeze([
@@ -135,15 +188,17 @@ export function documentLabelKey(document) {
  * **Overdue is decided like the app, in the browser's calendar day** (ETP-6209 review N-b):
  * - with the instalments (the document detail), like the topbar — overdue when any instalment
  *   still owing money is past due (`getCalendarDateRelation`, local-day parsing);
- * - without them (lists, home, related), like the invoice list grid — the badge shows no overdue,
- *   and the due-date column's dot (`getDueDateState`) carries it.
+ * - without them (lists, home), from the row's server `overdue` flag (an instalment past due with
+ *   money still owed — the same schedule query the detail reads). QA 24/11 CP-18: the list said
+ *   "Pendiente" for an overdue invoice, even inside the "Vencido" tab, while the detail and the
+ *   app said "Vencido"; list, home and detail must agree.
  *
  * @param {object} document a portal document
  * @param {Array<{dueDate: string, outstandingAmount: number}>} [installments] the detail's
  *   instalments, when known
  * @returns {{ id: string, labelKey: string, tone: string }|null} null when not an invoice
  */
-export function invoicePaymentState(document, installments = null, { useServerOverdue = false } = {}) {
+export function invoicePaymentState(document, installments = null, { useServerOverdue = true } = {}) {
   if (document?.kind !== 'INVOICE') return null;
   const badge = resolveInvoicePaymentBadge({
     grandTotalAmount: document.grandTotal,
@@ -151,10 +206,9 @@ export function invoicePaymentState(document, installments = null, { useServerOv
     documentStatus: document.documentStatus,
   });
   if (badge.kind === 'draft') return null;
-  // `useServerOverdue` — the home's "Documentos recientes" ONLY (design Main shows "Vencida"
-  // there): recent rows carry no instalments, so the row's server `overdue` flag (an instalment
-  // past due with money owed, server day) stands in for them. The lists keep the app grid's rule
-  // (no overdue badge, the due-date dot carries it).
+  // The row's server `overdue` flag (an instalment past due with money owed) counts everywhere by
+  // default (CP-18); `useServerOverdue: false` is left for a caller that must judge by the
+  // instalments alone.
   const overdue = (useServerOverdue && document.overdue === true)
     || (Array.isArray(installments) && installments.some((installment) => (
       (installment.outstandingAmount ?? 0) > 0
@@ -191,13 +245,17 @@ export function defaultPortalRange(reference = new Date()) {
 }
 
 /**
- * The range a list opens with: the rolling last month (D-2), unless the link that opened it names
- * a status group. A group link — a home tile ("Por responder", "Vencidas", "En curso") or "Ver
- * facturas pendientes" — asks for everything in that state, which may be older than a month, so it
- * opens on all time (`null`). Either way the customer can pick any other range.
+ * The status tabs that mean "everything in this state now", not "what happened in a period"
+ * (QA pass 2, CP-18b): an overdue invoice is by definition older than its due date, so the rolling
+ * last month hid every overdue invoice while Inicio said "1 Vencida". Selecting one of these tabs
+ * switches the list to all time (`null`), exactly as arriving from an Inicio tile does; the
+ * customer can still pick a narrower range afterwards.
  */
-export function initialPortalRange(group, reference = new Date()) {
-  return group ? null : defaultPortalRange(reference);
+export const PORTAL_ALL_TIME_GROUPS = Object.freeze(['awaiting', 'pending', 'overdue', 'inProgress']);
+
+/** Whether selecting the `group` tab shows the whole history ({@link PORTAL_ALL_TIME_GROUPS}). */
+export function isAllTimeGroup(group) {
+  return PORTAL_ALL_TIME_GROUPS.includes(group);
 }
 
 /** A local `Date` as the `yyyy-MM-dd` calendar day the API expects. */
@@ -210,7 +268,8 @@ export function toCalendarParam(date) {
  * (`/portal/:token`) and never here.
  *
  * - `{ view: 'home' }`
- * - `{ view: 'list', kind, group? }` — `group` one of the kind's tabs ({@link PORTAL_KIND_GROUPS})
+ * - `{ view: 'list', kind, group?, q? }` — `group` one of the kind's tabs ({@link PORTAL_KIND_GROUPS});
+ *   `q` the search the list opens on (ETP-6209: "Ver todos en …" of Inicio's search), trimmed
  * - `{ view: 'doc', kind, id, group? }` — `group`: the list tab the document was opened from
  */
 export function readPortalView(searchParams) {
@@ -221,7 +280,10 @@ export function readPortalView(searchParams) {
   const id = searchParams.get('id');
   const group = searchParams.get('group');
   if (view === 'list' && PORTAL_KIND_META[kind]) {
-    return isPortalGroup(kind, group) ? { view: 'list', kind, group } : { view: 'list', kind };
+    const q = searchParams.get('q')?.trim();
+    return {
+      view: 'list', kind, ...(isPortalGroup(kind, group) ? { group } : {}), ...(q ? { q } : {}),
+    };
   }
   // A document keeps the list tab it was opened from (the list stays underneath it on desktop).
   if (view === 'doc' && PORTAL_KIND_META[kind] && id) {
@@ -231,12 +293,17 @@ export function readPortalView(searchParams) {
   return null;
 }
 
-/** The search string of a view (see {@link readPortalView}): view, kind, id and group only. */
+/**
+ * The search string of a view (see {@link readPortalView}): view, kind, id, group and — on a list
+ * only — the search `q`. Nothing else, so no token or stray field ever reaches the URL.
+ */
 export function writePortalView(target) {
   const params = new URLSearchParams();
   params.set('view', target.view);
   if (target.kind) params.set('kind', target.kind);
   if (target.id) params.set('id', target.id);
   if (target.group) params.set('group', target.group);
+  const q = target.view === 'list' ? String(target.q ?? '').trim() : '';
+  if (q) params.set('q', q);
   return params;
 }

@@ -1,4 +1,5 @@
 // @covers tools/app-shell/src/windows/custom/sales-invoice/index.jsx
+// @covers artifacts/sales-invoice/custom/invoiceSubtype.js
 // Coverage-recovery suite (ETP-4346 batch 2): a genuine render smoke test for
 // the sales-invoice custom window wrapper. The existing index.test.js is a
 // source-reading suite (regex-only, per this project's convention for thin
@@ -329,6 +330,22 @@ describe('SalesInvoiceWindow — render smoke tests', () => {
     expect(modal).toHaveAttribute('data-bp-name', 'Acme');
     expect(modal).toHaveAttribute('data-bpartner-id', 'bp-1');
     expect(modal).toHaveAttribute('data-document-id', 'inv-7');
+  });
+
+  // The row's send names a rectificative invoice «Factura rectificativa» (as an MCP send does),
+  // whether the server subtype or only the doc type name says so; any other one by the window label.
+  it.each([
+    ['a rectificative invoice', { arInvoiceSubtype: 'RECTIFICATIVA' }, 'sendDocumentTypeCreditNote'],
+    ['a credit memo known only by its doc type name', { 'transactionDocument$_identifier': 'AR Credit Memo' }, 'sendDocumentTypeCreditNote'],
+    ['a regular invoice', { arInvoiceSubtype: 'FAC' }, 'Sales Invoice'],
+  ])('names %s in the row send modal', (_label, overrides, expected) => {
+    render(<SalesInvoiceWindow windowName="sales-invoice" apiBaseUrl="/api" token="tkn" />);
+
+    act(() => {
+      lastListViewProps.rowQuickActions.onEmail({ id: 'inv-7', documentNo: 'INV-007', ...overrides });
+    });
+
+    expect(screen.getByTestId('send-document-modal')).toHaveAttribute('data-document-type', expected);
   });
 
   it('closes the send-document modal portal on close', () => {

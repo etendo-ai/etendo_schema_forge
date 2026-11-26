@@ -37,6 +37,7 @@ export default function ConfirmWithCreditButton({ data, recordId, token, apiBase
         createInvoiceModalTitle={ui('returnReceipt.createRectificativeInvoiceTitle')}
         cardTitle={ui('returnReceipt.createRectificativeInvoice')}
         cardDesc={ui('returnReceipt.createRectificativeInvoiceDescription')}
+        validateInvoiceBeforeConfirm
         data-testid="ConfirmWithCreditButtonBase__a61728" />
     </>
   );

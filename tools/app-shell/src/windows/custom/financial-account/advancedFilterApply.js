@@ -26,7 +26,7 @@
 // aliased import here makes the whole test file fail to load with
 // ERR_MODULE_NOT_FOUND.
 import { parseCalendarDate } from '../../../lib/dateOnly.js';
-import { resolveFilterMode } from '../../../lib/gridQuery.js';
+import { resolveFilterMode } from '@etendo-ai/app-shell-core/lib/gridQuery.js';
 
 /** Case-insensitive string projection. Trims so a stray leading/trailing space
  * in the typed value (or in the stored data) never silently kills a match. */

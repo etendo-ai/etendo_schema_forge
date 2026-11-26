@@ -267,8 +267,8 @@ documentNo, identifier}, adjusted, createdVendor, createdProducts, alreadyConfir
 `org_not_allowed`, `QUOTA_EXCEEDED` (and a code-less 403 = no access); 404 `not_found`; 409
 `not_confirmable`, `stale_document`; 422 `not_valid` (+ `missing`), `duplicate_invoice`,
 `missing_exchange_rate`, `vendor_address_missing`, `price_list_tax_included`, `confirm_failed` (+ `detail`).
-`price_list_tax_included`: the vendor's purchase price list includes tax, which the inbox does not support; the
-row is NOT moved and nothing is created, the SPA tells the user to change the vendor's purchase price list. It
+`price_list_tax_included`: the purchase price list of the invoice (the vendor's, or the default one when the vendor has none or is new) includes tax, which the inbox does not support; the
+row is NOT moved and nothing is created, the SPA tells the user to use a price list without tax included. It
 does not stop a batch (per document) and, like `duplicate_invoice`, shows as a notice in the panel with no reload. The SPA never changes
 `ADJUSTED` on a confirm and sends nothing about it.
 
@@ -301,7 +301,16 @@ does not stop a batch (per document) and, like `duplicate_invoice`, shows as a n
   Partial → warning: the success text, then "{failed} no se pudieron confirmar: {reason}" (singular for 1) and,
   after a stop, "{n} sin confirmar" for the documents never sent (counted apart from the failed ones); none → error "No
   se pudieron confirmar las facturas: {reason}". The reason is the stopping one, the common one, or "varios
-  motivos, revisa los documentos con errores".
+  motivos, revisa los documentos con errores". A `confirm_failed` failure shows its REAL reason: the toast
+  translates its `detailCode` / `detailParams` through `CONFIRM_FAILED_DETAIL_KEYS` / `confirmFailedDetail`
+  (the same table as the panel banner), falling back to the generic text when there is no detail. Several
+  failures count as the same cause only when the code, the `detailCode` and ALL the params are identical
+  (params compared by a stable serialization with sorted keys); a different line, reason or amount is a
+  different cause and gives "varios motivos, revisa los documentos con errores". Stopping refusals and
+  network errors are unchanged.
+  **Duration:** the confirm and discard result toasts last 6 s on success and 10 s on warning or error, and
+  carry a close button (`toastOptions` in `InvoiceInboxPage.jsx`). Only those call sites: every other toast
+  keeps the global default (about 4 s).
 - **Single, from the review panel** (footer): "Confirmar factura" is enabled on a PENDING_REVIEW or READY
   document with no required field pending and nothing saving (`canConfirm`; marking as reviewed is NOT
   required, it stays optional and live). It flushes the pending saves, sends `{updated}` (the panel's
@@ -322,12 +331,16 @@ does not stop a batch (per document) and, like `duplicate_invoice`, shows as a n
   `error.detailParams`, next to the English `error.detail`) through the same table. An unknown code shows
   `params.reason`, else `params.message`, else the English `text`; the legacy free text of rows written
   before this change is shown as it is; no reason at all shows "No se pudo crear la factura. No se guardó
-  nada en Etendo; puedes reintentar." Only text built outside the confirm (the completion's own message, the
+  nada en Etendo; puedes reintentar." `step_refused_status {step, status}` ("El servidor rechazó el paso
+  «{step}» (código {status}). Contacta con soporte.", en_US / es_ES / es_AR) is what the user sees when the
+  server refused a confirm step and gave NO message of its own: the step (vendor, vendorAddress, header,
+  line, product, creation) and the HTTP status are all there is; when the operation gave a real message,
+  the `step_failed` path with that reason is unchanged Only text built outside the confirm (the completion's own message, the
   pipeline's `reason`, user data such as a product name) can still arrive in another language: our own
   confirm messages have no `AD_MESSAGE` row and are English by default, translated here by code. Editing it moves it back to PENDING_REVIEW (done by the backend). Nothing was saved in
   Etendo: the vendor, products and invoice roll back with the failure.
 - **Blockers in `validation.missing`** that no input shows: `exchangeRate` (no exchange rate for the invoice
-  currency and date) and `vendorAddress` (a vendor without a usable address). The stored row is ERROR /
+  currency and date, or a printed currency the tenant does not have: `header.currencyUnavailable`) and `vendorAddress` (a vendor without a usable address). The stored row is ERROR /
   `MISSING_FIELDS`. They show as a destructive banner (`confirmBlockers`, exact codes) and count in the
   pending counter, so Confirm stays disabled. `canConfirm` also accepts an ERROR / `MISSING_FIELDS`
   document once nothing is pending.
@@ -379,7 +392,11 @@ does not stop a batch (per document) and, like `duplicate_invoice`, shows as a n
 - **Batch dialog labels**: with more than one currency each total reads "Importe total (EUR)" / "(JPY)".
 - **Fields**: `currency`, `newProducts` and `errorDetail` are read-only `header` fields in `decisions.json`
   (`grid: false, form: false`; `totalMismatch` too), served in the list like `invoice`; the review answer carries
-  `currency {id, isoCode, symbol, scale}`, `errorDetail` (the raw stored string) and `errorInfo {code, params}`
+  `currency {id, isoCode, symbol, scale, rate, source}` (`rate`: the org-to-document rate on the invoice date, `1`
+  for the organization currency, null when none is valid; `source`: `printed`, `default` or `manual`),
+  `pricing {priceListId, orgCurrencyId, orgCurrencyIsoCode, rate}` (ETP-6051, read-time, never stored: the
+  document's purchase price list, the organization currency and the org-to-document rate, for the manual-line product picker),
+  `errorDetail` (the raw stored string) and `errorInfo {code, params}`
   (only when the stored value is the failure identifier JSON).
 - **Confirmed document**: read only. The list row shows "{docNo} · Completada" as a link to the purchase
   invoice; the panel's green banner shows "{docNo} registrada en Etendo · Completada" and an "Abrir la factura
@@ -439,8 +456,13 @@ scrolls horizontally; the numeric line cells keep the design widths and carry th
     "{taxId} · {city}", the "Vinculado por NIF / nombre" tag inline, ghost inert "Cambiar");
     ambiguous (one row: the "Etendo AI propone {n} proveedores" chip ("… propone 1 proveedor" for one) with sparkles and the muted
     "En el documento: «…»" with ", sin NIF legible" when no tax id was extracted; full-row
-    candidate buttons with a custom radio, "Más probable" on the first, "Ninguno · crear
-    proveedor nuevo con los datos extraídos" in primary; the destructive error "Elige uno de los
+    candidate buttons with a custom radio, "Más probable" only on the candidate the server flags
+    `probable: true` (ETP-6051: the best candidate, when it is uniquely best; a tie, or candidates whose
+    tax id conflicts with the printed one, carry no tag), "Ninguno · crear
+    proveedor nuevo con los datos extraídos" in primary and listed FIRST when the list is flagged and no
+    candidate is probable, last otherwise; a list stored before the flag existed (no candidate carries the
+    key) keeps the old rule: the tag on the first one, "Ninguno" last. When every name hit has a tax id that
+    differs from the printed one the matcher returns "Proveedor nuevo" directly, without candidates; the destructive error "Elige uno de los
     proveedores propuestos"; disabled in S1); new (solid-border block on a muted background, user-plus
     icon, bold "Proveedor nuevo." + hint, ghost inert "Buscar existente", then name, NIF/CIF and
     the address STRUCTURED: dirección, código postal, ciudad, país — the extracted country by
@@ -449,12 +471,33 @@ scrolls horizontally; the numeric line cells keep the design widths and carry th
   - Cabecera: a 2-column grid: Nº factura | Fecha de factura * (calendar icon inside the input,
     `formatCalendarDate`; red border, the amber "Revisar" tag and "Indica la fecha de factura"
     when `validation.missing` has `invoiceDate`), then Moneda. No Vencimiento (decision 1).
-    Moneda is the shared `CurrencyRatePicker` in `isReadOnly` mode, fed `value` = the
-    currency id, `displayValue` = its ISO code, `formData {eTGOCurrencyRate: 1}` (the invoice is
-    created in the organization currency, no conversion) and NO `apiBaseUrl`, so it shows
-    "EUR — 1,00" like the purchase / sales documents and requests no currency options (the spec
-    has no `currencyOptions` action). It still reads the organization's rate precision through
-    its own `useCurrencyPrecision` (`GET /sws/neo/session`), as it does in every window.
+    Moneda is the shared `CurrencyRatePicker` (ETP-6051: no longer read only). While the document is
+    editable it is fed `value` = the currency id, `displayValue` = its ISO code, `formData
+    {id, eTGOCurrencyRate: review.currency.rate, invoiceDate}` with `rateDateField="invoiceDate"` and
+    `apiBaseUrl`, so it shows "USD — 1,47" and lists only the currencies the system can convert on the
+    invoice date (the organization currency plus those with a conversion range), through the spec's
+    `currencyOptions` action. It is rendered with `allowRateEdit={false}`: there is NO pencil and no custom
+    rate, the system's rate is always used. Picking another currency sends `setCurrency {currencyId}`
+    (marks the document `ADJUSTED`); picking the one already shown writes nothing. Read only (no
+    `apiBaseUrl`, no options) when the document is not editable or the panel is locked. It still reads the
+    organization's rate precision through its own `useCurrencyPrecision` (`GET /sws/neo/session`).
+    A small neutral tag at the field's corner says where the currency came from: "del documento"
+    (`printed`), "por defecto" (`default`) or "elegido por ti" (`manual`).
+    The notice `currency_symbol_ambiguous` (the document printed only a bare symbol such as "$" that no
+    single usable currency carries) shows a warning "Moneda por revisar": "El documento solo indica «$»: se
+    usó la moneda por defecto ({iso}). Revísala." One per distinct symbol, not dismissible, hidden once the
+    document is settled and gone once the user picks a currency. When the printed ISO code is not a
+    currency of the tenant (`currencyUnavailable`) the `exchangeRate` blocker banner is titled "La moneda
+    {code} no está en Etendo" (instead of "Falta el tipo de cambio") with a short body. While that blocker or
+    `currencyUnavailable` is present (and the document is editable) the Moneda field is marked invalid: red
+    border, `aria-invalid` on `invoice-inbox-review-currency-wrap` and a message under it
+    (`invoice-inbox-review-currency-error`): "Sin tipo de cambio para esta moneda en la fecha de la factura",
+    or "La moneda {code} no está en Etendo" for `currencyUnavailable`. It goes away with the blocker, once a
+    currency with a conversion is picked. A small outline button "Usar {iso}"
+    (`invoice-inbox-review-currency-use-shown`) under the picker accepts the shown (default) currency: it sends `setCurrency` with that same id, which
+clears the blocker and does NOT mark the document adjusted. The shared picker calls `onChange` three
+    times in a fixed order (id, ISO label, rate) and the inbox commits on the third: a change of that
+    order breaks the field silently.
     Confirmed / discarded: the fields are disabled.
   - Líneas · {n} (`InvoiceInboxReviewLines.jsx`): columns Descripción | Cant. 62 | Precio 84 |
     IVA 78 | Importe 86 | 34, header 12/600; each line has a second full-width row: the product
@@ -464,7 +507,9 @@ scrolls horizontally; the numeric line cells keep the design widths and carry th
     candidates, a tie or a similarity below 90 %) arrives linked too, with `matchedBy: suggested`
     (ETP-6051): the name and key on one row and, under them, the AI tag "Elegido por OCR · {n} %"
     (the similarity of the linked candidate, read from the candidate list; only the label when it has
-    none). Opening it lists the candidates with the chosen one checked; choosing another one turns the
+    none). Opening it lists the candidates with the chosen one checked, each with its own similarity under
+    the name ("63 %" in es, "63%" in en; nothing when the candidate has none; `candidateSimilarity`, the
+    "Más probable" tag stays), so the user sees the number that made the choice; choosing another one turns the
     line into "Elegido por ti" and marks the document adjusted, choosing the same one changes nothing.
     ambiguous (AI chip "{n} productos posibles" ("1 producto posible" for one) + "Elige uno" in warning colour;
     starts expanded; no longer produced by the inbox matcher, but a stored document may still carry it), new ("Producto nuevo" pill + "{category} · {uom} · se creará al confirmar"),
@@ -557,13 +602,30 @@ scrolls horizontally; the numeric line cells keep the design widths and carry th
     VAT cell shows "…" until the answer (the rate is never guessed). Re-picking the same tax writes nothing. A new line
     inherits the previous line's tax by id (`addLine` then `setLine {taxId}`) when that tax has an id, else the server
     default. A typed rate is never sent; the printed OCR rate is not echoed back.
+  - Manual lines and the price list (ETP-6051): a line added with "Añadir línea" carries `manual: true` (set by the
+    server's `addLine`, also by the optimistic copy; OCR and legacy lines have none). On such a line the product search is NOT the
+    plain selector combo but the shared `ProductSearchDrawer` over the purchase-invoice lines product selector,
+    with that window's context (`buildLineSelectorContext`: price list = `review.pricing.priceListId`, document
+    date, purchase side; plus `currency` = the document ISO code and `priceCurrency` = the organization's, with
+    `eTGOCurrencyRate` = `review.currency.rate`): it lists only the products of the price list, shows each one's
+    list price in the organization currency and, underneath, the converted price (shown at 2 decimals; the server rounds to the currency's price precision, so they can differ for 0/3-decimal currencies) in the document currency (only
+    when the currencies differ and a rate exists; no rate or no list: no extra row, never an error). Picking sends `selectProduct`; the
+    SERVER then puts the price list price (converted, see neo-headless "Manual line pricing") on the line ALWAYS,
+    overwriting the current price (a typed one, or the previous product's), exactly as the purchase invoice
+    does; with no usable list price the current price is kept, and the OCR lines keep the plain
+    picker and their price. The list price is always read as an organization-currency price, whatever the list's own currency (GO semantics, as in the purchase invoice: a price list only dictates a price in the organization currency; its own currency is a Classic leftover and infers nothing). The price list is the vendor's purchase list, else the default purchase list (also
+    for a new vendor); no price is applied when the list includes tax, has no rate to
+    convert (document not in the organization currency), or does not carry the product (the line keeps its current price). The price is the one of the latest active list
+    version valid today (the picker's rule, not the invoice date's). The pick marks the document adjusted like any product choice; the price adds no extra mark. Manual lines created before this change have no marker: they keep the plain picker and are not
+    priced. The tax is not changed by picking a product (pending functional validation).
   - Quantity and price may be any sign (negative = credit / return line) or zero; a line lacking either is reported by
     the server as `line[i].quantity` / `line[i].unitPrice`: the cell is red, the red line under the table says "Indica la
     cantidad / el precio de todas las líneas" and the footer counter counts it. An empty price shows empty, not 0.
     Totals, the mismatch banner and the signs go through `formatCurrency` / `formatGroupedNumber`.
-  - Currency and totals (ETP-6050 S2): `review.currency = {id, isoCode, symbol, scale}` (the vendor's purchase price
-    list currency, else the organization's; read only, shown with the shared `CurrencyRatePicker` in the header
-    section). `scale` (the currency's StdPrecision: 0 for JPY-like, 2 usually; 2 when absent) drives EVERY amount of
+  - Currency and totals (ETP-6050 S2, ETP-6051): `review.currency = {id, isoCode, symbol, scale, rate, source}`
+    (the printed currency when the OCR read one the tenant has, else the organization's (the vendor and its price list infer nothing; a vendor change never moves it); changeable by the user with `setCurrency`, shown with the shared
+    `CurrencyRatePicker` in the header section). Line prices keep the printed price in the document currency:
+    changing the currency changes only the header, nothing is re-priced. `scale` (the currency's StdPrecision: 0 for JPY-like, 2 usually; 2 when absent) drives EVERY amount of
     the panel: `formatMoney` (`invoiceInboxMoney.js`) calls the canonical `formatCurrency` with that scale as min / max
     fraction digits (the global `formatCurrency` is untouched), in the lines' amounts, the totals card, the mismatch
     banner and the compact read-only list; unit prices show up to 6 decimals (at least the scale). The mismatch
@@ -698,9 +760,10 @@ Review panel (prefix `invoice-inbox-review-`): `-drawer`, `-veil`, `-header`, `-
 `-vendor-new-{email|phone}`, `-vendor-new-country-field`; save state: `-save-state` (`data-state`),
 `-save-error`, `-save-retry`; notice: `-notice`, `-notice-dismiss`; header section: `-header-section`, `-header-title`,
 `-invoice-no`, `-invoice-date` (+ `-tag`, `-error`, `-icon`, `-raw`, `-control`; each field also `…-field`), the
-currency picker (`field-currency`, `currency-rate-readonly`); lines: `-lines`, `-lines-title`,
+currency picker (`field-currency`, `currency-rate-readonly`; ETP-6051: `-currency-wrap`, `-currency-source`,
+`-currency-use-shown`, `-currency-error`, `-currency-notices`, `-currency-symbol-ambiguous`); lines: `-lines`, `-lines-title`,
 `-lines-head`, `-lines-list`, `-lines-error`, `-line-{i}`,
-`-line-{i}-{description|quantity|price|discount|tax|tax-picker|tax-name|amount|detail|product|product-tag|product-suggested|product-name|panel|candidates|in-document|candidate-{id}|likely|none-option|search|create-new|new-product|new-name|new-category|new-uom|new-error}`,
+`-line-{i}-{description|quantity|price|discount|tax|tax-picker|tax-name|amount|detail|product|product-tag|product-suggested|product-name|panel|candidates|in-document|candidate-{id}|candidate-{id}-similarity|likely|none-option|search|create-new|new-product|new-name|new-category|new-uom|new-error}`,
 `-line-delete-{i}`, `-add-line`; totals: `-totals`, `-total-base`,
 `-total-tax-{rate}`, `-total`, `-total-label`; footer: `-footer`, `-discard`, `-pending`,
 `-reviewed`, `-mark-reviewed`, `-confirm` (also "Reintentar"), `-footer-actions`, `-invoice-link` (the
@@ -769,7 +832,8 @@ Prerequisites: `etendo.go.flags.invoice-inbox=true` (Tomcat restart) and the spe
     Etendo · FC…a FC… · n productos creados"; the rows turn Confirmada with "{docNo} · Completada" as a link that
     opens the purchase invoice (Completado, original PDF attached, same total); `adjusted` unchanged. Make one
     fail (close the period, or no exchange rate): that row goes to Con error with its reason, the rest are
-    confirmed, the toast is a warning. From the panel: Confirmar factura → toast and the next pending document
+    confirmed, the toast is a warning that names the reason (same reason for all failures) or "varios motivos"
+    (different ones), stays about 10 s and has a close button. From the panel: Confirmar factura → toast and the next pending document
     (or the panel closes); a failed one shows the banner with the reason and "Reintentar". Widths 360, 390 and
     420: the header, the line inputs and the two footer actions all fit, no horizontal scroll.
 

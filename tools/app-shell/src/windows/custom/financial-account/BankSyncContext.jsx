@@ -120,6 +120,17 @@ function joinRunningSync(running, waiter, ui) {
   return { status: 'IN_PROGRESS' };
 }
 
+/**
+ * A result that reads as a success toast (anything but ERROR / WARNING / IN_PROGRESS).
+ * A sync that collided with one already running elsewhere (another tab, the scheduled process,
+ * an MCP call) was not run by this request, so the green "statements fetched" toast would claim
+ * work this tab did not do; the info notice it already got stands.
+ */
+function isSuccessResult(result) {
+  const status = result?.status;
+  return status !== 'ERROR' && status !== 'WARNING' && status !== 'IN_PROGRESS';
+}
+
 function withId(list, id) {
   return list.includes(id) ? list : [...list, id];
 }
@@ -139,7 +150,7 @@ export function useBankSyncController() {
   const depsRef = useRef({ ui, sync, syncStatus });
   depsRef.current = { ui, sync, syncStatus };
 
-  // id → { requested, startedAt, failures, timedOut, waiters: [{ fn, isAlive }] }
+  // id → { requested, collided, startedAt, failures, timedOut, waiters: [{ fn, isAlive }] }
   const entriesRef = useRef(new Map());
   const listenersRef = useRef(new Set());
   const trackedRef = useRef(new Map()); // id → number of hosts tracking it
@@ -184,7 +195,7 @@ export function useBankSyncController() {
     }
     if (!entry.requested) return;
     if (error) notifyBankSyncError(error, depsRef.current.ui);
-    else if (result) notifyBankSyncResult(result, depsRef.current.ui);
+    else if (result && !(entry.collided && isSuccessResult(result))) notifyBankSyncResult(result, depsRef.current.ui);
   }, [drop]);
 
   const startPolling = useCallback((id) => {
@@ -209,7 +220,8 @@ export function useBankSyncController() {
    * The bridge answered IN_PROGRESS (another user, tab or the scheduled process holds the lock):
    * say so, then follow the running sync — or let go of it when its status cannot be polled.
    */
-  const followSyncAlreadyInProgress = useCallback((accountId, res) => {
+  const followSyncAlreadyInProgress = useCallback((accountId, entry, res) => {
+    entry.collided = true;
     notifyBankSyncResult(res, depsRef.current.ui);
     if (canPoll()) {
       startPolling(accountId);
@@ -239,7 +251,7 @@ export function useBankSyncController() {
     const running = entriesRef.current.get(accountId);
     if (running) return joinRunningSync(running, waiter, depsRef.current.ui);
     const entry = {
-      requested: true, startedAt: Date.now(), failures: 0, timedOut: false,
+      requested: true, collided: false, startedAt: Date.now(), failures: 0, timedOut: false,
       waiters: waiter ? [waiter] : [],
     };
     begin(accountId, entry);
@@ -262,7 +274,7 @@ export function useBankSyncController() {
     }
 
     if (res?.status === 'IN_PROGRESS') {
-      followSyncAlreadyInProgress(accountId, res);
+      followSyncAlreadyInProgress(accountId, entry, res);
       return res;
     }
     finish(accountId, res);
@@ -328,7 +340,7 @@ export function useBankSyncController() {
       fresh.forEach((id) => {
         if (accounts[id]?.inProgress !== true || entriesRef.current.has(id)) return;
         begin(id, {
-          requested: false, startedAt: Date.now(), failures: 0, timedOut: false, waiters: [],
+          requested: false, collided: false, startedAt: Date.now(), failures: 0, timedOut: false, waiters: [],
         });
         startPolling(id);
       });

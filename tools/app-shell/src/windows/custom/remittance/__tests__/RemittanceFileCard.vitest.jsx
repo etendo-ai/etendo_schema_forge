@@ -202,7 +202,9 @@ describe('RemittanceFileCard — creditor identifier problem', () => {
 });
 
 describe('RemittanceFileCard — processed', () => {
-  it('shows no card any more: «Descargar fichero» is a top-bar button and «Regenerar fichero» a kebab item', () => {
+  // The file is not stored on the remittance (generated on the fly by «Descargar fichero»), and the returned
+  // lines are already told by the status banner, the lines' «Estado del recibo» and the download toast.
+  it('shows nothing and reads nothing, whatever the file carries', () => {
     const { container } = renderCard(PROCESSED);
     expect(container).toBeEmptyDOMElement();
     expect(mockApiFetch).not.toHaveBeenCalled();

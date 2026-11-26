@@ -298,18 +298,21 @@ describe('registry', () => {
       });
     });
 
-    // ETP-6148 — the real menu.json entry, not a synthetic one: Finance › Remittance is gated by
-    // the Classic Remittance window grant AND the per-account sepaRemittances capability.
+    // ETP-6148 — the real menu.json entry, not a synthetic one: Treasury › Remittance (moved from
+    // Finance in ETP-6247) is gated by the Classic Remittance window grant AND the per-account
+    // sepaRemittances capability.
     describe('remittance menu entry (accessWindowId + sepaRemittances)', () => {
       const REMITTANCE_WINDOW = 'FF8080812E71F7C7012E71FD0499001B';
       const visible = (capabilities, windowAccess) => filterMenuGroupsByAccess(
         buildMenuGroups(), new Set(), capabilities, windowAccess,
       ).flatMap(g => g.items.map(i => i.name)).includes('remittance');
 
-      it('is declared in Finance with its window anchor and capability', () => {
-        const finance = menuConfig.menu.find(g => g.items.some(i => i.name === 'remittance'));
-        const item = finance.items.find(i => i.name === 'remittance');
-        expect(finance.group).toBe('Finance');
+      it('is declared in Treasury, right after Payment Out, with its window anchor and capability', () => {
+        const treasury = menuConfig.menu.find(g => g.items.some(i => i.name === 'remittance'));
+        const item = treasury.items.find(i => i.name === 'remittance');
+        expect(treasury.group).toBe('Treasury');
+        const names = treasury.items.map(i => i.name);
+        expect(names.indexOf('remittance')).toBe(names.indexOf('payment-out') + 1);
         expect(item).toMatchObject({ accessWindowId: REMITTANCE_WINDOW, capability: 'sepaRemittances' });
         expect(item.windowId).toBeUndefined();
       });
@@ -603,7 +606,7 @@ describe('registry', () => {
 
     it('lists its entries in order for an admin', () => {
       const result = run({ capabilities: { isAdminOrClientAdmin: true }, allowedIds: null, reportAccess: {} });
-      expect(taxesNames(result)).toEqual(['tax', 'tax-category', 'fiscal-monitor', 'report-viewer-taxes', 'fiscal-config', 'fiscal-models']);
+      expect(taxesNames(result)).toEqual(['tax', 'tax-category', 'fiscal-monitor', 'fiscal-config', 'fiscal-models', 'report-viewer-taxes']);
     });
 
     it('hides the Taxes Reports link with the anchor window but no Tax Report grant', () => {
@@ -623,7 +626,7 @@ describe('registry', () => {
         .map(g => ({ ...g, items: g.items.filter(i => isSearchableMenuItem(i)) }));
       const result = filterMenuGroups(groups, 'impuestos', translate);
       const taxes = result.find(g => g.group === 'Taxes');
-      expect(taxes.items.map(i => i.name)).toEqual(['tax', 'tax-category', 'fiscal-monitor', 'report-viewer-taxes', 'fiscal-config', 'fiscal-models']);
+      expect(taxes.items.map(i => i.name)).toEqual(['tax', 'tax-category', 'fiscal-monitor', 'fiscal-config', 'fiscal-models', 'report-viewer-taxes']);
       // A moved window is found under Taxes, not under its old group.
       const byName = filterMenuGroups(groups, 'Fiscal Configuration', translate);
       expect(byName.map(g => g.group)).toEqual(['Taxes']);

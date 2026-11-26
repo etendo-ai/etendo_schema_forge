@@ -136,6 +136,15 @@ export function suppressNextUnloadPrompt() {
 }
 
 /**
+ * Whether the browser would honour a `beforeunload` confirmation. Without a user activation
+ * since load it blocks the dialog anyway. `false` only when the API exists and says so.
+ */
+export function canPromptOnUnload() {
+  const activation = globalThis.navigator?.userActivation;
+  return !(activation && activation.hasBeenActive === false);
+}
+
+/**
  * Install the `beforeunload` guard so F5 / tab close warns about unsaved changes.
  * The message is the browser's own — no browser lets a page choose that text.
  *
@@ -148,6 +157,11 @@ export function installUnloadGuard() {
       return undefined;
     }
     if (!hasUnsavedChanges()) {
+      return undefined;
+    }
+    // Without user activation the browser blocks the dialog anyway and emits the
+    // `BeforeUnloadNoGesture` intervention report, so do not ask for it.
+    if (!canPromptOnUnload()) {
       return undefined;
     }
     event.preventDefault();

@@ -98,6 +98,34 @@ Flags (ETP-5751)*.
 backend rolls back independently, by removing `DD_FEATURE_FLAGS_ENABLED` from its task definition
 (com.etendoerp.go `docs/feature-flags-and-tenant-upgrade.md` §1).
 
+### Flags panel CLI
+
+The rollout panel (`https://flags.jc.proxy.vpn.etendo.cloud`, VPN + Google login) manages each
+flag's stage (`off`/`alpha`/`beta`/`ga`), its alpha/beta rings (emails and `@groups`) and pushes
+them to Datadog. `cli/src/flags-panel.js` calls the same JSON API from the terminal:
+
+```bash
+make flags ARGS=login                        # once: browser sign-in, cookie in ~/.config/etendo-flags/
+make flags ARGS="list --mine"                # flags I own (GitHub login) or whose audience includes me
+make flags ARGS="show grid-column-views"
+make flags ARGS="ring grid-column-views alpha add someone@etendo.ai"
+make flags ARGS="stage grid-column-views beta"
+make flags ARGS="apply grid-column-views"    # dry run: prints the plan
+make flags ARGS="apply grid-column-views --yes"
+```
+
+`stage`, `ring` and `env` only change the panel's desired state; nothing reaches Datadog until
+`apply --yes`. `apply` refuses, unless `--force` is passed, when the plan removes someone's access
+or deletes a targeting rule the panel does not manage. `make flags ARGS=help` lists every command.
+
+`apply --yes` then verifies the result outside the panel: `check <key>` asks Datadog's flag CDN
+(`precompute-assignments`, the call the SPA makes, with the SPA's public client token read from
+the GitHub Actions variables) what each ring member gets, and exits 2 when someone the panel puts
+in the current stage does not get the flag. `extra rule` rows are people who get it through a rule
+the panel does not manage; `not applied` rows belong to a flag still pending in the panel. Flags the
+panel marks backend only (Datadog channel `SERVER`) are never served by that CDN, so `check` skips
+them instead of reporting a false mismatch.
+
 ### ConfigCat (fallback)
 
 The ConfigCat provider fetches assignments at initialization and polls for
@@ -233,7 +261,7 @@ its behaviour is documented in its topic doc and in `com.etendoerp.go`
 | `fiscal-model-390` | `fiscal-model-390` | ETP-5716 (TTL 2027-01-01): hides the whole Modelo 390 — the catalog answer drops it and marks it `_unavailable`, and every surface (catalog drawer, declarations list, Organization's Modelo 390 section) reacts to that answer; [fiscal models guide](generated-custom-windows/fiscal-models.md) "Modelo 390 behind the backend-only flag `fiscal-model-390`"; backend: `com.etendoerp.go` `docs/feature-flags-and-tenant-upgrade.md` |
 | `invoice-inbox` | `invoice-inbox` | ETP-6047 (TTL 2027-01-31, provisional). Backend-only, per account (lowercase `email` rules): gates the Invoice Inbox upload endpoint (evaluated at request entry, never in the OCR worker) and, through `capabilities.invoiceInbox` off `SFWindowAccessMap` (ETP-6049), the inbox menu entry and page. No web key: the browser only reads the capability. The page's Discard (batch bar and row trash, ETP-6049) calls the NEO action `POST /sws/neo/invoice-inbox/header/{id}/action/discard`, behind the same backend gate; with the flag off it answers `403 feature_disabled` and the SPA stops the batch. The table, window and read-only NEO spec ship unconditionally; backend: `com.etendoerp.go` `docs/feature-flags-and-tenant-upgrade.md` |
 | `sepa-remittances` | `sepa-remittances` | ETP-6148 (TTL 2027-03-31, provisional). Backend-only, per account (lowercase `email` rules): gates the automatic linking of the two SEPA remittance payment methods when a **Bank** financial account is created (manual create and bank-connection `createAndLink`, with lazy per-client provisioning; 409 `ETGO_RemittanceProvisioningConflict` on a race), the default SEPA mandate of a customer and the `remittance` spec (`403 feature_disabled` when off). There is no per-account «Admite remesas» switch and no `EM_ETGO_Allow_Remittance` column (removed in ETP-6148). The browser reads `capabilities.sepaRemittances` off `SFWindowAccessMap` (`SEPA_REMITTANCES_CAPABILITY`) for the menu entry, the page guard and the contact mandate section. The SPA shows no creditor identifier and no schemes. No web key. The remittance status is REM's own `REM_REMITTANCE.REMITTANCE_STATUS`, added in ETP-6148 on `feature/ETP-6148` and set by REM's processes; the remittance PR must be merged and its module built before this `com.etendoerp.go` change is deployed; backend: `com.etendoerp.go` `docs/feature-flags-and-tenant-upgrade.md` |
-| `sii-import-dua` | `sii-import-dua` | ETP-6284 (TTL placeholder 2027-03-31). Backend-only, per account (lowercase `email` rules): `SiiImportDuaFlag` gates the purchase-invoice tax-line writes and the `siiDeferredVat` action (`403 feature_disabled` when off, every channel); the browser reads `capabilities.siiImportDua` off `SFWindowAccessMap` (`SII_IMPORT_DUA_CAPABILITY`, `useSiiImportDuaEnabled`) for the DUA and import-taxes cards and the Confirm of an import invoice without lines. No web key. Reads, the header DUA fields, `hasManualTaxLines` and `aeatsiiFacturaIds` are not gated; window guide: [`purchase-invoice.md`](generated-custom-windows/purchase-invoice.md); backend: `com.etendoerp.go` `docs/feature-flags-and-tenant-upgrade.md` |
+| `sii-import-dua` | `sii-import-dua` | ETP-6284 (TTL placeholder 2027-03-31). Backend-only, per account (lowercase `email` rules): `SiiImportDuaFlag` gates turning the purchase-invoice "Importación con DUA" check (`etgoImportDua`) on, the tax-line writes and the `siiDeferredVat` action (`403 feature_disabled` when off, every channel); the browser reads `capabilities.siiImportDua` off `SFWindowAccessMap` (`SII_IMPORT_DUA_CAPABILITY`, `useSiiImportDuaEnabled`) for the Lines-tab check with its DUA and import-taxes cards, the SIF tab's F5 auto-switch and the Confirm of an import invoice without lines. No web key. Reads, the header DUA fields, `hasManualTaxLines` and `aeatsiiFacturaIds` are not gated; window guide: [`purchase-invoice.md`](generated-custom-windows/purchase-invoice.md); backend: `com.etendoerp.go` `docs/feature-flags-and-tenant-upgrade.md` |
 | `structured-address-for-sepa` | `structured-address-for-sepa` | ETP-5806 relaunch (TTL 2026-11-15, driven by [etendosoftware/etendo-ai#24](https://github.com/etendosoftware/etendo-ai/issues/24) — SEPA 2025 rulebooks ban unstructured addresses in remittance files from that date); backend: `com.etendoerp.go` `docs/feature-flags-and-tenant-upgrade.md` |
 | `product-movements-tab` | `product-movements-tab` | ETP-5889 (TTL placeholder 2027-01-31). Backend-only, per account: the browser reads `capabilities.productMovements` off `SFWindowAccessMap`; backend: `com.etendoerp.go` `docs/feature-flags-and-tenant-upgrade.md` |
 | `usage-aggregation-schedule` | `usage-aggregation-schedule` | [Usage measurement](usage-measurement.md) §7.1; go-live (flag plus production Process Request): "5.1 Turning the usage schedule on" in `com.etendoerp.go` `docs/plan-quotas.md`; behaviour: "`usage-aggregation-schedule` (ETP-5051)" in `com.etendoerp.go` `docs/feature-flags-and-tenant-upgrade.md` |

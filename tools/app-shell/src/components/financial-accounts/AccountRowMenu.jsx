@@ -53,7 +53,7 @@ function StaleReconnectMenuItem({ account, ui, onBankConnectionAction }) {
 }
 
 /**
- * "Traer extractos" (bank-connected accounts only — the caller decides).
+ * "Sincronizar movimientos bancarios" (bank-connected accounts only — the caller decides).
  *
  * ETP-6154: reads the window's shared bank-sync state, so while a fetch of this account runs —
  * started from here or from any other entry point — the item is disabled, its icon bobs and the
@@ -79,6 +79,25 @@ function SyncNowMenuItem({ account, ui, onBankConnectionAction }) {
       <span className="text-sm font-normal leading-6 text-[hsl(var(--foreground))]">
         {ui(syncing ? 'financeAccountsBankSyncInProgress' : 'financeAccountsMenuSyncNow')}
       </span>
+    </DropdownMenuItem>
+  );
+}
+
+/**
+ * A bank-connection item that must not run while a sync of the account is in flight (disconnect,
+ * delete connection): the sync is working on the very link they would remove. Disabled with the
+ * same shared state the sync item reads.
+ */
+function BankLinkMenuItem({ account, onClick, testId, children }) {
+  const { syncing } = useBankSyncStatus(account.id);
+  return (
+    <DropdownMenuItem
+      disabled={syncing}
+      aria-busy={syncing}
+      onClick={onClick}
+      data-testid={testId}
+    >
+      {children}
     </DropdownMenuItem>
   );
 }
@@ -144,15 +163,16 @@ function AccountRowMenuWriteItems({
                 onBankConnectionAction={onBankConnectionAction}
                 data-testid="StaleReconnectMenuItem__ffaf9f" />
               <DropdownMenuSeparator data-testid="DropdownMenuSeparator__ffaf9f" />
-              <DropdownMenuItem
+              <BankLinkMenuItem
+                account={account}
                 onClick={() => onBankConnectionAction?.('disconnect', account)}
-                data-testid={`account-row-menu-disconnect-${account.id}`}
-              >
+                testId={`account-row-menu-disconnect-${account.id}`}
+                data-testid="BankLinkMenuItem__ffaf9f">
                 <LinkBreakIcon className="h-5 w-5 text-[hsl(var(--text-disabled))]" data-testid="Unlink2__ffaf9f" />
                 <span className="text-sm font-normal leading-6 text-[hsl(var(--foreground))]">
                   {ui('financeAccountsMenuDisconnect')}
                 </span>
-              </DropdownMenuItem>
+              </BankLinkMenuItem>
             </>
           ) : null}
 
@@ -192,15 +212,16 @@ function AccountRowMenuWriteItems({
 
           {/* Permanent deletion is offered wherever a bank link exists — live or deactivated. */}
           {bankConnected || bankReconnectable ? (
-            <DropdownMenuItem
+            <BankLinkMenuItem
+              account={account}
               onClick={() => onBankConnectionAction?.('deleteConnection', account)}
-              data-testid={`account-row-menu-delete-connection-${account.id}`}
-            >
+              testId={`account-row-menu-delete-connection-${account.id}`}
+              data-testid="BankLinkMenuItem__ffaf9f">
               <TrashIcon className="h-5 w-5 text-[hsl(var(--destructive))]" data-testid="Trash2__ffaf9f" />
               <span className="text-sm font-normal leading-6 text-[hsl(var(--destructive))]">
                 {ui('financeAccountsBankConnectionDeleteAction')}
               </span>
-            </DropdownMenuItem>
+            </BankLinkMenuItem>
           ) : null}
         </>
       ) : null}
