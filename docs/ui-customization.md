@@ -3315,6 +3315,15 @@ SIF-tab fields are editable, their allowed codes and the value each would get. T
 as `sifFields` in the invoice-creating action's body. A field the caller does not send gets its
 preview value on the server, so the screen and the API always produce the same invoice.
 
+**Dry run before completing (`validateInvoiceFirst`, ETP-6179 CP-12).** `ConfirmInOutModal` completes
+the document and then calls the invoice action, two requests; a refused invoice used to leave the
+document confirmed without it. When the invoice action accepts `validateOnly:true` on the draft
+(today only the customer return's `createReturnInvoice`), pass `validateInvoiceFirst` (through
+`ConfirmWithCreditButtonBase`: `validateInvoiceBeforeConfirm`): the modal sends the dry run with the
+same body first and does not complete anything if it is refused. Leave it off for an action that
+does not support the dry run — it would be refused on the draft. The modal reads a handler
+refusal's `error.message` (`NeoResponse.error`) too, so it no longer shows a bare "Error (400)".
+
 **Rectification codes come as the backend previews them** — the step never picks one itself.
 On the rectificative of a **customer return** (return-material-receipt, both the Confirmar path and
 the *Crear factura rectificativa* button) the preview preselects **`R1`** for the SII motive

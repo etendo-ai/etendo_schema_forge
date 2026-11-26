@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 // @covers tools/app-shell/src/windows/custom/return-to-vendor-shipment/ConfirmWithCreditButton.jsx
+// @covers tools/app-shell/src/windows/custom/shared/ConfirmWithCreditButtonBase.jsx
 import { render, screen, act, fireEvent } from '@testing-library/react';
 
 vi.mock('@/i18n', () => ({
@@ -79,6 +80,14 @@ describe('ConfirmWithCreditButton (return-to-vendor)', () => {
     expect(modal).toHaveAttribute('data-spec-name', 'return-to-vendor-shipment');
     expect(modal).toHaveAttribute('data-entity-name', 'returnToVendorShipment');
     expect(modal).toHaveAttribute('data-confirm-label', 'confirmReturn');
+  });
+
+  // ETP-6179 — only the return receipt dry-runs its invoice before confirming; this window
+  // keeps the plain confirm, so the base must not turn the dry run on by default.
+  it('does not ask ConfirmInOutModal to dry-run the invoice before confirming', () => {
+    render(<ConfirmWithCreditButton {...BASE_PROPS} data={{ documentStatus: 'DR', linesCount: 2 }} />);
+    fireConfirm();
+    expect(screen.getByTestId('confirm-inout-modal')).toHaveAttribute('data-validate-invoice-first', 'false');
   });
 
   // ETP-5408: empty documents are blocked by the generic Confirm button itself
