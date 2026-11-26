@@ -5,8 +5,9 @@
  * DataTable — row hover style and the row selection colours (getRowClassName) plus the
  * scroll wrapper's room for the lifted row's shadow.
  *
- * Contract: a clickable row LIFTS on hover by default (opaque white + Shadows/lg, no
- * borders — its own line and the previous row's line hidden —, no colour transition). `'elevated'` (the former name) and any
+ * Contract: a clickable row LIFTS on hover by default (opaque white + Shadows/lg, its own
+ * bottom line hidden while the previous row's line stays as its single grey top line —
+ * ETP-6209 —, no colour transition). `'elevated'` (the former name) and any
  * unknown value lift too; `'tint'` is the only opt-out. A non-clickable row never lifts.
  * Every row sets `--row-hover-bg` to its own hovered background so the quick-actions fade
  * ends on it. Assertions read the RENDERED <tr> (after TableRow's own base classes are
@@ -65,9 +66,11 @@ const DATA = [{ id: 'r1', name: 'BBVA' }, { id: 'r2', name: 'Caja' }];
 const LIFT = [
   'relative', 'transition-none', 'hover:z-10',
   'hover:shadow-[0_4px_6px_-2px_rgba(18,18,23,0.05),0_10px_15px_-3px_rgba(18,18,23,0.08)]',
-  // Figma hover row has no borders: its own line and the previous row's line go transparent.
-  'hover:border-transparent', '[&:has(+tr:hover)]:border-transparent',
+  // Its own bottom line goes transparent under the shadow; the line above it stays (ETP-6209).
+  'hover:border-transparent',
 ];
+// ETP-6209 restored the hovered row's grey top line: no row may hide the previous row's border.
+const HIDES_TOP_LINE = '[&:has(+tr:hover)]:border-transparent';
 const LIFT_REST = ['hover:bg-card', '[--row-hover-bg:hsl(var(--card))]'];
 const CHECKED = [
   'bg-[hsl(var(--field-hover))]', 'hover:bg-[hsl(var(--field-hover))]',
@@ -119,6 +122,7 @@ describe('DataTable — clickable row hover (lift by default)', () => {
     const { row, tokens } = await renderRow(props);
 
     expect(tokens).toEqual(expect.arrayContaining(['cursor-pointer', ...LIFT, ...LIFT_REST]));
+    expect(tokens).not.toContain(HIDES_TOP_LINE);
     expect(tokens).not.toContain('hover:bg-muted/50');
     expect(tokens).not.toContain('transition-colors');
     expect(hoverBackgroundUtilities(row)).toEqual(['hover:bg-card']);
@@ -199,6 +203,7 @@ describe('DataTable — rowHoverStyle="lift-always"', () => {
     const { row, tokens } = await renderRow({ rowHoverStyle: 'lift-always', ...props });
 
     expect(tokens).toEqual(expect.arrayContaining([cursor, ...LIFT, ...LIFT_REST]));
+    expect(tokens).not.toContain(HIDES_TOP_LINE);
     expect(tokens).not.toContain(TINT_VAR);
     expect(hoverBackgroundUtilities(row)).toEqual(['hover:bg-card']);
   });

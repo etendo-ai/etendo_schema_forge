@@ -26982,6 +26982,7 @@
     "portalViewAll": "View all",
     "portalSearchAllPlaceholder": "Search quotations, orders, invoices…",
     "portalSearchNoResults": "No document matches your search.",
+    "portalSearchSeeAllIn": "See all in {kind}",
     "portalSearch": "Search",
     "portalCreatedWithLinkLabel": "Built with etendo.ai",
     "portalCreatedWithShort": "Built with",
