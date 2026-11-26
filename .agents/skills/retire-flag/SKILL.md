@@ -54,7 +54,7 @@ because no gate looked at the debt.
 An item clears only one of two ways:
 
 - **Resolved** — the work is done and the evidence is linked (a QA comment, a Datadog
-  screenshot/URL, the published help.etendo.ai page, a closed `deferredItem` with its
+  screenshot/URL, the published help.etendo.ai page (reuse an existing article; it must carry `features: [<flag-key>]` in its `etendo-docs` front matter), a closed `deferredItem` with its
   `$…ClosedComment`). You may do resolvable work yourself (write a pending spec, fix a stale
   marker), then rerun the check.
 - **Accepted by a human in this conversation**, item by item. Then ask them to post the decision
