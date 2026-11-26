@@ -1096,7 +1096,7 @@ and the modal use `h-4 w-4`.
 
 | Key | es_ES | en_US |
 |---|---|---|
-| `financeAccountsBankSyncTooltip` | Sincronizar movimientos bancarios (PSD2) | Sync bank transactions (PSD2) |
+| `financeAccountsBankSyncTooltip` | Sincronizar movimientos bancarios | Sync bank transactions |
 | `financeAccountsBankSyncInProgress` | Sincronización en curso, por favor espere… | Sync in progress, please wait… |
 | `backendError.bankSyncLockUnavailable` | No se pudo iniciar la sincronización bancaria en este momento. Inténtalo de nuevo en unos instantes. | The bank sync could not start right now. Try again in a moment. |
 | `backendError.bankSyncDuplicateCheckFailed` | No se pudo comprobar si algunos movimientos bancarios ya estaban importados y no se importaron. Vuelve a sincronizar. | Some bank transactions could not be checked for duplicates and were not imported. Try syncing again. |

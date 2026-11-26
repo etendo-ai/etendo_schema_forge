@@ -312,6 +312,23 @@ describe('useBankSyncController — polling a sync still running', () => {
     expect(mockSyncStatus).toHaveBeenCalledTimes(2);
   });
 
+  it('a collision with a sync run elsewhere (IN_PROGRESS) never ends in the green success toast', async () => {
+    mockSync.mockResolvedValue({ status: 'IN_PROGRESS' });
+    mockSyncStatus.mockResolvedValue({
+      A: { inProgress: false, lastResult: { status: 'OK', at: new Date(T0 + 4000).toISOString() } },
+    });
+    const onDone = vi.fn();
+    const { result } = setup();
+
+    await act(async () => { await result.current.startSync('A', { onDone }); });
+    await pollTicks(1);
+
+    expect(onDone).toHaveBeenCalledWith({ status: 'OK' }); // reloads still run
+    expect(toastMock.success).not.toHaveBeenCalled();
+    expect(toastCount()).toBe(1); // only the info notice
+    expect(result.current.isSyncing('A')).toBe(false);
+  });
+
   it('a finished sync whose outcome cannot be told runs the reloads but shows no result toast', async () => {
     mockSync.mockResolvedValue({ status: 'IN_PROGRESS' });
     mockSyncStatus.mockResolvedValue({ A: { inProgress: false } });
