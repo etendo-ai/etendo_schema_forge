@@ -3954,6 +3954,20 @@ finished**, as relative time. Cash, offline/reconnectable and unconnected accoun
   the sync actually ends, which can be after polling a sync still running on the server, and each
   runs once. See `financial-account-management.md` → *Bank sync: one at a time, shared by the four
   entry points* → "Who reloads what".
+- **Sync action wording and locking (ETP-6154 QA round):**
+  - The row sync button (tooltip and `aria-label`) and the kebab item are both labelled
+    "Sincronizar movimientos bancarios" (`financeAccountsBankSyncTooltip`,
+    `financeAccountsMenuSyncNow`; en_US "Sync bank transactions"). The statements tab button
+    (`financeAccountStatementsBankConnectionSync`) keeps its own "Traer extractos" wording.
+  - While a sync of the account runs, the kebab's "Desconectar banco" and "Borrar conexión
+    bancaria" are disabled together with the sync item (same shared `BankSyncContext` state, via
+    `BankLinkMenuItem` in `AccountRowMenu.jsx`). The row has no direct disconnect/delete button.
+  - If the UI request collides with a sync already running elsewhere (another tab, the scheduled
+    process, an MCP call; the bridge answers `IN_PROGRESS`), the user gets the info notice only.
+    When that other sync ends, the reloads still run and an ERROR/WARNING is still shown, but the
+    green "Extractos traídos del banco" toast is NOT: this tab did not fetch anything.
+  - Known, not changed: the blue "Sincronizando movimientos" banner above the grid still takes
+    layout space when it appears, shifting the rows down.
 - **i18n:** `financeAccountsSyncedAgo`, `financeAccountsLastSyncAgo`
   (both with `{time}`), `financeAccountsNeverSynced`. The old `financeAccountsSyncedJustNow`,
   `financeAccountsSyncUpdatedAgo`, `financeAccountsUpdatedAgo` and `financeAccountsUnsyncedNotice` were removed.
