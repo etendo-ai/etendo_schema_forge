@@ -46,7 +46,7 @@ import RunStatusPill from './acct-process-monitor/RunStatusPill.jsx';
  * add a log column or a row-expand — see `SFAcctProcessMonitor`'s class javadoc.
  *
  * The admin gate is the backend's (`NeoAccessHelper.isAdminOrClientAdmin`); the menu entry's
- * feature flag and `capability` key are visual gating only.
+ * `capability` key is visual gating only. No feature flag since GA (ETP-6425).
  */
 
 /** A server wall-clock instant, or an em dash when the run has not reached that point yet. */
