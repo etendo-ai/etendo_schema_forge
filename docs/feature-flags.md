@@ -126,6 +126,23 @@ the panel does not manage; `not applied` rows belong to a flag still pending in 
 panel marks backend only (Datadog channel `SERVER`) are never served by that CDN, so `check` skips
 them instead of reporting a false mismatch.
 
+Tester communication uses the panel's Communication tab through the same API. A flag has
+versioned messages (`email` to the testers of its stage, or `release-notes` for Novedades at GA);
+the panel sends one email per tester from its Gmail and remembers who was notified:
+
+```bash
+make flags ARGS="comms grid-column-views"                     # versions, sends, testers not notified yet
+make flags ARGS="comms grid-column-views save --subject 'Prueba …' --body-file /tmp/mail.md"
+make flags ARGS="comms grid-column-views preview"             # HTML file, as testers will see it
+make flags ARGS="notify grid-column-views --test"             # a copy to you, like the panel's test button
+make flags ARGS="notify grid-column-views"                    # dry run: lists the recipients
+make flags ARGS="notify grid-column-views --yes"
+```
+
+`notify` refuses while the flag is pending in the panel (`--force` overrides it): testers would get
+an email for something they cannot open yet. The rollout process and the email templates live in
+the `feature-flag-rollout` skill.
+
 ### ConfigCat (fallback)
 
 The ConfigCat provider fetches assignments at initialization and polls for
