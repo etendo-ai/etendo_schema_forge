@@ -246,8 +246,10 @@ describe('InviteAcceptancePage', () => {
   // terminal failure, or the error alone (never next to the "continue to join this company"
   // prompt) for anything else.
   //
-  // The error bodies below are the real wire shape, recorded from the running environment
-  // (GET /sws/go/company-invitations/resolve?token=bogus -> 404):
+  // Only the `resolve` 404 below was recorded from the running environment
+  // (GET /sws/go/company-invitations/resolve?token=bogus -> 404). The `accept` bodies
+  // (EXPIRED_TOKEN, INVITATION_ACCOUNT_MISMATCH, ...) are modelled on that shape from the servlet's
+  // writeError, not captured from the reported two-company scenario:
   //   {"error":{"code":"INVALID_TOKEN","message":"Invalid or unknown invitation link",
   //             "userMessage":"Invalid or unknown invitation link","status":404}}
   // i.e. the code is NESTED under `error`. A flat `{ error: true, code }` body is what the page
@@ -377,7 +379,7 @@ describe('InviteAcceptancePage', () => {
   it('shows the mismatch error with a sign-out instead of a retry, and no join prompt (ETP-5385)', async () => {
     await signInAndAccept(wireError(403, 'INVITATION_ACCOUNT_MISMATCH', 'Wrong account for this invitation'));
 
-    await waitFor(() => expect(screen.getByTestId('invite-action-error')).toHaveTextContent('Wrong account for this invitation'));
+    await waitFor(() => expect(screen.getByTestId('invite-action-error')).toHaveTextContent('invitePageAccountMismatch'));
     expect(screen.queryByText('invitePageAuthenticatedNotice')).not.toBeInTheDocument();
     expect(screen.queryByTestId('invite-error-state')).not.toBeInTheDocument();
     // The same account would fail again, so there is no retry.

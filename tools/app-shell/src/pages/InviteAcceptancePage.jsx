@@ -58,6 +58,12 @@ const ACTIONABLE_BRANCHES = new Set(['existing_account', 'registration_required'
 // showing an inline alert next to the "continue to join" prompt.
 const TERMINAL_ACCEPT_CODES = new Set(['INVALID_TOKEN', 'EXPIRED_TOKEN']);
 
+// ETP-5385: non-terminal accept failures are translated by code. The backend text is English, so
+// it is never shown; unknown codes fall back to `invitePageAcceptFailed`.
+const ACCEPT_ERROR_UI_KEYS = {
+  INVITATION_ACCOUNT_MISMATCH: 'invitePageAccountMismatch',
+};
+
 // ETP-5385: the /company-invitations endpoints answer failures as
 // `{ "error": { "code", "message", "userMessage", "status" } }` (EtendoGoJwtServlet.writeError),
 // not as flat `{ code, message }`. Reading `data.code` never matched, so every failed accept fell
@@ -442,7 +448,7 @@ export default function InviteAcceptancePage({ apiBase = import.meta.env.VITE_AP
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.error) {
-        const { code, message } = readApiError(data);
+        const { code } = readApiError(data);
         // The accept was attempted with a platform token this page never verified (it is read
         // straight from storage). When that token is the problem, dropping back to the login
         // step is recoverable; showing the error alone would dead-end a user who skipped the
@@ -462,7 +468,7 @@ export default function InviteAcceptancePage({ apiBase = import.meta.env.VITE_AP
           return;
         }
         setActionErrorCode(code);
-        setActionError(message || ui('invitePageAcceptFailed'));
+        setActionError(ui(ACCEPT_ERROR_UI_KEYS[code] || 'invitePageAcceptFailed'));
         setSubmitting(false);
         return;
       }
@@ -575,8 +581,9 @@ export default function InviteAcceptancePage({ apiBase = import.meta.env.VITE_AP
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || data.error) {
-      const { code, message } = readApiError(data);
-      const error = new Error(message || ui('invitePageInvalidDescription'));
+      const { code } = readApiError(data);
+      // Translated by code (ETP-5258): the backend text is English.
+      const error = new Error(ui(AUTH_ERROR_UI_KEYS[code] || 'invitePageInvalidDescription'));
       error.code = code || 'INVITATION_ERROR';
       throw error;
     }
