@@ -21040,7 +21040,6 @@
     "customerDataSection": "Datos de cliente",
     "vendorDataSection": "Datos de proveedor",
     "fiscal.title": "Configuración Fiscal",
-    "fiscal.monitor.nav": "Monitor fiscal",
     "fiscal.wip.badge": "Trabajo en progreso",
     "fiscal.wip.tooltip": "Esta ventana está en desarrollo activo. Los campos, el diseño y el comportamiento pueden cambiar sin previo aviso y no son definitivos.",
     "fiscal.territory.question": "¿En qué territorio fiscal opera esta organización?",

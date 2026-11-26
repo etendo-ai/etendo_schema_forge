@@ -182,8 +182,8 @@ export default function FiscalMonitorPage({ token, apiBaseUrl }) {
   useSetPageMeta({
     // ETP-6380 — with no profile label (unconfigured, loading, error, conflict) fall back to the
     // window name: TopBar renders title and breadcrumb only when the title is non-empty.
-    title: PROFILE_LABELS[profile] ?? ui('fiscal.monitor.nav'),
-    breadcrumb: `${ui('taxes')} / ${ui('fiscal.monitor.nav')}`,
+    title: PROFILE_LABELS[profile] ?? ui('fiscalMonitor.title'),
+    breadcrumb: `${ui('taxes')} / ${ui('fiscalMonitor.title')}`,
     recordCount: _totalCountMeta,
   });
 

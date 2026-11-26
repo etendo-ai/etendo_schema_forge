@@ -21879,7 +21879,6 @@
     "customerDataSection": "Customer data",
     "vendorDataSection": "Vendor data",
     "fiscal.title": "Fiscal Configuration",
-    "fiscal.monitor.nav": "Fiscal Monitor",
     "fiscal.wip.badge": "Work in Progress",
     "fiscal.wip.tooltip": "This window is still under active development. Fields, design, and behaviour may change without notice and are not final.",
     "fiscal.territory.question": "What fiscal territory does this organization operate in?",
