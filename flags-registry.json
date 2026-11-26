@@ -2135,15 +2135,7 @@
       "owner": "sebastianbarrozo",
       "jira": "ETP-5064",
       "created": "2026-08-27",
-      "flag": {
-        "key": "webmcp-agent-chat",
-        "defaultValue": false,
-        "ttlNote": "No TTL declared: registered by ETP-4697 so FLAG_DEFAULTS and the registry agree.",
-        "symbols": [
-          "webmcp-agent-chat",
-          "WEBMCP_AGENT_CHAT"
-        ]
-      },
+      "$flagRetiredComment": "SHIPPED — the `flag` object was removed after ETP-6424 promoted the Etendo AI chat and WebMCP to GA (WEBMCP_AGENT_CHAT deleted from flag-keys.js and FLAG_DEFAULTS, the CopilotContext and WebMcpEtendoGoTools gates unwrapped), not the entry. Re-grepped after removal: the only remaining match of the old key is a scope note in docs/plans/2026-09-23-usage-events-plan.md.",
       "paths": [],
       "testSpecs": {
         "unit": [],
@@ -2179,6 +2171,7 @@
       "created": "2026-11-17",
       "flag": {
         "key": "sii-import-dua",
+        "scope": "backend",
         "defaultValue": false,
         "ttl": "2027-03-31",
         "ttlNote": "PLACEHOLDER, not a commitment: end of Q1 2027. Revisit once the feature is validated on a real import client. Retirement means imports with DUA ship to everyone: unwrap the SiiImportDuaFlag checks in PurchaseInvoiceTaxExtension.handle, PurchaseInvoiceSiiDeferredVat.handleIfDeferredVat and PurchaseInvoiceImportDua.checkHeaderWrite, delete SiiImportDuaFlag.java (and its test), FLAG_SII_IMPORT_DUA from GoFeatureFlags, the ETGO_SiiImportDuaDisabled texts, the siiImportDua capability of SFWindowAccessMap (SII_IMPORT_DUA constant and its put) and the com.etendoerp.go docs section; in the SPA delete useSiiImportDuaEnabled and its callers' conditions (SiiImportDuaSection, SiiImportTaxesSection, ImportDuaLinesSection, the useSifFieldPatcher F5 auto-switch, purchase-invoice index.jsx allowEmptyWhen) and SII_IMPORT_DUA_CAPABILITY; drop the feature_disabled sentence from the header and tax agentPrompts (decisions.json and ETGO_SF_ENTITY.xml); delete the hosted Datadog setting; delete the flag object, keep this entry.",
