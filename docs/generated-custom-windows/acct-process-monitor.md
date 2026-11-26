@@ -16,7 +16,7 @@ Like Not Posted Documents, this has **no backing AD window** — it is a synthet
 
 Delivered by **ETP-5269** and promoted to general availability by **ETP-6425**: the `acct-process-monitor` feature flag was retired and the page is permanent.
 
-**User documentation (Spanish admin guide):** [Cómo supervisar el proceso de contabilización](https://help.etendo.ai/finanzas/como-supervisar-el-proceso-de-contabilizacion/como-supervisar-el-proceso-de-contabilizacion/) — *pending publication*: the page is written in the `etendo-docs` repo (`docs/es/finanzas/como-supervisar-el-proceso-de-contabilizacion/como-supervisar-el-proceso-de-contabilizacion.md`) and the link resolves only once that PR merges.
+**User documentation (Spanish admin guide):** [Cómo revisar el proceso contable](https://help.etendo.ai/sistema/configuracion/como-revisar-el-proceso-contable/como-revisar-el-proceso-contable/) (ETP-5532) — declared for this feature with `features: [acct-process-monitor]` in its `etendo-docs` front matter.
 
 ---
 
