@@ -17,6 +17,17 @@ import {
 
 const SEARCH_DEBOUNCE_MS = 300;
 
+/** The opening range: all time on a search from the URL, else the rolling last month (D-2). */
+function initialRange(search) {
+  return search ? null : defaultPortalRange();
+}
+
+/** Whether two picker values name the same calendar days (presets and `null` compare as is). */
+function sameCalendarRange(a, b) {
+  if (!a || !b || !('from' in a) || !('from' in b)) return a === b;
+  return toCalendarParam(a.from) === toCalendarParam(b.from) && toCalendarParam(a.to) === toCalendarParam(b.to);
+}
+
 /**
  * One document kind's list (design Listado / Movil-Listado).
  *
@@ -28,7 +39,9 @@ const SEARCH_DEBOUNCE_MS = 300;
  * payment state and outstanding; shipments carry no amounts. A totals row closes the table and
  * "Todos los registros cargados" the list. Checkboxes and "Descargar seleccionados" are out (PO
  * answer: bulk download is a performance risk; a document downloads from its detail), and so are
- * the advanced "Filtros"; the funnel carries the document-type quick filter (CP-16).
+ * the advanced "Filtros". The quick filters — status, document type (CP-16) and date range — are
+ * the app list toolbar's own controls (`PortalListFilters.jsx`, ETP-6209); on mobile they sit in
+ * the funnel's panel. A `search` from the URL (`q`) opens the list on that search, all time.
  *
  * **Every figure refers to the set shown** (QA 24/11 f): the header's count chip, "Mostrando X de
  * Y" and the totals row all come from the current query (kind, tab, type, range, search). The
@@ -36,18 +49,21 @@ const SEARCH_DEBOUNCE_MS = 300;
  * overdue invoices) — and say so in their tooltip.
  */
 export default function PortalDocumentListView({
-  apiFetch, token, kind, group = null, identity = null, logoUrl = null, onNavigate, onInvalid,
+  apiFetch, token, kind, group = null, search: initialSearch = null, identity = null, logoUrl = null,
+  onNavigate, onInvalid,
 }) {
   const ui = useUI();
   const tabLabel = usePortalTabLabel();
-  // The range of the period tabs (Todos, Pagado, Aceptado…): the rolling last month by default.
-  const [range, setRange] = useState(() => defaultPortalRange());
+  // The range of the period tabs (Todos, Pagado, Aceptado…): the rolling last month by default —
+  // all time when the list opens on a search ("Ver todos en …" of Inicio's search, ETP-6209),
+  // whose hits are not limited to a period, so the list shows what the search found.
+  const [range, setRange] = useState(() => initialRange(initialSearch));
   // A range the customer picked while on a state tab, for that tab only (QA pass 3).
   const [stateRange, setStateRange] = useState({ group: null, range: null });
-  // CP-16: the document type inside the kind (invoice / credit note), from the funnel.
+  // CP-16: the document type inside the kind (invoice / credit note), from the type selector.
   const [subtype, setSubtype] = useState(null);
-  const [searchInput, setSearchInput] = useState('');
-  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState(initialSearch ?? '');
+  const [search, setSearch] = useState(initialSearch ?? '');
   const [page, setPage] = useState(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
@@ -63,14 +79,20 @@ export default function PortalDocumentListView({
   // first commit — on mount too — and its fresh `defaultPortalRange()` object changed the query, so
   // every list was requested twice (QA pass 3: each GET /documents went out twice). Now the first
   // commit already holds the final state, and a mount or a kind change sends one request.
-  const [shownKind, setShownKind] = useState(kind);
-  if (shownKind !== kind) {
-    setShownKind(kind);
-    setRange(defaultPortalRange());
-    setStateRange({ group: null, range: null });
-    setSubtype(null);
-    setSearchInput('');
-    setSearch('');
+  // The same for a new search from the URL (`q`, ETP-6209): "Ver todos en …" of Inicio's search
+  // opens the list on that search even when this kind's list is already mounted. A `q` that goes
+  // away (a document opened over the list, then closed) changes nothing: the customer's own search
+  // and filters stay as they were.
+  const [shown, setShown] = useState({ kind, search: initialSearch });
+  if (shown.kind !== kind || shown.search !== initialSearch) {
+    setShown({ kind, search: initialSearch });
+    if (shown.kind !== kind || initialSearch) {
+      setRange(initialRange(initialSearch));
+      setStateRange({ group: null, range: null });
+      setSubtype(null);
+      setSearchInput(initialSearch ?? '');
+      setSearch(initialSearch ?? '');
+    }
   }
 
   // CP-18b + QA pass 3: a "state" tab (Vencido, Pendiente, Bajo evaluación, En proceso) lists
@@ -85,6 +107,11 @@ export default function PortalDocumentListView({
     if (allTimeTab) setStateRange({ group, range: next });
     else setRange(next);
   }, [allTimeTab, group]);
+  // The date button shows the active border, as the app's toolbar does, when the range is not the
+  // tab's default (all time on a state tab, the rolling last month on the others).
+  const dateActive = allTimeTab
+    ? effectiveRange != null
+    : !sameCalendarRange(effectiveRange, defaultPortalRange());
 
   useEffect(() => {
     const timer = setTimeout(() => setSearch(searchInput), SEARCH_DEBOUNCE_MS);
@@ -281,6 +308,7 @@ export default function PortalDocumentListView({
           onRange={changeRange}
           subtype={subtype}
           onSubtype={setSubtype}
+          dateActive={dateActive}
           onRefresh={() => setReload((value) => value + 1)}
           data-testid="DesktopToolbar__c7f7d2" />
 

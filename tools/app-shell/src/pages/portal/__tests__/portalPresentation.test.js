@@ -298,6 +298,8 @@ describe('portal view in the URL', () => {
     { view: 'home' },
     { view: 'list', kind: 'ORDER' },
     { view: 'list', kind: 'INVOICE', group: 'overdue' },
+    // ETP-6209: "Ver todos en …" of Inicio's search opens a list on its query.
+    { view: 'list', kind: 'QUOTATION', q: 'PR/0001 & co' },
     { view: 'doc', kind: 'INVOICE', id: 'inv/1' },
   ]) {
     it(`round-trips ${JSON.stringify(target)}`, () => {
@@ -330,5 +332,16 @@ describe('portal view in the URL', () => {
   it('writes only view, kind, id and group', () => {
     const params = writePortalView({ view: 'list', kind: 'INVOICE', group: 'paid', id: 'x', token: 'tok-secret' });
     assert.deepEqual([...params.keys()], ['view', 'kind', 'id', 'group']);
+  });
+
+  it('carries a trimmed search on a list only, and drops a blank one', () => {
+    assert.equal(writePortalView({ view: 'list', kind: 'ORDER', q: '  PV/7 ' }).get('q'), 'PV/7');
+    assert.equal(writePortalView({ view: 'list', kind: 'ORDER', q: '   ' }).has('q'), false);
+    assert.equal(writePortalView({ view: 'doc', kind: 'ORDER', id: 'o-1', q: 'PV' }).has('q'), false);
+    assert.deepEqual(readPortalView(new URLSearchParams('view=list&kind=ORDER&q=%20%20')), { view: 'list', kind: 'ORDER' });
+    assert.deepEqual(
+      readPortalView(new URLSearchParams('view=doc&kind=ORDER&id=o-1&q=PV')),
+      { view: 'doc', kind: 'ORDER', id: 'o-1' },
+    );
   });
 });

@@ -1077,6 +1077,62 @@ describe('PortalPage — home', () => {
     await detailReady();
     expect(urlView()).toEqual({ view: 'doc', kind: 'INVOICE', id: 'inv-2' });
   });
+
+  // ETP-6209: the dropdown is the app's global-search look, one group per kind (heading = the
+  // kind's plural), and "Ver todos en <kind>" opens that list on the same search, all time.
+  it('groups the matches by kind from the server groups, with their counts', async () => {
+    const user = userEvent.setup();
+    responses.search = jsonResponse({
+      documents: [INVOICES[1], order(1)],
+      groups: [
+        { kind: 'ORDER', count: 7, documents: [order(1)] },
+        { kind: 'INVOICE', count: 1, documents: [INVOICES[1]] },
+      ],
+    });
+    renderPortal();
+    await shellReady();
+    await user.type(screen.getByTestId('portal-global-search'), 'P');
+
+    const orders = await screen.findByTestId('portal-search-group-order');
+    expect(within(orders).getByRole('heading')).toHaveTextContent('portalKindOrderPlural');
+    expect(within(orders).getAllByTestId('portal-search-result')).toHaveLength(1);
+    expect(within(orders).getByTestId('portal-search-see-all-order')).toHaveTextContent('portalSearchSeeAllIn');
+    expect(within(orders).getByTestId('portal-search-group-count')).toHaveTextContent('7');
+    // The server's order is kept: orders before invoices here.
+    expect(screen.getAllByTestId(/^portal-search-group-(?!count)/).map((el) => el.dataset.testid))
+      .toEqual(['portal-search-group-order', 'portal-search-group-invoice']);
+  });
+
+  it('groups a flat answer by kind and opens the kind list on the search with "see all"', async () => {
+    const user = userEvent.setup();
+    renderPortal();
+    await shellReady();
+    await user.type(screen.getByTestId('portal-global-search'), ' FV ');
+
+    const invoices = await screen.findByTestId('portal-search-group-invoice');
+    expect(within(invoices).queryByTestId('portal-search-group-count')).not.toBeInTheDocument();
+    await user.click(within(invoices).getByTestId('portal-search-see-all-invoice'));
+
+    await listReady();
+    expect(urlView()).toEqual({ view: 'list', kind: 'INVOICE', q: 'FV' });
+    // Seeded into the list's own search and sent, over all time (the search is not a period).
+    expect(screen.getByTestId('portal-search')).toHaveValue('FV');
+    const query = listQueries().at(-1);
+    expect(query.get('q')).toBe('FV');
+    expect(query.has('dateFrom')).toBe(false);
+  });
+
+  it('keeps the list search when a document opened from it is closed', async () => {
+    const user = userEvent.setup();
+    renderPortal(`/portal/${TOKEN}?view=list&kind=INVOICE&q=FV`);
+    await listReady();
+    expect(screen.getByTestId('portal-search')).toHaveValue('FV');
+
+    await user.click(screen.getAllByTestId('portal-document-open')[0]);
+    await detailReady();
+
+    expect(screen.getByTestId('portal-search')).toHaveValue('FV');
+  });
 });
 
 describe('PortalPage — document list', () => {
@@ -1229,20 +1285,38 @@ describe('PortalPage — document list', () => {
     }
   });
 
-  it('filters invoices by document type from the funnel, sent as the subtype parameter', async () => {
+  // ETP-6209: the quick filters are the app list toolbar's own controls (ListFilterBar's buttons,
+  // DistinctValuesList options, active border), fed with the portal's fixed groups and types.
+  it('filters invoices by document type from the toolbar selector, sent as the subtype parameter', async () => {
     const user = userEvent.setup();
     renderPortal(listPath('INVOICE'));
     await listReady();
     expect(listQueries().some((query) => query.has('subtype'))).toBe(false);
+    expect(screen.getByTestId('portal-filter-type')).toHaveTextContent('allTypes');
+    expect(screen.getByTestId('portal-filter-type').className).not.toContain('border-primary/40');
 
-    await user.click(screen.getByTestId('portal-list-filters'));
-    await user.click(screen.getByTestId('portal-list-subtype-creditnote'));
+    await user.click(screen.getByTestId('portal-filter-type'));
+    await user.click(await screen.findByTestId('portal-list-subtype-creditnote'));
     await waitFor(() => expect(listQueries().at(-1).get('subtype')).toBe('creditNote'));
+    expect(screen.getByTestId('portal-filter-type').className).toContain('border-primary/40');
 
-    await user.click(screen.getByTestId('portal-list-filters'));
-    expect(screen.getByTestId('portal-list-subtype-creditnote')).toHaveAttribute('aria-checked', 'true');
+    await user.click(screen.getByTestId('portal-filter-type'));
+    expect((await screen.findByTestId('portal-list-subtype-creditnote')).closest('[role="option"]'))
+      .toHaveAttribute('aria-selected', 'true');
     await user.click(screen.getByTestId('portal-list-subtype-all'));
     await waitFor(() => expect(listQueries().at(-1).has('subtype')).toBe(false));
+  });
+
+  it('picks the status group from the toolbar selector, like the tabs', async () => {
+    const user = userEvent.setup();
+    renderPortal(listPath('INVOICE'));
+    await listReady();
+
+    await user.click(screen.getByTestId('portal-filter-status'));
+    await user.click(await screen.findByTestId('portal-list-filter-paid'));
+
+    await waitFor(() => expect(screen.getByTestId('portal-status-tab-paid')).toHaveAttribute('aria-selected', 'true'));
+    expect(screen.getByTestId('portal-filter-status').className).toContain('border-primary/40');
   });
 
   it('offers no document-type filter on a kind with a single type', async () => {
@@ -1251,9 +1325,10 @@ describe('PortalPage — document list', () => {
     renderPortal(listPath('ORDER'));
     await listReady();
 
-    await user.click(screen.getByTestId('portal-list-filters'));
+    expect(screen.queryByTestId('portal-filter-type')).not.toBeInTheDocument();
+    await user.click(screen.getByTestId('portal-filter-status'));
 
-    expect(screen.getByTestId('portal-list-filter-completed')).toBeInTheDocument();
+    expect(await screen.findByTestId('portal-list-filter-completed')).toBeInTheDocument();
     expect(screen.queryByTestId('portal-list-subtype-all')).not.toBeInTheDocument();
   });
 
@@ -1367,7 +1442,10 @@ describe('PortalPage — mobile layout', () => {
     renderPortal(`/portal/${TOKEN}?view=list&kind=INVOICE`);
     await listReady();
 
-    expect(screen.getByTestId('portal-document-table').parentElement).toHaveClass('hidden', 'md:block');
+    expect(screen.getByTestId('portal-document-table-scroll')).toHaveClass('hidden', 'md:block');
+    // ETP-6209: the last row's lift shadow keeps its 24px, taken back from the layout (as DataTable).
+    expect(screen.getByTestId('portal-document-table-scroll')).toHaveClass('overflow-x-auto', '!-mb-6');
+    expect(screen.getByTestId('portal-document-table').parentElement).toHaveClass('pb-6', 'pointer-events-none');
     expect(screen.getByTestId('portal-document-cards')).toHaveClass('md:hidden');
     expect(screen.getAllByTestId('portal-document-card'))
       .toHaveLength(screen.getAllByTestId('portal-document-row').length);
@@ -1879,12 +1957,16 @@ describe('PortalPage — mobile redesign', () => {
 
     await user.click(screen.getByTestId('portal-list-filters-mobile'));
     const panel = within(await screen.findByTestId('portal-list-filters-mobile-panel'));
-    expect(panel.getByTestId('portal-list-subtype-all-mobile')).toHaveAttribute('aria-pressed', 'true');
-    expect(panel.getByTestId('portal-list-filter-all-mobile')).toBeInTheDocument();
-    expect(panel.getByTestId('portal-list-filters-mobile-range')).toBeInTheDocument();
+    // ETP-6209: the app toolbar's selector buttons, and the range picker in its compact layout.
+    expect(panel.getByTestId('portal-filter-type-mobile')).toHaveTextContent('allTypes');
+    expect(panel.getByTestId('portal-filter-status-mobile')).toHaveTextContent('allStatuses');
+    expect(within(panel.getByTestId('portal-list-filters-mobile-range')).getByTestId('date-range-compact'))
+      .toBeInTheDocument();
 
-    await user.click(panel.getByTestId('portal-list-subtype-creditnote-mobile'));
+    await user.click(panel.getByTestId('portal-filter-type-mobile'));
+    await user.click(await screen.findByTestId('portal-list-subtype-creditnote-mobile'));
     await waitFor(() => expect(listQueries().at(-1).get('subtype')).toBe('creditNote'));
+    expect(panel.getByTestId('portal-filter-type-mobile').className).toContain('border-primary/40');
   });
 
   it('keeps the bottom bar\'s active item marked with its dot', async () => {
@@ -2118,12 +2200,17 @@ describe('PortalPage — mobile list card options and filters', () => {
     await listReady();
 
     await user.click(screen.getByTestId('portal-list-filters-mobile'));
+    await user.click(await screen.findByTestId('portal-filter-status-mobile'));
     await user.click(await screen.findByTestId('portal-list-filter-pending-mobile'));
 
     await waitFor(() => expect(listQueries().at(-1).get('group')).toBe('pending'));
     expect(urlView()).toEqual({ view: 'list', kind: 'INVOICE', group: 'pending' });
-    expect(screen.getByTestId('portal-list-filter-pending-mobile')).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByTestId('portal-list-filter-all-mobile')).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByTestId('portal-filter-status-mobile')).toHaveTextContent('statusPending');
+    await user.click(screen.getByTestId('portal-filter-status-mobile'));
+    expect((await screen.findByTestId('portal-list-filter-pending-mobile')).closest('[role="option"]'))
+      .toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByTestId('portal-list-filter-all-mobile').closest('[role="option"]'))
+      .toHaveAttribute('aria-selected', 'false');
   });
 
   it.each([

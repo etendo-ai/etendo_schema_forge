@@ -1501,6 +1501,41 @@ Figma `6cMWBbmrAt65GwZCT5YIF1`, node `3377-13236`. Built in `sf/tools/app-shell/
 - **Card category chip:** uses the row's `reference`. The design shows a description (e.g.
   «Servicios de consultoría»), which the list rows do not carry.
 
+## Review call follow-up (product decisions, 2026-11-26)
+
+Four asks after the review call, built in the SPA (`etendo_schema_forge`); the backend part of the
+search is its own change in `com.etendoerp.go`.
+
+- **Quick filters = the app list toolbar's.** `pages/portal/PortalListFilters.jsx` builds the status
+  selector, the document-type selector (invoices only) and the date selector from the very pieces
+  `ListFilterBar` uses — outline `Button` in `TOOLBAR_SELECT_CLASS` (now in
+  `contract-ui/listToolbarStyles.js`, imported by both), the `border-primary/40` active border,
+  `Popover` + `DistinctValuesList` (search box, "all" row, check on the committed option), the
+  shared `DateRangePopoverContent`. The options are the portal's fixed groups and types, filtered
+  in memory (no NEO distinct endpoint). `ListFilterBar` itself is unchanged; there is no advanced
+  filter (the portal API takes no NEO criteria). Desktop: tabs + the three selectors + refresh (the
+  old funnel dropdown is gone). Mobile: the funnel opens a panel with the type and status selectors
+  and the range picker in its compact layout. The date button is "active" when the range is not the
+  tab's default. Testids: `portal-filter-status|type[-mobile]`, options `portal-list-filter-<group>`
+  / `portal-list-subtype-<type>` (+ `-mobile`), `portal-date-range` kept.
+- **Rows = the app list row.** The desktop table renders core `TableRow`s with
+  `listRowClassName({ clickable: true })` from `contract-ui/rowVisuals.js`, the helper
+  `DataTable.getRowClassName` now uses too: the same hover lift, borders and cursor as every list.
+  The rows stay 40px (the Figma's) and keep the portal's focus ring.
+- **Mobile filters fit the phone.** `DateRangePopoverContent` has an opt-in `layout="compact"`:
+  wrapping preset pills; "Personalizado" stacks the two calendars ("Desde" over "Hasta", each still
+  setting its own end — no range-click change) above a full-width footer. Nothing is wider than one
+  244px calendar, so the panel fits from 320px; the default layout (≈680px) is unchanged for the app.
+- **Search like the app's.** Inicio's search dropdown uses the `GlobalSearch*` primitives of the
+  app's `CommandPalette`: one group per kind (heading = plural kind name), its matches, and a last
+  "Ver todos en <kind>" item that opens that list on the same search (`?view=list&kind=…&q=…`;
+  `readPortalView` / `writePortalView` carry `q` on a list only). The list seeds its search box from
+  `q` and opens on **all time**, so it shows what the search found; a `q` that goes away (a document
+  opened over the list, then closed) keeps the customer's search. Document opens keep
+  `origin=search`. `searchPortalDocuments` now returns `{ documents, groups }`: the server's
+  `groups: [{ kind, count, documents[≤5] }]` when present (with a per-kind count on "Ver todos"),
+  otherwise the flat `documents` grouped client-side.
+
 ## Still open
 
 Parts A and B are done. This plan stays in `docs/plans/` (not `completed/`) until the items below

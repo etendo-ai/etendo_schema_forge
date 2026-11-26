@@ -57,15 +57,64 @@ export function resolvePresets(extraPresets) {
   ]);
 }
 
+/** The Cancel / Apply pair of the custom range. `stretch`: each button takes half the width. */
+function RangeFooterButtons({ onCancel, onApply, canApply, stretch = false }) {
+  const ui = useUI();
+  return (
+    <div className={cn('flex items-center gap-2', stretch && 'w-full [&>button]:flex-1')}>
+      <button
+        type="button"
+        onClick={onCancel}
+        className="inline-flex h-10 items-center justify-center rounded-full border border-border-control bg-card px-3 text-sm font-medium text-foreground shadow-[0px_1px_2px_hsl(var(--foreground) / 0.05)] transition-colors hover:bg-muted"
+      >
+        {ui('dateRangeCancel')}
+      </button>
+      <button
+        type="button"
+        onClick={onApply}
+        disabled={!canApply}
+        className="inline-flex h-10 items-center justify-center rounded-full bg-foreground px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent-highlight hover:text-accent-highlight-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        {ui('dateRangeApply')}
+      </button>
+    </div>
+  );
+}
+
+/** One preset of the compact layout: a pill that wraps with the others, checked when active. */
+function PresetChip({ active, onClick, children }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={cn(
+        'inline-flex h-8 max-w-full items-center gap-1 rounded-full border px-3 text-sm leading-6 text-foreground transition-colors',
+        active ? 'border-foreground bg-muted font-medium' : 'border-border-control bg-card hover:bg-muted',
+      )}
+    >
+      {active ? <CheckIcon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" data-testid="Check__482ed1" /> : null}
+      <span className="truncate">{children}</span>
+    </button>
+  );
+}
+
 /**
  * @param {{
  *   value: null | { presetId: string } | { from: Date, to: Date };
  *   onChange: (v: null | { presetId: string } | { from: Date, to: Date }) => void;
  *   onClose: () => void;
  *   extraPresets?: Array<'last3m'|'last6m'>;
+ *   layout?: 'default'|'compact';
  * }} props
+ *
+ * `layout="compact"` (opt-in, ETP-6209) is for a narrow container — a phone's filter panel, from
+ * 320px: the presets wrap as pills, and "Personalizado" reveals the same two calendars stacked
+ * ("Desde" over "Hasta", each still setting its own end) above a full-width footer. Nothing is
+ * wider than one 244px calendar. The default layout (presets column + side-by-side calendars,
+ * ~680px) is unchanged.
  */
-export function DateRangePopoverContent({ value, onChange, onClose, extraPresets }) {
+export function DateRangePopoverContent({ value, onChange, onClose, extraPresets, layout = 'default' }) {
   const ui = useUI();
 
   const datePresets = useMemo(
@@ -123,15 +172,70 @@ export function DateRangePopoverContent({ value, onChange, onClose, extraPresets
     return '';
   })();
 
+  const presetActive = (presetId) => (presetId === 'allTime'
+    ? (!hasActiveValue && !customMode)
+    : (activePresetId === presetId && !customMode));
+
+  if (layout === 'compact') {
+    return (
+      <div className="flex w-full min-w-0 flex-col" data-layout="compact" data-testid="date-range-compact">
+        <div className="flex flex-wrap gap-1.5 p-2">
+          {datePresets.map((preset) => (
+            <PresetChip
+              key={preset.id}
+              active={presetActive(preset.id)}
+              onClick={() => handlePresetSelect(preset.id)}
+              data-testid="PresetChip__482ed1">
+              {preset.label}
+            </PresetChip>
+          ))}
+          <PresetChip active={customMode} onClick={() => setCustomMode(true)} data-testid="PresetChip__482ed1">
+            {ui('dateRangeCustom')}
+          </PresetChip>
+        </div>
+        {customMode ? (
+          <>
+            <div className="flex flex-col items-center border-t border-border-subtle">
+              <p className="w-full px-3 pt-2 text-xs font-semibold leading-4 text-muted-foreground">{ui('filterFrom')}</p>
+              <CalendarWithPicker
+                month={leftMonth}
+                onMonthChange={setLeftMonth}
+                selected={fromDate ?? undefined}
+                onSelect={(d) => { setFromDate(d || null); setCustomMode(true); }}
+                modifiers={inRangeModifier ? { inRange: inRangeModifier } : undefined}
+                modifiersClassNames={{ inRange: 'bg-muted [&>button]:rounded-none' }}
+                data-testid="CalendarWithPicker__482ed1" />
+              <p className="w-full border-t border-border-subtle px-3 pt-2 text-xs font-semibold leading-4 text-muted-foreground">{ui('filterTo')}</p>
+              <CalendarWithPicker
+                month={rightMonth}
+                onMonthChange={setRightMonth}
+                selected={toDate ?? undefined}
+                onSelect={(d) => { setToDate(d || null); setCustomMode(true); }}
+                modifiers={inRangeModifier ? { inRange: inRangeModifier } : undefined}
+                modifiersClassNames={{ inRange: 'bg-muted [&>button]:rounded-none' }}
+                data-testid="CalendarWithPicker__482ed1" />
+            </div>
+            <div className="flex flex-col gap-2 border-t border-border-subtle px-3 py-3">
+              {rangeSummary ? <span className="text-sm font-medium text-muted-foreground">{rangeSummary}</span> : null}
+              <RangeFooterButtons
+                onCancel={onClose}
+                onApply={handleApplyCustom}
+                canApply={canApplyCustom}
+                stretch
+                data-testid="RangeFooterButtons__482ed1" />
+            </div>
+          </>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <div className="flex">
       {/* Preset list */}
       <div className="flex w-[193px] flex-col border-r border-border-subtle py-1">
         {datePresets.map((preset) => {
-          const active =
-            preset.id === 'allTime'
-              ? (!hasActiveValue && !customMode)
-              : (activePresetId === preset.id && !customMode);
+          const active = presetActive(preset.id);
           return (
             <button
               key={preset.id}
@@ -182,23 +286,11 @@ export function DateRangePopoverContent({ value, onChange, onClose, extraPresets
         </div>
         <div className="flex h-16 items-center justify-between gap-2 px-5 py-3">
           <span className="text-sm font-medium text-muted-foreground">{rangeSummary}</span>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="inline-flex h-10 items-center justify-center rounded-full border border-border-control bg-card px-3 text-sm font-medium text-foreground shadow-[0px_1px_2px_hsl(var(--foreground) / 0.05)] transition-colors hover:bg-muted"
-            >
-              {ui('dateRangeCancel')}
-            </button>
-            <button
-              type="button"
-              onClick={handleApplyCustom}
-              disabled={!canApplyCustom}
-              className="inline-flex h-10 items-center justify-center rounded-full bg-foreground px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-accent-highlight hover:text-accent-highlight-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {ui('dateRangeApply')}
-            </button>
-          </div>
+          <RangeFooterButtons
+            onCancel={onClose}
+            onApply={handleApplyCustom}
+            canApply={canApplyCustom}
+            data-testid="RangeFooterButtons__482ed1" />
         </div>
       </div>
     </div>
