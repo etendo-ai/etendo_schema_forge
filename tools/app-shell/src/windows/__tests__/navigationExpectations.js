@@ -21,7 +21,7 @@ const groups = {
   Finance: 'chart-of-accounts cost-center service-project general-ledger-configuration calendar assets asset-group amortization not-posted-documents manual-journals report-viewer-finance',
   // ETP-6380 — Impuestos: the fiscal windows out of Finance, an Informes link holding only the Tax
   // Report, and Configuración fiscal (moved from Settings).
-  Taxes: 'tax tax-category fiscal-monitor report-viewer-taxes fiscal-config fiscal-models',
+  Taxes: 'tax tax-category fiscal-monitor fiscal-config fiscal-models report-viewer-taxes',
   Connections: 'authorize',
   Settings: 'organization document-sequence business-partner-category user roles api-keys document-templates acct-process-monitor conversion-rates',
 };
