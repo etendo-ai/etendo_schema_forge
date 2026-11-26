@@ -90,7 +90,9 @@ export function AutoMatchPairSide({
         <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
           {dateText ? (
             <span className="inline-flex min-w-0 items-center gap-1">
-              <CalendarBlankIcon className="size-3.5 flex-none text-[hsl(var(--text-disabled))]" />
+              <CalendarBlankIcon
+                className="size-3.5 flex-none text-[hsl(var(--text-disabled))]"
+                data-testid="CalendarBlankIcon__c26634" />
               <span
                 className="min-w-0 truncate text-xs leading-4 text-[hsl(var(--muted-foreground))]"
                 data-testid={metaTestId}>

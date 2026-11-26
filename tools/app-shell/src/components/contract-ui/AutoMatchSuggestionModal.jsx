@@ -90,7 +90,10 @@ function StatementSide({ group, currency }) {
             kind={badgeKind}
             label={badgeLabel}
             icon={badgeKind === 'suggested'
-              ? <SparkleIcon className="size-3.5 text-[var(--status-info-fg)]" weight="fill" />
+              ? <SparkleIcon
+              className="size-3.5 text-[var(--status-info-fg)]"
+              weight="fill"
+              data-testid="SparkleIcon__a89979" />
               : null}
             data-testid="StatusBadge__a89979" />
         </span>
@@ -98,7 +101,8 @@ function StatementSide({ group, currency }) {
       reason={line.referenceNo ? (
         <span className="text-xs leading-4 text-[hsl(var(--muted-foreground))]">{line.referenceNo}</span>
       ) : null}
-      testId={`automatch-group-statement-${group.groupKey}`} />
+      testId={`automatch-group-statement-${group.groupKey}`}
+      data-testid="AutoMatchPairSide__a89979" />
   );
 }
 
@@ -212,7 +216,8 @@ function GroupRow({ group, checked, onToggle, currency, glItemDifference }) {
               data-testid="OperationRow__a89979" />
           ))}
         </div>
-      )} />
+      )}
+      data-testid="AutoMatchPairRow__a89979" />
   );
 }
 
@@ -576,7 +581,8 @@ export function AutoMatchSuggestionModal({
                         ? ui('loading')
                         : ui('financeReconcileAutomatchActionReconcile', { count: checkedGroups.length })}
                     </Button>
-                  )}>
+                  )}
+                  data-testid="AutoMatchCard__a89979">
                   <AutoMatchCardHeader
                     selectAll={(
                       // Shows a dash whenever there is any selection (same control as the rows).
@@ -588,7 +594,8 @@ export function AutoMatchSuggestionModal({
                     )}
                     leftTitle={ui('financeReconcileAutomatchColStatement')}
                     count={transactionGroups.length}
-                    rightTitle={ui('financeReconcileAutomatchColOps')} />
+                    rightTitle={ui('financeReconcileAutomatchColOps')}
+                    data-testid="AutoMatchCardHeader__a89979" />
                   {transactionGroups.length === 0 ? (
                     <p className="m-0 py-8 text-center text-sm text-[hsl(var(--muted-foreground))]">
                       {ui('financeReconcileAutomatchEmpty')}
@@ -615,7 +622,8 @@ export function AutoMatchSuggestionModal({
         <AutoMatchCloseConfirmDialog
           open
           onKeep={() => setConfirmingClose(false)}
-          onConfirm={handleDismiss} />
+          onConfirm={handleDismiss}
+          data-testid="AutoMatchCloseConfirmDialog__a89979" />
       )}
     </>
   );

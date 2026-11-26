@@ -727,7 +727,7 @@ function PairTablesView({
                   className="w-auto min-w-0 text-xs font-normal leading-4 text-[hsl(var(--muted-foreground))]"
                   data-testid={`recon-bounce-ref-${line.id}`} />
               ) : null}
-              <AiPercentText rowId={line.id} pct={pct} />
+              <AiPercentText rowId={line.id} pct={pct} data-testid="AiPercentText__d0f4d5" />
               {unpairable ? (
                 <span
                   id={noMatchId}
@@ -825,7 +825,7 @@ function PairTablesView({
       data-testid={parts ? 'recon-bounce-panel' : 'recon-bounce-pairs-view'}>
       {selectedEntry && parts && model && model.mode === BOUNCE_STATE ? (
         <div className="pt-2">
-          <BounceNotice model={model} bcpLocale={bcpLocale} />
+          <BounceNotice model={model} bcpLocale={bcpLocale} data-testid="BounceNotice__d0f4d5" />
         </div>
       ) : null}
       {/* One grid, three rows (toolbar / table / footer) over two columns: every row is shared, so
@@ -837,7 +837,8 @@ function PairTablesView({
           <RightEmptyState
             titleKey="financeReconcileBounceRightEmptyTitle"
             hintKey="financeReconcileBounceRightEmptyHint"
-            className="col-start-2 row-span-3 row-start-1" />
+            className="col-start-2 row-span-3 row-start-1"
+            data-testid="RightEmptyState__d0f4d5" />
         ) : null}
         {selectedEntry ? (
         <div className="col-start-2 row-start-1 flex min-w-0 flex-wrap items-center gap-2 p-2">
@@ -900,7 +901,8 @@ function PairTablesView({
               onDiscard={parts.onDiscard}
               onRestore={parts.onRestore}
               busy={parts.busy}
-              windowReadOnly={parts.windowReadOnly} />
+              windowReadOnly={parts.windowReadOnly}
+              data-testid="BounceFooter__d0f4d5" />
           ) : (
             <div className="h-full border-t border-[hsl(var(--border-subtle))]" />
           )}
@@ -1277,7 +1279,7 @@ function CandidateOperationsPanel({
   const candidatesFrozen = matchedExpanded;
 
   if (!line) {
-    return <RightEmptyState />;
+    return <RightEmptyState data-testid="RightEmptyState__d0f4d5" />;
   }
 
   const renderRow = (cand) => {

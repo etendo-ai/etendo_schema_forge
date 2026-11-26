@@ -36,7 +36,10 @@ export function pairBadgeAndReason(
         <span
           className={cn(TAG_CLS, 'bg-[var(--status-success-bg)] text-[var(--status-success-fg)]')}
           data-testid={`automatch-bounce-tag-high-${group.groupKey}`}>
-          <CheckCircleIcon className="size-3.5 text-[var(--status-success-fg)]" weight="fill" />
+          <CheckCircleIcon
+            className="size-3.5 text-[var(--status-success-fg)]"
+            weight="fill"
+            data-testid="CheckCircleIcon__c4ff28" />
           {ui('financeReconcileBounceTagHigh')}
         </span>
       ),
@@ -52,7 +55,8 @@ export function pairBadgeAndReason(
     <AiPercentText
       rowId={group.groupKey}
       pct={aiPct}
-      testId={`automatch-bounce-ai-pct-${group.groupKey}`} />
+      testId={`automatch-bounce-ai-pct-${group.groupKey}`}
+      data-testid="AiPercentText__c4ff28" />
   );
 
   return {
@@ -60,7 +64,10 @@ export function pairBadgeAndReason(
       <span
         className={cn(TAG_CLS, 'bg-[var(--status-warning-bg)] text-[var(--status-warning-fg)]')}
         data-testid={`automatch-bounce-tag-review-${group.groupKey}`}>
-        <WarningCircleIcon className="size-3.5 text-[var(--status-warning-fg)]" weight="fill" />
+        <WarningCircleIcon
+          className="size-3.5 text-[var(--status-warning-fg)]"
+          weight="fill"
+          data-testid="WarningCircleIcon__c4ff28" />
         {ui(reviewTagKey)}
       </span>
     ),
@@ -147,7 +154,8 @@ function BouncePairRow({
           badge={badge}
           reason={reason}
           testId={`automatch-bounce-original-${group.groupKey}`}
-          metaTestId={`automatch-bounce-original-meta-${group.groupKey}`} />
+          metaTestId={`automatch-bounce-original-meta-${group.groupKey}`}
+          data-testid="AutoMatchPairSide__c4ff28" />
       )}
       right={(
         <AutoMatchPairSide
@@ -169,8 +177,10 @@ function BouncePairRow({
             </Button>
           ) : null}
           testId={`automatch-bounce-line-${group.groupKey}`}
-          metaTestId={`automatch-bounce-line-meta-${group.groupKey}`} />
-      )} />
+          metaTestId={`automatch-bounce-line-meta-${group.groupKey}`}
+          data-testid="AutoMatchPairSide__c4ff28" />
+      )}
+      data-testid="AutoMatchPairRow__c4ff28" />
   );
 }
 
@@ -229,7 +239,8 @@ export function AutoMatchBounceSection({
           data-testid="automatch-bounce-exclude">
           {ui('financeReconcileAutomatchBounceExclude', { count: checkedCount })}
         </Button>
-      )}>
+      )}
+      data-testid="AutoMatchCard__c4ff28">
       <AutoMatchCardHeader
         selectAll={(
           <Checkbox
@@ -242,7 +253,8 @@ export function AutoMatchBounceSection({
         leftTitle={ui('financeReconcileAutomatchBounceColOriginal')}
         count={pairs.length}
         countTestId="automatch-bounce-count"
-        rightTitle={ui('financeReconcileAutomatchBounceColBounce')} />
+        rightTitle={ui('financeReconcileAutomatchBounceColBounce')}
+        data-testid="AutoMatchCardHeader__c4ff28" />
       {pairs.map((group) => (
         <BouncePairRow
           key={group.groupKey}

@@ -145,7 +145,11 @@ export function AiPercentText({ rowId, pct, testId = null }) {
       id={testId ? undefined : `recon-bounce-ai-pct-${rowId}`}
       className="inline-flex shrink-0 items-center gap-0.5 text-xs font-medium leading-4 text-[var(--status-info-fg)]"
       data-testid={testId ?? `recon-bounce-ai-pct-${rowId}`}>
-      <SparkleIcon className="size-3 shrink-0" weight="fill" aria-hidden="true" />
+      <SparkleIcon
+        className="size-3 shrink-0"
+        weight="fill"
+        aria-hidden="true"
+        data-testid="SparkleIcon__4bce30" />
       {ui('financeReconcileBounceAiProbability', { pct: pctParam(pct) })}
     </span>
   );
@@ -206,7 +210,7 @@ function PairRow({ row, model, onChoose, currency, bcpLocale }) {
                 className="w-auto min-w-0 text-xs font-normal leading-4 text-[hsl(var(--muted-foreground))]"
                 data-testid={`recon-bounce-ref-${row.id}`} />
             ) : null}
-            <AiPercentText rowId={row.id} pct={pct} />
+            <AiPercentText rowId={row.id} pct={pct} data-testid="AiPercentText__4bce30" />
           </div>
         </div>
       </TableCell>
@@ -364,7 +368,7 @@ export function BouncePairPanel({
           {sourceLabel(ui, model)}
         </span>
       </div>
-      <BounceNotice model={model} bcpLocale={bcpLocale} />
+      <BounceNotice model={model} bcpLocale={bcpLocale} data-testid="BounceNotice__4bce30" />
       <div className="flex-1 overflow-y-auto [&>div]:overflow-visible">
         <Table className="table-fixed" data-testid="Table__bounce-pair">
           <TableHeader data-testid="TableHeader__bounce-pair">
@@ -400,7 +404,8 @@ export function BouncePairPanel({
         onDiscard={onDiscard}
         onRestore={onRestore}
         busy={busy}
-        windowReadOnly={windowReadOnly} />
+        windowReadOnly={windowReadOnly}
+        data-testid="BounceFooter__4bce30" />
     </div>
   );
 }
