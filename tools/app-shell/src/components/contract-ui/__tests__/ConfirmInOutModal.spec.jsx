@@ -611,8 +611,9 @@ describe('ConfirmInOutModal', () => {
       }
     });
 
-    // Any other 403 reads exactly as before this change, and is not announced as a quota refusal.
-    it('keeps "Error (403)" for a 403 that is not a quota refusal', async () => {
+    // Any other 403 is not announced as a quota refusal. Since ETP-6179 CP-12 it shows the
+    // backend's own `error.message` instead of the bare "Error (403)".
+    it('shows the backend sentence for a 403 that is not a quota refusal, unannounced', async () => {
       const announced = vi.fn();
       window.addEventListener('etendo:quota-refused', announced);
       routeLegs({ invStatus: 403, invBody: { error: { status: 403, message: 'Access denied' } } });
@@ -620,7 +621,8 @@ describe('ConfirmInOutModal', () => {
         render(<ConfirmInOutModal {...BASE_PROPS} defaultCreateInvoice={true} />);
         fireEvent.click(screen.getByTestId('confirm-modal-confirm-btn'));
 
-        await waitFor(() => expect(screen.getByText('Error (403)')).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByText('Access denied')).toBeInTheDocument());
+        expect(screen.queryByText('Error (403)')).toBeNull();
         expect(announced).not.toHaveBeenCalled();
       } finally {
         window.removeEventListener('etendo:quota-refused', announced);
@@ -672,6 +674,70 @@ describe('ConfirmInOutModal', () => {
 
   const invoiceCall = () =>
     globalThis.fetch.mock.calls.find(([url]) => String(url).includes('/action/createReturnInvoice'));
+
+  // ETP-6179 CP-12 — the return was left confirmed without its rectificativa because the invoice
+  // refusal only arrived after documentAction, and it read "Error (400)" (`error.message` unread).
+  describe('validateInvoiceFirst — dry run before completing', () => {
+    const BP_MSG = 'Business Partner is missing mandatory Payment Terms or Payment Method';
+    const calls = (part) => globalThis.fetch.mock.calls.filter(([url]) => String(url).includes(part));
+
+    function mockDryRunRouter({ dryRunOk }) {
+      vi.stubGlobal('fetch', vi.fn((url, opts) => {
+        const u = String(url);
+        if (u.includes('/action/rectifiableInvoices')) {
+          return Promise.resolve({ ok: true,
+            json: async () => ({ response: { data: { invoices: RECTIFIABLE, suggestedInvoiceIds: ['inv-1'] } } }) });
+        }
+        if (u.includes('/action/createReturnInvoice') && JSON.parse(opts.body).validateOnly) {
+          return Promise.resolve(dryRunOk
+            ? { ok: true, json: async () => ({ response: { data: { validateOnly: true } } }) }
+            : { ok: false, status: 400, json: async () => ({ error: { message: BP_MSG, status: 400 } }) });
+        }
+        return Promise.resolve({ ok: true,
+          json: async () => ({ response: { data: { id: 'INV-001', documentNo: 'FAC-NEW' } } }) });
+      }));
+    }
+
+    async function confirm() {
+      await waitFor(() => {
+        expect(screen.getByTestId('confirm-modal-confirm-btn')).not.toBeDisabled();
+      });
+      fireEvent.click(screen.getByTestId('confirm-modal-confirm-btn'));
+    }
+
+    it('a refused dry run shows the backend sentence and never completes the document', async () => {
+      mockDryRunRouter({ dryRunOk: false });
+      render(<ConfirmInOutModal {...RECTIFY_PROPS} validateInvoiceFirst />);
+      await confirm();
+      await waitFor(() => {
+        expect(screen.getByText(BP_MSG)).toBeInTheDocument();
+      });
+      expect(screen.queryByText('Error (400)')).not.toBeInTheDocument();
+      expect(calls('/action/documentAction')).toHaveLength(0);
+      expect(RECTIFY_PROPS.onConfirmed).not.toHaveBeenCalled();
+    });
+
+    it('a passing dry run goes on: dry run, then documentAction, then the real invoice call', async () => {
+      mockDryRunRouter({ dryRunOk: true });
+      render(<ConfirmInOutModal {...RECTIFY_PROPS} validateInvoiceFirst />);
+      await confirm();
+      await waitFor(() => expect(RECTIFY_PROPS.onConfirmed).toHaveBeenCalled());
+      const invoiceBodies = calls('/action/createReturnInvoice').map(([, o]) => JSON.parse(o.body));
+      expect(invoiceBodies).toEqual([
+        { originInvoices: ['inv-1'], validateOnly: true },
+        { originInvoices: ['inv-1'] },
+      ]);
+      expect(calls('/action/documentAction')).toHaveLength(1);
+    });
+
+    it('without the flag no dry run is sent', async () => {
+      mockDryRunRouter({ dryRunOk: true });
+      render(<ConfirmInOutModal {...RECTIFY_PROPS} />);
+      await confirm();
+      await waitFor(() => expect(RECTIFY_PROPS.onConfirmed).toHaveBeenCalled());
+      expect(calls('/action/createReturnInvoice')).toHaveLength(1);
+    });
+  });
 
   describe('rectifiable-invoice picker (ETP-5381)', () => {
     const openPicker = () => fireEvent.click(screen.getByTestId('confirm-modal-rectify-open'));

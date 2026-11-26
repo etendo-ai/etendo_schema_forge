@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowsOutIcon, CubeIcon, CalendarBlankIcon, CaretDownIcon } from '@phosphor-icons/react';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -7,7 +7,7 @@ import { useUI, useLocaleSwitch } from '@/i18n';
 import { SIDEBAR_PERIOD_OPTIONS, DEFAULT_SIDEBAR_PERIOD, formatPeriodRange } from './productSidebarPeriod';
 import { niceScale } from '@/lib/dashboardNumberFormat';
 import { formatStockQuantity } from './stockQuantityFormat';
-import { buildXAxisLabels, buildTooltipModel } from './stockChartAxis';
+import { buildXAxisLabels, buildTooltipModel, yAxisPadding } from './stockChartAxis';
 import { buildChartModel, dayFraction, fractionToDay, valueAtDay } from './stockSeries';
 import { useStockHistory } from './useStockHistory';
 import StockChartTooltip from './StockChartTooltip';
@@ -161,10 +161,13 @@ function ChartSVG({ range, series, W, H, PAD_X, PAD_Y, fontSize = 10, PAD_R = PA
   const maxVal = Math.max(...allVals, 0);
   const { niceMax, ticks: yTicks } = niceScale(maxVal);
 
-  const plotW = W - PAD_X - PAD_R;
+  const yLabels = yTicks.map(t => ({ v: t, label: formatStockQuantity(t) }));
+  // PAD_X is the minimum left column; it grows when a y label (e.g. "2.500") needs more so none is clipped.
+  const padX = yAxisPadding(yLabels.map(yl => yl.label), fontSize, PAD_X);
+  const plotW = W - padX - PAD_R;
   const toY = v => PAD_Y + (H - PAD_Y * 2) * (1 - Math.max(v, 0) / niceMax);
   // Points sit on a date scale: window start .. today, proportional to their day.
-  const toX = day => PAD_X + dayFraction(day, range) * plotW;
+  const toX = day => padX + dayFraction(day, range) * plotW;
 
   const paths = series.map((s, idx) => {
     const xs = s.points.map(p => toX(p.day));
@@ -174,15 +177,13 @@ function ChartSVG({ range, series, W, H, PAD_X, PAD_Y, fontSize = 10, PAD_R = PA
     return { fill: s.fill, line: s.line, idx, linePath, areaPath, opacity: dimmedOpacity(s.name, highlight), emphasis: highlight != null && s.name === highlight };
   });
 
-  const yLabels = yTicks.map(t => ({ v: t, label: formatStockQuantity(t) }));
-
-  const xLabels = buildXAxisLabels(range, locale);
+  const xLabels = buildXAxisLabels(range, locale, { plotWidth: plotW, fontSize });
   const ANCHOR = { start: 'start', middle: 'middle', end: 'end' };
 
   const handleMouseMove = (e) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const viewX = ((e.clientX - rect.left) / rect.width) * W;
-    setHoveredDay(fractionToDay((viewX - PAD_X) / plotW, range));
+    setHoveredDay(fractionToDay((viewX - padX) / plotW, range));
   };
 
   const hx = hoveredDay !== null ? toX(hoveredDay) : null;
@@ -195,10 +196,10 @@ function ChartSVG({ range, series, W, H, PAD_X, PAD_Y, fontSize = 10, PAD_R = PA
       onClick={onClick}
       onMouseMove={handleMouseMove} onMouseLeave={() => setHoveredDay(null)}>
       {yLabels.map((yl) => (
-        <line key={yl.v} x1={PAD_X} y1={toY(yl.v)} x2={W - PAD_R} y2={toY(yl.v)} stroke="hsl(var(--border-subtle))" strokeWidth="1" strokeDasharray="4,3" />
+        <line key={yl.v} x1={padX} y1={toY(yl.v)} x2={W - PAD_R} y2={toY(yl.v)} stroke="hsl(var(--border-subtle))" strokeWidth="1" strokeDasharray="4,3" />
       ))}
       {yLabels.map((yl) => (
-        <text key={yl.label} x={PAD_X - 5} y={toY(yl.v) + 4} textAnchor="end" fontSize={fontSize} fill="hsl(var(--text-disabled))">{yl.label}</text>
+        <text key={yl.label} x={padX - 5} y={toY(yl.v) + 4} textAnchor="end" fontSize={fontSize} fill="hsl(var(--text-disabled))">{yl.label}</text>
       ))}
       {paths.map((p) => (
         <path key={`area-${p.idx}`} d={p.areaPath} fill={p.fill} style={{ fillOpacity: CHART_AREA_OPACITY_VAR }} opacity={p.opacity} data-testid="StockChartArea" />
@@ -213,7 +214,7 @@ function ChartSVG({ range, series, W, H, PAD_X, PAD_Y, fontSize = 10, PAD_R = PA
           {series.map((s) => (
             <circle key={s.name ?? 'single'} cx={hx} cy={toY(valueAtDay(s.points, hoveredDay))} r={multi ? 4 : 5} fill="white" stroke={s.line} strokeWidth="2" />
           ))}
-          <StockChartTooltip model={tooltipModel} hx={hx} W={W} PAD_X={PAD_X} PAD_R={PAD_R} PAD_Y={PAD_Y} fontSize={fontSize} data-testid="StockChartTooltip__59b33d" />
+          <StockChartTooltip model={tooltipModel} hx={hx} W={W} PAD_X={padX} PAD_R={PAD_R} PAD_Y={PAD_Y} fontSize={fontSize} data-testid="StockChartTooltip__59b33d" />
         </>
       )}
       {xLabels.map((l) => (
@@ -272,6 +273,30 @@ function PartialHistoryNote({ partial }) {
   return <span className="text-xs text-muted-foreground" data-testid="StockChartPartialNote">{ui('stockHistoryPartial')}</span>;
 }
 
+// Panel chart canvas (design: lienzo drawn at its real width, never stretched): a 28 px column for the y labels,
+// a 4 px right margin and 176 px of height including the month / year axis labels (H + 20 + fontSize + 2 = 176).
+const PANEL_CHART = { PAD_X: 28, PAD_R: 4, PAD_Y: 10, H: 144, HEIGHT: 176, FALLBACK_W: 268 };
+
+/** Real pixel width of the element behind `ref`, kept current with a ResizeObserver (`fallback` until measured). */
+function useMeasuredWidth(fallback) {
+  const ref = useRef(null);
+  const [width, setWidth] = useState(fallback);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    const measure = () => {
+      const w = Math.round(el.getBoundingClientRect().width);
+      if (w > 0) setWidth((prev) => (prev === w ? prev : w));
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  return [ref, width];
+}
+
 function StockChart({
   transactions, partial = false, currentStock, locationRows = [], locatorToWarehouse = {},
   // Inline chart time window (driven by the sidebar period selector). Modal keeps its own period.
@@ -284,6 +309,7 @@ function StockChart({
   panelVisible, onTogglePanelSeries,
 }) {
   const [internalOpen, setInternalOpen] = useState(false);
+  const [panelChartRef, panelChartWidth] = useMeasuredWidth(PANEL_CHART.FALLBACK_W);
   const [period, setPeriod] = useState(panelPeriod);
   // Modal visibility: a copy of the panel's set taken on every open; never written back to the panel.
   const [modalVisibleRaw, setModalVisibleRaw] = useState(null);
@@ -350,18 +376,17 @@ function StockChart({
           </button>
         </div>
         <StockChartLegend items={legendItems} visible={panelShown} highlight={panelHighlight} onToggle={onTogglePanelSeries} onHover={setPanelHover} data-testid="StockChartLegend__59b33d" />
-        <div style={{ height: 170 }}>
+        <div ref={panelChartRef} style={{ height: PANEL_CHART.HEIGHT }} data-testid="StockChartPanelCanvas">
           <ChartSVG
             range={chart.range}
             series={filterVisibleSeries(chart.series, panelShown)}
             highlight={panelHighlight}
-            W={340}
-            H={100}
-            PAD_X={46}
-            PAD_R={8}
-            PAD_Y={12}
+            W={panelChartWidth}
+            H={PANEL_CHART.H}
+            PAD_X={PANEL_CHART.PAD_X}
+            PAD_R={PANEL_CHART.PAD_R}
+            PAD_Y={PANEL_CHART.PAD_Y}
             fontSize={10}
-            preserveAspectRatio="none"
             onClick={() => setInternalOpen(true)}
             className="cursor-pointer"
             data-testid="ChartSVG__59b33d" />

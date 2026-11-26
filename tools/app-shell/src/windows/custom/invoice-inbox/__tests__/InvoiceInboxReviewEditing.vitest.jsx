@@ -1,3 +1,5 @@
+// @covers tools/app-shell/src/windows/custom/invoice-inbox/invoiceInboxCurrency.js
+// @covers tools/app-shell/src/windows/custom/invoice-inbox/invoiceInboxReviewModel.js
 // @covers tools/app-shell/src/windows/custom/invoice-inbox/InvoiceInboxReviewDrawer.jsx
 // @covers tools/app-shell/src/windows/custom/invoice-inbox/InvoiceInboxReviewInputs.jsx
 // @covers tools/app-shell/src/windows/custom/invoice-inbox/InvoiceInboxReviewSaveStatus.jsx
@@ -606,7 +608,7 @@ describe('editing — vendor resolution', () => {
     const option = await screen.findByTestId('inline-add-option-inbox-vendor-E9');
     fireEvent.mouseDown(option);
     await waitFor(() => expect(editOps()).toEqual([{ op: 'selectVendor', id: 'E9' }]));
-    const [url] = mockPickerFetch.mock.calls[0];
+    const [url] = mockPickerFetch.mock.calls.map((c) => c[0]).filter((u) => String(u).includes('/selectors/'));
     expect(url).toContain('/selectors/');
     expect(url).not.toContain('_neoWhere');
   });
@@ -714,6 +716,36 @@ describe('editing — product resolution', () => {
     expect(tid('invoice-inbox-review-line-0-product')).toHaveTextContent('Elegido por ti');
   });
 
+  it('the opened candidate list of an OCR-chosen product shows each candidate similarity and keeps "Más probable"', async () => {
+    await mountLoaded(suggestedLine());
+    fireEvent.click(tid('invoice-inbox-review-line-0-product'));
+    expect(tid('invoice-inbox-review-line-0-candidate-p0-similarity')).toHaveTextContent('72 %');
+    expect(tid('invoice-inbox-review-line-0-candidate-p1-similarity')).toHaveTextContent('70 %');
+    expect(tid('invoice-inbox-review-line-0-likely')).toHaveTextContent('Más probable');
+  });
+
+  it('a candidate without similarity renders no percentage', async () => {
+    const review = makeReview({}, {
+      lines: [line({
+        description: 'Tornillo',
+        product: {
+          state: 'ambiguous',
+          candidates: [
+            { id: 'p0', name: 'Tornillo A', searchKey: 'T-A', similarity: '63,4' },
+            { id: 'p1', name: 'Tornillo B', searchKey: 'T-B' },
+            { id: 'p2', name: 'Tornillo C', searchKey: 'T-C', similarity: 'n/a' },
+          ],
+        },
+      })],
+      validation: { missing: ['line[0].product'] },
+    });
+    await mountLoaded(review);
+    expect(tid('invoice-inbox-review-line-0-candidate-p0-similarity')).toHaveTextContent('63 %');
+    expect(maybe('invoice-inbox-review-line-0-candidate-p1-similarity')).toBeNull();
+    expect(maybe('invoice-inbox-review-line-0-candidate-p2-similarity')).toBeNull();
+    expect(tid('invoice-inbox-review-line-0-likely')).toBeInTheDocument();
+  });
+
   it('ambiguous: "Ninguno · crear producto nuevo" sends newProduct and opens the new-product form with the description as name', async () => {
     await mountLoaded(ambiguousLine());
     fireEvent.click(tid('invoice-inbox-review-line-0-none-option'));
@@ -784,6 +816,98 @@ describe('editing — product resolution', () => {
     fireEvent.click(combo);
     fireEvent.mouseDown(await screen.findByTestId('inline-add-option-inbox-line-0-product-P7'));
     await waitFor(() => expect(editOps()).toEqual([{ op: 'selectProduct', index: 0, id: 'P7' }]));
+  });
+});
+
+describe('editing — manual line product picker (ETP-6051)', () => {
+  const PRICING = { priceListId: 'PL1', orgCurrencyId: 'EUR1', orgCurrencyIsoCode: 'EUR', rate: null };
+  const manualReview = ({ pricing = PRICING, currency = { id: 'USD1', isoCode: 'USD', symbol: '$', rate: 1.47 }, lineOver = {}, over = {} } = {}) => makeReview(
+    { pricing, currency, ...over },
+    { lines: [line({ description: 'A mano', manual: true, product: { state: 'none', candidates: [] }, ...lineOver })] },
+  );
+  const lastUrl = () => String(mockPickerFetch.mock.calls.at(-1)?.[0] ?? '');
+  const openDrawer = async () => {
+    fireEvent.click(tid('invoice-inbox-review-line-0-product'));
+    fireEvent.click(await screen.findByTestId('ManualProductPicker__inbox-line-0-product'));
+  };
+
+  it('a manual line searches with the product drawer; the OCR search combo is not rendered', async () => {
+    await mountLoaded(manualReview());
+    fireEvent.click(tid('invoice-inbox-review-line-0-product'));
+    expect(tid('ManualProductPicker__inbox-line-0-product')).toBeInTheDocument();
+    expect(maybe('inline-add-field-inbox-line-0-product')).toBeNull();
+  });
+
+  it('a line without the manual marker (OCR / legacy) keeps the plain search combo', async () => {
+    await mountLoaded(manualReview({ lineOver: { manual: undefined } }));
+    fireEvent.click(tid('invoice-inbox-review-line-0-product'));
+    expect(within(tid('invoice-inbox-review-line-0-search')).getByTestId('inline-add-field-inbox-line-0-product')).toBeInTheDocument();
+    expect(maybe('ManualProductPicker__inbox-line-0-product')).toBeNull();
+  });
+
+  it('the drawer is asked with the price list, document currency, organization currency and rate of the review', async () => {
+    await mountLoaded(manualReview());
+    await openDrawer();
+    await waitFor(() => expect(mockPickerFetch).toHaveBeenCalled());
+    const url = lastUrl();
+    expect(url).toContain('priceList=PL1');
+    expect(url).toContain('currency=USD');
+    expect(url).toContain('priceCurrency=EUR');
+    expect(url).toContain('priceCurrencyRate=1.47');
+    expect(url).toContain('01-08-2026');
+  });
+
+  it('a rate of exactly 1 is sent; no rate sends none and still lists products', async () => {
+    pickerItems([{ id: 'P7', name: 'Nuevo Prod', searchKey: 'NP-7' }]);
+    await mountLoaded(manualReview({ currency: { id: 'EUR1', isoCode: 'EUR', rate: 1 } }));
+    await openDrawer();
+    await waitFor(() => expect(lastUrl()).toContain('priceCurrencyRate=1'));
+  });
+
+  it('no price list and no rate: the drawer opens, lists the products and sends neither', async () => {
+    pickerItems([{ id: 'P7', name: 'Nuevo Prod', searchKey: 'NP-7' }]);
+    await mountLoaded(manualReview({ pricing: { priceListId: null, orgCurrencyIsoCode: null }, currency: { id: 'USD1', isoCode: 'USD', rate: null } }));
+    await openDrawer();
+    expect(await screen.findByTestId('product-search-option-P7')).toBeInTheDocument();
+    const url = lastUrl();
+    expect(url).not.toContain('priceList=');
+    expect(url).not.toContain('priceCurrencyRate');
+    expect(url).not.toContain('priceCurrency=');
+  });
+
+  it('a review with no pricing block at all still opens the drawer', async () => {
+    pickerItems([{ id: 'P7', name: 'Nuevo Prod', searchKey: 'NP-7' }]);
+    await mountLoaded(manualReview({ pricing: undefined }));
+    await openDrawer();
+    expect(await screen.findByTestId('product-search-option-P7')).toBeInTheDocument();
+  });
+
+  it('picking a product in the drawer commits selectProduct {index, id} through the editor and links the chip', async () => {
+    pickerItems([{ id: 'P7', name: 'Nuevo Prod', searchKey: 'NP-7' }]);
+    await mountLoaded(manualReview());
+    await openDrawer();
+    fireEvent.click(await screen.findByTestId('product-search-option-P7'));
+    await waitFor(() => expect(editOps()).toEqual([{ op: 'selectProduct', index: 0, id: 'P7' }]));
+    expect(tid('invoice-inbox-review-line-0-product')).toHaveAttribute('data-state', 'ok');
+  });
+
+  it('a line added with "Añadir línea" is manual at once: its panel uses the product drawer and the pick is sent with its index', async () => {
+    pickerItems([{ id: 'P7', name: 'Nuevo Prod', searchKey: 'NP-7' }]);
+    await mountLoaded(manualReview());
+    fireEvent.click(tid('invoice-inbox-review-add-line'));
+    fireEvent.click(await screen.findByTestId('invoice-inbox-review-line-1-product'));
+    fireEvent.click(await screen.findByTestId('ManualProductPicker__inbox-line-1-product'));
+    fireEvent.click(await screen.findByTestId('product-search-option-P7'));
+    await waitFor(() => expect(editOps()).toEqual([{ op: 'addLine' }, { op: 'selectProduct', index: 1, id: 'P7' }]));
+  });
+
+  it('a read-only (confirmed) document offers no product picker on a manual line', async () => {
+    await mountLoaded(manualReview({ over: { status: 'CONFIRMED', editable: false, invoice: { id: 'I1', documentNo: 'F-1' } } }));
+    if (maybe('invoice-inbox-review-line-0-product')) fireEvent.click(tid('invoice-inbox-review-line-0-product'));
+    expect(maybe('ManualProductPicker__inbox-line-0-product')).toBeNull();
+    expect(maybe('product-search-option-P7')).toBeNull();
+    await act(async () => { await Promise.resolve(); });
+    expect(posts).toHaveLength(0);
   });
 });
 
@@ -967,6 +1091,24 @@ describe('editing — leaving the panel waits for the saves', () => {
     const after = new Event('beforeunload', { cancelable: true });
     window.dispatchEvent(after);
     expect(after.defaultPrevented).toBe(false);
+  });
+
+  it('does not ask for the dialog while a write is open if the page never had a user gesture', async () => {
+    Object.defineProperty(window.navigator, 'userActivation', { value: { hasBeenActive: false }, configurable: true });
+    try {
+      const release = holdWrites();
+      await mountLoaded();
+      const qty = tid('invoice-inbox-review-line-0-quantity');
+      fireEvent.focus(qty);
+      fireEvent.change(qty, { target: { value: '6' } });
+      fireEvent.blur(qty);
+      const event = new Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(false);
+      release();
+    } finally {
+      delete window.navigator.userActivation;
+    }
   });
 });
 
@@ -1242,8 +1384,8 @@ describe('editing — currency scale end to end (ETP-6050 S2)', () => {
     expect(tid('invoice-inbox-review-total')).toHaveTextContent(M(10.5));
   });
 
-  it('the currency badge is read-only and shows the document currency (no selector, no fetch, nothing written)', async () => {
-    await mountLoaded(makeReview({ currency: jpy }));
+  it('the currency badge of a settled document is read-only and shows the document currency (no selector, no fetch, nothing written)', async () => {
+    await mountLoaded(makeReview({ currency: jpy, status: 'CONFIRMED', editable: false, invoice: { documentNo: 'F-1' } }));
     const badge = tid('currency-rate-readonly');
     expect(badge).toHaveTextContent(/JPY/);
     expect(badge).toHaveAttribute('aria-disabled', 'true');
@@ -1251,6 +1393,15 @@ describe('editing — currency scale end to end (ETP-6050 S2)', () => {
     expect(maybe('currency-rate-popover')).toBeNull();
     expect(mockPickerFetch).not.toHaveBeenCalled();
     expect(posts).toHaveLength(0);
+  });
+
+  it('an unavailable printed currency offers "Usar EUR" that sends setCurrency with the shown id; none without the flag', async () => {
+    const view = await mountLoaded(makeReview({}, { header: { currencyUnavailable: 'CHF' } }));
+    fireEvent.click(tid('invoice-inbox-review-currency-use-shown'));
+    await waitFor(() => expect(editOps()).toEqual([{ op: 'setCurrency', currencyId: 'EUR1' }]));
+    view.unmount();
+    await mountLoaded(makeReview());
+    expect(maybe('invoice-inbox-review-currency-use-shown')).toBeNull();
   });
 
   it('the read-only list (settled document) formats line, detail and total with the scale', async () => {
@@ -1629,5 +1780,287 @@ describe('editing — new product pre-fill source hints (ETP-6051)', () => {
     fireEvent.click(tid('invoice-inbox-review-line-0-product'));
     expect(tid('invoice-inbox-review-line-0-new-name')).toHaveAttribute('aria-label', L('invoiceInboxReviewProductName'));
     expect(tid('invoice-inbox-review-line-0-new-product')).toHaveTextContent(L('invoiceInboxReviewProductName'));
+  });
+});
+
+describe('editing — vendor candidate tiers (ETP-6051)', () => {
+  const vendorReview = (candidates) => makeReview({}, {
+    header: {
+      vendor: { state: 'ambiguous', extracted: { name: 'Uno SL', taxId: 'A1' }, candidates },
+    },
+    validation: { missing: ['vendor'] },
+  });
+  const cand = (id, extra = {}) => ({ id, name: `Vendor ${id}`, taxId: `T${id}`, city: 'X', ...extra });
+  /** The rows of the radio group in document order: candidate ids and "none". */
+  const rowOrder = () => [...tid('invoice-inbox-review-vendor-ambiguous').querySelectorAll('[data-testid]')]
+    .map((el) => el.getAttribute('data-testid'))
+    .filter((id) => /^invoice-inbox-review-vendor-(candidate-[^-]+|none-option)$/.test(id))
+    .map((id) => id.replace('invoice-inbox-review-vendor-', '').replace('candidate-', ''));
+  const likelyIds = () => [...document.querySelectorAll('[data-testid^="invoice-inbox-review-vendor-likely-"]')]
+    .map((el) => el.getAttribute('data-testid').replace('invoice-inbox-review-vendor-likely-', ''));
+
+  it('legacy list (no candidate carries `probable`): "Más probable" on the first one and "Ninguno" last', async () => {
+    await mountLoaded(vendorReview([cand('c0'), cand('c1')]));
+    expect(rowOrder()).toEqual(['c0', 'c1', 'none-option']);
+    expect(likelyIds()).toEqual(['c0']);
+    expect(tid('invoice-inbox-review-vendor-likely-c0')).toHaveTextContent(L('invoiceInboxReviewMostLikely'));
+  });
+
+  it('flagged list with one probable in the middle: the tag only on it, "Ninguno" last', async () => {
+    await mountLoaded(vendorReview([cand('c0', { probable: false }), cand('c1', { probable: true }), cand('c2', { probable: false })]));
+    expect(rowOrder()).toEqual(['c0', 'c1', 'c2', 'none-option']);
+    expect(likelyIds()).toEqual(['c1']);
+  });
+
+  it('flagged list where every candidate is `probable:false`: no tag and "Ninguno" FIRST', async () => {
+    await mountLoaded(vendorReview([cand('c0', { probable: false }), cand('c1', { probable: false })]));
+    expect(rowOrder()).toEqual(['none-option', 'c0', 'c1']);
+    expect(likelyIds()).toEqual([]);
+  });
+
+  it('a SINGLE candidate with `probable:false`: no tag and "Ninguno" first', async () => {
+    await mountLoaded(vendorReview([cand('c0', { probable: false })]));
+    expect(rowOrder()).toEqual(['none-option', 'c0']);
+    expect(likelyIds()).toEqual([]);
+  });
+
+  it('an empty list keeps only "Ninguno", with no tag', async () => {
+    await mountLoaded(vendorReview([]));
+    expect(rowOrder()).toEqual(['none-option']);
+    expect(likelyIds()).toEqual([]);
+  });
+
+  it.each([
+    ['legacy', [cand('c0'), cand('c1')]],
+    ['flagged with a probable', [cand('c0', { probable: false }), cand('c1', { probable: true })]],
+    ['flagged with none probable', [cand('c0', { probable: false }), cand('c1', { probable: false })]],
+    ['empty', []],
+  ])('%s list: nothing is preselected', async (_name, candidates) => {
+    await mountLoaded(vendorReview(candidates));
+    expect(tid('invoice-inbox-review-vendor')).toHaveAttribute('data-state', 'ambiguous');
+    const group = within(tid('invoice-inbox-review-vendor-ambiguous')).getByRole('radiogroup');
+    expect(group.querySelectorAll('[aria-checked="true"], [aria-selected="true"]')).toHaveLength(0);
+    expect(posts).toHaveLength(0);
+  });
+
+  it('a weak (probable:false) candidate can still be chosen: sends selectVendor and links it', async () => {
+    await mountLoaded(vendorReview([cand('c0', { probable: false }), cand('c1', { probable: false })]));
+    fireEvent.click(tid('invoice-inbox-review-vendor-candidate-c1'));
+    await waitFor(() => expect(editOps()).toEqual([{ op: 'selectVendor', id: 'c1' }]));
+    expect(tid('invoice-inbox-review-vendor')).toHaveAttribute('data-state', 'linked');
+  });
+});
+
+describe('editing — currency field (ETP-6051)', () => {
+  const eur = { id: 'EUR1', isoCode: 'EUR', symbol: '€', rate: 1 };
+  const usd = { id: 'USD1', isoCode: 'USD', rate: 1.47, isOrgCurrency: false };
+  const chf = { id: 'CHF1', isoCode: 'CHF', rate: null, isOrgCurrency: false };
+  const currencyOptionsCalls = () => mockPickerFetch.mock.calls.filter(([url]) => String(url).includes('/action/currencyOptions'));
+  const withCurrencyOptions = (options) => mockPickerFetch.mockImplementation(async (url) => (
+    String(url).includes('/action/currencyOptions')
+      ? jsonRes(200, { response: { data: options } })
+      : jsonRes(200, { items: [], hasMore: false })));
+  const trigger = () => tid('currency-rate-trigger');
+  const pick = async (id) => {
+    await waitFor(() => expect(currencyOptionsCalls().length).toBeGreaterThan(0));
+    fireEvent.click(trigger());
+    fireEvent.click(await screen.findByTestId(`currency-rate-option-${id}`));
+  };
+
+  it('choosing a currency WITH a rate commits ONE setCurrency {id} and shows "USD — 1,47"', async () => {
+    withCurrencyOptions([{ ...eur, isOrgCurrency: true }, usd]);
+    await mountLoaded(makeReview({ currency: eur }));
+    const release = holdWrites();
+    await pick('USD1');
+    expect(trigger()).toHaveTextContent(/USD\s*—\s*1[.,]47/);
+    await act(async () => { release(); });
+    await waitFor(() => expect(editOps()).toEqual([{ op: 'setCurrency', currencyId: 'USD1' }]));
+  });
+
+  it('choosing a currency with a NULL rate still commits (the third onChange call), and the picker shows "—"', async () => {
+    withCurrencyOptions([{ ...eur, isOrgCurrency: true }, chf]);
+    await mountLoaded(makeReview({ currency: eur }));
+    const release = holdWrites();
+    await pick('CHF1');
+    expect(trigger()).toHaveTextContent('CHF');
+    expect(trigger().textContent).not.toMatch(/\d[.,]\d/);
+    expect(tid('currency-rate-missing')).toHaveTextContent('—');
+    await act(async () => { release(); });
+    await waitFor(() => expect(editOps()).toEqual([{ op: 'setCurrency', currencyId: 'CHF1' }]));
+  });
+
+  it('the rate pencil is not offered (no custom rate in the inbox)', async () => {
+    withCurrencyOptions([{ ...eur, isOrgCurrency: true }, usd]);
+    await mountLoaded(makeReview({ currency: { ...usd, symbol: '$' } }));
+    await waitFor(() => expect(currencyOptionsCalls().length).toBeGreaterThan(0));
+    expect(maybe('currency-rate-pencil')).toBeNull();
+  });
+
+  it('an editable document fetches the options from the inbox spec for the record', async () => {
+    withCurrencyOptions([usd]);
+    await mountLoaded(makeReview({ currency: eur }));
+    await waitFor(() => expect(currencyOptionsCalls()).toHaveLength(1));
+    expect(String(currencyOptionsCalls()[0][0])).toContain('/header/D1/action/currencyOptions');
+  });
+
+  it.each([
+    ['a settled document', { status: 'CONFIRMED', editable: false, invoice: { documentNo: 'F-1' } }],
+    ['a non editable pending document', { editable: false }],
+  ])('%s: read-only badge, no options fetch, nothing written', async (_name, over) => {
+    withCurrencyOptions([usd]);
+    await mountLoaded(makeReview({ currency: eur, ...over }));
+    expect(tid('currency-rate-readonly')).toHaveTextContent('EUR');
+    expect(maybe('currency-rate-trigger')).toBeNull();
+    expect(currencyOptionsCalls()).toHaveLength(0);
+    expect(posts).toHaveLength(0);
+  });
+
+  it.each([
+    ['printed', 'invoiceInboxReviewSourceOcr'],
+    ['default', 'invoiceInboxReviewSourceDefault'],
+    ['manual', 'invoiceInboxReviewSourceManual'],
+  ])('source tag "%s" from the review answer', async (source, key) => {
+    await mountLoaded(makeReview({ currency: { ...eur, source } }));
+    expect(tid('invoice-inbox-review-currency-source')).toHaveTextContent(L(key));
+  });
+
+  it('the source falls back to the header, and no tag is shown when it is absent or unknown', async () => {
+    const fromHeader = await mountLoaded(makeReview({}, { header: { currencySource: 'printed' } }));
+    expect(tid('invoice-inbox-review-currency-source')).toHaveTextContent(L('invoiceInboxReviewSourceOcr'));
+    fromHeader.unmount();
+    const absent = await mountLoaded(makeReview({ currency: eur }));
+    expect(maybe('invoice-inbox-review-currency-source')).toBeNull();
+    absent.unmount();
+    await mountLoaded(makeReview({ currency: { ...eur, source: 'guessed' } }));
+    expect(maybe('invoice-inbox-review-currency-source')).toBeNull();
+  });
+
+  it('"Usar {iso}" commits the CURRENT currency id (not a fixed one)', async () => {
+    await mountLoaded(makeReview({ currency: { id: 'GBP7', isoCode: 'GBP', symbol: '£', rate: 0.85 } }, { header: { currencyUnavailable: 'CHF' } }));
+    const button = tid('invoice-inbox-review-currency-use-shown');
+    expect(button).toHaveTextContent(L('invoiceInboxReviewCurrencyUseShown', { iso: 'GBP' }));
+    fireEvent.click(button);
+    await waitFor(() => expect(editOps()).toEqual([{ op: 'setCurrency', currencyId: 'GBP7' }]));
+  });
+
+  it('"Usar {iso}" is not offered when the document is not editable (even with the flag set)', async () => {
+    await mountLoaded(makeReview({ currency: eur, editable: false }, { header: { currencyUnavailable: 'CHF' } }));
+    expect(maybe('invoice-inbox-review-currency-use-shown')).toBeNull();
+    await mountLoaded(makeReview({ currency: eur, status: 'CONFIRMED', editable: false, invoice: { documentNo: 'F-1' } }, { header: { currencyUnavailable: 'CHF' } }));
+    expect(maybe('invoice-inbox-review-currency-use-shown')).toBeNull();
+    expect(posts).toHaveLength(0);
+  });
+
+  it('with currencyUnavailable the exchange-rate banner is titled with the missing currency; otherwise the rate title', async () => {
+    const withFlag = await mountLoaded(makeReview({}, { header: { currencyUnavailable: 'CHF' }, validation: { missing: ['exchangeRate'] } }));
+    const banner = tid('invoice-inbox-review-banner-blocker-exchangeRate');
+    expect(banner).toHaveTextContent(L('invoiceInboxBlockerCurrencyUnavailable', { code: 'CHF' }));
+    expect(banner).not.toHaveTextContent(L('invoiceInboxBlockerExchangeRateTitle'));
+    expect(tid('invoice-inbox-review-banner-blocker-exchangeRate-body')).toHaveTextContent(L('invoiceInboxBlockerCurrencyUnavailableBody'));
+    withFlag.unmount();
+    await mountLoaded(makeReview({}, { validation: { missing: ['exchangeRate'] } }));
+    expect(tid('invoice-inbox-review-banner-blocker-exchangeRate')).toHaveTextContent(L('invoiceInboxBlockerExchangeRateTitle'));
+    expect(tid('invoice-inbox-review-banner-blocker-exchangeRate-body')).toHaveTextContent(L('invoiceInboxBlockerExchangeRateBody'));
+  });
+
+  it('the ambiguous-symbol notice shows ONCE per symbol with the used ISO code', async () => {
+    await mountLoaded(makeReview({}, { header: { currencyRaw: '$' }, notices: ['currency_symbol_ambiguous', 'currency_symbol_ambiguous'] }));
+    const notices = screen.getAllByTestId('invoice-inbox-review-currency-symbol-ambiguous');
+    expect(notices).toHaveLength(1);
+    expect(notices[0]).toHaveTextContent(L('invoiceInboxCurrencyAmbiguousTitle'));
+    expect(notices[0]).toHaveTextContent(L('invoiceInboxCurrencyAmbiguousBody', { symbol: '$', iso: 'EUR' }));
+  });
+
+  it('no ambiguous notice on a settled document, nor without the notice', async () => {
+    const settled = await mountLoaded(makeReview(
+      { status: 'CONFIRMED', editable: false, invoice: { documentNo: 'F-1' } },
+      { header: { currencyRaw: '$' }, notices: ['currency_symbol_ambiguous'] },
+    ));
+    expect(maybe('invoice-inbox-review-currency-symbol-ambiguous')).toBeNull();
+    settled.unmount();
+    await mountLoaded(makeReview({}, { header: { currencyRaw: '$' } }));
+    expect(maybe('invoice-inbox-review-currency-symbol-ambiguous')).toBeNull();
+  });
+
+  it('choosing a currency clears the ambiguous notice and the "Usar" button at once', async () => {
+    withCurrencyOptions([{ ...eur, isOrgCurrency: true }, usd]);
+    await mountLoaded(makeReview({ currency: eur }, {
+      header: { currencyRaw: '$', currencyUnavailable: true }, notices: ['currency_symbol_ambiguous'],
+    }));
+    expect(tid('invoice-inbox-review-currency-symbol-ambiguous')).toBeInTheDocument();
+    expect(tid('invoice-inbox-review-currency-use-shown')).toBeInTheDocument();
+    const release = holdWrites();
+    await pick('USD1');
+    expect(maybe('invoice-inbox-review-currency-symbol-ambiguous')).toBeNull();
+    expect(maybe('invoice-inbox-review-currency-use-shown')).toBeNull();
+    expect(tid('invoice-inbox-review-currency-source')).toHaveTextContent(L('invoiceInboxReviewSourceManual'));
+    await act(async () => { release(); });
+    await waitFor(() => expect(editOps()).toEqual([{ op: 'setCurrency', currencyId: 'USD1' }]));
+  });
+  describe('invalid state of the Moneda field', () => {
+    const wrap = () => tid('invoice-inbox-review-currency-wrap');
+    const err = () => maybe('invoice-inbox-review-currency-error');
+
+    it('exchangeRate blocker: the wrap is aria-invalid, the trigger wrapper class is red and the no-rate message shows under it', async () => {
+      await mountLoaded(makeReview({}, { validation: { missing: ['exchangeRate'] } }));
+      expect(wrap()).toHaveAttribute('aria-invalid', 'true');
+      expect(wrap().className).toContain('[&_[data-testid=currency-rate-trigger]]:border-destructive');
+      expect(err()).toHaveTextContent(L('invoiceInboxReviewCurrencyNoRateError'));
+      expect(wrap()).toContainElement(err());
+    });
+
+    it('currencyUnavailable: the message names the missing code (and the unavailable text replaces the no-rate text)', async () => {
+      await mountLoaded(makeReview({}, { header: { currencyUnavailable: 'CHF' }, validation: { missing: ['exchangeRate'] } }));
+      expect(wrap()).toHaveAttribute('aria-invalid', 'true');
+      expect(err()).toHaveTextContent(L('invoiceInboxReviewCurrencyUnavailableError', { code: 'CHF' }));
+      expect(err()).not.toHaveTextContent(L('invoiceInboxReviewCurrencyNoRateError'));
+    });
+
+    it('currencyUnavailable as a boolean uses the printed currencyRaw as the code', async () => {
+      await mountLoaded(makeReview({}, { header: { currencyUnavailable: true, currencyRaw: 'CHF' } }));
+      expect(err()).toHaveTextContent(L('invoiceInboxReviewCurrencyUnavailableError', { code: 'CHF' }));
+    });
+
+    it('no blocker: the field is valid (no aria-invalid, no red class, no message)', async () => {
+      await mountLoaded(makeReview());
+      expect(wrap()).not.toHaveAttribute('aria-invalid');
+      expect(wrap().className).not.toContain('border-destructive');
+      expect(err()).toBeNull();
+    });
+
+    it.each([
+      ['confirmed', { status: 'CONFIRMED', editable: false, invoice: { documentNo: 'F-1' } }],
+      ['discarded', { status: 'DISCARDED', editable: false }],
+      ['read-only pending', { editable: false }],
+    ])('a %s document is never shown invalid even with the blocker', async (_name, over) => {
+      await mountLoaded(makeReview(over, { header: { currencyUnavailable: 'CHF' }, validation: { missing: ['exchangeRate'] } }));
+      expect(wrap()).not.toHaveAttribute('aria-invalid');
+      expect(wrap().className).not.toContain('border-destructive');
+      expect(err()).toBeNull();
+    });
+
+    it('picking a currency with conversion clears the invalid state once the server answers without the blocker', async () => {
+      withCurrencyOptions([{ ...eur, isOrgCurrency: true }, usd]);
+      await mountLoaded(makeReview({ currency: eur }, { validation: { missing: ['exchangeRate'] } }));
+      expect(err()).toBeInTheDocument();
+      respond = (url) => {
+        if (!url.endsWith('/action/apply')) return undefined;
+        tokenCount += 1;
+        state = { ...state, document: { ...state.document, validation: { missing: [] } }, updated: `T${tokenCount}`, adjusted: true };
+        return jsonRes(200, state);
+      };
+      await pick('USD1');
+      await waitFor(() => expect(editOps()).toEqual([{ op: 'setCurrency', currencyId: 'USD1' }]));
+      await waitFor(() => expect(err()).toBeNull());
+      expect(wrap()).not.toHaveAttribute('aria-invalid');
+      expect(wrap().className).not.toContain('border-destructive');
+    });
+
+    it('"Usar {iso}" next to the message still commits setCurrency with the shown id', async () => {
+      await mountLoaded(makeReview({}, { header: { currencyUnavailable: 'CHF' }, validation: { missing: ['exchangeRate'] } }));
+      expect(err()).toBeInTheDocument();
+      fireEvent.click(tid('invoice-inbox-review-currency-use-shown'));
+      await waitFor(() => expect(editOps()).toEqual([{ op: 'setCurrency', currencyId: 'EUR1' }]));
+    });
   });
 });

@@ -16,4 +16,6 @@ export default buildReturnRowConfirmModal({
   confirmLabelKey: 'processReceipt',
   confirmWithInvoiceLabelKey: 'returnReceipt.confirmModal.confirmWithInvoice',
   testId: 'ConfirmInOutModal__1f8f4b',
+  // ETP-6179 CP-12 — dry-run the rectificativa before confirming, as the form does.
+  validateInvoiceBeforeConfirm: true,
 });

@@ -2,6 +2,7 @@
 // @covers tools/app-shell/src/components/contract-ui/ConfirmResultModal.jsx
 // @covers tools/app-shell/src/windows/custom/shared/InvoiceSifStep.jsx
 // @covers tools/app-shell/src/components/contract-ui/CreateInvoiceConfirmModal.jsx
+// @covers tools/app-shell/src/components/contract-ui/ConfirmInOutModal.jsx
 import { test, expect } from '../../helpers/test.js';
 import { login } from '../../helpers/auth.js';
 import { buildRectifiableInvoicesPayload } from '../../helpers/rectifiable-invoices-mock.js';
@@ -203,6 +204,7 @@ async function installReturnReceiptMocks(page, { suggestedInvoiceIds = [], state
 
     // POST action/documentAction → complete the record
     if (method === 'POST' && url.includes('/action/documentAction')) {
+      state?.calls?.push('documentAction');
       const idMatch = url.match(/\/returnMaterialReceipt\/([^/]+)\/action/);
       const row = ROWS.find(r => r.id === idMatch?.[1]) ?? ROWS[0];
       await route.fulfill({
@@ -252,14 +254,19 @@ async function installReturnReceiptMocks(page, { suggestedInvoiceIds = [], state
     // ETP-4737: the generated invoice carries a NEGATIVE total (return flow) — the
     // response key must be `grandTotalAmount` (not `grandTotal`), matching the field
     // useConfirmWithCredit.js / ConfirmInOutModal.jsx actually read from the API.
+    // ETP-6179 CP-12: a `validateOnly` body is the dry run the draft Confirmar asks before
+    // completing — answered with the backend's success shape for it (nothing is created).
     if (method === 'POST' && url.includes('/action/createReturnInvoice')) {
-      state?.invoicePosts?.push(req.postData() ? JSON.parse(req.postData()) : {});
+      const invoiceBody = req.postData() ? JSON.parse(req.postData()) : {};
+      state?.invoicePosts?.push(invoiceBody);
+      state?.calls?.push(invoiceBody.validateOnly ? 'createReturnInvoice:validateOnly' : 'createReturnInvoice');
+      const data = invoiceBody.validateOnly
+        ? { validateOnly: true, rectifiedInvoices: invoiceBody.originInvoices ?? [] }
+        : { id: 'inv-new', documentNo: 'FC/00100', grandTotalAmount: -150 };
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({
-          response: { data: { id: 'inv-new', documentNo: 'FC/00100', grandTotalAmount: -150 } },
-        }),
+        body: JSON.stringify({ response: { data } }),
       });
       return;
     }
@@ -383,7 +390,7 @@ test.describe('return-material-receipt — DR form actions', () => {
   let state;
 
   test.beforeEach(async ({ page }) => {
-    state = { invoicePosts: [], rectifiableRequests: [] };
+    state = { invoicePosts: [], rectifiableRequests: [], calls: [] };
     await login(page);
     await installReturnReceiptMocks(page, { suggestedInvoiceIds: [], state });
   });
@@ -492,8 +499,14 @@ test.describe('return-material-receipt — DR form actions', () => {
     // originInvoices the backend falls back to the auto-detected chain and, with none
     // detected (this fixture), answers 400 before writing anything — deliberately, since
     // the alternative is a rectificative invoice that can never be confirmed.
-    expect(state.invoicePosts).toHaveLength(1);
-    expect(state.invoicePosts[0].originInvoices).toEqual(['rect-inv-b']);
+    // ETP-6179 CP-12: the draft Confirmar dry-runs the invoice (`validateOnly`) BEFORE
+    // completing, so a refused invoice never leaves the return confirmed; the real invoice is
+    // created AFTER documentAction. Exactly one of each, both carrying the user's choice.
+    expect(state.invoicePosts).toEqual([
+      { originInvoices: ['rect-inv-b'], validateOnly: true },
+      { originInvoices: ['rect-inv-b'] },
+    ]);
+    expect(state.calls).toEqual(['createReturnInvoice:validateOnly', 'documentAction', 'createReturnInvoice']);
   });
 });
 

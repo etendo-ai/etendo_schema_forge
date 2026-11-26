@@ -363,6 +363,26 @@ test.describe('Invoice Inbox — batch confirm', () => {
     expect(state.confirms).toEqual(['ready1', 'review1']);
   });
 
+  test('a partial batch toast names the real reason (not the generic text) and is still visible after 5 seconds', async ({ page }) => {
+    state.confirmRefuse = {
+      review1: { status: 422, error: { code: 'confirm_failed', detailCode: 'refused', detailParams: { message: 'Periodo contable cerrado' } } },
+    };
+    await openInbox(page, state);
+    await pick(page, 'ready1', 'review1');
+    await openConfirm(page);
+    await page.getByTestId('invoice-inbox-confirm-confirm').click();
+    const toast = toasts(page).filter({ hasText: '1 no se pudo confirmar' });
+    await expect(toast).toContainText('Periodo contable cerrado');
+    await expect(toast).not.toContainText('no se pudo crear la factura');
+    expect(state.confirms).toEqual(['ready1', 'review1']);
+    // Problem toasts last 10 s (the global default is ~4 s). A real 5 s wait leaves a 5 s margin on both
+    // sides of the threshold; the page also polls and animates, so a fake clock would only add risk here.
+    // eslint-disable-next-line playwright/no-wait-for-timeout
+    await page.waitForTimeout(5000);
+    await expect(toast).toBeVisible();
+    await expect(toast).toContainText('Periodo contable cerrado');
+  });
+
   test('a stopping code (the feature flag is off) stops the run: the rest is reported as unsent', async ({ page }) => {
     state.confirmRefuse = { ready1: { status: 403, error: { code: 'feature_disabled' } } };
     await openInbox(page, state);

@@ -80,12 +80,40 @@ describe('DateTimeField', () => {
     expect(screen.getByTestId(T)).toHaveValue('');
   });
 
+  it('the popover time box is 24h text: typing 1745 commits 17:45, a half time reverts on blur', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<Controlled initial="2026-11-19T09:05:00" onChange={onChange} />);
+    await user.click(screen.getByTestId(`${T}-trigger`));
+    const time = await screen.findByTestId(`${T}-time`);
+    expect(time).toHaveAttribute('type', 'text');
+    expect(time).toHaveValue('09:05');
+
+    await user.clear(time);
+    await user.type(time, '1745');
+    expect(time).toHaveValue('17:45');
+    expect(onChange).toHaveBeenLastCalledWith('2026-11-19T17:45:00');
+
+    await user.clear(time);
+    await user.type(time, '8');
+    await user.tab();
+    expect(time).toHaveValue('17:45');
+    expect(onChange).toHaveBeenCalledTimes(1);
+  });
+
   it('flags a value later than max without changing it', () => {
     const onChange = vi.fn();
     render(<Controlled initial="2026-11-20T10:06:00" max="2026-11-20T10:05:00" onChange={onChange} />);
     expect(screen.getByTestId(T)).toHaveAttribute('aria-invalid', 'true');
     expect(screen.getByTestId(T)).toHaveValue('20/11/2026 10:06');
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('shows the optional suffix inside the field, read-only too, and nothing without it', () => {
+    const { rerender } = render(<DateTimeField value="2026-11-19T14:20:00" readOnly suffix="GMT-3" data-testid={T} />);
+    expect(screen.getByTestId(`${T}-suffix`)).toHaveTextContent('GMT-3');
+    rerender(<DateTimeField value="2026-11-19T14:20:00" readOnly data-testid={T} />);
+    expect(screen.queryByTestId(`${T}-suffix`)).not.toBeInTheDocument();
   });
 
   it('read-only: no popover trigger, the placeholder stands for an empty value', () => {

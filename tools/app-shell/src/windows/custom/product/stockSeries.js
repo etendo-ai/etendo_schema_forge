@@ -1,5 +1,6 @@
 import { parseCalendarDate } from '@/lib/dateOnly';
 import { computePeriodRange } from './productSidebarPeriod';
+import { movementDateTime } from './productMovements';
 import { chartSeriesColor } from '@/lib/chartPalette';
 
 // Pure series math of the product side-panel / modal stock chart (ETP-5908). A series is a list of
@@ -87,12 +88,16 @@ export const fractionToDay = (fraction, { startDay, endDay }) => {
   return startDay + Math.round(clamped * (endDay - startDay));
 };
 
-/** Movement rows ({ movementDate, movementQuantity }) -> [{ day, qty }]; rows with no valid date are dropped. */
+/**
+ * Movement rows -> [{ day, qty }]. The day is the calendar day of the movement's TrxProcessDate (`etgoProcessTime`,
+ * wall clock, no zone), the same date the Movements tab filters and shows; a row the backend sent no process
+ * time for falls back to its `movementDate`. Rows with no valid date are dropped.
+ */
 export function toMovements(transactions, keep = () => true) {
   const out = [];
   for (const t of transactions ?? []) {
     if (!keep(t)) continue;
-    const d = parseCalendarDate(t.movementDate);
+    const d = parseCalendarDate(movementDateTime(t));
     if (d) out.push({ day: dayNumber(d), qty: Number(t.movementQuantity || 0) });
   }
   return out;

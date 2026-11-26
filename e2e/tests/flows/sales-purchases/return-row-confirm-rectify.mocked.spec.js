@@ -1,5 +1,7 @@
 // @covers tools/app-shell/src/windows/custom/shared/useRowConfirmAction.jsx
 // @covers tools/app-shell/src/components/contract-ui/ConfirmResultModal.jsx
+// @covers tools/app-shell/src/windows/custom/shared/buildReturnRowConfirmModal.jsx
+// @covers tools/app-shell/src/components/contract-ui/ConfirmInOutModal.jsx
 import { test, expect } from '../../helpers/test.js';
 import { login } from '../../helpers/auth.js';
 import { buildRectifiableInvoicesPayload } from '../../helpers/rectifiable-invoices-mock.js';
@@ -120,6 +122,10 @@ const WINDOWS = {
     createdInvoice: { id: 'inv-new', documentNo: 'FC/00100', grandTotalAmount: -150, documentStatus: 'CO' },
     // ETP-5674 — the result popup is titled after the doc type this window passes.
     resultTitle: /^(Factura rectificativa creada|Rectificative invoice created)$/,
+    // ETP-6179 CP-12 — the customer return dry-runs createReturnInvoice (`validateOnly`) BEFORE
+    // completing, so a refused invoice never leaves the return confirmed. The vendor return
+    // does not (no `validateInvoiceBeforeConfirm` on its row popup).
+    validatesInvoiceFirst: true,
   },
   'return-to-vendor-shipment': {
     entity: 'returnToVendorShipment',
@@ -235,6 +241,7 @@ async function installReturnWindowMocks(page, spec, { suggestedInvoiceIds = [], 
       const idMatch = url.match(new RegExp(`/${entity}/([^/]+)/action`));
       const row = rows.find(r => r.id === idMatch?.[1]) ?? rows[0];
       state?.documentActions?.push({ url, body: req.postData() ? JSON.parse(req.postData()) : {} });
+      state?.calls?.push('documentAction');
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -279,12 +286,19 @@ async function installReturnWindowMocks(page, spec, { suggestedInvoiceIds = [], 
     // POST action/createReturnInvoice → synthetic rectificativa, NEGATIVE total (return flow).
     // The response key is `grandTotalAmount` (not `grandTotal`) — that is the field
     // ConfirmInOutModal actually reads.
+    // ETP-6179 CP-12: a `validateOnly` body is the dry run asked before completing — answered
+    // with the success shape the backend returns for it (nothing is created).
     if (method === 'POST' && url.includes('/action/createReturnInvoice')) {
-      state?.invoicePosts?.push(req.postData() ? JSON.parse(req.postData()) : {});
+      const body = req.postData() ? JSON.parse(req.postData()) : {};
+      state?.invoicePosts?.push(body);
+      state?.calls?.push(body.validateOnly ? 'createReturnInvoice:validateOnly' : 'createReturnInvoice');
+      const data = body.validateOnly
+        ? { validateOnly: true, rectifiedInvoices: body.originInvoices ?? [] }
+        : cfg.createdInvoice;
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ response: { data: cfg.createdInvoice } }),
+        body: JSON.stringify({ response: { data } }),
       });
       return;
     }
@@ -353,7 +367,7 @@ for (const spec of Object.keys(WINDOWS)) {
       // CP-10: no invoiced origin, so the backend auto-detects nothing. This is exactly the
       // fixture under which the broken build produced the 400 — the grid popup sent no
       // originInvoices and the server had nothing to fall back to.
-      state = { rectifiableRequests: [], invoicePosts: [], documentActions: [] };
+      state = { rectifiableRequests: [], invoicePosts: [], documentActions: [], calls: [] };
       await login(page);
       await installReturnWindowMocks(page, spec, { suggestedInvoiceIds: [], state });
       await page.goto(`/${spec}`);
@@ -471,9 +485,22 @@ for (const spec of Object.keys(WINDOWS)) {
       // The payload is the point: `buildInvoiceBody()` only adds `originInvoices` when
       // `rectifyActive` is true, which requires the URL prop this fix restored. Without it the
       // body went out bare and the backend answered 400 — after the CO had already committed.
-      expect(state.invoicePosts).toHaveLength(1);
-      expect(state.invoicePosts[0].originInvoices).toEqual([cfg.pickInvoiceId]);
-      // And the confirm did run both halves, in the order the modal drives them.
+      // ETP-6179 CP-12: the customer return also dry-runs the invoice before completing —
+      // exactly one `validateOnly` post BEFORE documentAction and one real post AFTER it, both
+      // carrying the picked invoice. The vendor return goes straight to documentAction.
+      if (cfg.validatesInvoiceFirst) {
+        expect(state.invoicePosts).toEqual([
+          { originInvoices: [cfg.pickInvoiceId], validateOnly: true },
+          { originInvoices: [cfg.pickInvoiceId] },
+        ]);
+        expect(state.calls).toEqual(['createReturnInvoice:validateOnly', 'documentAction', 'createReturnInvoice']);
+      } else {
+        expect(state.invoicePosts).toHaveLength(1);
+        expect(state.invoicePosts[0].originInvoices).toEqual([cfg.pickInvoiceId]);
+        expect(state.invoicePosts[0]).not.toHaveProperty('validateOnly');
+        expect(state.calls).toEqual(['documentAction', 'createReturnInvoice']);
+      }
+      // And the confirm did complete the document once.
       expect(state.documentActions).toHaveLength(1);
       expect(state.documentActions[0].body).toMatchObject({ docAction: 'CO' });
     });
