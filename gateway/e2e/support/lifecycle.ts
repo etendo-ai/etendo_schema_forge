@@ -54,6 +54,38 @@ export async function expectPatchWithEtag(spec: LifecycleSpec): Promise<void> {
   spec.staleEtag = etag; // kept for the 412 test
 }
 
+/**
+ * PUT is published next to PATCH on every writable resource (the manifest lists it in `operations`)
+ * and follows the same If-Match rules (docs/public-api.md 4.2, 4.5): the current ETag applies the
+ * write and answers a new ETag, none or `*` is 428, a stale one is 412 and changes nothing.
+ * Needs `staleEtag` (set by expectPatchWithEtag) for the 412 check.
+ */
+export async function expectPutWithEtag(spec: LifecycleSpec, attributes: Record<string, unknown>, staleAttributes: Record<string, unknown>): Promise<void> {
+  const put = (attrs: Record<string, unknown>, ifMatch?: string) => api('PUT', itemPath(spec), {
+    body: resource(spec.type, attrs, undefined, spec.id),
+    headers: ifMatch === undefined ? {} : { 'If-Match': ifMatch },
+  });
+  expectErrorDocument(await put(attributes), 428);
+  expectErrorDocument(await put(attributes, '*'), 428);
+
+  const { etag } = await readWithEtag(itemPath(spec));
+  const res = await put(attributes, etag);
+  expectStatus(res, 200);
+  const [field, value] = Object.entries(attributes)[0];
+  assert.equal(String(res.json.data.attributes[field]), String(value), `PUT response reflects ${field}`);
+  const newEtag = res.headers.get('etag');
+  assert.ok(newEtag, 'PUT response carries the new ETag');
+  assert.notEqual(newEtag, etag, 'the version changed');
+  assert.equal(res.json.data.meta?.etag, newEtag, 'meta.etag equals the ETag header');
+
+  if (spec.staleEtag) {
+    expectErrorDocument(await put(staleAttributes, spec.staleEtag), 412);
+    const { res: reread } = await readWithEtag(itemPath(spec));
+    const [staleField, staleValue] = Object.entries(staleAttributes)[0];
+    assert.notEqual(String(reread.json.data.attributes[staleField]), String(staleValue), 'a refused PUT leaves the record unchanged');
+  }
+}
+
 export async function expectStaleEtagRefused(spec: LifecycleSpec): Promise<void> {
   const stale = spec.staleEtag;
   assert.ok(stale, 'the PATCH-with-ETag test must run first');

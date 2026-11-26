@@ -1,10 +1,11 @@
 // @covers gateway/src/public-api/public-api.controller.ts
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { api, cleanupCreated, createRecord, expectErrorDocument, expectStatus, resource } from './support/client.ts';
-import { CONTACT_HINT, createAddress, createContact, createContactCategory, personAttributes } from './support/fixtures.ts';
+import { api, createRecord, expectErrorDocument, expectStatus, resource } from './support/client.ts';
+import { cleanupCreated, scoped } from './support/cleanup.ts';
+import { CONTACT_HINT, createAddress, createContact, createContactCategory, createContactPerson, personAttributes } from './support/fixtures.ts';
 import {
-  expectDeleted, expectListed, expectMissingIfMatchRefused, expectPatchWithEtag, expectStaleEtagRefused,
+  expectDeleted, expectListed, expectMissingIfMatchRefused, expectPatchWithEtag, expectPutWithEtag, expectStaleEtagRefused,
   patch, readWithEtag, type LifecycleSpec,
 } from './support/lifecycle.ts';
 
@@ -59,6 +60,10 @@ describe('contacts and their location address', () => {
 
   it('PATCHes the contact with the ETag from its read', async () => {
     await expectPatchWithEtag(contact);
+  });
+
+  it('PUT is exposed: the current ETag applies it, none or * is 428, a stale one is 412', async () => {
+    await expectPutWithEtag(contact, { web: 'put.example.com' }, { phone: '600000009' });
   });
 
   it('contact: a stale ETag is 412 and a missing If-Match is 428', async () => {
@@ -289,5 +294,82 @@ describe('contact roles: is_customer and is_vendor', () => {
     const read = (await readWithEtag(`contacts/${created.id}`)).res.json.data.attributes;
     assert.equal(read.is_vendor, true, 'the patched role changed');
     assert.equal(read.is_customer, true, 'the other role is untouched');
+  });
+});
+
+// The people of a contact: `contacts/{id}/contact` (resource contacts-contact), a child of the contact.
+describe('contacts-contact: the people of a contact', () => {
+  let master = '';
+  let person: LifecycleSpec;
+
+  it('creates a person under its contact and reads it back with an ETag', async () => {
+    master = (await createContact('people-master')).id;
+    const created = await createContactPerson(master, 'person');
+    person = {
+      collection: `contacts/${master}/contact`, type: 'contacts-contact', id: created.id,
+      firstPatch: { position: 'Buyer' }, secondPatch: { comments: 'stale write must not land' },
+    };
+    assert.equal(created.data.type, 'contacts-contact');
+    const { res } = await readWithEtag(`${person.collection}/${person.id}`);
+    const read = res.json.data.attributes;
+    assert.equal(read.first_name, created.data.attributes.first_name);
+    assert.equal(read.last_name, 'Person');
+    assert.equal(read.email, created.data.attributes.email);
+    assert.equal(read.phone, '600000003');
+  });
+
+  it('is reachable only through its master: the top-level path is 404', async () => {
+    expectErrorDocument(await api('GET', 'contacts-contact'), 404);
+    expectErrorDocument(await api('GET', `contact/${person.id}`), 404);
+  });
+
+  it('lists the person under its master, with filter and sort', async () => {
+    await expectListed(person);
+    const byPhone = await api('GET', `${person.collection}?filter[phone][contains]=60000000&sort=-first_name`);
+    expectStatus(byPhone, 200);
+    assert.ok(byPhone.json.data.some((r: any) => r.id === person.id), 'the child list honors filter[...][contains]');
+    const none = await api('GET', `${person.collection}?filter[last_name]=no-such-${master}`);
+    expectStatus(none, 200);
+    assert.deepEqual(none.json.data, []);
+    assert.equal(none.json.meta.page.total, 0);
+  });
+
+  it('a person of another contact is not listed under this master', async () => {
+    await scoped(async () => {
+      const other = await createContact('people-other');
+      const stranger = await createContactPerson(other.id, 'stranger');
+      const res = await api('GET', `${person.collection}?filter[id]=${stranger.id}`);
+      expectStatus(res, 200);
+      assert.deepEqual(res.json.data, [], 'the master scopes the child list');
+    });
+  });
+
+  it('PATCH with the ETag updates only the sent field', async () => {
+    const before = (await readWithEtag(`${person.collection}/${person.id}`)).res.json.data.attributes;
+    await expectPatchWithEtag(person);
+    const after = (await readWithEtag(`${person.collection}/${person.id}`)).res.json.data.attributes;
+    assert.equal(after.position, 'Buyer');
+    for (const field of ['first_name', 'last_name', 'email', 'phone']) assert.equal(after[field], before[field], `${field} is unchanged`);
+  });
+
+  it('a stale ETag is 412 and a missing If-Match is 428', async () => {
+    await expectStaleEtagRefused(person);
+    await expectMissingIfMatchRefused(person);
+  });
+
+  it('PUT is exposed: the current ETag applies it, none or * is 428, a stale one is 412', async () => {
+    await expectPutWithEtag(person, { position: 'Manager' }, { comments: 'stale put must not land' });
+  });
+
+  it('active is read-only: sending it is 400', async () => {
+    const error = expectErrorDocument(await api('POST', `contacts/${master}/contact`, {
+      body: resource('contacts-contact', { first_name: 'x', last_name: 'y', active: false }),
+    }), 400);
+    assert.match(error.detail, /active/);
+  });
+
+  it('deletes the person and it answers 404 afterwards; the master stays', async () => {
+    await expectDeleted(person);
+    expectStatus(await api('GET', `contacts/${master}`), 200);
   });
 });
