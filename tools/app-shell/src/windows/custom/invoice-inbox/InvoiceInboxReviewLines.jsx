@@ -278,7 +278,10 @@ function ProductPanel({ line, position, lineIndex, readOnly, state, missing, api
                 <span className="block truncate font-mono text-[11px] text-muted-foreground">
                   {joinMeta([candidate.searchKey, candidate.category, candidate.uom])}
                 </span>
-                <CandidateSimilarity candidate={candidate} position={position} />
+                <CandidateSimilarity
+                  candidate={candidate}
+                  position={position}
+                  data-testid="CandidateSimilarity__21702d" />
               </OptionRow>
             ))}
             <OptionRow

@@ -67,9 +67,10 @@ function CurrencyField({ review, currency, editable, invoiceDate, id, apiBaseUrl
       editor?.commit(currencyKey(), buildOp.setCurrency(currencyId), { isoCode, rate: value ?? null });
     }
   }, [editor]);
+  const invalidClass = invalid ? ` ${CURRENCY_TRIGGER_INVALID}` : '';
   return (
     <div
-      className={`relative${invalid ? ` ${CURRENCY_TRIGGER_INVALID}` : ''}`}
+      className={`relative${invalidClass}`}
       aria-invalid={invalid || undefined}
       data-testid="invoice-inbox-review-currency-wrap">
       <CurrencyRatePicker

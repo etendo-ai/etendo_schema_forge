@@ -78,7 +78,9 @@ function CandidateRadios({ view, readOnly, checkedId = null, noneChecked = false
   return (
     <div className="flex flex-col gap-2" role="radiogroup" aria-label={ui('invoiceInboxReviewSectionVendor')}>
       {noneFirst && noneOption}
-      {candidates.map((candidate, position) => (
+      {candidates.map((candidate, position) => {
+        const likely = flagged ? candidate.probable === true : position === 0;
+        return (
         <OptionRow
           key={candidate.id}
           value={candidate.id}
@@ -86,7 +88,7 @@ function CandidateRadios({ view, readOnly, checkedId = null, noneChecked = false
           onSelect={onSelect}
           readOnly={readOnly}
           testId={`invoice-inbox-review-vendor-candidate-${candidate.id}`}
-          badge={(flagged ? candidate.probable === true : position === 0)
+          badge={likely
             ? <ReviewTag
             tone="info"
             label={ui('invoiceInboxReviewMostLikely')}
@@ -99,7 +101,8 @@ function CandidateRadios({ view, readOnly, checkedId = null, noneChecked = false
             {joinMeta([candidate.taxId, candidate.city])}
           </span>
         </OptionRow>
-      ))}
+        );
+      })}
       {!noneFirst && noneOption}
     </div>
   );
