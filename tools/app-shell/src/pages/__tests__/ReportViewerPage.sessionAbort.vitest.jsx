@@ -113,6 +113,17 @@ describe('ReportViewerPage — render catch blocks (ETP-5645)', () => {
     expect(screen.queryByText(GENERIC)).not.toBeInTheDocument();
   });
 
+  it('renderReport: a response whose text() rejects with the AbortError shows no error', async () => {
+    const user = userEvent.setup();
+    stubFetch(() => Promise.resolve({ ok: true, text: () => Promise.reject(abort()) }));
+    render(<ReportViewerPage />);
+    await waitFor(() => expect(screen.getByText('Free Text')).toBeInTheDocument());
+    await user.click(screen.getByText('runReport'));
+    await waitFor(() => expect(screen.getByText('runReport').closest('button')).toBeEnabled());
+    expect(screen.queryByText(/superseded/)).not.toBeInTheDocument();
+    expect(screen.queryByText(GENERIC)).not.toBeInTheDocument();
+  });
+
   for (const [name, make] of [['Error', () => new Error('boom')], ['SyntaxError', () => new SyntaxError('boom')]]) {
     it(`renderReport: ${name} shows the translated generic text, not its message`, async () => {
       const user = userEvent.setup();

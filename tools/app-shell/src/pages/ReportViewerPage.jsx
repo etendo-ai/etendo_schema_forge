@@ -1175,7 +1175,7 @@ async function renderErrorMessage(res, ui) {
   if (data?.code === 'ORG_ACCESS_DENIED') return ui('reportErrorOrgAccess');
   if (data?.code === 'REPORT_ACCESS_DENIED') return ui('reportErrorReportAccess');
   if (data?.code === 'REPORT_TIMEOUT') return ui('reportErrorTimeout');
-  return data?.error || `Render failed: ${res.status}`;
+  return data?.error || ui('reportErrorGeneric');
 }
 
 // A failure whose message the render endpoint produced and renderErrorMessage already resolved
