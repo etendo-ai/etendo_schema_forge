@@ -1,3 +1,6 @@
+/**
+ * @covers tools/app-shell/src/components/copilot/useAiCopilotChat.js
+ */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderHook } from '@testing-library/react';
 

@@ -9,6 +9,8 @@ const MAX_SHEETS = 3;
 
 export const DEFAULT_ATTACHMENT_LIMITS = { maxRows: 500, maxChars: 100_000, maxBytes: 512 * 1024 };
 
+const fileNameOf = part => part.filename || 'archivo';
+
 function mediaTypeOf(part) {
   return String(part.mediaType || '').split(';')[0].trim().toLowerCase();
 }
@@ -75,7 +77,7 @@ function assertWorkbookSize(bytes) {
 }
 
 function classify(part) {
-  const filename = part.filename || 'archivo';
+  const filename = fileNameOf(part);
   const mediaType = mediaTypeOf(part);
   if (mediaType === XLSX_MEDIA_TYPE || XLSX_EXTENSION.test(filename)) return 'xlsx';
   return TEXT_MEDIA_TYPES.has(mediaType) || TEXT_EXTENSIONS.test(filename) ? 'text' : null;
@@ -104,7 +106,7 @@ async function xlsxToSections(filename, bytes, limits) {
 }
 
 async function partToText(part, limits) {
-  const filename = part.filename || 'archivo';
+  const filename = fileNameOf(part);
   const kind = classify(part);
   if (!kind) return unsupported(filename);
   try {
@@ -125,6 +127,7 @@ async function partToText(part, limits) {
  *
  * @param {Array} uiMessages
  * @param {{maxRows: number, maxChars: number, maxBytes: number}} [limits]
+ * @returns {Promise<Array>} The messages with file parts replaced by text parts.
  */
 export async function tabularAttachmentsToText(uiMessages, limits = DEFAULT_ATTACHMENT_LIMITS) {
   if (!Array.isArray(uiMessages)) return uiMessages;
@@ -152,7 +155,7 @@ export function attachmentNotes(uiMessages) {
   return uiMessages.map(message => (
     message?.role === 'user' && Array.isArray(message.parts) && message.parts.some(part => part?.type === 'file')
       ? { ...message, parts: message.parts.map(part => (
-        part?.type === 'file' ? { type: 'text', text: `[Archivo adjunto "${part.filename || 'archivo'}"]` } : part
+        part?.type === 'file' ? { type: 'text', text: `[Archivo adjunto "${fileNameOf(part)}"]` } : part
       )) }
       : message
   ));

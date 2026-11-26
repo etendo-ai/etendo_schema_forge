@@ -358,6 +358,7 @@ describe('agent chat file attachments', () => {
     const { result } = setup();
     await act(async () => { result.current.actions.uploadFile(file('a.csv', 10, 'application/pdf')); });
     expect(result.current.files).toHaveLength(0);
+    expect(result.current.error).toBe('copilotFileUnsupported');
   });
 
   it('dismissError clears a file error', async () => {

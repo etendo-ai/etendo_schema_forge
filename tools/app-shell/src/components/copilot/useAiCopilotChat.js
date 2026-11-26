@@ -250,6 +250,7 @@ function traceHistory(stage, payload) {
   console.warn(`[copilot:history] ${stage}`, payload);
 }
 
+const fileNameOf = part => part.filename || 'archivo';
 const AGENT_FILE_EXTENSIONS = /\.(csv|tsv|txt|xlsx)$/i;
 const AGENT_FILE_MEDIA_TYPES = new Set([
   'text/csv', 'text/tab-separated-values', 'text/plain',
@@ -659,7 +660,7 @@ export function useAiCopilotChat({ onOpenCopilot, menuGroups }) {
     const attached = [];
     const textParts = [];
     for (const part of message.role === 'user' ? (message.parts || []) : []) {
-      if (part.type === 'file') attached.push({ name: part.filename || 'archivo' });
+      if (part.type === 'file') attached.push({ name: fileNameOf(part) });
       else if (part.type === 'text' && ATTACHED_NOTE.test(part.text)) attached.push({ name: part.text.match(ATTACHED_NOTE)[1] });
       else if (part.type === 'text') textParts.push(part);
     }
@@ -707,7 +708,7 @@ export function useAiCopilotChat({ onOpenCopilot, menuGroups }) {
       chat.setMessages(current => current.map(message => (
         message.role === 'user' && (message.parts || []).some(part => part.type === 'file')
           ? { ...message, parts: message.parts.map(part => (
-            part.type === 'file' ? { type: 'text', text: `[Archivo adjunto "${part.filename || 'archivo'}"]` } : part
+            part.type === 'file' ? { type: 'text', text: `[Archivo adjunto "${fileNameOf(part)}"]` } : part
           )) }
           : message
       )));
@@ -736,7 +737,8 @@ export function useAiCopilotChat({ onOpenCopilot, menuGroups }) {
   }, [ui]);
 
   const removeFile = useCallback((index) => {
-    setFiles(current => current.filter((_, i) => i !== index));
+    filesRef.current = filesRef.current.filter((_, i) => i !== index);
+    setFiles(filesRef.current);
   }, []);
 
   const requestPageHelp = useCallback(async () => {
