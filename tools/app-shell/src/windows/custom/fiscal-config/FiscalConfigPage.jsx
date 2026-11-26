@@ -44,8 +44,6 @@ import { buildSystems, buildTerritories } from './fiscalCatalog.js';
 // Profiles that represent a real, active fiscal config (i.e. "Change SIF" applies).
 const CONFIGURED_PROFILES = ['sii', 'sii-navarra', 'sii+tbai', 'tbai', 'verifactu'];
 
-const PROFILE_LABEL = { sii: 'SII', 'sii-navarra': 'SII', 'sii+tbai': 'SII + TBAI', tbai: 'TBAI', verifactu: 'VERI*FACTU' };
-
 // Label and class for the save button, reflecting the current save state.
 function resolveSaveLabel(ui, saving, savedOk) {
   if (saving) return ui('fiscal.saving');
@@ -61,10 +59,6 @@ function resolveEffectiveProfile(mockOverride, profile) {
   return mockOverride
     ? detectProfile(mockOverride.sii, mockOverride.tbai, mockOverride.verifactu)
     : profile;
-}
-
-function resolvePageTitle(ui, profileLabel) {
-  return profileLabel ? `${ui('fiscal.title')} ${profileLabel}` : ui('fiscal.title');
 }
 
 /**
@@ -191,8 +185,9 @@ function FiscalConfigPageContent({ token, apiBaseUrl }) {
   // effectiveProfile is still used for canAddComplementary, canChangeSif, handleSave logic.
   const renderProfile = resolveRenderProfile(addingComplementary, effectiveProfile);
 
-  const profileLabel = PROFILE_LABEL[effectiveProfile];
-  const pageTitle = resolvePageTitle(ui, profileLabel);
+  // ETP-6380 — the title is the plain window name, as in the menu; the active system is shown in
+  // the page body (status panel, tabs), never in the title or the breadcrumb.
+  const pageTitle = ui('fiscal.title');
   useSetPageMeta({ title: pageTitle, breadcrumb: `${ui('taxes')} / ${pageTitle}` });
   const [effectiveSii, effectiveTbai, effectiveVerifactu] = mockOverride
     ? [mockOverride.sii, mockOverride.tbai, mockOverride.verifactu]

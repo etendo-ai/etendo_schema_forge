@@ -22,14 +22,6 @@ import VfSolveErrorModal from './VfSolveErrorModal.jsx';
 import FiscalMonitorDebugPanel from './FiscalMonitorDebugPanel.jsx';
 import './fiscal-monitor.css';
 
-const PROFILE_LABELS = {
-  sii:          'SII',
-  tbai:         'TBAI',
-  'sii+tbai':   'SII + TBAI',
-  'sii-navarra':'SII Navarra',
-  verifactu:    'VERI*FACTU',
-};
-
 
 const FmEmpty = ({ ui }) => {
   const navigate = useNavigate();
@@ -180,10 +172,15 @@ export default function FiscalMonitorPage({ token, apiBaseUrl }) {
   const _totalCountMeta = getTotalCountForProfile(profile, _siiTotalMeta, _tbaiTotalMeta, _vfTotalMeta);
 
   useSetPageMeta({
-    title: PROFILE_LABELS[profile] ?? '',
-    breadcrumb: `${ui('taxes')} / ${ui('fiscal.monitor.nav')}`,
+    // ETP-6380 — always the plain window name, as in the menu, whatever the profile (also when
+    // unconfigured: TopBar renders title and breadcrumb only when the title is non-empty). The
+    // active system is shown in the page body.
+    title: ui('fiscalMonitor.title'),
+    breadcrumb: `${ui('taxes')} / ${ui('fiscalMonitor.title')}`,
     recordCount: _totalCountMeta,
-  });
+  // useSetPageMeta re-publishes only on title/breadcrumb plus these deps: the count is known only
+  // once the KPIs load, so it must be a dep or the 0 published while loading sticks (ETP-6380).
+  }, [_totalCountMeta]);
 
   // ETP-5395 Fix 3 follow-up — this custom window never delegated to a generated Page.jsx
   // (registry.js loads FiscalMonitorPage.jsx directly for "fiscal-monitor"), so it never

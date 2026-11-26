@@ -420,22 +420,32 @@ test.describe('Customer portal — mocked', () => {
     await expect(accept).toHaveCount(0);
     expect(requests.decisionBodies).toBeUndefined();
 
-    // The funnel: document type, status and date range, as on desktop.
+    // The funnel: document type and date range, as on desktop — the app toolbar's selector button
+    // and the range picker's compact layout, none of it wider than the phone (ETP-6209).
     await page.getByTestId('portal-bottom-nav-invoice').click();
     await expect(page.getByTestId('portal-document-card')).toHaveCount(INVOICES.length);
     await page.getByTestId('portal-list-filters-mobile').click();
     const filters = page.getByTestId('portal-list-filters-mobile-panel');
     await expect(filters.getByTestId('portal-list-filters-mobile-range')).toBeVisible();
+    const viewport = page.viewportSize();
+    const panelBox = await filters.boundingBox();
+    expect(panelBox.x).toBeGreaterThanOrEqual(0);
+    expect(panelBox.x + panelBox.width).toBeLessThanOrEqual(viewport.width);
+    expect(await filters.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
     const bySubtype = page.waitForRequest((request) => request.url().includes('/sws/portal/documents?')
       && new URL(request.url()).searchParams.get('subtype') === 'creditNote');
-    await filters.getByTestId('portal-list-subtype-creditnote-mobile').click();
+    await filters.getByTestId('portal-filter-type-mobile').click();
+    await page.getByTestId('portal-list-subtype-creditnote-mobile').click();
     await bySubtype;
+    await expect(filters.getByTestId('portal-filter-type-mobile')).toHaveClass(/border-primary\/40/);
+    // No status selector in the funnel: the status tabs under the search filter it.
+    await expect(filters.getByTestId('portal-filter-status-mobile')).toHaveCount(0);
+    await page.keyboard.press('Escape');
     const byGroup = page.waitForRequest((request) => request.url().includes('/sws/portal/documents?')
       && new URL(request.url()).searchParams.get('group') === 'pending');
-    await filters.getByTestId('portal-list-filter-pending-mobile').click();
+    await page.getByTestId('portal-status-tab-pending-mobile').click();
     await byGroup;
-    await expect(filters.getByTestId('portal-list-filter-pending-mobile')).toHaveAttribute('aria-pressed', 'true');
-    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('portal-status-tab-pending-mobile')).toHaveAttribute('aria-selected', 'true');
 
     // "Más" → the customer's entry → the language. Spanish first, so the switch to English is a
     // real change whatever language the browser starts in.

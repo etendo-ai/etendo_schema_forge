@@ -341,6 +341,7 @@ function portalViewBody({
           token={token}
           kind={current.kind}
           group={current.group ?? null}
+          search={current.q ?? null}
           identity={identity}
           logoUrl={logoUrl}
           onNavigate={onNavigate}
