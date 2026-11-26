@@ -484,27 +484,11 @@
       "owner": "sebastianbarrozo",
       "jira": "ETP-5364",
       "created": "2026-09-22",
-      "flag": {
-        "key": "demo-data-transfer",
-        "scope": "backend",
-        "defaultValue": false,
-        "ttl": "2026-12-31",
-        "ttlNote": "PLACEHOLDER, not a commitment: revisit the removal target after the transfer has run against a real demo with prices, costs and client-scoped UOMs. Revisit the date when the flag is first switched on anywhere.",
-        "symbols": [
-          "demo-data-transfer",
-          "useDemoDataTransfer",
-          "demoDataTransferStep",
-          "demoDataTransfer",
-          "DataTransferAction",
-          "firstStepsDemoDataTransfer"
-        ],
-        "$symbolsComment": "Backend-only flag: evaluated by com.etendoerp.go alone through DemoDataTransferFlag.isEnabled(), the single gate every backend toggle point calls. There is NO key in flag-keys.js and none must be added: the browser learns the flag from GET /sws/go/demo-data-transfer answering 404 (off) or 2xx (on), which is what useDemoDataTransfer exposes as `available`. A browser key would be a second evaluator on a different control plane and targeting key, the ETP-4966 shape (docs/feature-flags.md, GoFeatureFlags javadoc). The page/hook/servlet names are listed because FirstStepsPage.jsx, FirstStepsContext.jsx, firstStepsConfig.js and EtendoGoJwtServlet.java reference the feature by them, not by the key. `firstStepsDemoDataTransfer` is the i18n prefix of the keys this feature adds to en_US, es_ES and es_AR."
-      },
       "paths": [
         "tools/app-shell/src/pages/first-steps/demoDataTransferStep.js",
         "tools/app-shell/src/pages/first-steps/useDemoDataTransfer.js"
       ],
-      "$pathsComment": "Owned code only. Shared toggle points, NOT owned: EtendoGoJwtServlet.java (two route conditions, the recordDemoDataTransferSelection guard, startDemoDataTransferBestEffort and the two handlers), GoFeatureFlags.java (the FLAG_DEMO_DATA_TRANSFER constant, framework path), firstStepsConfig.js (the optional transfer argument threaded through the catalogue helpers), FirstStepsContext.jsx, FirstStepsPage.jsx (DataTransferAction and the row wiring), firstStepsIcons.js and the three locale files. UpgradePage.jsx / lib/upgrade/api.js now send the `dataTransfer` selection with billing purchase creation as well as the legacy checkout-session request. These shared checkout paths remain ungated: with the flag off the server does not record a durable job selection, while an explicit copy on POST /onboarding drives ETP-5421's synchronous OnboardingDataTransferService. With the flag on the backend records the checkout choice before contacting the provider and runs only the durable job after onboarding commits. A resumed paid purchase uses its recorded selection; a flag-on purchase missing that selection continues onboarding without transfer, shows a warning, and needs operator recovery for the missing data. The other ETP-5364 changes (R39 data-fixes, the demo banner notice, the fiscal step gate, TopBar, the team link) are not part of this feature and are not gated.",
+      "$pathsComment": "Owned code only. Shared toggle points, NOT owned: EtendoGoJwtServlet.java (two route conditions, the recordDemoDataTransferSelection guard, startDemoDataTransferBestEffort and the two handlers), firstStepsConfig.js (the optional transfer argument threaded through the catalogue helpers), FirstStepsContext.jsx, FirstStepsPage.jsx (DataTransferAction and the row wiring), firstStepsIcons.js and the three locale files. UpgradePage.jsx / lib/upgrade/api.js now send the `dataTransfer` selection with billing purchase creation as well as the legacy checkout-session request. These shared checkout paths remain ungated: with the flag off the server does not record a durable job selection, while an explicit copy on POST /onboarding drives ETP-5421's synchronous OnboardingDataTransferService. With the flag on the backend records the checkout choice before contacting the provider and runs only the durable job after onboarding commits. A resumed paid purchase uses its recorded selection; a flag-on purchase missing that selection continues onboarding without transfer, shows a warning, and needs operator recovery for the missing data. The other ETP-5364 changes (R39 data-fixes, the demo banner notice, the fiscal step gate, TopBar, the team link) are not part of this feature and are not gated.",
       "deferredItems": [
         {
           "id": "executor-never-shut-down",
@@ -543,7 +527,8 @@
             "note": "Covers RUNNING progress, FAILED retry, and row absence with the flag off."
           }
         ]
-      }
+      },
+      "$retiredComment": "Flag retired: ETP-5443's DemoDataTransferFlag gate is no longer in com.etendoerp.go (no FLAG_DEMO_DATA_TRANSFER constant, no etendo.go.flags.demo-data-transfer property), so the durable job is not gated. The feature keeps scoring its paths, tests and deferred items. Re-adding a gate means a header flag plus a GoFeatureFlags constant and a contribution with flagKey. The frontend names it still references: useDemoDataTransfer, demoDataTransferStep, demoDataTransfer, DataTransferAction, firstStepsDemoDataTransfer."
     },
     {
       "id": "environment-access-enforcement-kill-switch",
