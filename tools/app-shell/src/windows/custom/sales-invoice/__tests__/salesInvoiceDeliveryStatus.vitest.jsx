@@ -35,7 +35,7 @@ vi.mock('@/windows/custom/shared/InvoicePaymentHistoryModal.jsx', () => ({
   default: () => <div data-testid="payment-history-modal" />,
 }));
 
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import InvoiceDeliveryBadge from '@generated/sales-invoice/custom/InvoiceDeliveryBadge.jsx';
 import InvoiceHeaderTable from '@generated/sales-invoice/custom/InvoiceHeaderTable.jsx';
 
@@ -78,5 +78,58 @@ describe('InvoiceHeaderTable — delivery status column', () => {
     } else {
       expect(cell).toBeEmptyDOMElement();
     }
+  });
+});
+
+// A confirmed remittance: the remitted part is the bank's to collect, so the list neither offers it
+// as an amount to register nor paints its due date as overdue.
+describe('InvoiceHeaderTable — confirmed remittance', () => {
+  // A past due date: without the remittance it reads overdue.
+  const PENDING = {
+    documentStatus: 'CO', grandTotalAmount: '100', outstandingAmount: '100',
+    eTGODueDate: '2020-01-01', 'currency$_identifier': 'EUR',
+  };
+
+  function renderCell(key, row) {
+    capturedColumns = null;
+    render(<InvoiceHeaderTable apiBaseUrl="/api" />);
+    const col = capturedColumns.find((c) => c.key === key);
+    const { container } = render(<div>{col.render(row)}</div>);
+    return { container, ...within(container) };
+  }
+
+  it('shows the "in remittance" chip, no amount, when the whole outstanding is remitted', () => {
+    const { getByTestId, container } = renderCell('outstandingAmount', { ...PENDING, etgoRemittedAmt: '100' });
+    expect(getByTestId('invoice-remitted')).toHaveTextContent('remittanceInvoiceChip');
+    expect(container.textContent).not.toMatch(/100,00/);
+  });
+
+  it('opens the payments modal from the remitted chip', () => {
+    const { getByTestId } = renderCell('outstandingAmount', { ...PENDING, etgoRemittedAmt: '100' });
+    fireEvent.click(getByTestId('invoice-remitted'));
+    expect(screen.getByTestId('payment-history-modal')).toBeInTheDocument();
+  });
+
+  it('shows only the free part, like any pending invoice, for a partial remittance', () => {
+    const { container, queryByTestId } = renderCell('outstandingAmount', { ...PENDING, etgoRemittedAmt: '60' });
+    expect(queryByTestId('invoice-remitted')).toBeNull();
+    expect(container).toHaveTextContent('40,00 €');
+    expect(container).not.toHaveTextContent('60,00 €');
+  });
+
+  it('keeps the plain pending amount when nothing is remitted', () => {
+    const { container, queryByTestId } = renderCell('outstandingAmount', PENDING);
+    expect(queryByTestId('invoice-remitted')).toBeNull();
+    expect(container).toHaveTextContent('100,00 €');
+  });
+
+  it('paints a fully remitted overdue due with the neutral dot, not the destructive one', () => {
+    const { container } = renderCell('eTGODueDate', { ...PENDING, etgoRemittedAmt: '100' });
+    expect(container.querySelector('.rounded-full').style.backgroundColor).toBe('var(--status-neutral-fg)');
+  });
+
+  it('keeps the overdue dot for a partial remittance (the free part is still owed)', () => {
+    const { container } = renderCell('eTGODueDate', { ...PENDING, etgoRemittedAmt: '60' });
+    expect(container.querySelector('.rounded-full').style.backgroundColor).toBe('hsl(var(--destructive))');
   });
 });

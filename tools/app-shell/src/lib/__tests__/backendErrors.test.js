@@ -876,6 +876,96 @@ describe('extractBackendMessageParams (ETP-5175)', () => {
   });
 });
 
+describe('remittance refusals of the invoice (ETP-6247)', () => {
+  // com.etendoerp.go InvoiceRemittance: the values travel as top-level error keys, not messageParams.
+  const es = localeTranslator('es_ES');
+  const en = localeTranslator('en_US');
+  const invoiceBody = (extra = {}) => ({
+    error: {
+      message: 'Parte de esta factura está en la remesa R-0001 y se cobra con ella; solo puedes registrar 1234.50.',
+      messageKeys: ['ETGO_InvoiceInRemittance'],
+      remittanceId: 'ABC', remittanceDocumentNo: 'R-0001', payableAmount: 1234.5, remittedAmount: 60,
+      ...extra,
+    },
+  });
+
+  it('turns the error keys into the sentence params, the amount through formatCurrency', () => {
+    const params = extractBackendMessageParams(invoiceBody({ currency: 'EUR' }));
+    assert.equal(params.remittance, 'R-0001');
+    // formatCurrency puts a no-break space before the symbol; \s covers it.
+    assert.match(params.amount, /^1\.234,50\s€$/);
+  });
+
+  it('renders the locale sentence with the formatted amount and the remittance number', () => {
+    const out = translateBackendErrorBody(invoiceBody({ currency: 'EUR' }), es, 'f');
+    assert.match(out, /R-0001/);
+    assert.match(out, /1\.234,50\s€/);
+    assert.doesNotMatch(out, /1234\.50/);
+    assert.match(translateBackendErrorBody(invoiceBody({ currency: 'EUR' }), en, 'f'), /remittance R-0001/);
+  });
+
+  it('formats the amount without a symbol when the body names no currency', () => {
+    assert.equal(extractBackendMessageParams(invoiceBody()).amount, '1.234,50');
+  });
+
+  it('names the remittance of a refused payment action', () => {
+    const body = { error: { message: 'prose', messageKeys: ['ETGO_PaymentInRemittance'], remittanceDocumentNo: 'R-9' } };
+    assert.deepEqual(extractBackendMessageParams(body), { remittance: 'R-9' });
+    assert.match(translateBackendErrorBody(body, es, 'f'), /R-9/);
+  });
+
+  it('falls back to the backend text when the remittance number or amount is missing', () => {
+    const noNumber = invoiceBody({ remittanceDocumentNo: '' });
+    assert.equal(extractBackendMessageParams(noNumber), undefined);
+    assert.equal(translateBackendErrorBody(noNumber, es, 'f'), noNumber.error.message);
+    const noAmount = invoiceBody({ payableAmount: null });
+    assert.equal(translateBackendErrorBody(noAmount, es, 'f'), noAmount.error.message);
+  });
+
+  // The whole invoice is remitted: the backend adds ETGO_InvoiceFullyInRemittance after the partial key
+  // (and error.fullyRemitted). The first key's sentence would read "solo puedes registrar 0,00 €".
+  const fullyBody = (keys, extra = {}) => ({
+    error: {
+      message: 'Esta factura está en la remesa R-0001; quedará saldada cuando se liquide la remesa.',
+      messageKeys: keys, remittanceDocumentNo: 'R-0001', payableAmount: 0, remittedAmount: 500,
+      currency: 'EUR', ...extra,
+    },
+  });
+
+  it('renders the locale sentence of a wholly remitted invoice, never "0,00 €"', () => {
+    const body = fullyBody(['ETGO_InvoiceInRemittance', 'ETGO_InvoiceFullyInRemittance'], { fullyRemitted: true });
+    assert.deepEqual(extractBackendMessageParams(body), { remittance: 'R-0001', fullyRemitted: true });
+    for (const t of [es, en]) {
+      const out = translateBackendErrorBody(body, t, 'f');
+      assert.equal(out, t('backendError.invoiceFullyInRemittance', { remittance: 'R-0001' }));
+      assert.doesNotMatch(out, /0,00/);
+      assert.match(out, /R-0001/);
+    }
+  });
+
+  it('treats error.fullyRemitted alone, or the second key alone, as wholly remitted', () => {
+    const expected = es('backendError.invoiceFullyInRemittance', { remittance: 'R-0001' });
+    assert.equal(translateBackendErrorBody(fullyBody(['ETGO_InvoiceInRemittance'], { fullyRemitted: true }), es, 'f'), expected);
+    assert.equal(translateBackendErrorBody(fullyBody(['ETGO_InvoiceFullyInRemittance']), es, 'f'), expected);
+  });
+
+  it('keeps the partial sentence when fullyRemitted is false', () => {
+    const out = translateBackendErrorBody(invoiceBody({ currency: 'EUR', fullyRemitted: false }), es, 'f');
+    assert.match(out, /1\.234,50\s€/);
+    assert.notEqual(out, es('backendError.invoiceFullyInRemittance', { remittance: 'R-0001' }));
+  });
+
+  it('falls back to the backend text for a wholly remitted invoice without the remittance number', () => {
+    const body = fullyBody(['ETGO_InvoiceInRemittance', 'ETGO_InvoiceFullyInRemittance'], { remittanceDocumentNo: '', fullyRemitted: true });
+    assert.equal(translateBackendErrorBody(body, es, 'f'), body.error.message);
+  });
+
+  it('leaves real messageParams and unrelated bodies alone', () => {
+    assert.deepEqual(extractBackendMessageParams({ error: { messageKeys: ['ETGO_InvoiceInRemittance'], messageParams: { x: 1 }, remittanceDocumentNo: 'R-1' } }), { x: 1 });
+    assert.equal(extractBackendMessageParams({ error: { messageKeys: ['Other'], remittanceDocumentNo: 'R-1' } }), undefined);
+  });
+});
+
 // ── ETP-4706: costing engine "@product@" placeholder never resolves ──────────────
 //
 // Core Etendo's `NotCalculatedCostWithTransaction` AD_MESSAGE
@@ -1619,6 +1709,78 @@ describe('translateBackendError — SEPA remittance refusals (ETP-6148)', () => 
     });
   }
 
+});
+
+// The invoice side of a confirmed remittance (InvoiceRemittance in com.etendoerp.go, 422). The
+// remittance number and the amount travel inside the backend text with no messageParams, so the
+// sentences take `{remittance}` / `{amount}`: without them the backend text is shown, never a
+// sentence missing the remittance it names.
+describe('translateBackendError — invoice in a confirmed remittance', () => {
+  const LOCALES = ['en_US', 'es_ES', 'es_AR'];
+  const labels = Object.fromEntries(LOCALES.map((loc) => [
+    loc, JSON.parse(readFileSync(new URL(`../../locales/${loc}.json`, import.meta.url), 'utf8')).genericLabels,
+  ]));
+  const CASES = [
+    {
+      messageKey: 'ETGO_InvoiceInRemittance',
+      uiKey: 'backendError.invoiceInRemittance',
+      params: ['remittance', 'amount'],
+      prose: 'Parte de esta factura está en la remesa 1000123 y se liquida con ella; solo puedes registrar 40,00 €.',
+    },
+    {
+      messageKey: 'ETGO_PaymentInRemittance',
+      uiKey: 'backendError.paymentInRemittance',
+      params: ['remittance'],
+      prose: 'Este pago pertenece a la remesa 1000123; gestiónalo desde la remesa.',
+    },
+  ];
+
+  for (const { messageKey, uiKey, params, prose } of CASES) {
+    it(`${messageKey}: maps to ${uiKey}`, () => {
+      assert.equal(hasMappedMessageKey([messageKey]), true);
+    });
+
+    it(`${messageKey}: every locale sentence takes ${params.map((p) => `{${p}}`).join(' and ')}`, () => {
+      for (const loc of LOCALES) {
+        for (const param of params) assert.match(labels[loc][uiKey] ?? '', new RegExp(`\\{${param}\\}`), `${loc} ${uiKey}`);
+      }
+    });
+
+    it(`${messageKey}: translates the Spanish locales instead of copying the English sentence`, () => {
+      assert.notEqual(labels.es_ES[uiKey], labels.en_US[uiKey]);
+      assert.notEqual(labels.es_AR[uiKey], labels.en_US[uiKey]);
+    });
+
+    it(`${messageKey}: without messageParams, shows the backend text (remittance number included)`, () => {
+      for (const loc of LOCALES) {
+        const out = translateBackendError(prose, localeTranslator(loc), { messageKeys: [messageKey] });
+        assert.equal(out, prose, loc);
+        assert.doesNotMatch(out, /\{\w+\}/);
+      }
+      const body = { error: { status: 422, message: prose, messageKeys: [messageKey] } };
+      assert.equal(translateBackendErrorBody(body, localeTranslator('es_ES'), 'fallback'), prose);
+    });
+
+    it(`${messageKey}: with every messageParam, renders the locale sentence around them`, () => {
+      const values = { remittance: '1000123', amount: '40,00 €' };
+      const messageParams = Object.fromEntries(params.map((p) => [p, values[p]]));
+      for (const loc of LOCALES) {
+        const out = translateBackendError('raw', localeTranslator(loc), { messageKeys: [messageKey], messageParams });
+        let expected = labels[loc][uiKey];
+        for (const p of params) expected = expected.replace(`{${p}}`, values[p]);
+        assert.equal(out, expected, loc);
+        assert.match(out, /1000123/);
+      }
+    });
+  }
+
+  it('ETGO_InvoiceInRemittance: with only the remittance param, still falls back to the backend text', () => {
+    const { prose } = CASES[0];
+    const out = translateBackendError(prose, localeTranslator('es_ES'), {
+      messageKeys: ['ETGO_InvoiceInRemittance'], messageParams: { remittance: '1000123' },
+    });
+    assert.equal(out, prose);
+  });
 });
 
 // ETP-4891 follow-up: PSD2_IBANAutoFillFailed (com.etendoerp.psd2) — that module ships ~108

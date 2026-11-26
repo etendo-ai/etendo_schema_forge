@@ -2,7 +2,10 @@ import { useNavigate } from 'react-router-dom';
 import { useUI } from '@/i18n';
 import { formatCalendarDate } from '@/lib/dateOnly';
 import { formatCurrency } from '@/lib/formatCurrency.js';
-import { paymentDisplayState } from '../paymentStatuses';
+import { paymentAmountOnInvoice, paymentDisplayState } from '../paymentStatuses';
+import { REMITTANCE_EPSILON } from '../invoiceRemittance.js';
+import { ArrowsLeftRightIcon } from '@phosphor-icons/react';
+import RemittanceInfoBanner, { remittancesOf } from '../RemittanceInfoBanner.jsx';
 
 
 function fmtPayDate(raw) {
@@ -55,6 +58,12 @@ function resolveMethodKey(name) {
 // Tone + copy per display state; the pill shape itself never changes.
 const STATE_TAGS = {
   error: { testid: 'payments-card-state-error', bg: 'var(--status-destructive-bg)', fg: 'var(--status-destructive-fg)', labelKey: 'cpPaymentStateError' },
+  // ETP-6247 — undone by a remittance return. Same "Anulado" and destructive tone as the payment
+  // window's own RPVOID badge; never "Depositado", it no longer settles anything.
+  voided: { testid: 'payments-card-state-voided', bg: 'var(--status-destructive-bg)', fg: 'var(--status-destructive-fg)', labelKey: 'statusVoid' },
+  // ETP-6247 — in a confirmed remittance, not collected yet. Amber like the remittance window's own
+  // REM_SENT badge; never "Depositado", the money has not moved.
+  remitted: { testid: 'payments-card-state-remitted', bg: 'var(--status-warning-bg)', fg: 'var(--status-warning-fg)', labelKey: 'statusRemSent' },
   inProgress: { testid: 'payments-card-state-in-progress', bg: 'var(--status-warning-bg)', fg: 'var(--status-warning-fg)', labelKey: 'cpPaymentStateInProgress' },
   deposited: { testid: 'payments-card-state-deposited', bg: 'var(--status-success-bg)', fg: 'var(--status-success-fg)', labelKey: 'statusDeposited' },
   draft: { testid: 'payments-card-state-draft', bg: 'hsl(var(--muted))', fg: 'hsl(var(--muted-foreground))', dot: 'hsl(var(--text-disabled))', labelKey: 'statusDraft' },
@@ -77,7 +86,7 @@ function StateTag({ payment, ui }) {
 
 // Resolves the title-right slot (credit-note badge / add-payment action / blocked hint / fully-paid
 // check) shown next to the "Payments" section title. No hooks used — pure derivation from props.
-function resolvePaymentsTitleRight({ isCreditNote, canAddPayment, addPaymentBlockedByDraft, isFullyPaid, isIn, onAddPayment, ui }) {
+function resolvePaymentsTitleRight({ isCreditNote, canAddPayment, addPaymentBlockedByDraft, addPaymentBlockedByRemittance, isFullyPaid, isIn, onAddPayment, ui }) {
   if (isCreditNote) {
     return (
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 500, padding: '1px 8px', borderRadius: 5, background: 'var(--status-info-bg)', color: 'var(--status-info-fg)' }}>
@@ -96,12 +105,16 @@ function resolvePaymentsTitleRight({ isCreditNote, canAddPayment, addPaymentBloc
       </button>
     );
   }
+  // ETP-6247 — the whole outstanding is in a confirmed remittance: nothing the user does here
+  // unblocks it and the banner says what happens next, so no dead action is shown.
+  if (addPaymentBlockedByRemittance) return null;
   if (addPaymentBlockedByDraft) {
     // Shown, but inert: the reason it is unavailable is what the user needs to act on.
     return (
       <span
         className="text-xs font-medium text-muted-foreground"
         title={ui('cpAddPaymentBlockedByDraft')}
+        data-testid="payments-card-add-blocked-draft"
       >
         {ui(isIn ? 'previewCardAddCollection' : 'previewCardAddPayment')}
       </span>
@@ -146,8 +159,16 @@ function PaymentsEmptyState({ emptyLabel }) {
 function PaymentRow({ payment: p, idx, isLast, isIn, currencyCode, paymentWindow, ui, navigate }) {
   const methodRaw = p['paymentMethod$_identifier'] || p.paymentMethod || '';
   const methodKey = resolveMethodKey(methodRaw);
-  const amtColor = isIn ? 'var(--status-success-fg)' : 'hsl(var(--foreground))';
-  const amtSign = isIn ? '+ ' : '− ';
+  // ETP-6247 — a remitted payment has not moved money yet, and a voided one no longer settles
+  // anything: both neutral, no sign; the voided one is also struck through.
+  const state = paymentDisplayState(p);
+  const neutral = state === 'remitted' || state === 'voided';
+  let amtColor = isIn ? 'var(--status-success-fg)' : 'hsl(var(--foreground))';
+  let amtSign = isIn ? '+ ' : '− ';
+  if (neutral) {
+    amtColor = 'hsl(var(--muted-foreground))';
+    amtSign = '';
+  }
   const currency = currencyCode || p['currency$_identifier'] || '';
   return (
     <div
@@ -170,15 +191,32 @@ function PaymentRow({ payment: p, idx, isLast, isIn, currencyCode, paymentWindow
           {p.documentNo || p.id}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2, color: 'hsl(var(--text-disabled))' }}>
-          <span style={{ display: 'inline-flex' }}>{METHOD_ICONS[methodKey]}</span>
-          <span style={{ fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {methodRaw || fmtPayDate(p.paymentDate)}
-          </span>
+          {/* ETP-6247 — a payment a remittance created reads as that remittance (its "method"). */}
+          {p.remittanceDocumentNo ? (
+            <>
+              <ArrowsLeftRightIcon size={12} style={{ flexShrink: 0 }} data-testid="ArrowsLeftRight__c6fe34" />
+              <span data-testid={`PaymentsCard__remittance-method-${idx}`} style={{ fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {ui('remittancePaymentLink', { documentNo: p.remittanceDocumentNo })}
+              </span>
+            </>
+          ) : (
+            <>
+              <span style={{ display: 'inline-flex' }}>{METHOD_ICONS[methodKey]}</span>
+              <span style={{ fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {methodRaw || fmtPayDate(p.paymentDate)}
+              </span>
+            </>
+          )}
         </div>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, flexShrink: 0 }}>
-        <span className="tabular-nums" style={{ font: '600 13px/17px Inter', color: amtColor, whiteSpace: 'nowrap' }}>
-          {amtSign}{formatCurrency(currency, p.amount)}
+        <span
+          className="tabular-nums"
+          data-testid={`PaymentsCard__amount-${idx}`}
+          style={{ font: '600 13px/17px Inter', color: amtColor, whiteSpace: 'nowrap', textDecoration: state === 'voided' ? 'line-through' : undefined }}
+        >
+          {/* ETP-6247 — this invoice's share: one grouped remittance payment can pay several. */}
+          {amtSign}{formatCurrency(currency, paymentAmountOnInvoice(p))}
         </span>
         <StateTag payment={p} ui={ui} data-testid="StateTag__c6fe34" />
       </div>
@@ -186,7 +224,11 @@ function PaymentRow({ payment: p, idx, isLast, isIn, currencyCode, paymentWindow
   );
 }
 
-function PaymentsList({ payments, isIn, currencyCode, totalOutstanding, paymentWindow, ui, navigate }) {
+function PaymentsList({ payments, isIn, currencyCode, totalOutstanding, totalRemitted = 0, paymentWindow, ui, navigate }) {
+  // ETP-6247 — the part of the outstanding in a confirmed remittance is its own row: it is still
+  // owed, but the remittance collects it, so "Pendiente de pago" shows only the free part.
+  const remitted = Math.min(Math.max(0, totalRemitted), Math.max(0, totalOutstanding));
+  const freeOutstanding = totalOutstanding - remitted;
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
       {payments.map((p, idx) => (
@@ -203,11 +245,22 @@ function PaymentsList({ payments, isIn, currencyCode, totalOutstanding, paymentW
           data-testid="PaymentRow__c6fe34"
         />
       ))}
-      {totalOutstanding > 0 && (
+      {freeOutstanding > REMITTANCE_EPSILON && (
         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 14px', borderTop: '0.5px solid hsl(var(--muted))', background: 'var(--status-warning-bg)' }}>
           <span style={{ fontSize: 12, color: 'var(--status-warning-fg)' }}>{ui('invoicePendingPayment')}</span>
           <span className="tabular-nums" style={{ fontSize: 12, fontWeight: 600, color: 'var(--status-warning-fg)' }}>
-            {formatCurrency(currencyCode, totalOutstanding)}
+            {formatCurrency(currencyCode, freeOutstanding)}
+          </span>
+        </div>
+      )}
+      {remitted > REMITTANCE_EPSILON && (
+        <div
+          data-testid="PaymentsCard__remitted"
+          style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 14px', borderTop: '0.5px solid hsl(var(--muted))', background: 'var(--status-warning-bg)' }}
+        >
+          <span style={{ fontSize: 12, color: 'var(--status-warning-fg)' }}>{ui('remittanceInvoiceChip')}</span>
+          <span className="tabular-nums" style={{ fontSize: 12, fontWeight: 600, color: 'var(--status-warning-fg)' }}>
+            {formatCurrency(currencyCode, remitted)}
           </span>
         </div>
       )}
@@ -217,7 +270,7 @@ function PaymentsList({ payments, isIn, currencyCode, totalOutstanding, paymentW
 
 // Resolves the card body: loading spinner text / empty state / payments list. No hooks used —
 // navigate and ui are passed in from the caller, which is the component that owns them.
-function resolvePaymentsContent({ loading, payments, isCreditNote, isIn, currencyCode, totalOutstanding, paymentWindow, ui, navigate }) {
+function resolvePaymentsContent({ loading, payments, isCreditNote, isIn, currencyCode, totalOutstanding, totalRemitted, paymentWindow, ui, navigate }) {
   if (loading) {
     return <p className="text-xs text-muted-foreground py-4 text-center">{ui('loading')}</p>;
   }
@@ -231,6 +284,7 @@ function resolvePaymentsContent({ loading, payments, isCreditNote, isIn, currenc
       isIn={isIn}
       currencyCode={currencyCode}
       totalOutstanding={totalOutstanding}
+      totalRemitted={totalRemitted}
       paymentWindow={paymentWindow}
       ui={ui}
       navigate={navigate}
@@ -243,12 +297,15 @@ function resolvePaymentsContent({ loading, payments, isCreditNote, isIn, currenc
  * PaymentsCard — payment history in invoice preview panel.
  *
  * Props:
- *   payments        array   — from invoicePayments action: { id, documentNo, paymentDate, paymentMethod$_identifier, amount, status }
+ *   payments        array   — from invoicePayments action: { id, documentNo, paymentDate, paymentMethod$_identifier, amount, appliedToInvoice, status }
  *   currencyCode    string
  *   totalOutstanding number
  *   canAddPayment   boolean
+ *   totalRemitted   number  — the part of totalOutstanding in a confirmed remittance (ETP-6247)
  *   addPaymentBlockedByDraft boolean — invoice takes payments, but the drafts on it already
  *                            reserve the whole outstanding
+ *   addPaymentBlockedByRemittance boolean — invoice takes payments, but its whole outstanding is
+ *                            in a confirmed remittance (ETP-6247)
  *   isFullyPaid     boolean
  *   loading         boolean
  *   onAddPayment    function
@@ -258,8 +315,10 @@ export default function PaymentsCard({
   payments = [],
   currencyCode = '',
   totalOutstanding = 0,
+  totalRemitted = 0,
   canAddPayment = false,
   addPaymentBlockedByDraft = false,
+  addPaymentBlockedByRemittance = false,
   isFullyPaid = false,
   isCreditNote = false,
   loading = false,
@@ -271,14 +330,27 @@ export default function PaymentsCard({
   const isIn = specName === 'sales-invoice';
   const paymentWindow = isIn ? 'payment-in' : 'payment-out';
 
-  const titleRight = resolvePaymentsTitleRight({ isCreditNote, canAddPayment, addPaymentBlockedByDraft, isFullyPaid, isIn, onAddPayment, ui });
-  const content = resolvePaymentsContent({ loading, payments, isCreditNote, isIn, currencyCode, totalOutstanding, paymentWindow, ui, navigate });
+  const titleRight = resolvePaymentsTitleRight({ isCreditNote, canAddPayment, addPaymentBlockedByDraft, addPaymentBlockedByRemittance, isFullyPaid, isIn, onAddPayment, ui });
+  const content = resolvePaymentsContent({ loading, payments, isCreditNote, isIn, currencyCode, totalOutstanding, totalRemitted, paymentWindow, ui, navigate });
 
   return (
     <SectionCard
       title={ui(isIn ? 'previewCardCollectionsTitle' : 'previewCardPayments')}
       titleRight={titleRight}
       data-testid="SectionCard__c6fe34">
+      {/* ETP-6247 — where the remitted part sits and what happens next. */}
+      {!loading && !isCreditNote && remittancesOf(payments).length > 0 && (
+        <div style={{ padding: '10px 10px 0' }}>
+          <RemittanceInfoBanner
+            payments={payments}
+            isSales={isIn}
+            ui={ui}
+            onOpen={(remittanceId) => navigate(`/remittance/${remittanceId}`)}
+            compact
+            testid="PaymentsCard__remittance-banner"
+            data-testid="RemittanceInfoBanner__c6fe34" />
+        </div>
+      )}
       {content}
     </SectionCard>
   );

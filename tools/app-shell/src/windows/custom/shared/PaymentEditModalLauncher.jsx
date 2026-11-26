@@ -4,7 +4,20 @@ import { useApiFetch } from '@/auth/useApiFetch.js';
 
 import ConfirmPaymentModal from './ConfirmPaymentModal';
 import NewPaymentEntryModal from './NewPaymentEntryModal.jsx';
+import { invoiceRemittedAmount } from './invoiceRemittance.js';
 import { notifyRecordUpdated } from './useRecordRefreshSignal';
+
+/**
+ * The outstanding the editor treats as the target (and its overpayment hint): the invoice's
+ * outstanding minus the part in a confirmed remittance (`etgoRemittedAmt`, ETP-6247), which the
+ * remittance collects and the backend refuses to register again. A credit instrument (negative
+ * outstanding) is never remitted and passes through unchanged.
+ */
+function freeOutstanding(invoice) {
+  const outstanding = Number(invoice?.outstandingAmount) || 0;
+  if (outstanding <= 0) return outstanding;
+  return Math.max(0, outstanding - invoiceRemittedAmount(invoice));
+}
 
 /** Which invoice window a payment's editor belongs to. PIS aside, direction decides it. */
 const INVOICE_SPEC = { in: 'sales-invoice', out: 'purchase-invoice' };
@@ -107,7 +120,7 @@ export default function PaymentEditModalLauncher({
       specName={specName}
       invoiceId={invoiceId}
       invoiceData={resolved.invoice}
-      outstanding={resolved.invoice.outstandingAmount}
+      outstanding={freeOutstanding(resolved.invoice)}
       payment={resolved.payment}
       apiBaseUrl={`${base}/${specName}`}
       onClose={onClose}

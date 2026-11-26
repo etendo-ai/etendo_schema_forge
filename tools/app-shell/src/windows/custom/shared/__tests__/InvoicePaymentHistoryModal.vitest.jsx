@@ -1,9 +1,16 @@
+// @covers tools/app-shell/src/windows/custom/shared/InvoicePaymentHistoryModal.jsx
+// @covers tools/app-shell/src/windows/custom/shared/RemittanceInfoBanner.jsx
 // Mocks must be hoisted before imports (Vitest hoisting)
 // NOTE (ETP-4314): the mock now interpolates params (rather than swallowing them)
 // so the delete-confirm message's fmtAmount() output actually reaches the DOM —
 // needed for the thousands-grouping regression below. Calls made with no params
 // still return the bare key, so every other `getByText('someKey')` exact-match
 // assertion in this file is unaffected.
+const caps = vi.hoisted(() => ({ current: { sepaRemittances: true } }));
+// The remittance banner offers «Ver remesa» only while the sepaRemittances capability is visible
+// (its route is guarded by the flag); RemittanceInfoBanner.vitest.jsx covers the variant without it.
+vi.mock('@/hooks/useCapabilitiesSafe.js', () => ({ useCapabilitiesSafe: () => caps.current }));
+
 vi.mock('@/i18n', () => ({
   useUI: () => (key, params) => (params ? `${key} ${JSON.stringify(params)}` : key),
 }));
@@ -1148,6 +1155,243 @@ describe('InvoicePaymentHistoryModal', () => {
   // for the empty/populated states, so it visibly resized as it settled. BODY_MIN_HEIGHT (200)
   // is now threaded through as `bodyMinHeight` and applied as an inline `minHeight` on all three
   // render branches of PaymentHistoryBody — this locks that floor in place.
+  // A confirmed remittance: the remitted part of the outstanding is collected by the remittance, so
+  // it is not offered again, and its REM_SENT payment is managed from the remittance, not from here.
+  describe('confirmed remittance', () => {
+    /** paymentPlan answers with `installments`, invoicePayments with `payments`. */
+    function makeApiFetchWithPlan(installments, payments = []) {
+      return vi.fn((url) => Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({
+          response: { data: String(url).includes('/paymentPlan') ? installments : payments },
+        }),
+      }));
+    }
+
+    const REMITTED_PAYMENT = {
+      id: 'r1', documentNo: 'PAY-R', paymentDate: '2026-01-01', amount: '500.00', status: 'REM_SENT',
+      processed: true, remittanceId: 'rem-1', remittanceDocumentNo: '1000123',
+    };
+
+    function renderModal(props = {}) {
+      return render(
+        <InvoicePaymentHistoryModal
+          invoiceId="42" invoiceData={INVOICE_DATA} specName="sales-invoice"
+          apiBaseUrl="http://host/sws/neo/sales-invoice" onClose={vi.fn()} {...props} />,
+      );
+    }
+
+    it('offers no add-btn, only "Cerrar", when the whole plan is remitted', async () => {
+      // Nothing the user does here unblocks it: a dead disabled button only read as broken.
+      useApiFetch.mockReturnValue(makeApiFetchWithPlan(
+        [{ id: 'i1', outstandingAmount: '500.00', remittedAmount: '500.00', payableAmount: '0' }],
+        [REMITTED_PAYMENT],
+      ));
+      renderModal();
+
+      await screen.findByTestId('InvoicePaymentHistoryModal__row');
+      expect(screen.queryByTestId('InvoicePaymentHistoryModal__add-btn')).toBeNull();
+      expect(screen.getByTestId('InvoicePaymentHistoryModal__cerrar-btn')).toHaveTextContent('close');
+    });
+
+    it('offers no add-btn from the header etgoRemittedAmt when the plan is empty', async () => {
+      useApiFetch.mockReturnValue(makeApiFetchWithoutPlan([REMITTED_PAYMENT]));
+      renderModal({ invoiceData: { ...INVOICE_DATA, etgoRemittedAmt: '500.00' } });
+
+      await screen.findByTestId('InvoicePaymentHistoryModal__row');
+      expect(screen.queryByTestId('InvoicePaymentHistoryModal__add-btn')).toBeNull();
+    });
+
+    it('offers a new payment only the free part of a partial remittance', async () => {
+      useApiFetch.mockReturnValue(makeApiFetchWithPlan(
+        [{ id: 'i1', outstandingAmount: '500.00', remittedAmount: '300.00', payableAmount: '200.00' }],
+        [{ ...REMITTED_PAYMENT, amount: '300.00' }],
+      ));
+      renderModal();
+
+      await screen.findByTestId('InvoicePaymentHistoryModal__row');
+      const addBtn = screen.getByTestId('InvoicePaymentHistoryModal__add-btn');
+      expect(addBtn).not.toBeDisabled();
+      fireEvent.click(addBtn);
+      expect(await screen.findByTestId('new-payment-entry-modal')).toHaveAttribute('data-outstanding', '200');
+    });
+
+    it('subtracts a draft once, not twice, on a partial remittance (new payment)', async () => {
+      // free 200 − draft 100 = 100. payableAmount (100) already leaves the draft out; reading it as
+      // the base would offer 0.
+      useApiFetch.mockReturnValue(makeApiFetchWithPlan(
+        [{ id: 'i1', outstandingAmount: '500.00', remittedAmount: '300.00', payableAmount: '100.00' }],
+        [{ id: 'd1', documentNo: 'PAY-D', amount: '100.00', status: 'RPAP', processed: false }],
+      ));
+      renderModal();
+
+      await screen.findByTestId('InvoicePaymentHistoryModal__row');
+      fireEvent.click(screen.getByTestId('InvoicePaymentHistoryModal__add-btn'));
+      expect(await screen.findByTestId('new-payment-entry-modal')).toHaveAttribute('data-outstanding', '100');
+    });
+
+    it('offers the edited draft the whole free part of a partial remittance', async () => {
+      // The draft holds the whole free part (200): re-opening it must offer 200 (its own amount
+      // added back), not 0.
+      useApiFetch.mockReturnValue(makeApiFetchWithPlan(
+        [{ id: 'i1', outstandingAmount: '500.00', remittedAmount: '300.00', payableAmount: '0' }],
+        [{ id: 'd1', documentNo: 'PAY-D', amount: '200.00', status: 'RPAP', processed: false }],
+      ));
+      renderModal();
+
+      const row = await screen.findByTestId('InvoicePaymentHistoryModal__row');
+      // The draft covers the free part: the add button is blocked by the draft, not the remittance.
+      expect(screen.getByTestId('InvoicePaymentHistoryModal__add-btn')).toHaveAttribute('title', 'cpAddPaymentBlockedByDraft');
+      fireEvent.click(row);
+      expect(await screen.findByTestId('new-payment-entry-modal')).toHaveAttribute('data-outstanding', '200');
+    });
+
+    it('shows a REM_SENT payment as remitted, with no delete button, and opens it read-only', async () => {
+      const onClose = vi.fn();
+      useApiFetch.mockReturnValue(makeApiFetchWithPlan(
+        [{ id: 'i1', outstandingAmount: '500.00', remittedAmount: '500.00' }],
+        [REMITTED_PAYMENT],
+      ));
+      renderModal({ onClose });
+
+      const row = await screen.findByTestId('InvoicePaymentHistoryModal__row');
+      expect(screen.getByTestId('PaymentStateTag__remitted')).toHaveTextContent('statusRemSent');
+      expect(screen.queryByTestId('PaymentStateTag__deposited')).toBeNull();
+      expect(screen.queryByTestId('InvoicePaymentHistoryModal__delete-btn')).toBeNull();
+
+      fireEvent.click(row);
+      // Never re-opened as an editable draft.
+      expect(screen.queryByTestId('new-payment-entry-modal')).toBeNull();
+      expect(mockNavigate).toHaveBeenCalledWith('/payment-in/r1');
+    });
+
+    it('names the remittance and its status in a banner whose «Ver remesa» opens it', async () => {
+      const onClose = vi.fn();
+      useApiFetch.mockReturnValue(makeApiFetchWithPlan(
+        [{ id: 'i1', outstandingAmount: '500.00', remittedAmount: '500.00' }],
+        [{ ...REMITTED_PAYMENT, remittanceStatus: 'PR', remittanceStatusLabel: 'Pendiente de envío' }],
+      ));
+      renderModal({ onClose });
+
+      const banner = await screen.findByTestId('InvoicePaymentHistoryModal__remittance-banner');
+      expect(banner).toHaveTextContent('invoiceRemittanceBannerTitle');
+      expect(banner).toHaveTextContent('1000123');
+      expect(banner).toHaveTextContent('Pendiente de envío');
+      expect(banner).toHaveTextContent('invoiceRemittanceBannerHintSales');
+      fireEvent.click(screen.getByTestId('InvoicePaymentHistoryModal__remittance-banner-open'));
+      expect(onClose).toHaveBeenCalledOnce();
+      expect(mockNavigate).toHaveBeenCalledTimes(1);
+      expect(mockNavigate).toHaveBeenCalledWith('/remittance/rem-1');
+    });
+
+    it('offers no «Ver remesa» without the sepaRemittances capability', async () => {
+      caps.current = {};
+      try {
+        useApiFetch.mockReturnValue(makeApiFetchWithPlan(
+          [{ id: 'i1', outstandingAmount: '500.00', remittedAmount: '500.00' }],
+          [REMITTED_PAYMENT],
+        ));
+        renderModal();
+        await screen.findByTestId('InvoicePaymentHistoryModal__remittance-banner');
+        expect(screen.queryByTestId('InvoicePaymentHistoryModal__remittance-banner-open')).toBeNull();
+      } finally {
+        caps.current = { sepaRemittances: true };
+      }
+    });
+
+    it('shows the remittance as the method and the amount neutral, without a sign', async () => {
+      useApiFetch.mockReturnValue(makeApiFetchWithPlan(
+        [{ id: 'i1', outstandingAmount: '500.00', remittedAmount: '500.00' }],
+        [REMITTED_PAYMENT],
+      ));
+      renderModal();
+
+      const row = await screen.findByTestId('InvoicePaymentHistoryModal__row');
+      expect(screen.getByTestId('InvoicePaymentHistoryModal__remittance-method')).toHaveTextContent('remittancePaymentLink');
+      expect(screen.getByTestId('InvoicePaymentHistoryModal__remittance-method')).toHaveTextContent('1000123');
+      expect(row).not.toHaveTextContent('+ ');
+      expect(screen.queryByTestId('InvoicePaymentHistoryModal__remittance-link')).toBeNull();
+    });
+
+    it('splits the summary into "En remesa" and the free part still pending', async () => {
+      useApiFetch.mockReturnValue(makeApiFetchWithPlan(
+        [{ id: 'i1', outstandingAmount: '500.00', remittedAmount: '300.00' }],
+        [{ ...REMITTED_PAYMENT, amount: '300.00' }],
+      ));
+      renderModal();
+
+      const remitted = await screen.findByTestId('InvoicePaymentHistoryModal__remitted');
+      expect(remitted).toHaveTextContent('remittanceInvoiceChip');
+      expect(remitted).toHaveTextContent('300,00');
+      expect(screen.getByText('invoicePendingCollection')).toBeInTheDocument();
+      expect(screen.queryByText('saldoPendiente')).toBeNull();
+    });
+
+    it('shows no remittance line when nothing is remitted', async () => {
+      useApiFetch.mockReturnValue(makeApiFetchWithPlan([{ id: 'i1', outstandingAmount: '500.00' }]));
+      renderModal();
+
+      await screen.findByTestId('InvoicePaymentHistoryModal__empty');
+      expect(screen.queryByTestId('InvoicePaymentHistoryModal__remitted')).toBeNull();
+      expect(screen.getByTestId('InvoicePaymentHistoryModal__add-btn')).not.toBeDisabled();
+    });
+
+    // A remittance RETURN voids the collected payment (RPVOID): the invoice is pending again, so the
+    // payment must not read "Cobro depositado" nor count as registered. It was one payment for two
+    // invoices (grouped by customer): the row shows THIS invoice's share, not the 55,66 total.
+    const VOIDED_GROUPED_PAYMENT = {
+      id: 'v1', documentNo: '1000109', paymentDate: '2026-01-01', amount: '55.66', appliedToInvoice: '27.83',
+      status: 'RPVOID', processed: true, remittanceId: 'rem-1', remittanceDocumentNo: '1000123',
+    };
+
+    it('shows a returned (RPVOID) payment as voided, never deposited, and does not count it', async () => {
+      useApiFetch.mockReturnValue(makeApiFetchWithPlan(
+        [{ id: 'i1', outstandingAmount: '27.83' }],
+        [VOIDED_GROUPED_PAYMENT],
+      ));
+      renderModal();
+
+      const row = await screen.findByTestId('InvoicePaymentHistoryModal__row');
+      expect(screen.getByTestId('PaymentStateTag__voided')).toHaveTextContent('statusVoid');
+      expect(screen.queryByTestId('PaymentStateTag__deposited')).toBeNull();
+      expect(screen.queryByTestId('InvoicePaymentHistoryModal__delete-btn')).toBeNull();
+      expect(screen.getByText((_, el) => el.tagName === 'SPAN' && /^\s*0\s*cobrosRegistrados/.test(el.textContent))).toBeInTheDocument();
+      // This invoice's share, unsigned: the void settles nothing.
+      expect(row).toHaveTextContent('27,83');
+      expect(row).not.toHaveTextContent('55,66');
+      expect(row).not.toHaveTextContent('+');
+      // Not a draft: opens read-only on the payment window.
+      fireEvent.click(row);
+      expect(screen.queryByTestId('new-payment-entry-modal')).toBeNull();
+      expect(mockNavigate).toHaveBeenCalledWith('/payment-in/v1');
+    });
+
+    it('counts only the non-voided payments in the footer', async () => {
+      useApiFetch.mockReturnValue(makeApiFetchWithPlan(
+        [{ id: 'i1', outstandingAmount: '0' }],
+        [VOIDED_GROUPED_PAYMENT, { id: 'p2', documentNo: '1000110', amount: '27.83', status: 'RPR', processed: true }],
+      ));
+      renderModal();
+
+      await waitFor(() => expect(screen.getAllByTestId('InvoicePaymentHistoryModal__row')).toHaveLength(2));
+      expect(screen.getByTestId('PaymentStateTag__voided')).toBeInTheDocument();
+      expect(screen.getByTestId('PaymentStateTag__deposited')).toBeInTheDocument();
+      expect(screen.getByText((_, el) => el.tagName === 'SPAN' && /^\s*1\s*cobroRegistrado$/.test(el.textContent.trim()))).toBeInTheDocument();
+    });
+
+    it("shows a grouped payment's share of this invoice, not the payment's total", async () => {
+      useApiFetch.mockReturnValue(makeApiFetchWithPlan(
+        [{ id: 'i1', outstandingAmount: '0' }],
+        [{ id: 'g1', documentNo: '1000111', amount: '55.66', appliedToInvoice: '27.83', status: 'RPR', processed: true }],
+      ));
+      renderModal();
+
+      const row = await screen.findByTestId('InvoicePaymentHistoryModal__row');
+      expect(row).toHaveTextContent('27,83');
+      expect(row).not.toHaveTextContent('55,66');
+    });
+  });
+
   describe('body minHeight floor (ETP-5253)', () => {
     it('applies the 200px minHeight floor to the loading skeleton', async () => {
       // A never-resolving fetch keeps `loading` true forever, so the skeleton stays mounted.
