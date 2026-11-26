@@ -330,7 +330,12 @@ export function productView(line) {
 export function linkedProductSimilarity(product) {
   const candidates = Array.isArray(product?.candidates) ? product.candidates : [];
   const own = candidates.find((candidate) => candidate?.id != null && candidate.id === product?.id);
-  const raw = String(own?.similarity ?? '').replace('%', '').replace(',', '.').trim();
+  return candidateSimilarity(own);
+}
+
+/** The similarity (0-100) of ONE product candidate (text or number, with or without "%"), or `null`. */
+export function candidateSimilarity(candidate) {
+  const raw = String(candidate?.similarity ?? '').replace('%', '').replace(',', '.').trim();
   if (raw === '') return null;
   const value = Number(raw);
   return Number.isFinite(value) ? value : null;
@@ -478,6 +483,7 @@ export const buildOp = Object.freeze({
   setLine: (index, patch) => ({ op: 'setLine', index, ...defined(patch) }),
   addLine: () => ({ op: 'addLine' }),
   removeLine: (index) => ({ op: 'removeLine', index }),
+  setCurrency: (currencyId) => ({ op: 'setCurrency', currencyId }),
   selectVendor: (id) => ({ op: 'selectVendor', id }),
   newVendor: (fields) => (fields && Object.keys(fields).length ? { op: 'newVendor', fields } : { op: 'newVendor' }),
   selectProduct: (index, id) => ({ op: 'selectProduct', index, id }),
@@ -533,12 +539,13 @@ function applyTaxChoice(line, taxId, hint) {
   }
 }
 
+/** A line the user added: `manual: true` (the server sets the same marker; an OCR or legacy line has none). */
 function newLine(lines) {
   const index = lines.reduce((max, line, position) => Math.max(max, indexOf(line, position)), -1) + 1;
   const previous = lines.length ? lines[lines.length - 1] : null;
   const rate = previous ? lineRate(previous) : null;
   return {
-    index, description: '', quantity: 1, unitPrice: 0, ...(rate == null ? {} : { taxRate: rate }),
+    index, manual: true, description: '', quantity: 1, unitPrice: 0, ...(rate == null ? {} : { taxRate: rate }),
     ...(previous?.tax?.id ? { tax: previous.tax } : {}),
     product: { state: 'none', candidates: [] },
   };
@@ -573,6 +580,17 @@ function localSetHeader(doc, op) {
     else delete next.invoiceDate;
   }
   return { ...doc, header: next };
+}
+
+/** Chosen currency: manual source; the unavailable-currency flag and the ambiguous-symbol notices no longer apply. */
+function localSetCurrency(doc, op) {
+  const header = omitKeys(doc.header ?? {}, ['currencyUnavailable']);
+  const notices = Array.isArray(doc.notices)
+    ? doc.notices.filter((n) => (n?.code ?? n) !== 'currency_symbol_ambiguous')
+    : doc.notices;
+  const next = { ...doc, header: { ...header, currencyId: op.currencyId, currencySource: 'manual' } };
+  if (notices !== undefined) next.notices = notices;
+  return next;
 }
 
 function localSelectVendor(doc, op, hint) {
@@ -633,6 +651,7 @@ const LOCAL_OPERATIONS = Object.freeze({
   setLine: (doc, op, hint) => ({ ...doc, lines: mapLine(linesOf(doc), op.index, (line) => setLinePatch(line, op, hint)) }),
   addLine: (doc) => ({ ...doc, lines: [...linesOf(doc), newLine(linesOf(doc))] }),
   removeLine: (doc, op) => ({ ...doc, lines: linesOf(doc).filter((line, position) => indexOf(line, position) !== op.index) }),
+  setCurrency: localSetCurrency,
   selectVendor: localSelectVendor,
   newVendor: localNewVendor,
   selectProduct: localSelectProduct,
@@ -643,7 +662,15 @@ const LOCAL_OPERATIONS = Object.freeze({
 export function applyPendingToReview(review, pending) {
   if (!review || !pending?.length) return review;
   const document = pending.reduce((doc, entry) => applyOperationLocally(doc, entry.op, entry.hint), review.document ?? {});
-  return { ...review, document };
+  const chosen = pending.filter((entry) => entry.op?.op === 'setCurrency').pop();
+  if (!chosen) return { ...review, document };
+  // The top-level `currency` is what the picker shows: follow the pending choice until the server answers.
+  const currency = {
+    ...(review.currency ?? {}), id: chosen.op.currencyId, source: 'manual',
+    ...(chosen.hint?.isoCode ? { isoCode: chosen.hint.isoCode } : {}),
+    rate: chosen.hint && 'rate' in chosen.hint ? chosen.hint.rate : null,
+  };
+  return { ...review, document, currency };
 }
 
 /** The description a `new` product is created with: its own name, else the line's description. */
@@ -680,6 +707,7 @@ export const SAVE_ERROR_LABEL_KEYS = Object.freeze({
   unknown_product: 'invoiceInboxSaveErrorUnknownProduct',
   unknown_category: 'invoiceInboxSaveErrorUnknownCategory',
   unknown_uom: 'invoiceInboxSaveErrorUnknownUom',
+  invalid_currency: 'invoiceInboxSaveErrorInvalidCurrency',
   document_too_large: 'invoiceInboxSaveErrorTooLarge',
   request_too_large: 'invoiceInboxSaveErrorTooLarge',
   missing_updated: 'invoiceInboxSaveErrorGeneric',
@@ -737,4 +765,31 @@ const BLOCKER_CODES = Object.freeze({ exchangeRate: 'exchangeRate', vendorAddres
 export function confirmBlockers(document) {
   const codes = missingSet(document);
   return Object.entries(BLOCKER_CODES).filter(([, code]) => codes.has(code)).map(([kind]) => kind);
+}
+
+/** Whether a line was added by the user (`manual: true`, written by the server's `addLine`); OCR and legacy lines are not. */
+export function isManualLine(line) {
+  return line?.manual === true;
+}
+
+/**
+ * What the product picker of a MANUAL line needs to price like the purchase invoice (ETP-6051), read from
+ * the review answer: the document's price list, the organization's and the document's ISO currency and the
+ * org-to-document rate. Any of them may be null (no list, no usable rate): the picker then just shows fewer
+ * prices, never an error.
+ *
+ * @param {object} review the review answer (`pricing`, `currency`)
+ * @param {object} [header] the document header (`invoiceDate`)
+ * @returns {{priceListId: string|null, orgIso: string|null, docIso: string|null, rate: number|null, invoiceDate: string|null}}
+ */
+export function manualPricingOf(review, header) {
+  const rawRate = review?.currency?.rate;
+  const rate = rawRate === null || rawRate === undefined || rawRate === '' ? null : Number(rawRate);
+  return {
+    priceListId: review?.pricing?.priceListId ?? null,
+    orgIso: review?.pricing?.orgCurrencyIsoCode ?? null,
+    docIso: review?.currency?.isoCode ?? null,
+    rate: Number.isFinite(rate) ? rate : null,
+    invoiceDate: header?.invoiceDate ?? null,
+  };
 }
