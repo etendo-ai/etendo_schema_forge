@@ -42,7 +42,10 @@ export function useRemainingHeight({ active = true, bottomGap = 20, minHeight = 
     const content = fitContent
       ? Array.from(el.children).reduce((sum, child) => sum + child.getBoundingClientRect().height, 0) + (el.offsetHeight - el.clientHeight)
       : null;
-    const floor = content != null && content > 0 ? Math.min(minHeight, Math.ceil(content)) : minHeight;
+    // With the scroll tolerance active (nothing more to load) the box may sit up to `scrollTolerance` px under its
+    // content, which the hidden overflow below absorbs, so a short list never makes the column overflow by a few px.
+    const fitted = content != null && content > 0 ? Math.max(0, Math.ceil(content) - scrollTolerance) : null;
+    const floor = fitted != null ? Math.min(minHeight, fitted) : minHeight;
     const next = container
       ? computeRemainingHeight({
         boxTop: box.top,
@@ -56,7 +59,7 @@ export function useRemainingHeight({ active = true, bottomGap = 20, minHeight = 
         boxTop: box.top, containerTop: 0, containerClientHeight: globalThis.innerHeight, containerScrollTop: 0, bottomGap, minHeight: floor,
       });
     if (next != null) setMeasured((prev) => (prev?.height === next && prev?.floor === floor && prev?.content === content ? prev : { height: next, floor, content }));
-  }, [bottomGap, minHeight, fitContent]);
+  }, [bottomGap, minHeight, fitContent, scrollTolerance]);
 
   useLayoutEffect(() => {
     if (!active) return undefined;

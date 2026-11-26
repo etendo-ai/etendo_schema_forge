@@ -133,6 +133,49 @@ describe('useRemainingHeight', () => {
       } finally { restore(); }
     });
 
+    it('with the scroll tolerance active the floor is content - tolerance, absorbed by the hidden overflow', () => {
+      const restore = mockFitLayout({ boxTop: 650, columnHeight: 600, kidHeight: 40 });
+      try {
+        renderFit({ minHeight: 200, rows: 3, scrollTolerance: 4 }); // content 120, room left negative
+        const box = screen.getByTestId('box');
+        expect(box.style.minHeight).toBe('116px');
+        expect(box.style.height).toBe('116px');
+        expect(box.style.overflowY).toBe('hidden'); // shortfall 4 = tolerance
+      } finally { restore(); }
+    });
+
+    it('with tolerance 0 (more pages to load) the floor stays exactly the content height', () => {
+      const restore = mockFitLayout({ boxTop: 650, columnHeight: 600, kidHeight: 40 });
+      try {
+        renderFit({ minHeight: 200, rows: 3, scrollTolerance: 0 });
+        const box = screen.getByTestId('box');
+        expect(box.style.minHeight).toBe('120px');
+        expect(box.style.overflowY).toBe('');
+      } finally { restore(); }
+    });
+
+    it('counts the horizontal scrollbar before taking the tolerance off, and never goes negative', () => {
+      let restore = mockFitLayout({ boxTop: 650, columnHeight: 600, kidHeight: 40, hBar: 10 });
+      try {
+        renderFit({ minHeight: 200, rows: 3, scrollTolerance: 4 }); // 120 + 10 - 4
+        expect(screen.getByTestId('box').style.minHeight).toBe('126px');
+      } finally { restore(); }
+      document.body.innerHTML = '';
+      restore = mockFitLayout({ boxTop: 650, columnHeight: 600, kidHeight: 1 });
+      try {
+        renderFit({ minHeight: 200, rows: 3, scrollTolerance: 10 }); // content 3 < tolerance 10
+        expect(Number.parseFloat(screen.getByTestId('box').style.minHeight)).toBeGreaterThanOrEqual(0);
+      } finally { restore(); }
+    });
+
+    it('keeps a taller content at minHeight whatever the tolerance (7 rows: floor 200)', () => {
+      const restore = mockFitLayout({ boxTop: 650, columnHeight: 600, kidHeight: 40 });
+      try {
+        renderFit({ minHeight: 200, rows: 8, scrollTolerance: 4 }); // content 320
+        expect(screen.getByTestId('box').style.minHeight).toBe('200px');
+      } finally { restore(); }
+    });
+
     it('caps the floor at minHeight when the content is taller', () => {
       const restore = mockFitLayout({ boxTop: 650, columnHeight: 600, kidHeight: 40 });
       try {
