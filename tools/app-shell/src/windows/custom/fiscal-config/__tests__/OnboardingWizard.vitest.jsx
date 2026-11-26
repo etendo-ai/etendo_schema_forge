@@ -990,6 +990,7 @@ describe('OnboardingWizard — forceTestMode (ETP-5272 follow-up)', () => {
 // TopBar: the wizard belongs to the Impuestos menu group, so there is no Configuración / Settings
 // level and no "Monitor fiscal" one. The flow is walked with the key-returning ui, then the real
 // dictionary is switched in and the wizard re-rendered on the same screen.
+// ETP-6380 CP-17 — the title is the plain window name: the chosen system is not appended.
 describe('OnboardingWizard — DetailScreen TopBar breadcrumb', () => {
   afterEach(() => { i18nState.ui = null; });
 
@@ -1013,23 +1014,24 @@ describe('OnboardingWizard — DetailScreen TopBar breadcrumb', () => {
 
   it('publishes "taxes / <title>" on the detail screen', async () => {
     await openDetailScreen();
-    expect(lastMeta.title).toBe('fiscal.title SII');
-    expect(lastMeta.breadcrumb).toBe('taxes / fiscal.title SII');
+    expect(lastMeta.title).toBe('fiscal.title');
+    expect(lastMeta.breadcrumb).toBe('taxes / fiscal.title');
   });
 
-  it('es_ES: "Impuestos / Configuración Fiscal SII", two levels only', async () => {
+  it('es_ES: "Impuestos / Configuración Fiscal", two levels only, no system in it', async () => {
     const { rerender } = await openDetailScreen();
     rerenderIn(rerender, 'es_ES');
-    await waitFor(() => expect(lastMeta.breadcrumb).toBe('Impuestos / Configuración Fiscal SII'));
-    expect(lastMeta.title).toBe('Configuración Fiscal SII');
+    await waitFor(() => expect(lastMeta.breadcrumb).toBe('Impuestos / Configuración Fiscal'));
+    expect(lastMeta.title).toBe('Configuración Fiscal');
     expect(lastMeta.breadcrumb.split(' / ')).toHaveLength(2);
-    expect(lastMeta.breadcrumb).not.toMatch(/Monitor fiscal/i);
+    expect(lastMeta.breadcrumb).not.toMatch(/Monitor fiscal|SII/i);
   });
 
-  it('en_US: "Taxes / Fiscal Configuration SII", with no Settings level', async () => {
+  it('en_US: "Taxes / Fiscal Configuration", with no Settings level', async () => {
     const { rerender } = await openDetailScreen();
     rerenderIn(rerender, 'en_US');
-    await waitFor(() => expect(lastMeta.breadcrumb).toBe('Taxes / Fiscal Configuration SII'));
+    await waitFor(() => expect(lastMeta.breadcrumb).toBe('Taxes / Fiscal Configuration'));
+    expect(lastMeta.title).toBe('Fiscal Configuration');
     expect(lastMeta.breadcrumb).not.toMatch(/Settings|Fiscal Monitor/i);
   });
 });
