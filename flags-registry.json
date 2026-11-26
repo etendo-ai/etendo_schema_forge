@@ -834,7 +834,7 @@
           "DefaultAssignmentField",
           "windows/custom/business-partner-category"
         ],
-        "$symbolsComment": "Frontend toggle points that never name the key: the registry.js line that loads the window wrapper (windows/custom/business-partner-category), the decisions.json/generated reference to BpCategoryTable (whose ToolbarQuickFilter static is ContactTypeQuickFilter), the DefaultAssignmentField / ContactTypeField renderers the wrapper swaps in, and the contactVendorCreditor locale key. contactCategoryTypeEnabled is the descriptor's toggle point; useContactCreateTypeGate the create popups' one. FLAG_CONTACT_CATEGORY_TYPE is the backend constant in GoFeatureFlags (framework)."
+        "$symbolsComment": "Frontend toggle points that never name the key: the registry.js line that loads the window wrapper (windows/custom/business-partner-category), the decisions.json/generated reference to BpCategoryTable (whose ToolbarQuickFilter static is ContactTypeQuickFilter), the DefaultAssignmentField / ContactTypeField renderers the wrapper swaps in, and the contactVendorCreditor locale key. contactCategoryTypeEnabled is the descriptor's toggle point; useContactCreateTypeGate the create popups' one. The backend constant FLAG_CONTACT_CATEGORY_TYPE (GoFeatureFlags, framework) is a symbol of the com.etendoerp.go contribution, not of this header."
       },
       "paths": [
         "artifacts/business-partner-category/custom/",

@@ -459,7 +459,7 @@ The script scans, waits for the report to process, and prints issues sorted by s
 
 ### Per-file line coverage (core: `make sonar-file-coverage` / `cli/sonar-coverage.sh`)
 
-`cli/sonar-coverage.sh` reads EXISTING SonarQube analysis (it does NOT run a scan) and reports, for given files, which lines remain uncovered — collapsed into ranges. It works for files in BOTH repos (schema_forge and com.etendoerp.go): each file's repo and project key are auto-detected from its on-disk location (override with `--project schema-forge|etendo-go`). Use `NEW_ONLY=1` to show only new-code uncovered lines — the "coverage dropped in this PR" review case. Other flags: `BRANCH=`, `PR=`, plus `--partial` (also list partial branches) and `-q`. Exit 0 = fully covered, 1 = uncovered lines found, 2 = error.
+`cli/sonar-coverage.sh` reads EXISTING SonarQube analysis (it does NOT run a scan) and reports, for given files, which lines remain uncovered — collapsed into ranges. It works for files in every repo of its roster (schema_forge, schema_forge_core and com.etendoerp.go, found as siblings): each file's repo and project key are auto-detected from its on-disk location (override with `--project schema-forge|schema-forge-core|etendo-go`; add other checkouts with `SONAR_PROJECT_ROOTS=name=/path[,name=/path]`). Use `NEW_ONLY=1` to show only new-code uncovered lines — the "coverage dropped in this PR" review case. Other flags: `BRANCH=`, `PR=`, plus `--partial` (also list partial branches) and `-q`. Exit 0 = fully covered, 1 = uncovered lines found, 2 = error.
 
 ```bash
 make sonar-file-coverage FILES="cli/src/push-to-neo.js"
