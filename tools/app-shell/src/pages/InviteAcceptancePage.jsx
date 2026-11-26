@@ -531,7 +531,7 @@ export default function InviteAcceptancePage({ apiBase = import.meta.env.VITE_AP
       if (!res.ok || data.error) {
         // ETP-5258 — translate by code only: `data.message` is the backend's English text, and
         // WEAK_PASSWORD used to show the unrelated "passwords must match" copy.
-        setActionError(ui(AUTH_ERROR_UI_KEYS[data.code] || 'invitePageInvalidDescription'));
+        setActionError(ui(AUTH_ERROR_UI_KEYS[readApiError(data).code] || 'invitePageInvalidDescription'));
         setSubmitting(false);
         return;
       }
@@ -575,8 +575,9 @@ export default function InviteAcceptancePage({ apiBase = import.meta.env.VITE_AP
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || data.error) {
-      const error = new Error(data.message || ui('invitePageInvalidDescription'));
-      error.code = data.code || 'INVITATION_ERROR';
+      const { code, message } = readApiError(data);
+      const error = new Error(message || ui('invitePageInvalidDescription'));
+      error.code = code || 'INVITATION_ERROR';
       throw error;
     }
     await signInRegisteredAccount(accountEmail || invitationData?.email, accountPassword);
@@ -615,8 +616,15 @@ export default function InviteAcceptancePage({ apiBase = import.meta.env.VITE_AP
   // ETP-5385: one precedence for both signed-in layouts: errorState (full page) > actionError >
   // join notice. The notice is only shown while no error is, and a mismatch swaps the retry
   // button for a sign-out, since the same account fails the same way again.
+  // The fallback layout further down (the last `return`) is unreachable for these states: the
+  // early returns above already cover errorState, every session-guard value and both
+  // existing_account variants. It carries the same conditions only so it cannot drift.
   const showJoinNotice = !actionError;
   const accountMismatch = actionErrorCode === 'INVITATION_ACCOUNT_MISMATCH';
+  // Known limit: `existingAuthenticated` is only set once the session guard ran, which needs a
+  // resolved invitation. A signed-in user whose link already fails at `resolve` therefore sees
+  // "Sign in" rather than "Go to application"; accepted, since /login reaches the app when a
+  // session is open.
   const errorButtonSignedIn = existingAuthenticated;
   const guardApplies = !loading && !errorState && !successData
     && ACTIONABLE_BRANCHES.has(invitationData?.branch);

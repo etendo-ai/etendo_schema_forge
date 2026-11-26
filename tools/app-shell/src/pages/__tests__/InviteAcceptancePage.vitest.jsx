@@ -23,6 +23,11 @@ vi.mock('@/i18n', () => ({
   useUI: () => (key) => key,
 }));
 
+const logoutMock = vi.fn();
+vi.mock('@/auth/useLogout.js', () => ({
+  useLogout: () => logoutMock,
+}));
+
 vi.mock('@etendo-ai/app-shell-core/i18n', () => ({
   useUI: () => (key) => key,
   // No setLocale → the shared auth steps skip the language selector.
@@ -46,6 +51,7 @@ vi.mock('@etendo-ai/etendo-go-core/onboarding/sso', () => ({
 describe('InviteAcceptancePage', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    logoutMock.mockClear();
     ssoHandlers = null;
     globalThis.localStorage.clear();
   });
@@ -377,6 +383,17 @@ describe('InviteAcceptancePage', () => {
     // The same account would fail again, so there is no retry.
     expect(screen.queryByTestId('action-accept-invitation')).not.toBeInTheDocument();
     expect(screen.getByTestId('action-mismatch-sign-out')).toHaveTextContent('inviteSessionConflictLogoutUnknown');
+
+    // The button must actually sign out and reload into the same invitation.
+    const replace = vi.fn();
+    vi.stubGlobal('location', { ...globalThis.location, pathname: '/invite', replace });
+    try {
+      fireEvent.click(screen.getByTestId('action-mismatch-sign-out'));
+      expect(logoutMock).toHaveBeenCalledTimes(1);
+      expect(replace).toHaveBeenCalledWith('/invite?token=second-company-token');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('does not call the link invalid when the accept request fails on the network (ETP-5385)', async () => {
