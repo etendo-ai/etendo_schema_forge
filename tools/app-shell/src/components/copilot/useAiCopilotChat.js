@@ -260,6 +260,9 @@ const AGENT_FILE_MEDIA_TYPES = new Set([
 ]);
 // Keeps the base64 body under the BFF's 1 MB request limit.
 export const AGENT_FILE_MAX_BYTES = 512 * 1024;
+// Budget for the WHOLE chat request (history + tool outputs + base64 files), kept below the
+// BFF's 1 MB BFF_MAX_BODY_BYTES with headroom for the tool round-trips of the turn.
+export const AGENT_REQUEST_MAX_CHARS = 900 * 1024;
 
 function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -709,6 +712,13 @@ export function useAiCopilotChat({ onOpenCopilot, menuGroups }) {
       })));
     } catch {
       setFileError(ui('copilotFileReadError'));
+      return;
+    }
+    // The raw file limit is not enough: the request also carries every earlier message and tool output.
+    const requestChars = JSON.stringify(chat.messages ?? []).length
+      + parts.reduce((total, part) => total + part.url.length, 0) + value.length;
+    if (requestChars > AGENT_REQUEST_MAX_CHARS) {
+      setFileError(ui('copilotRequestTooLarge'));
       return;
     }
     setInput('');

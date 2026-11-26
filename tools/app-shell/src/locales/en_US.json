@@ -20722,6 +20722,7 @@
     "copilotFileUnsupported": "Unsupported format: attach a CSV, TSV, TXT or XLSX file.",
     "copilotFileTooLarge": "The file is too large: the maximum is 512 KB.",
     "copilotFilesTotalTooLarge": "The attached files exceed the 512 KB total maximum.",
+    "copilotRequestTooLarge": "The conversation plus the attached files is too large to send. Remove a file or start a new conversation.",
     "copilotWelcome": "Hi! I'm your ERP agent. What do you need today?",
     "copilotInvoiceResponse": "I'll help you create an invoice. Opening Sales Invoice...\n\nYou can also say 'show pending invoices' to see what's outstanding.",
     "copilotStockResponse": "Here's a quick stock summary:\n• Cerveza Ale 0.5L: 150 units\n• Vino Tinto Reserva: 80 units\n• Aceite de Oliva 1L: 230 units\n\nWould you like to check a specific product?",

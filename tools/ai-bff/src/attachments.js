@@ -97,13 +97,19 @@ async function xlsxToSections(filename, bytes, limits) {
   assertWorkbookSize(bytes);
   const sheets = await readExcelFile(bytes);
   const skipped = sheets.slice(MAX_SHEETS).map(sheet => `"${sheet.sheet}"`);
+  let remaining = limits.maxChars;
   const text = sheets.slice(0, MAX_SHEETS)
-    .map((sheet, index) => sectionText(
-      filename,
-      ` — hoja ${index + 1} "${sheet.sheet}"`,
-      sheet.data.map(row => row.map(csvCell).join(',')),
-      limits,
-    ))
+    .map((sheet, index) => {
+      // maxChars is a budget for the whole file: each sheet gets what earlier ones left.
+      const section = sectionText(
+        filename,
+        ` — hoja ${index + 1} "${sheet.sheet}"`,
+        sheet.data.map(row => row.map(csvCell).join(',')),
+        { ...limits, maxChars: remaining },
+      );
+      remaining = Math.max(0, remaining - section.length);
+      return section;
+    })
     .join('\n\n');
   if (!text) return unsupported(filename);
   return skipped.length ? `${text}\n\n[Hojas no leídas: ${skipped.join(', ')}. Díselo al usuario.]` : text;

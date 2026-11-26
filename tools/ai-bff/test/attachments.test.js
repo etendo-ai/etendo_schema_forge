@@ -96,3 +96,10 @@ test('rejects a highly compressible workbook before parsing it (decompression bo
   }), limits);
   assert.match(textOf(out), /^\[Archivo adjunto "bomb\.xlsx" demasiado grande: el contenido descomprimido supera 8 MB\]$/);
 });
+
+test('maxChars is one budget for the whole workbook, not per sheet', async () => {
+  const bytes = readFileSync(new URL('./fixtures/mixed.xlsx', import.meta.url));
+  const out = await tabularAttachmentsToText(userFile({ mediaType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', filename: 'mixed.xlsx', url: `data:application/octet-stream;base64,${bytes.toString('base64')}` }), { ...limits, maxChars: 5 });
+  assert.doesNotMatch(textOf(out), /Ana,2020-01-31/);
+  assert.match(textOf(out), /Contenido truncado/);
+});

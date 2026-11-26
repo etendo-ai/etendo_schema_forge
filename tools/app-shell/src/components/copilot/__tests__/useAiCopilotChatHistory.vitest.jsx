@@ -4,7 +4,7 @@
  * turn, no save on error/abort, hydration, and resilience to save failures.
  * `useChat` is replaced by a small controllable fake so turns can be scripted.
  */
-import { act, renderHook } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Created at module level so a describe block can run on its own.
@@ -65,7 +65,7 @@ vi.mock('../agentChatApi.js', () => ({
 }));
 
 import * as api from '../agentChatApi.js';
-import { useAiCopilotChat } from '../useAiCopilotChat.js';
+import { useAiCopilotChat, AGENT_REQUEST_MAX_CHARS } from '../useAiCopilotChat.js';
 
 const text = (t) => ({ type: 'text', text: t });
 const user = (id, t) => ({ id, role: 'user', parts: [text(t)] });
@@ -394,19 +394,34 @@ describe('agent chat file attachments', () => {
     expect(result.current.messages[0]).toEqual({ id: 'u1', role: 'user', text: 'importa', files: [{ name: 'c.csv' }] });
   });
 
-  it('keeps the file part through the automatic resends of the same turn', async () => {
+  it('keeps the file part while the turn is pending and turns it into a note once it settles', async () => {
     const { result } = setup();
-    const assistant = { id: 'a1', role: 'assistant', parts: [{ type: 'step-start' }, { type: 'tool-navigate_to', toolCallId: 't1', state: 'output-available', input: {}, output: {} }] };
+    await act(async () => { result.current.actions.uploadFile(file('c.csv')); });
+    let settle;
+    globalThis.__chatApi.sendMessage.mockImplementationOnce(() => new Promise(resolve => { settle = resolve; }));
     await act(async () => {
-      globalThis.__chat.setMessages([
-        { id: 'u1', role: 'user', parts: [{ type: 'file', mediaType: 'text/csv', filename: 'c.csv', url: 'data:text/csv;base64,YSxi' }, text('importa')] },
-        assistant,
-      ]);
+      globalThis.__chat.setMessages([{ id: 'u1', role: 'user', parts: [{ type: 'file', mediaType: 'text/csv', filename: 'c.csv', url: 'data:text/csv;base64,YSxi' }, text('importa')] }]);
     });
-    let resend;
-    await act(async () => { resend = await globalThis.__chatOptions.sendAutomaticallyWhen({ messages: globalThis.__chat.messages }); });
-    expect(resend).toBe(true);
-    // The second request of the turn must still carry the CSV for the BFF to convert.
+    let sending;
+    await act(async () => { sending = result.current.actions.sendMessage('importa'); });
+    await waitFor(() => expect(settle).toBeTypeOf('function'));
+    // Simulated automatic client-tool resend while sendMessage is still pending.
+    await act(async () => { await globalThis.__chatOptions.sendAutomaticallyWhen({ messages: globalThis.__chat.messages }); });
     expect(globalThis.__chat.messages[0].parts[0]).toMatchObject({ type: 'file', url: 'data:text/csv;base64,YSxi' });
+    await act(async () => { settle(); await sending; });
+    expect(globalThis.__chat.messages[0].parts.some(part => part.type === 'file')).toBe(false);
+    expect(globalThis.__chat.messages[0].parts[0]).toEqual({ type: 'text', text: '[Archivo adjunto "c.csv"]' });
+  });
+
+  it('refuses up front a send whose whole request exceeds the budget, keeping the file queued', async () => {
+    const { result } = setup();
+    await act(async () => { result.current.actions.uploadFile(file('c.csv', 10, 'text/csv', 'a,b')); });
+    await act(async () => {
+      globalThis.__chat.setMessages([{ id: 'a1', role: 'assistant', parts: [{ type: 'text', text: 'x'.repeat(AGENT_REQUEST_MAX_CHARS) }] }]);
+    });
+    await act(async () => { await result.current.actions.sendMessage('importa'); });
+    expect(globalThis.__chatApi.sendMessage).not.toHaveBeenCalled();
+    expect(result.current.error).toBe('copilotRequestTooLarge');
+    expect(result.current.files).toHaveLength(1);
   });
 });
