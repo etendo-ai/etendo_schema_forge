@@ -21,9 +21,9 @@ Schema Forge is split across three repos. Know which one a change belongs to bef
 
 | Repo | Remote | Role |
 |------|--------|------|
-| `etendo_schema_forge` (this repo) | `etendosoftware/etendo_schema_forge` | Functional: windows, artifacts, decisions, app-shell, per-client config |
-| `schema_forge_core` | `etendosoftware/schema_forge_core` | Tooling/platform: generators, extractors, pipeline, shared React runtime (`app-shell-core`) |
-| `com.etendoerp.go` | `etendosoftware/com.etendoerp.go` | Runtime (NEO Headless, Java), lives in `modules/` of Etendo Core |
+| `etendo_schema_forge` (this repo) | `etendo-ai/etendo_schema_forge` | Functional: windows, artifacts, decisions, app-shell, per-client config |
+| `schema_forge_core` | `etendo-ai/schema_forge_core` | Tooling/platform: generators, extractors, pipeline, shared React runtime (`app-shell-core`) |
+| `com.etendoerp.go` | `etendo-ai/com.etendoerp.go` | Runtime (NEO Headless, Java), lives in `modules/` of Etendo Core |
 
 Most developers only work in `schema_forge` and consume the published `@etendo-ai/*` packages. Clone `schema_forge_core` only if you also change the tooling.
 
@@ -52,7 +52,7 @@ Two ways to get a working setup. Use **local-env** unless you already maintain y
 
 ### Option A: local-env (isolated environment, recommended)
 
-[`local-env`](https://github.com/etendosoftware/etendo-localenv) builds an Etendo checkout with its own cached PostgreSQL, build and Tomcat, and can create one parallel environment per branch (git worktrees) so you never touch your main checkout. Schema Forge ships a plugin (`local-env.d/plugins/etendo-go`) that local-env discovers automatically and that adds everything Etendo GO needs.
+[`local-env`](https://github.com/etendo-ai/etendo-localenv) builds an Etendo checkout with its own cached PostgreSQL, build and Tomcat, and can create one parallel environment per branch (git worktrees) so you never touch your main checkout. Schema Forge ships a plugin (`local-env.d/plugins/etendo-go`) that local-env discovers automatically and that adds everything Etendo GO needs.
 
 Per hook, the plugin:
 
@@ -63,7 +63,7 @@ Per hook, the plugin:
 **Step 0: install the tool (once per machine).** `etendo-localenv` is a separate repo and a tool, not part of the Etendo checkout. Clone it **outside** `etendo_develop`/`etendo_core`, anywhere (e.g. next to it) and run its installer, which symlinks `local-env` and `tomcat-fast` into `~/.local/bin` and the agent skills into `~/.claude/skills`:
 
 ```bash
-git clone git@github.com:etendosoftware/etendo-localenv.git ~/Workspace/etendo-localenv
+git clone git@github.com:etendo-ai/etendo-localenv.git ~/Workspace/etendo-localenv
 cd ~/Workspace/etendo-localenv && ./install.sh
 # make sure ~/.local/bin is on your PATH (install.sh prints a NOTE if not)
 ```
@@ -113,7 +113,7 @@ Things to know:
 - Pushing NEO config (`sf-push-neo`) lives only in the environment's DB until `local-env export`.
 - The bundled PostgreSQL has **no pgvector**: vector search in the CommandPalette does not work there.
 - Skip the SPA for one run: `local-env up --skip-plugin=etendo-go`.
-- Install the progress mod in Claude Code for phase/gradle/elapsed above the prompt: `/plugin install local-env-progress --marketplace etendosoftware/etendo-localenv`.
+- Install the progress mod in Claude Code for phase/gradle/elapsed above the prompt: `/plugin install local-env-progress --marketplace etendo-ai/etendo-localenv`.
 
 Full reference: [`docs/local-env-plugin.md`](docs/local-env-plugin.md) (plugin hooks, allowed origins, MCP/OAuth URLs, ports) and the project skill [`.claude/skills/local-env/SKILL.md`](.claude/skills/local-env/SKILL.md) (rules, failure table).
 
@@ -137,10 +137,10 @@ git checkout epic/ETP-3504
 
 | Repo (remote) | Target branch | Notes (as of 2026-10-21, after `git fetch`) |
 |---|---|---|
-| `etendosoftware/etendo_core` | — | **Not a base repo for now: fixed on epic** (see the module table below) |
-| `etendosoftware/etendo_schema_forge` | `main` / `develop` | epic has 0 commits ahead: nothing is epic-only |
-| `etendosoftware/schema_forge_core` | `main` / `develop` | epic is 36 commits ahead of `develop` |
-| `etendosoftware/com.etendoerp.go` (in `modules/`) | `main` / `develop` | epic has 0 commits ahead; use `develop`, or `feature/ETP-XXXX` cut from `origin/develop` |
+| `etendo-ai/etendo_core` | — | **Not a base repo for now: fixed on epic** (see the module table below) |
+| `etendo-ai/etendo_schema_forge` | `main` / `develop` | epic has 0 commits ahead: nothing is epic-only |
+| `etendo-ai/schema_forge_core` | `main` / `develop` | epic is 36 commits ahead of `develop` |
+| `etendo-ai/com.etendoerp.go` (in `modules/`) | `main` / `develop` | epic has 0 commits ahead; use `develop`, or `feature/ETP-XXXX` cut from `origin/develop` |
 
 > **Naming:** clone each repo with its remote name (`etendo_core`, `etendo_schema_forge`, `schema_forge_core`, …) and do not rename the directory. `schema_forge_core` is the only base repo whose remote has no `etendo_` prefix. Some tooling and docs still reference the old directory names `../schema_forge` / `../schema_forge_core` (the `local-env` plugin, `SCHEMA_FORGE_CORE`, `docs/repo-topology.md`); those need updating together with the rename.
 
@@ -150,7 +150,7 @@ Branch state of every module repo on the remote. **Fixed on epic** = the module'
 
 | Module | Remote | `main` | `develop` | Epic ahead of `develop` | CI list | Policy |
 |---|---|---|---|---|---|---|
-| `etendo_core` (Etendo Core) | GitHub etendosoftware | yes | yes | +118 (vs `main`: +124) | pipeline pin (`pipelines/Jenkinsfile`, `TODO: Remove this block`) | fixed on epic |
+| `etendo_core` (Etendo Core) | GitHub etendo-ai | yes | yes | +118 (vs `main`: +124) | pipeline pin (`pipelines/Jenkinsfile`, `TODO: Remove this block`) | fixed on epic |
 | `com.etendoerp.sif.general` | Bitbucket koodu_software | yes | yes | +43 | SF+GO | fixed on epic |
 | `com.smf.ticketbai` | Bitbucket koodu_software | no | yes | +71 | SF+GO | fixed on epic |
 | `com.etendoerp.verifactu` | Bitbucket koodu_software | no | yes | +84 | SF+GO | fixed on epic |
@@ -167,7 +167,7 @@ Branch state of every module repo on the remote. **Fixed on epic** = the module'
 | `com.etendoerp.psd2.bank.integration` | Bitbucket koodu_software | no | yes | +186 | GO | fixed on epic |
 | `com.etendoerp.copilot` | GitHub etendosoftware | no | yes | +31 | GO | fixed on epic |
 | `com.etendoerp.db.extended` | GitHub etendosoftware | yes | yes | +107 | GO | fixed on epic |
-| `com.etendoerp.go.template` | GitHub etendosoftware | yes | yes | +3 | GO | fixed on epic |
+| `com.etendoerp.go.template` | GitHub etendo-ai | yes | yes | +3 | GO | fixed on epic |
 | `com.etendoerp.go.localization.es.data` | GitHub etendosoftware | yes | yes | 0 | GO | fixed on epic |
 | `org.openbravo.sepa.iso20022` | Bitbucket koodu_software | no (`master`) | yes | +8 | GO | fixed on epic |
 | `org.openbravo.sepa.iso20022.template` | GitHub etendosoftware | yes | yes | +3 | GO | fixed on epic |
@@ -232,10 +232,10 @@ Clone the modules into `modules/`:
 cd /path/to/etendo_core/modules
 
 # Runtime (develop)
-git clone -b develop git@github.com:etendosoftware/com.etendoerp.go.git
+git clone -b develop git@github.com:etendo-ai/com.etendoerp.go.git
 
 # GitHub modules on the epic
-git clone -b epic/ETP-3504 git@github.com:etendosoftware/com.etendoerp.go.template.git
+git clone -b epic/ETP-3504 git@github.com:etendo-ai/com.etendoerp.go.template.git
 git clone -b epic/ETP-3504 git@github.com:etendosoftware/com.etendoerp.go.localization.es.data.git
 git clone -b epic/ETP-3504 git@github.com:etendosoftware/com.etendoerp.db.extended.git
 git clone -b epic/ETP-3504 git@github.com:etendosoftware/com.etendoerp.copilot.git
@@ -308,11 +308,11 @@ Clone **inside** the Etendo project directory, sibling of `modules/`:
 
 ```bash
 cd /path/to/etendo_core
-git clone git@github.com:etendosoftware/etendo_schema_forge.git
+git clone git@github.com:etendo-ai/etendo_schema_forge.git
 git -C etendo_schema_forge checkout develop
 
 # Only if you also change the tooling (core developer profile)
-git clone git@github.com:etendosoftware/schema_forge_core.git schema_forge_core
+git clone git@github.com:etendo-ai/schema_forge_core.git schema_forge_core
 (cd schema_forge_core && npm install)
 ```
 

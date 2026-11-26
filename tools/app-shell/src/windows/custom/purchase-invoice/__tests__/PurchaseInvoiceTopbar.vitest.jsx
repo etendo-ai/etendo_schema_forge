@@ -634,3 +634,40 @@ describe('PurchaseInvoiceTopbar — branch/fallback coverage (ETP-4738)', () => 
 // ETP-5272 follow-up ("Enviar a SIF" must flush pending header edits before sending) does NOT
 // apply to this component: the form-topbar send button it guarded was removed in ETP-5700 (the
 // form view sends from the kebab, SifSendMenuItem).
+
+// A confirmed payment remittance: the remitted part is the bank's to pay, so the badge says so
+// instead of offering it as pending.
+describe('PurchaseInvoiceTopbar — confirmed remittance', () => {
+  const props = { recordId: 'inv-001', apiBaseUrl: '/api', onRefresh: vi.fn() };
+
+  it('shows the remitted badge with the remitted amount when the whole outstanding is remitted', () => {
+    render(<PurchaseInvoiceTopbar {...props} data={{ ...BASE_DATA, etgoRemittedAmt: 500 }} />);
+    const badge = screen.getByTestId('payment-status-badge');
+    expect(badge).toHaveAttribute('data-state', 'remitted');
+    expect(badge).toHaveTextContent('remittanceInvoiceChip');
+    expect(badge).toHaveTextContent('EUR:500');
+    expect(badge).not.toHaveTextContent('statusPending');
+  });
+
+  it('opens the payments modal from the remitted badge', () => {
+    render(<PurchaseInvoiceTopbar {...props} data={{ ...BASE_DATA, etgoRemittedAmt: 500 }} />);
+    fireEvent.click(screen.getByTestId('payment-status-badge'));
+    expect(screen.getByTestId('payment-history-modal')).toBeInTheDocument();
+  });
+
+  it('shows only the free part as pending, like any pending invoice, for a partial remittance', () => {
+    render(<PurchaseInvoiceTopbar {...props} data={{ ...BASE_DATA, etgoRemittedAmt: 300 }} />);
+    const badge = screen.getByTestId('payment-status-badge');
+    expect(badge).toHaveTextContent('statusPending');
+    expect(badge).toHaveTextContent('EUR:200');
+    expect(badge).not.toHaveTextContent('EUR:300');
+  });
+
+  it('keeps the plain pending badge when nothing is remitted', () => {
+    render(<PurchaseInvoiceTopbar {...props} data={BASE_DATA} />);
+    const badge = screen.getByTestId('payment-status-badge');
+    expect(badge).not.toHaveAttribute('data-state', 'remitted');
+    expect(badge).toHaveTextContent('EUR:500');
+    expect(screen.queryByTestId('payment-status-badge-remitted')).toBeNull();
+  });
+});

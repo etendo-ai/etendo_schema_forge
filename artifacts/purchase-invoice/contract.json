@@ -1,8 +1,8 @@
 {
-  "version": "0.12.0",
+  "version": "0.13.0",
   "generatedAt": "2026-09-17T15:12:05.434Z",
-  "updatedAt": "2026-11-24T16:50:37.552Z",
-  "checksum": "9f9801789dfe1af6",
+  "updatedAt": "2026-11-25T19:12:10.978Z",
+  "checksum": "c3edc68695463378",
   "frontendContract": {
     "window": {
       "id": "183",
@@ -1778,6 +1778,25 @@
             "gridOrder": 8,
             "validation": {
               "maxLength": 0
+            }
+          },
+          {
+            "name": "etgoRemittedAmt",
+            "apiKey": "etgoRemittedAmt",
+            "column": "EM_Etgo_Remitted_Amt",
+            "label": "EM_Etgo_Remitted_Amt",
+            "type": "amount",
+            "tsType": "number",
+            "visibility": "readOnly",
+            "required": false,
+            "grid": false,
+            "form": false,
+            "computed": {
+              "mode": "stored",
+              "refresh": "synchronous"
+            },
+            "validation": {
+              "maxLength": 22
             }
           },
           {
@@ -3964,6 +3983,13 @@
                 }
               },
               {
+                "value": "REM_SENT",
+                "name": "Remitted",
+                "labels": {
+                  "es_ES": "Remitted"
+                }
+              },
+              {
                 "value": "PPM",
                 "name": "Payment Made",
                 "labels": {
@@ -3975,6 +4001,13 @@
                 "name": "Payment Received",
                 "labels": {
                   "es_ES": "Cobrado"
+                }
+              },
+              {
+                "value": "REM_CANCEL",
+                "name": "Settled in Remittance",
+                "labels": {
+                  "es_ES": "Settled in Remittance"
                 }
               },
               {
@@ -6969,6 +7002,14 @@
             "column": "em_tbai_qrcode",
             "type": "button",
             "visibility": "discarded",
+            "required": false
+          },
+          {
+            "name": "etgoRemittedAmt",
+            "apiKey": "etgoRemittedAmt",
+            "column": "EM_Etgo_Remitted_Amt",
+            "type": "amount",
+            "visibility": "readOnly",
             "required": false
           },
           {
@@ -12612,6 +12653,14 @@
         "description": "Field 'etgoImportDua' should be present in header"
       },
       {
+        "id": "t-field-presence-header-etgoRemittedAmt",
+        "category": "field-presence",
+        "entity": "header",
+        "field": "etgoRemittedAmt",
+        "runner": "node",
+        "description": "Field 'etgoRemittedAmt' should be present in header"
+      },
+      {
         "id": "t-field-presence-header-eTGOTbaiStatus",
         "category": "field-presence",
         "entity": "header",
@@ -13946,6 +13995,14 @@
         "field": "etgoImportDua",
         "runner": "node",
         "description": "Field 'etgoImportDua' should have type 'boolean' in header"
+      },
+      {
+        "id": "t-field-type-header-etgoRemittedAmt",
+        "category": "field-type",
+        "entity": "header",
+        "field": "etgoRemittedAmt",
+        "runner": "node",
+        "description": "Field 'etgoRemittedAmt' should have type 'number' in header"
       },
       {
         "id": "t-field-type-header-eTGOTbaiStatus",
@@ -19241,15 +19298,15 @@
       }
     ],
     "summary": {
-      "total": 1035,
+      "total": 1037,
       "byCategory": {
         "action-endpoint": 26,
         "crud-flags": 13,
         "default-value-type": 42,
         "displaylogic-evaluable": 28,
         "displaylogic-valid": 28,
-        "field-presence": 167,
-        "field-type": 167,
+        "field-presence": 168,
+        "field-type": 168,
         "readonlylogic-evaluable": 76,
         "readonlylogic-valid": 76,
         "rule-declared": 23,
@@ -19259,7 +19316,7 @@
         "visibility": 13
       },
       "byRunner": {
-        "node": 1035,
+        "node": 1037,
         "junit": 0
       }
     }

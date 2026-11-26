@@ -13,7 +13,7 @@
 //         remittanceCreditorId (the collection's copy; null when none, invalid or of another account),
 //         remittanceCreditorIdValid, accountCreditorId, accountCreditorIdValid, suggestedCreditorId,
 //         creditorIdSource ('remittance' | 'account' | 'suggested' | 'missing'), creditorId (effective),
-//         creditorIdAvailable, directDebitScheme ('CORE' | 'B2B', null on a payment remittance), financed,
+//         creditorIdAvailable, directDebitScheme ('CORE' | 'B2B', null on a payment remittance),
 //         missing: ["iban" | "orgTaxId" | "country" | "creditorBusinessCode"] (in that order;
 //         creditorBusinessCode when the CORE type's Creditor_Business_Code is not 3 letters/digits) }
 //     Refusals: 404 plain text (account / organization not found), 422 ETGO_RemittanceAccountNotBank
@@ -74,7 +74,6 @@ export function normalizeSepaFileData(raw) {
     country: data.country ?? null,
     ...normalizeCreditorIdInfo(data),
     directDebitScheme: data.directDebitScheme === 'CORE' || data.directDebitScheme === 'B2B' ? data.directDebitScheme : null,
-    financed: data.financed === true,
     collection: typeof data.collection === 'boolean' ? data.collection : null,
     missing: Array.isArray(data.missing) ? data.missing : [],
   };

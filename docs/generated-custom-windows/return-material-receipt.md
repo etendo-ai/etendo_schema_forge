@@ -799,6 +799,30 @@ The popup opened by "Crear Factura Rectificativa" on a completed (CO), not-yet-i
 How the step itself works — the backend `sifDefaults` preview, when it appears, the
 `sifFields` it sends and the fail-open rule — is described once in [sales-order.md → Fiscal data step before the invoice is created](sales-order.md#fiscal-data-step-before-the-invoice-is-created--etp-6179).
 
+**Nothing is confirmed when the rectificativa would be refused (QA CP-12).** Confirming the return
+and creating its rectificativa are two requests, and confirming cannot be undone. Before, a refused
+rectificativa (e.g. a customer without *Método de pago* / *Condiciones de pago*) left the return
+confirmed without invoice, and the modal said only "Error (400)". Now, with *Crear factura
+rectificativa* on, `ConfirmInOutModal` (prop `validateInvoiceFirst`, passed by this window's
+`ConfirmWithCreditButton` through `ConfirmWithCreditButtonBase.validateInvoiceBeforeConfirm`) first
+sends `createReturnInvoice` with `validateOnly:true` — a dry run that runs every check the real
+call makes before saving anything and works on the draft. A refusal stops there: the return stays
+in draft and the modal shows the backend sentence, translated (`backendError.bpMissingPaymentTermsOrMethod`:
+"El contacto no tiene Condiciones de pago o Método de pago…"). The modal and the post-confirm
+"Crear factura rectificativa" button also read a handler refusal's `error.message`, so no refusal
+reads as a bare "Error (400)" any more. Backend side: `modules/com.etendoerp.go/docs/neo-headless.md`
+→ ETP-6179, *`createReturnInvoice` dry run*. Over MCP, `sifFields` is accepted as an object (or a
+JSON string), CP-16.
+
+The list's row-hover Confirmar sends the same dry run: `ReturnMaterialReceiptRowConfirmModal` sets
+`validateInvoiceBeforeConfirm` in its `buildReturnRowConfirmModal` config (the vendor return's
+does not).
+
+Manual check: a customer without payment method or terms, a return of one of its shipments,
+Confirmar with *Crear factura rectificativa* on, step *Datos fiscales* → *Confirmar y crear
+factura*: the modal shows the Spanish sentence and the return is still *Borrador*. Fill in the
+contact's payment method and terms, retry: the return is confirmed and the rectificativa created.
+
 ## Doc type and number survive picking the customer — ETP-5837 (QA round 1)
 
 Choosing the customer on a new return no longer switches the document to the shipment doc type. Before, the number
