@@ -59,19 +59,21 @@ export function buildReportFilename(reportId, format, suffix = '') {
   return `${reportId}${suffix}-${dd}-${mm}-${yyyy}.${format}`;
 }
 
-// ETP-5116 — report categories with a real permission-anchor AD_Window (see
-// menu.json's matching windowId for each). A category not listed here (e.g.
-// "purchases") is intentionally NOT gated by window access — it's kept
-// menu-hidden only, a deliberate decision made earlier in this same ticket.
+// ETP-5116 — report categories with a permission anchor (see menu.json's matching accessFeature
+// for each). ETP-4802: the anchor is the GO feature `financial-reports` / `inventory-stock-report`
+// (the role's GO Access row, or the legacy anchor-window grant while it has none), published by the
+// backend as `windowAccess[<feature id>]`. A category not listed here (e.g. "purchases") is
+// intentionally NOT gated by feature access — it's kept menu-hidden only, a deliberate decision made
+// earlier in ETP-5116.
 const REPORT_CATEGORY_WINDOW_IDS = {
-  finance: 'D647D118F5014D00AF47A636B2CD0DD3',
+  finance: 'financial-reports',
   // ETP-6389 — Tesorería › Informes shares the Financial Reports anchor window: the aging reports
   // moved out of the finance category, not out of that permission.
-  treasury: 'D647D118F5014D00AF47A636B2CD0DD3',
+  treasury: 'financial-reports',
   // ETP-6380 — Impuestos › Informes shares it too: the Tax Report moved out of the finance
   // category, not out of that permission.
-  taxes: 'D647D118F5014D00AF47A636B2CD0DD3',
-  inventory: '6346B88619F948F9A42224BDB0B239FA',
+  taxes: 'financial-reports',
+  inventory: 'inventory-stock-report',
 };
 
 // ETP-5402 QA follow-up — the report ids ReportAccessCatalog.java actually covers, one array per

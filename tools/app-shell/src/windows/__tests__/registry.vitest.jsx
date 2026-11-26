@@ -7,7 +7,7 @@ vi.mock('@generated/remittance/generated/web/remittance/index.jsx', () => ({ def
 import { buildMenuGroups, getAllWindowNames, apiOnlyWindows, buildWindowMap, filterMenuGroupsByAccess, hasAccessibleReportInGroup } from '../registry';
 import menuConfig from '../../menu.json';
 import { filterMenuGroups, isSearchableMenuItem } from '../../lib/globalSearchMenu.js';
-import { defaultNavigation, optionalNavigation, hiddenNavigation, navigationProfiles, expectedNavigation, navigationPermissions, expectNavigation } from './navigationExpectations.js';
+import { defaultNavigation, optionalNavigation, hiddenNavigation, navigationProfiles, expectedNavigation, navigationPermissions, expectNavigation, accessKeyOf } from './navigationExpectations.js';
 
 describe('registry', () => {
   // ETP-4598 — calling filterMenuGroupsByAccess() directly with synthetic
@@ -240,6 +240,33 @@ describe('registry', () => {
   // check fails CLOSED, same convention as the `capability` axis: hidden
   // unless `windowAccess[item.accessWindowId]` is a defined access tier.
   describe('filterMenuGroupsByAccess — windowAccess axis (ETP-5240)', () => {
+    // ETP-4802 — the six GO features are addressed by their own id (`accessFeature`), which the
+    // backend publishes as a windowAccess key next to the real window ids: same check, same map.
+    describe('accessFeature axis (GO features)', () => {
+      const smartScan = () => [{ group: 'Tools', items: [{ name: 'smart-scan', accessFeature: 'smart-scan' }] }];
+      const names = (groups) => groups.flatMap((g) => g.items.map((i) => i.name));
+
+      it('hides the item while windowAccess is not loaded or holds no tier for the feature', () => {
+        expect(names(filterMenuGroupsByAccess(smartScan(), null, { isAdminOrClientAdmin: false }, null))).toEqual([]);
+        expect(names(filterMenuGroupsByAccess(smartScan(), null, { isAdminOrClientAdmin: false }, { 'other-feature': 'full' }))).toEqual([]);
+      });
+
+      it('shows it for both tiers: presence of the feature key, not the tier value, decides', () => {
+        for (const tier of ['full', 'read-only']) {
+          expect(names(filterMenuGroupsByAccess(smartScan(), null, { isAdminOrClientAdmin: false }, { 'smart-scan': tier }))).toEqual(['smart-scan']);
+        }
+      });
+
+      it('is not satisfied by the legacy anchor window id any more', () => {
+        const legacyAnchorOnly = { '33705E0F52874D91B0BB2FF8BB648B8E': 'full' };
+        expect(names(filterMenuGroupsByAccess(smartScan(), null, { isAdminOrClientAdmin: false }, legacyAnchorOnly))).toEqual([]);
+      });
+
+      it('exempts admin/client-admin like the accessWindowId axis', () => {
+        expect(names(filterMenuGroupsByAccess(smartScan(), null, { isAdminOrClientAdmin: true }, {}))).toEqual(['smart-scan']);
+      });
+    });
+
     it('hides an accessWindowId-gated item when windowAccess is null/omitted (fails closed)', () => {
       // allowedIds is set to a non-null Set here (rather than null) so the
       // function's own "all three axes falsy -> back-compat passthrough" guard
@@ -533,7 +560,7 @@ describe('registry', () => {
   // not enough on its own: that would open an empty catalog. Uses the real Treasury group because
   // REPORT_IDS_BY_GROUP is keyed off menu.json's group names.
   describe('filterMenuGroupsByAccess — requiresGroupReport axis', () => {
-    const FINANCIAL_REPORTS_WINDOW = 'D647D118F5014D00AF47A636B2CD0DD3';
+    const FINANCIAL_REPORTS_WINDOW = 'financial-reports';
     const treasuryNames = result => result.find(g => g.group === 'Treasury')?.items.map(i => i.name) ?? [];
     const run = ({ capabilities = { isAdminOrClientAdmin: false }, windowAccess = {}, reportAccess, allowedIds = new Set() }) =>
       filterMenuGroupsByAccess(buildMenuGroups(), allowedIds, capabilities, windowAccess, undefined, reportAccess);
@@ -593,7 +620,7 @@ describe('registry', () => {
   // ETP-6380 — Impuestos › Informes follows the Treasury rule: only a grant on the Tax Report
   // reveals it, and the Taxes group lists its entries in the agreed order.
   describe('filterMenuGroupsByAccess — Taxes group (ETP-6380)', () => {
-    const FINANCIAL_REPORTS_WINDOW = 'D647D118F5014D00AF47A636B2CD0DD3';
+    const FINANCIAL_REPORTS_WINDOW = 'financial-reports';
     const taxesNames = result => result.find(g => g.group === 'Taxes')?.items.map(i => i.name) ?? [];
     const run = ({ capabilities = { isAdminOrClientAdmin: false }, windowAccess = {}, reportAccess, allowedIds = new Set() }) =>
       filterMenuGroupsByAccess(buildMenuGroups(), allowedIds, capabilities, windowAccess, undefined, reportAccess);
@@ -673,7 +700,7 @@ describe('registry', () => {
     // and drop the entry from every profile below, which is that axis's job, not this block's;
     // its own on/off behaviour lives in the dedicated describe above.
     const NOT_DISMISSED = false;
-    const gated = defaultNavigation.filter(entry => entry.windowId || entry.processId || entry.obuiappProcessId || entry.accessWindowId || entry.capability);
+    const gated = defaultNavigation.filter(entry => entry.windowId || entry.processId || entry.obuiappProcessId || accessKeyOf(entry) || entry.capability);
     const ungated = defaultNavigation.filter(entry => !gated.includes(entry));
     const proof = optionalNavigation.filter(entry => entry.proof);
 
@@ -690,7 +717,7 @@ describe('registry', () => {
 
     it('keeps permission namespaces and identities aligned with independent sources', () => {
       const items = menuConfig.menu.flatMap(group => group.items);
-      const keys = ['windowId', 'processId', 'obuiappProcessId', 'accessWindowId', 'capability'];
+      const keys = ['windowId', 'processId', 'obuiappProcessId', 'accessWindowId', 'accessFeature', 'capability'];
       for (const expected of [...defaultNavigation, ...optionalNavigation.filter(entry => !entry.app)]) {
         const actual = items.find(item => item.name === expected.name);
         expect(actual, expected.name).toBeDefined();
@@ -730,7 +757,7 @@ describe('registry', () => {
       const bypassedAnchors = entry.capability === 'isAdminOrClientAdmin'
         // The admin bypass only waives the accessWindowId axis; an entry that ALSO declares its own
         // capability (invoice-inbox -> invoiceInbox) stays hidden until that capability is granted.
-        ? defaultNavigation.filter(candidate => candidate.accessWindowId && !candidate.capability) : [];
+        ? defaultNavigation.filter(candidate => accessKeyOf(candidate) && !candidate.capability) : [];
       // A capability is a NAMED BOOLEAN, not a per-entry grant: switching one on reveals every
       // entry gated on that same name, not only the entry we asked for. Latent until ETP-5269
       // added a second `isAdminOrClientAdmin` entry next to `roles` — with one entry per
@@ -765,7 +792,7 @@ describe('registry', () => {
       expect(names).toContain('roles');
     });
 
-    it.each(defaultNavigation.filter(entry => entry.accessWindowId))('read-only anchor grant: $name', entry => {
+    it.each(defaultNavigation.filter(entry => accessKeyOf(entry)))('read-only anchor grant: $name', entry => {
       const { allowedIds, capabilities, windowAccess, reportAccess } = navigationPermissions([entry], 'read-only');
       expectNavigation(filterMenuGroupsByAccess(buildMenuGroups(), allowedIds, capabilities, windowAccess, NOT_DISMISSED, reportAccess), [...ungated, ...proof, entry]);
     });
@@ -784,7 +811,7 @@ describe('registry', () => {
 
     it('null role-menu fallback opens only the membership axis, not capabilities or anchors', () => {
       expectNavigation(filterMenuGroupsByAccess(buildMenuGroups(), null, {}, {}, NOT_DISMISSED), [
-        ...defaultNavigation.filter(entry => !entry.accessWindowId && !entry.capability), ...proof,
+        ...defaultNavigation.filter(entry => !accessKeyOf(entry) && !entry.capability), ...proof,
       ]);
     });
   });

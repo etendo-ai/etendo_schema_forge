@@ -22,15 +22,15 @@ vi.mock('../FiscalModelsPage', () => ({
 }));
 
 import { useWindowAccess } from '@/auth/AuthContext.jsx';
-import FiscalModelsRoute, { FISCAL_MODELS_WINDOW_ID } from '../index.jsx';
+import FiscalModelsRoute, { FISCAL_MODELS_FEATURE_ID } from '../index.jsx';
 
 describe('FiscalModelsRoute (ETP-5546)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('checks access against the Tax Report window id (the "Modelos Fiscales" access proxy, ETP-5116)', () => {
-    expect(FISCAL_MODELS_WINDOW_ID).toBe('3E8FEA1EA7404D979306C9EE7FD2E7E8');
+  it('checks access against the GO feature id, not the Tax Report proxy window (ETP-4802)', () => {
+    expect(FISCAL_MODELS_FEATURE_ID).toBe('fiscal-models');
   });
 
   it('renders WindowAccessGuard instead of FiscalModelsPage when the tier is "none"', () => {
@@ -38,10 +38,10 @@ describe('FiscalModelsRoute (ETP-5546)', () => {
 
     render(<FiscalModelsRoute token="tok" apiBaseUrl="/api" />);
 
-    expect(useWindowAccess).toHaveBeenCalledWith(FISCAL_MODELS_WINDOW_ID);
+    expect(useWindowAccess).toHaveBeenCalledWith(FISCAL_MODELS_FEATURE_ID);
     expect(screen.getByTestId('window-access-guard')).toHaveAttribute(
       'data-window-id',
-      FISCAL_MODELS_WINDOW_ID,
+      FISCAL_MODELS_FEATURE_ID,
     );
     expect(screen.queryByTestId('fiscal-models-page')).not.toBeInTheDocument();
   });

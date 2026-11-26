@@ -521,15 +521,15 @@ describe('ReportViewerPage — finance window access gate (ETP-5116)', () => {
     mockFinanceWindowAccessTier = 'full';
   });
 
-  it('renders the WindowAccessGuard (windowId D647D118F5014D00AF47A636B2CD0DD3) instead of the report list when category=finance and the access tier is none', async () => {
+  it('renders the WindowAccessGuard (windowId financial-reports) instead of the report list when category=finance and the access tier is none', async () => {
     mockSearchParams = new URLSearchParams({ category: 'finance' });
     mockFinanceWindowAccessTier = 'none';
     render(<ReportViewerPage />);
 
-    expect(useWindowAccess).toHaveBeenCalledWith('D647D118F5014D00AF47A636B2CD0DD3');
+    expect(useWindowAccess).toHaveBeenCalledWith('financial-reports');
     expect(screen.getByTestId('window-access-guard')).toHaveAttribute(
       'data-window-id',
-      'D647D118F5014D00AF47A636B2CD0DD3',
+      'financial-reports',
     );
   });
 
@@ -577,18 +577,18 @@ describe('ReportViewerPage — finance window access gate (ETP-5116)', () => {
 
   // Review follow-up (ETP-5116): the gate generalizes to every category with a
   // real permission-anchor window, not just finance — "Informes de inventario"
-  // now has a windowId in menu.json (6346B88619F948F9A42224BDB0B239FA) too, and
+  // now has a windowId in menu.json (inventory-stock-report) too, and
   // the frontend gate must cover it the same way, or the page stays reachable
   // by URL despite the backend enforcing it.
-  it('renders the WindowAccessGuard (windowId 6346B88619F948F9A42224BDB0B239FA) instead of the report list when category=inventory and the access tier is none', async () => {
+  it('renders the WindowAccessGuard (windowId inventory-stock-report) instead of the report list when category=inventory and the access tier is none', async () => {
     mockSearchParams = new URLSearchParams({ category: 'inventory' });
     mockFinanceWindowAccessTier = 'none';
     render(<ReportViewerPage />);
 
-    expect(useWindowAccess).toHaveBeenCalledWith('6346B88619F948F9A42224BDB0B239FA');
+    expect(useWindowAccess).toHaveBeenCalledWith('inventory-stock-report');
     expect(screen.getByTestId('window-access-guard')).toHaveAttribute(
       'data-window-id',
-      '6346B88619F948F9A42224BDB0B239FA',
+      'inventory-stock-report',
     );
   });
 
@@ -655,7 +655,7 @@ describe('catalogCategoryOf', () => {
 });
 
 describe('ReportViewerPage — treasury category (Tesorería › Informes)', () => {
-  const FINANCIAL_REPORTS_WINDOW = 'D647D118F5014D00AF47A636B2CD0DD3';
+  const FINANCIAL_REPORTS_WINDOW = 'financial-reports';
   const agingReport = (id, en, es) => ({
     id, title: { en_US: en, es_ES: es }, type: 'listing', category: 'treasury', outputs: ['pdf'], parameters: [],
   });

@@ -5302,8 +5302,10 @@ hid the "Modelos Fiscales" menu entry for a role without the grant, but:
 **Fixed on both sides, reusing existing utilities — no new access-control mechanism:**
 
 - **Frontend** — `tools/app-shell/src/windows/custom/fiscal-models/index.jsx` now wraps
-  `FiscalModelsPage` behind `useWindowAccess(FISCAL_MODELS_WINDOW_ID)` /
-  `WindowAccessGuard` (`FISCAL_MODELS_WINDOW_ID` = the same Tax Report window id above), the
+  `FiscalModelsPage` behind `useWindowAccess(FISCAL_MODELS_FEATURE_ID)` /
+  `WindowAccessGuard` (`FISCAL_MODELS_FEATURE_ID` = `'fiscal-models'`, the GO feature of ETP-4802: the
+  role's GO Access row, or the Tax Report grant above while it has none, published by the backend as
+  `windowAccess['fiscal-models']`), the
   identical pattern already used by `sales-invoice/index.jsx` and `not-posted-documents`. A
   `'none'` tier renders the access-denied screen instead of `FiscalModelsPage`; `'read-only'` and
   `'full'` both render the page (this window is window-gated, not write-gated, on the frontend).

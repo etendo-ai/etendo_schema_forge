@@ -127,6 +127,14 @@ export function hasAccessibleReportInGroup(groupName, reportAccess) {
  * convention as the `capability` axis: an item with `accessWindowId` is hidden
  * unless `windowAccess[item.accessWindowId]` is a defined access tier.
  *
+ * ETP-4802: an entry gated by a GO feature (the six features with no classic window/process of
+ * their own: Smart Scan, Financial Reports, Inventory Stock, ...) declares
+ * `"accessFeature": "<feature id>"` instead of the proxy/anchor window id. It is the same check on
+ * the same map: `SFWindowAccessMap` publishes each feature id as a `windowAccess` key (tier
+ * `full`/`read-only`, absent = no access) resolved by the backend's `GoFeatureAccess`, so the sidebar
+ * answers exactly like the API gates and the GO Access subtab of the Role window. A feature id never
+ * collides with an AD_Window_ID. `accessWindowId` stays for anchors that are real windows.
+ *
  * Admin/client-admin is exempt from this axis (ETP-5240 follow-up).
  * `SFWindowAccessMap` now includes windows with active grants alongside active
  * spec windows, so permission anchors are included in the admin map. Keeping
@@ -215,8 +223,9 @@ export function filterMenuGroupsByAccess(groups, allowedIds, capabilities = null
           if (item.requiresGroupReport && !capabilities?.isAdminOrClientAdmin && !groupHasAccessibleReport) {
             return false;
           }
-          if (item.accessWindowId && !capabilities?.isAdminOrClientAdmin) {
-            const hasWindowAccess = windowAccess && windowAccess[item.accessWindowId] !== undefined;
+          const accessKey = item.accessFeature || item.accessWindowId;
+          if (accessKey && !capabilities?.isAdminOrClientAdmin) {
+            const hasWindowAccess = windowAccess && windowAccess[accessKey] !== undefined;
             if (!hasWindowAccess && !groupHasAccessibleReport) return false;
           }
           if (!allowedIds) return true;

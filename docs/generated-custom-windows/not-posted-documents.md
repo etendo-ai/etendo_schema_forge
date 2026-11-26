@@ -398,9 +398,11 @@ Props: `{ token, apiBaseUrl }` — `apiBaseUrl` is already spec-scoped.
 ### Access gate (ETP-5485)
 
 The page has no `AD_Window`; its only access anchor is the "Not Posted Documents" OBUIAPP
-process `D6AB95CE52D34E1599590526115E26C6` (the same id `menu.json`'s `obuiappProcessId`, the
-backend's `NotPostedDocumentsHandler.NOT_POSTED_DOCUMENTS_PROCESS_ID` and the role matrices'
-proxy row use). So the generic `WindowAccessGuard` — which only reads `windowAccess[windowId]`
+process `D6AB95CE52D34E1599590526115E26C6` (the id `menu.json`'s `obuiappProcessId` and the role
+matrices' proxy row use as the menu identity). Since ETP-4802 the access decision is the GO feature
+`not-posted-documents` (the role's GO Access row, or that process grant while it has none), which the
+backend's `NotPostedDocumentsHandler` and the sidebar (`SFListMenu`) resolve through
+`GoFeatureAccess` and the route guard reads as `windowAccess['not-posted-documents']`. So the generic `WindowAccessGuard` — which only reads `windowAccess[windowId]`
 — never applied, and the page had no gate of its own: a role without the grant (e.g.
 Purchasing-only) did not see the sidebar entry, but opening `/not-posted-documents` directly
 rendered the filters, "0 registros" and the backend's raw English "Forbidden".

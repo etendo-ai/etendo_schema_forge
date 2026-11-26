@@ -60,19 +60,19 @@ const exceptions = {
   // cache omits this namespace; its "Not Posted Documents" row has null IDs.
   'not-posted-documents': { obuiappProcessId: 'D6AB95CE52D34E1599590526115E26C6' },
   // Independent content gates: ReportViewerPage.jsx and SmartScanPage.jsx.
-  'report-viewer-finance': { accessWindowId: 'D647D118F5014D00AF47A636B2CD0DD3', path: 'report-viewer?category=finance' },
-  'report-viewer-inventory': { accessWindowId: '6346B88619F948F9A42224BDB0B239FA', path: 'report-viewer?category=inventory' },
+  'report-viewer-finance': { accessFeature: 'financial-reports', path: 'report-viewer?category=finance' },
+  'report-viewer-inventory': { accessFeature: 'inventory-stock-report', path: 'report-viewer?category=inventory' },
   // ETP-6389 — shares the Financial Reports anchor, but `requiresGroupReport` makes a grant on one
   // of its group's reports (`reportIds`) the condition that reveals it; the anchor alone does not.
   'report-viewer-treasury': {
-    accessWindowId: 'D647D118F5014D00AF47A636B2CD0DD3',
+    accessFeature: 'financial-reports',
     path: 'report-viewer?category=treasury',
     requiresGroupReport: true,
     reportIds: ['aging-receivable', 'aging-payable'],
   },
   // ETP-6380 — same shape as Treasury: revealed by a grant on the Tax Report, not by the anchor.
   'report-viewer-taxes': {
-    accessWindowId: 'D647D118F5014D00AF47A636B2CD0DD3',
+    accessFeature: 'financial-reports',
     path: 'report-viewer?category=taxes',
     requiresGroupReport: true,
     reportIds: ['tax-report'],
@@ -125,6 +125,12 @@ export const navigationProfiles = [
   { label: 'all optional entries enabled', apps: ['quick-order', 'spike-hello-app'], marketplace: true, proof: true },
 ];
 
+// ETP-4802 — the key an entry is gated on in `windowAccess`: its GO feature id (`accessFeature`) or,
+// for an anchor that is a real window, `accessWindowId`.
+export function accessKeyOf(entry) {
+  return entry.accessFeature || entry.accessWindowId;
+}
+
 export function expectedNavigation({ apps = [], marketplace = false, proof = false } = {}) {
   return [...defaultNavigation, ...optionalNavigation.filter(entry =>
     (!entry.proof || proof) && (!entry.marketplace || marketplace) && (!entry.app || apps.includes(entry.app)))];
@@ -140,8 +146,8 @@ export function expectedNavigation({ apps = [], marketplace = false, proof = fal
 export function navigationPermissions(entries = defaultNavigation, tier = 'full') {
   return {
     allowedIds: collectAllowedIds(entries.map(({ windowId, processId, obuiappProcessId }) => ({ windowId, processId, obuiappProcessId }))),
-    windowAccess: Object.fromEntries(entries.filter(entry => entry.accessWindowId && !entry.requiresGroupReport)
-      .map(entry => [entry.accessWindowId, tier])),
+    windowAccess: Object.fromEntries(entries.filter(entry => accessKeyOf(entry) && !entry.requiresGroupReport)
+      .map(entry => [accessKeyOf(entry), tier])),
     capabilities: Object.fromEntries(entries.filter(entry => entry.capability).map(entry => [entry.capability, true])),
     reportAccess: Object.fromEntries(entries.flatMap(entry => entry.reportIds ?? []).map(id => [id, tier])),
   };
