@@ -13,7 +13,7 @@ import {
 } from '../observability/payload.js';
 import { createDatadogProvider } from '../observability/providers/datadog.js';
 import { createRumProvider } from '../rum.js';
-import { createMixpanelProvider } from '../observability/providers/mixpanel.js';
+import { FLAG_EVENTS, createMixpanelProvider } from '../observability/providers/mixpanel.js';
 
 // ETP-5466 — Mixpanel only emits from a production host.
 const PROD_HOST = 'app.etendo.software';
@@ -126,7 +126,9 @@ describe('every event in events.js reaches the providers whole (ETP-4578 H8)', (
   });
 
   for (const event of OBSERVABILITY_EVENT_LIST) {
-    it(`${event.name}: every declared property reaches Mixpanel and Datadog intact, with the three providers running`, async () => {
+    // ETP-6363: the feature-flag events go to Datadog only; Mixpanel drops them on purpose.
+    const mixpanelGetsIt = !FLAG_EVENTS.has(event.name);
+    it(`${event.name}: every declared property reaches ${mixpanelGetsIt ? 'Mixpanel and ' : ''}Datadog intact, with the three providers running`, async () => {
       const { seen, providers } = threeProviders();
       const observability = await facadeOver(providers);
       const samples = samplesFor(event.properties);
@@ -135,11 +137,15 @@ describe('every event in events.js reaches the providers whole (ETP-4578 H8)', (
       await observability.track(built.name, built.properties);
 
       const [sent] = seen.mixpanelTrack.filter(({ name }) => name === event.name);
-      assert.ok(sent, `${event.name} never reached Mixpanel`);
-      for (const [key, value] of Object.entries(samples)) {
-        assert.equal(sent.properties[key], value, `${event.name}.${key} did not arrive as sent (got ${JSON.stringify(sent.properties[key])})`);
+      if (mixpanelGetsIt) {
+        assert.ok(sent, `${event.name} never reached Mixpanel`);
+        for (const [key, value] of Object.entries(samples)) {
+          assert.equal(sent.properties[key], value, `${event.name}.${key} did not arrive as sent (got ${JSON.stringify(sent.properties[key])})`);
+        }
+        assert.equal(Object.values(sent.properties).includes(REDACTED), false, `${event.name} carries a [REDACTED] value`);
+      } else {
+        assert.equal(sent, undefined, `${event.name} reached Mixpanel`);
       }
-      assert.equal(Object.values(sent.properties).includes(REDACTED), false, `${event.name} carries a [REDACTED] value`);
 
       const [action] = seen.datadogActions.filter(({ name }) => name === event.name);
       assert.ok(action, `${event.name} never reached Datadog`);

@@ -23,11 +23,14 @@ import {
   MOVEMENTS_DEFAULT_SORT,
   MOVEMENTS_PAGE_SIZE,
   MOVEMENTS_TABLE_MIN_HEIGHT,
+  MOVEMENTS_TABLE_COMPACT_MIN_HEIGHT,
+  MOVEMENTS_TABLE_SCROLL_TOLERANCE_PX,
   buildAnyMovementQuery,
   buildMovementsQuery,
   buildTypeLabelOrder,
   extractMovementTotals,
   formatProcessTime,
+  movementDateTime,
   isMovementsSortKey,
   isStorableProduct,
   isUnfilteredMovements,
@@ -46,11 +49,13 @@ import {
 // Opt-in presets of the period filter: they map 1:1 to the side panel's 3M / 6M (12M is a default one).
 const MOVEMENTS_EXTRA_PRESETS = ['last3m', 'last6m'];
 
-// `min-w-[994px]` is the real width of the grid: the column minimums (150 + 220 + 140 + 100 + 150 + 130 = 890)
+// `min-w-[1014px]` is the real width of the grid: the column minimums (150 + 220 + 140 + 100 + 170 + 130 = 910)
 // + 5 gaps of `gap-x-4` (80) + the `px-3` of each row (24). It must stay equal to that sum: a smaller literal
 // lets the cells overflow the row box, so backgrounds and borders stop before the last column. Every row, the
 // sticky header and the period total use it, so they have the same width and align when the box scrolls sideways.
-const GRID = 'grid shrink-0 min-w-[994px] grid-cols-[150px_minmax(220px,1.6fr)_minmax(140px,1fr)_100px_150px_130px] items-center gap-x-4';
+// The cost column is 170, not 150: its sortable header (label 136 + arrow 12 + gap 2 = 150) overflowed a 150
+// column by a sub-pixel fraction and `truncate` showed an ellipsis.
+const GRID = 'grid shrink-0 min-w-[1014px] grid-cols-[150px_minmax(220px,1.6fr)_minmax(140px,1fr)_100px_170px_130px] items-center gap-x-4';
 const NEAR_BOTTOM_PX = 80;
 const SKELETON_ROWS = 6;
 
@@ -104,7 +109,7 @@ function MovementRow({ row, ui, currency }) {
   return (
     <div role="row" className={`${GRID} border-b border-border/50 px-3 py-2 text-sm`} data-testid="product-movements-row">
       <div role="cell" className="flex items-baseline gap-2 whitespace-nowrap">
-        <span className="font-medium tabular-nums">{formatCalendarDate(row.movementDate)}</span>
+        <span className="font-medium tabular-nums">{formatCalendarDate(movementDateTime(row))}</span>
         {time ? <span className="text-xs tabular-nums text-muted-foreground" data-testid="product-movements-time">{time}</span> : null}
       </div>
       <div role="cell" className="flex min-w-0 flex-nowrap items-center gap-2 whitespace-nowrap">
@@ -141,6 +146,10 @@ function totalColor(netQuantity) {
 // is deliberate headroom for font scaling. It is also the scroll padding the box keeps at its bottom, so
 // keyboard focus and scrollIntoView clear the sticky total that overlays the box's lower edge.
 const TOTAL_ROW_RESERVE_PX = 48;
+// Room kept below the table box so that box + Total end exactly at the bottom of the content column: the Total's
+// own height (41 px; its `-mb-4` cancels the 8 px `p-2` of the custom-tab wrapper and the 8 px `pb-2` of Product's
+// content column). Measured live: Total bottom == column bottom with no outer scroll above ~980 px of viewport.
+const TOTAL_ROW_BOTTOM_GAP_PX = 41;
 
 /**
  * Period total, OUTSIDE the table's scroll box and sticky at the bottom of the content column's scroller, so it
@@ -148,9 +157,10 @@ const TOTAL_ROW_RESERVE_PX = 48;
  * match (server side), under the Quantity column. `row` is what `resolveTotalRow` answers: hidden, or the
  * totals (null while loading, a skeleton).
  *
- * Alignment with the table, which scrolls on its own: the box keeps `scrollbar-gutter: stable` and this row
- * takes the same width as `scrollbarWidth` on its right, so both grids have the same width with or without
- * rows overflowing. The inner grid is as wide as the table's content (`gridWidth` = the box's `scrollWidth`,
+ * Alignment with the table, which scrolls on its own: the box has no reserved scrollbar gutter, and this row
+ * takes the live width of its vertical scrollbar (`scrollbarWidth`, 0 with overlay scrollbars or no overflow) on
+ * its right, so both grids have the same width with or without rows overflowing. The inner grid is as wide as
+ * the table's content (`gridWidth` = the box's `scrollWidth`,
  * NOT a literal: it also covers a window wider than the grid), so both have the same horizontal scroll
  * range; sideways, the table box drives this row's `scrollLeft` (this row is `overflow-hidden`).
  *
@@ -189,7 +199,7 @@ const MovementsTotalRow = forwardRef(function MovementsTotalRow({ ui, row, scrol
       ref={setRef}
       role="group"
       aria-label={ui('productMovementsTotalLabel')}
-      className="sticky -bottom-2 z-40 -ml-2 -mr-4 -mt-3 overflow-hidden border-t border-border bg-[var(--surface-subtle)]"
+      className="sticky -bottom-2 z-40 -ml-2 -mr-4 -mb-4 -mt-3 overflow-hidden border-t border-border bg-[var(--surface-subtle)]"
       style={{ paddingRight: scrollbarWidth }}
       data-testid="product-movements-total">
       <div className={`${GRID} px-3 py-2.5 text-sm`} style={gridWidth ? { minWidth: gridWidth } : undefined}>
@@ -440,6 +450,44 @@ function MovementsFilterBar({ ui, direction, onDirectionChange, dateRange, onDat
   );
 }
 
+/**
+ * The tab survives a change of record, so nothing of the previous product may outlive it: its warehouses and its
+ * warehouse filter (an option the new product may not have). The state is reset while rendering, so the effects of
+ * this same commit already see the clean filters; resetting it in an effect would let the first page of the new
+ * product go out with the warehouse of the old one.
+ */
+function useResetOnProductChange(productId, activeAndStorable, setters) {
+  const [stateProductId, setStateProductId] = useState(productId);
+  if (stateProductId !== productId) {
+    setStateProductId(productId);
+    setters.setWarehouseId(null);
+    setters.setWarehouses([]);
+    setters.setEverActive(activeAndStorable);
+    setters.setProbe(null);
+    setters.setTotals(null);
+    setters.setState({ rows: [], loading: true, loadingMore: false, error: null, hasMore: false });
+  }
+}
+
+/**
+ * Sizing of the table's scroll box. It is bounded by the room left in the content column (inline maxHeight wins
+ * over the class, which only stays as the pre-measure fallback), so the page itself never scrolls. `fill` also sets
+ * the height to that room, so the total row sits at the card bottom whether there are few rows or many. With the
+ * hook's measured floor (min of 200 px and the natural height of header + rows) a short table does not keep 340 px
+ * of empty box; before it is measured, and in the skeleton / error states, the floor stays 340. The scroll tolerance
+ * is off while more pages can load, so the scrollbar is never hidden then.
+ */
+function useMovementsScrollBox({ isActive, state }) {
+  const fitContent = !state.loading && !state.error;
+  const minHeight = fitContent ? MOVEMENTS_TABLE_COMPACT_MIN_HEIGHT : MOVEMENTS_TABLE_MIN_HEIGHT;
+  const scrollTolerance = state.hasMore ? 0 : MOVEMENTS_TABLE_SCROLL_TOLERANCE_PX;
+  const remaining = useRemainingHeight({
+    active: Boolean(isActive), minHeight, bottomGap: TOTAL_ROW_BOTTOM_GAP_PX, fill: true, fitContent, scrollTolerance,
+  });
+  const scrollBoxStyle = { minHeight: MOVEMENTS_TABLE_MIN_HEIGHT, ...remaining.style, scrollPaddingBottom: TOTAL_ROW_RESERVE_PX };
+  return { remaining, scrollBoxStyle };
+}
+
 export default function ProductMovementsTab({ data, apiBaseUrl, isActive, onVisibilityChange }) {
   const ui = useUI();
   const { locale } = useLocaleSwitch();
@@ -468,25 +516,11 @@ export default function ProductMovementsTab({ data, apiBaseUrl, isActive, onVisi
   // Period totals of the first page: { key, value }, `key` ties them to the product + filters they were
   // computed for (a sort does not change it), `value` is null when the backend sent none.
   const [totals, setTotals] = useState(null);
-  // The tab's own scroll box is bounded by the room left in the content column (inline maxHeight wins
-  // over the class, which only stays as the pre-measure fallback), so the page itself never scrolls.
-  const remaining = useRemainingHeight({ active: Boolean(isActive), minHeight: MOVEMENTS_TABLE_MIN_HEIGHT, bottomGap: 20 + TOTAL_ROW_RESERVE_PX });
-  const scrollBoxStyle = { ...remaining.style, minHeight: MOVEMENTS_TABLE_MIN_HEIGHT, scrollPaddingBottom: TOTAL_ROW_RESERVE_PX };
+  const { remaining, scrollBoxStyle } = useMovementsScrollBox({ isActive, state });
 
-  // The tab survives a change of record, so nothing of the previous product may outlive it: its
-  // warehouses and its warehouse filter (an option the new product may not have). The state is reset
-  // while rendering, so the effects of this same commit already see the clean filters; resetting it in an
-  // effect would let the first page of the new product go out with the warehouse of the old one.
-  const [stateProductId, setStateProductId] = useState(productId);
-  if (stateProductId !== productId) {
-    setStateProductId(productId);
-    setWarehouseId(null);
-    setWarehouses([]);
-    setEverActive(activeAndStorable);
-    setProbe(null);
-    setTotals(null);
-    setState({ rows: [], loading: true, loadingMore: false, error: null, hasMore: false });
-  }
+  useResetOnProductChange(productId, activeAndStorable, {
+    setWarehouseId, setWarehouses, setEverActive, setProbe, setTotals, setState,
+  });
 
   // Side effects of that change cannot run while rendering: the pages of the old product still in flight
   // are dropped by bumping the generation.
@@ -627,9 +661,10 @@ export default function ProductMovementsTab({ data, apiBaseUrl, isActive, onVisi
         // its static position to the content column's scrollable height (blank page after scrolling).
         // ETP-5889: the block that wraps this box bleeds to the card edges like the document lines of a standard
         // window (`-ml-2 -mr-4`: DetailView wraps a custom tab in `p-2` and Product's content column adds `pr-2`,
-        // index.jsx); the filter bar above keeps the 8px inset. `scrollbar-gutter: stable` keeps the grid width
-        // the same whether or not rows overflow, so the total row below can match it.
-        className="relative flex max-h-[calc(100vh-420px)] flex-col overflow-y-auto [scrollbar-gutter:stable]"
+        // index.jsx); the filter bar above keeps the 8px inset. There is no `scrollbar-gutter`: the total row below
+        // measures the live scrollbar width (`boxMetrics`) and reserves it, so it matches the grid either way, and
+        // without overflow the rows run to the box edge.
+        className="relative flex max-h-[calc(100vh-420px)] flex-col overflow-y-auto"
         onScroll={onScroll}
         data-testid="product-movements-scroll">
         <div role="row" className={`${GRID} sticky top-0 z-30 border-b border-border bg-card px-3 py-2 text-xs font-medium text-muted-foreground`}>

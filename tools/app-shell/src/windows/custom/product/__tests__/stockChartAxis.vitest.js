@@ -1,6 +1,6 @@
 /** @covers tools/app-shell/src/windows/custom/product/stockChartAxis.js */
 import { describe, it, expect } from 'vitest';
-import { shortMonthName, formatFullDate, buildXAxisLabels, buildTooltipModel } from '../stockChartAxis';
+import { shortMonthName, formatFullDate, buildXAxisLabels, buildTooltipModel, estimateTextWidth, yAxisPadding } from '../stockChartAxis';
 
 import { dayNumber } from '../stockSeries';
 
@@ -26,6 +26,20 @@ describe('formatFullDate', () => {
     expect(formatFullDate(day(2026, 10, 28), 'es_ES')).toBe('28 Oct 2026');
     expect(formatFullDate(day(2026, 1, 5), 'es_ES')).toBe('5 Ene 2026');
     expect(formatFullDate(day(2026, 1, 5), 'en_US')).toBe('5 Jan 2026');
+  });
+});
+
+describe('estimateTextWidth / yAxisPadding', () => {
+  it('estimates digits at 0.6 em and separators at 0.3 em', () => {
+    expect(estimateTextWidth('2.500', 10)).toBeCloseTo(27, 5);
+    expect(estimateTextWidth('0', 10)).toBeCloseTo(6, 5);
+    expect(estimateTextWidth('', 10)).toBe(0);
+  });
+  it('keeps the 28 px design column for short labels and grows for wide ones', () => {
+    expect(yAxisPadding(['0', '500', '1'], 10, 28)).toBe(28);
+    expect(yAxisPadding(['0', '2.500'], 10, 28)).toBe(33); // 27 + 5 gap + 1 slack
+    expect(yAxisPadding(['12.500'], 13, 60)).toBe(60);
+    expect(yAxisPadding([], 10, 28)).toBe(28);
   });
 });
 
@@ -96,3 +110,33 @@ describe('buildTooltipModel', () => {
     expect(m.total).toBeNull();
   });
 });
+
+describe('buildXAxisLabels with a measured plot (collision gap)', () => {
+  const opts = { plotWidth: 239, fontSize: 10 };
+
+  it('drops the partial first month when it would touch the next label, and puts the year on the new first label', () => {
+    const labels = buildXAxisLabels(range([2025, 11, 25], [2026, 11, 25]), 'es_ES', opts);
+    expect(labels.map(l => l.text)).toEqual(['Ene', 'Mar', 'May', 'Jul', 'Sep', 'Nov']);
+    expect(labels.map(l => l.year)).toEqual(['2026', null, null, null, null, null]);
+  });
+
+  it('keeps a first label that is clear of the next one', () => {
+    const labels = buildXAxisLabels(R3, 'es_ES', { plotWidth: 239, fontSize: 10 });
+    expect(labels.map(l => l.text)).toEqual(['Ago', 'Sep', 'Oct', 'Nov']);
+    expect(labels[0].anchor).toBe('start');
+  });
+
+  it('skips the later label when the first one is a month boundary', () => {
+    // A very narrow plot: every label collides, the first (a 1st of the month) wins and later ones are skipped.
+    const labels = buildXAxisLabels(range([2026, 1, 1], [2026, 6, 30]), 'es_ES', { plotWidth: 60, fontSize: 10 });
+    expect(labels[0].text).toBe('Ene');
+    expect(labels.length).toBeLessThan(6);
+    const x = (l) => ((l.day - range([2026, 1, 1], [2026, 6, 30]).startDay) / (range([2026, 1, 1], [2026, 6, 30]).endDay - range([2026, 1, 1], [2026, 6, 30]).startDay)) * 60;
+    for (let i = 1; i < labels.length; i += 1) expect(x(labels[i]) - x(labels[i - 1])).toBeGreaterThan(10);
+  });
+
+  it('without a plot width nothing is dropped (previous behaviour)', () => {
+    expect(buildXAxisLabels(R12, 'es_ES').map(l => l.text)).toEqual(['Nov', 'Ene', 'Mar', 'May', 'Jul', 'Sep', 'Nov']);
+  });
+});
+

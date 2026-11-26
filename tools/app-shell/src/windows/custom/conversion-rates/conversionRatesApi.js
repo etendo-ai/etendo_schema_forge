@@ -20,8 +20,9 @@
  *       warning}; with `confirm: true` it saves and answers the forward row.
  * Generic POST/PUT/PATCH are closed (405 ETGO_ConvRateUseActions).
  *     currentRates → [{currencyId, isoCode, name, symbol, origin, rate, validFrom, lastDownloadAt}]
- *     serverClock → {now: "yyyy-MM-ddTHH:mm:00"} (the server's wall clock: default and upper bound
- *       of "Válido desde", which can never be later than now)
+ *     serverClock → {now: "yyyy-MM-ddTHH:mm:00", timeZone: "UTC"} (the server's wall clock:
+ *       default and upper bound of "Válido desde", which can never be later than now; and the
+ *       server's zone id, the zone of every datetime above — the page converts with it)
  *
  * The writes go through the same actions the MCP uses, so both channels run one process: the
  * server creates the inverse rate, closes the previous open range at `start − 1 minute`, refuses
@@ -77,15 +78,25 @@ export async function fetchCurrentRates(apiFetch, signal) {
   return Array.isArray(data) ? data : [];
 }
 
-/** The server's current minute, `yyyy-MM-ddTHH:mm:00` wall clock, or null when unavailable. */
+/**
+ * The server clock: `{now, timeZone}` — its current minute (`yyyy-MM-ddTHH:mm:00` wall clock, null
+ * when absent) and its zone id (null when absent, e.g. an older backend) — or null when the answer
+ * carries neither.
+ */
 export async function fetchServerClock(apiFetch, signal) {
   const data = await postAction(apiFetch, 'serverClock', {}, signal);
-  return typeof data?.now === 'string' ? data.now : null;
+  const now = typeof data?.now === 'string' ? data.now : null;
+  const timeZone = typeof data?.timeZone === 'string' && data.timeZone ? data.timeZone : null;
+  return now || timeZone ? { now, timeZone } : null;
 }
 
-/** Active currencies that can still receive a FIRST manual rate (no rates yet, never USD/GBP). */
-export async function fetchManualCurrencyOptions(apiFetch, signal) {
-  const data = await postAction(apiFetch, 'manualCurrencyOptions', { withoutRates: true }, signal);
+/**
+ * Active currencies, with their server (translated) name and symbol, that can receive a manual
+ * rate (never the organization currency nor the downloaded USD/GBP). By default only those that
+ * can still receive a FIRST manual rate (no rates yet); `withoutRates: false` lists them all.
+ */
+export async function fetchManualCurrencyOptions(apiFetch, signal, { withoutRates = true } = {}) {
+  const data = await postAction(apiFetch, 'manualCurrencyOptions', { withoutRates }, signal);
   return Array.isArray(data) ? data : [];
 }
 

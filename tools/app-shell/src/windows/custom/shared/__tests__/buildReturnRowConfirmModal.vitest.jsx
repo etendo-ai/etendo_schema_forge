@@ -118,6 +118,39 @@ describe('buildReturnRowConfirmModal', () => {
     expect(confirmInOutProps.defaultCreateInvoice).toBe(false);
   });
 
+  /**
+   * ETP-6179 CP-12 — the row-hover Confirmar confirmed the customer return first and created the
+   * rectificativa in a second request, so a refused invoice left it confirmed without one. The
+   * customer return's createReturnInvoice accepts a `validateOnly` dry run; the vendor return's
+   * backend does not read the key (it would refuse the draft), so it must stay off there. Both
+   * assertions run against the REAL window configs, not the transcribed ones above.
+   */
+  describe('validateInvoiceFirst — dry run before confirming (ETP-6179 CP-12)', () => {
+    const renderRow = (Modal) => render(
+      <Modal base="/sws/neo" headers={{}} recordId="r-1" data={{ invoiceStatus: 0 }}
+        onConfirmed={vi.fn()} onClose={vi.fn()} />,
+    );
+
+    it('is on for the customer return (return-material-receipt)', async () => {
+      const { default: Modal } = await import(
+        '../../return-material-receipt/ReturnMaterialReceiptRowConfirmModal.jsx');
+      renderRow(Modal);
+      expect(confirmInOutProps.validateInvoiceFirst).toBe(true);
+    });
+
+    it('is off for the vendor return (return-to-vendor-shipment)', async () => {
+      const { default: Modal } = await import(
+        '../../return-to-vendor-shipment/ReturnToVendorShipmentRowConfirmModal.jsx');
+      renderRow(Modal);
+      expect(confirmInOutProps.validateInvoiceFirst).toBe(false);
+    });
+
+    it('is off when the config does not set the flag', () => {
+      renderRow(buildReturnRowConfirmModal(CONFIG));
+      expect(confirmInOutProps.validateInvoiceFirst).toBe(false);
+    });
+  });
+
   it('forwards onConfirmed and onClose through unchanged', () => {
     const Modal = buildReturnRowConfirmModal(CONFIG);
     const onConfirmed = vi.fn();

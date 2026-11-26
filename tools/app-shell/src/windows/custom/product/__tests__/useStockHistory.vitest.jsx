@@ -25,10 +25,10 @@ describe('buildHistoryPageQuery', () => {
     const q = buildHistoryPageQuery('P1', new Date(2025, 10, 3), 500);
     const params = new URL(q, 'http://x').searchParams;
     expect(params.get('parentId')).toBe('P1');
-    expect(params.get('_sortBy')).toMatch(/^-movementDate/);
+    expect(params.get('_sortBy')).toMatch(/^-transactionProcessDate/);
     expect(params.get('_startRow')).toBe('500');
     expect(params.get('_endRow')).toBe('999');
-    expect(JSON.parse(params.get('criteria'))).toEqual([{ fieldName: 'movementDate', operator: 'greaterOrEqual', value: '2025-11-03' }]);
+    expect(JSON.parse(params.get('criteria'))).toEqual([{ fieldName: 'transactionProcessDate', operator: 'greaterOrEqual', value: '2025-11-03' }]);
   });
 
   it('the window start is today minus 12 months', () => {

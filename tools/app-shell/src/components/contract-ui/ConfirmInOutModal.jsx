@@ -67,11 +67,19 @@ function buildInvoiceBody({ pickerActive, priceListId, rectifyActive, selectedId
  * toward the function that encloses it, with a nesting surcharge on each one.
  */
 async function runConfirm({ apiFetch, actionBase, skipDocumentAction, invoiceRequested,
-  invoiceAction, invoiceBody }) {
+  invoiceAction, invoiceBody, validateInvoiceFirst }) {
+  const invoicing = invoiceRequested && !!invoiceAction;
+  // ETP-6179 CP-12: completing cannot be undone, so when the invoice action supports a dry run
+  // its refusals (a customer without payment terms, an unpriced product…) are asked first and
+  // nothing is confirmed if it would be refused.
+  if (!skipDocumentAction && invoicing && validateInvoiceFirst) {
+    await postAction(apiFetch, `${actionBase}/${invoiceAction}`,
+      { ...invoiceBody, validateOnly: true });
+  }
   if (!skipDocumentAction) {
     await postAction(apiFetch, `${actionBase}/documentAction`, { docAction: 'CO' });
   }
-  if (!invoiceRequested || !invoiceAction) {
+  if (!invoicing) {
     return null;
   }
   const invRes = await postAction(apiFetch, `${actionBase}/${invoiceAction}`, invoiceBody);
@@ -99,7 +107,10 @@ async function runConfirm({ apiFetch, actionBase, skipDocumentAction, invoiceReq
  * announces the refusal to the quota banner). Any other error is built exactly as before.
  */
 function buildBackendError(body, status) {
-  const err = new Error(body?.response?.message || body?.message || `Error (${status})`);
+  // ETP-6179 CP-12: a handler refusal (`NeoResponse.error`) carries its sentence in
+  // `error.message`; without it the modal showed only "Error (400)".
+  const err = new Error(body?.response?.message || body?.message || body?.error?.message
+    || `Error (${status})`);
   err.status = status;
   err.messageKeys = extractBackendMessageKeys(body);
   Object.assign(err, quotaRefusalFields(body));
@@ -154,6 +165,9 @@ export default function ConfirmInOutModal({
   rectifiableInvoicesUrl,
   token,
   periodDate,
+  // ETP-6179 CP-12: the invoice action accepts `validateOnly` (a dry run that works on the draft);
+  // it is asked before completing so a refused invoice never leaves the document confirmed.
+  validateInvoiceFirst = false,
   onConfirmed,
   onClose,
 }) {
@@ -215,6 +229,7 @@ export default function ConfirmInOutModal({
         invoiceBody: withSifFields(buildInvoiceBody({
           pickerActive, priceListId, rectifyActive, selectedIds: rectify.selectedIds,
         }), sif),
+        validateInvoiceFirst,
       });
       onConfirmed({ invoice });
     } catch (err) {
