@@ -42,7 +42,6 @@ vi.mock('@/lib/flags', () => ({
   PUBLIC_API_KEYS: 'public-api-keys',
   DOC_TEMPLATE_SELECTION: 'doc-template-selection',
   PROOF_OF_CONCEPT_MENU: 'proof-of-concept-menu',
-  UNIFIED_CALENDAR_POC: 'unified-calendar-poc',
 }));
 vi.mock('@/auth/AuthContext.jsx', () => ({ useAuth: () => mockUseAuth() }));
 
