@@ -9,10 +9,12 @@ vi.mock('@/i18n', () => ({ useUI: () => (key) => key }));
 // 'full' so this suite keeps exercising the window as before (mirrors financial-account's own
 // ETP-4658 test convention). Mutable so a dedicated test can flip it to 'none'.
 let currentWindowAccessTier = 'full';
+const useWindowAccessSpy = vi.fn();
+let currentDebugMode = false;
 vi.mock('@/auth/AuthContext.jsx', () => ({
   useAuth: () => ({ selectedOrg: { id: 'org-1', name: 'TestOrg' } }),
-  useWindowAccess: () => currentWindowAccessTier,
-  WindowAccessGuard: () => <div data-testid="window-access-guard" />,
+  useWindowAccess: (id) => { useWindowAccessSpy(id); return currentWindowAccessTier; },
+  WindowAccessGuard: ({ windowId }) => <div data-testid="window-access-guard" data-window-id={windowId} />,
 }));
 vi.mock('@/auth/useApiFetch.js', () => ({ useApiFetch: () => stableApiFetch }));
 vi.mock('@/components/related-documents/helpers.js', async (importOriginal) => ({ ...(await importOriginal()), neoBase: (u) => u }));
@@ -49,7 +51,7 @@ vi.mock('../useFiscalMonitor.js', () => ({
   TBAI_ENTITY: 'i',
 }));
 vi.mock('../useDebugMode.js', () => ({
-  useDebugMode: () => false,
+  useDebugMode: () => currentDebugMode,
 }));
 vi.mock('../fiscalMonitor.utils.js', () => ({
   computeKpis: () => ({}),
@@ -80,7 +82,9 @@ vi.mock('../VerifactuMonitorSection.jsx', () => ({
   default: () => <div data-testid="verifactu-section" />,
 }));
 vi.mock('../FiscalMonitorDebugPanel.jsx', () => ({
-  default: () => <div data-testid="debug-panel" />,
+  default: ({ onProfileChange }) => (
+    <button data-testid="debug-panel" onClick={() => onProfileChange('tbai')} />
+  ),
 }));
 // The stub must exercise onEdit: an inert stub is exactly why ETP-5027
 // (frozen page on "Edit") went unnoticed.
@@ -117,6 +121,33 @@ const baseProps = {
 describe('FiscalMonitorPage', () => {
   beforeEach(() => {
     currentWindowAccessTier = 'full';
+    currentDebugMode = false;
+    useWindowAccessSpy.mockClear();
+  });
+
+  // ETP-4802 — the guard reads the GO feature, so a fiscal-monitor GO Access row takes effect.
+  it('checks the fiscal-monitor GO feature, blocks on none and shows the page on read-only', async () => {
+    currentWindowAccessTier = 'none';
+    const { unmount } = render(<FiscalMonitorPage {...baseProps} />);
+    expect(useWindowAccessSpy).toHaveBeenCalledWith('fiscal-monitor');
+    expect(screen.getByTestId('window-access-guard').getAttribute('data-window-id'))
+      .toBe('fiscal-monitor');
+    unmount();
+
+    currentWindowAccessTier = 'read-only';
+    render(<FiscalMonitorPage {...baseProps} />);
+    await waitFor(() => expect(screen.getByTestId('sii-section')).toBeInTheDocument());
+    expect(screen.queryByTestId('window-access-guard')).toBeNull();
+  });
+
+  it('keeps the page when the debug profile override is active even with tier none', async () => {
+    currentDebugMode = true;
+    const { rerender } = render(<FiscalMonitorPage {...baseProps} />);
+    await waitFor(() => expect(screen.getByTestId('sii-section')).toBeInTheDocument());
+    await act(async () => { screen.getByTestId('debug-panel').click(); });
+    currentWindowAccessTier = 'none';
+    rerender(<FiscalMonitorPage {...baseProps} />);
+    expect(screen.queryByTestId('window-access-guard')).toBeNull();
   });
 
   // ETP-5395 Fix 3 follow-up — before this fix, a 'none' tier still fired the fetch (via

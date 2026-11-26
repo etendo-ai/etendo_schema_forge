@@ -411,8 +411,8 @@ Two layers now:
 
 - **Route guard.** The registry entry (`windows/custom/not-posted-documents/index.jsx`) wraps the
   page in `WindowAccessGuard` and reads access with `useWindowAccess` under the GO feature id
-  `not-posted-documents` (ETP-4802), the same key the backend publishes in the `windowAccess` map
-  and the sidebar filters by (`accessFeature`), so page and sidebar always agree. A role without
+  `not-posted-documents` (ETP-4802), the same key the backend publishes in the `windowAccess` map.
+  The sidebar entry keeps `obuiappProcessId`, which `SFListMenu` resolves through `GoFeatureAccess`, so page and sidebar agree. A role without
   the feature gets the shared access-denied screen (`data-testid="window-access-denied"`, i18n
   `windowAccessDenied`) and the page never mounts or fires a request. While access is still
   loading the guard also shows the access-denied screen, and it **no longer fails open**: when the

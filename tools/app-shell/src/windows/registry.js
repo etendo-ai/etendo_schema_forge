@@ -97,6 +97,21 @@ export function hasAccessibleReportInGroup(groupName, reportAccess) {
 }
 
 /**
+ * Decides an item through its access anchor (`accessFeature` / `accessWindowId`): `false` denies,
+ * `true` allows without consulting the menu tree, `undefined` leaves the decision to the other
+ * axes. A GO feature's own grant decides the entry because its legacy window may not be in the
+ * role's menu tree (a role granted only through a GO Access row, e.g. fiscal-monitor).
+ */
+function anchorDecision(item, capabilities, windowAccess, groupHasAccessibleReport) {
+  const accessKey = item.accessFeature || item.accessWindowId;
+  const admin = capabilities?.isAdminOrClientAdmin;
+  const granted = !!accessKey && windowAccess?.[accessKey] !== undefined;
+  if (accessKey && !admin && !granted && !groupHasAccessibleReport) return false;
+  if (item.accessFeature && (admin || granted)) return true;
+  return undefined;
+}
+
+/**
  * Filters an already-built menuGroups array (see buildMenuGroups) down to what
  * the current role can reach, per SFListMenu (com.etendoerp.go docs/neo-headless.md
  * §8). Items carrying no windowId/processId/obuiappProcessId (dashboard, custom
@@ -223,17 +238,8 @@ export function filterMenuGroupsByAccess(groups, allowedIds, capabilities = null
           if (item.requiresGroupReport && !capabilities?.isAdminOrClientAdmin && !groupHasAccessibleReport) {
             return false;
           }
-          const accessKey = item.accessFeature || item.accessWindowId;
-          if (accessKey && !capabilities?.isAdminOrClientAdmin) {
-            const hasWindowAccess = windowAccess && windowAccess[accessKey] !== undefined;
-            if (!hasWindowAccess && !groupHasAccessibleReport) return false;
-          }
-          // a GO feature's own grant decides the entry: its legacy window may not be in the role's
-          // menu tree (a role granted only through a GO Access row, e.g. fiscal-monitor, whose
-          // windowId is the real SII Monitor window)
-          if (item.accessFeature && (capabilities?.isAdminOrClientAdmin || windowAccess?.[item.accessFeature] !== undefined)) {
-            return true;
-          }
+          const anchor = anchorDecision(item, capabilities, windowAccess, groupHasAccessibleReport);
+          if (anchor !== undefined) return anchor;
           if (!allowedIds) return true;
           const ids = itemIds(item);
           return ids.length === 0 || ids.some(id => allowedIds.has(String(id)));
