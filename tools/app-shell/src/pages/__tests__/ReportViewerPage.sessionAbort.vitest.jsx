@@ -1,3 +1,6 @@
+// @covers tools/app-shell/src/pages/ReportViewerPage.jsx
+// New file (not an extension of ReportViewerPage.vitest.jsx): it drives the REAL apiFetch with only
+// `fetch` stubbed, whereas the sibling suites mock apiFetch itself.
 // ETP-5645 — the render catch blocks (main viewer AND drill-down) must not surface the session
 // AbortError (apiFetch abandoning a request of a session that is gone) and must never print an
 // untranslated `err.message`: unexpected errors show the translated reportErrorGeneric text.
@@ -104,7 +107,8 @@ describe('ReportViewerPage — render catch blocks (ETP-5645)', () => {
     await waitFor(() => expect(screen.getByText('Free Text')).toBeInTheDocument());
     await user.click(screen.getByText('runReport'));
     await waitFor(() => expect(globalThis.fetch.mock.calls.some(([u]) => String(u).includes('/render'))).toBe(true));
-    await waitFor(() => expect(screen.getByText('runReport')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('runReport').closest('button')).toBeEnabled());
+    expect(screen.queryByText('running')).not.toBeInTheDocument();
     expect(screen.queryByText(/superseded/)).not.toBeInTheDocument();
     expect(screen.queryByText(GENERIC)).not.toBeInTheDocument();
   });

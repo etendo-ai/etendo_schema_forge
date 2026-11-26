@@ -1135,7 +1135,12 @@ async function renderErrorMessage(res, ui) {
 // A failure whose message the render endpoint produced and renderErrorMessage already resolved
 // (translated code or the server's own text). Anything else reaching the catch below is an
 // unexpected error whose `message` is untranslated English.
-class RenderFailure extends Error {}
+class RenderFailure extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'RenderFailure';
+  }
+}
 
 // ETP-5645 — null means "show nothing": the session AbortError is apiFetch abandoning a
 // request that belongs to a session that is gone (logout, other user/client), not a failed render.
