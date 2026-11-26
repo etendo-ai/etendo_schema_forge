@@ -52,7 +52,15 @@ function isCreditNote(invoice) {
  *   - sales invoice, completed: managed by GenericPreviewModal (cached as a marked Attachment)
  *   - purchase invoice:         managed by GenericPreviewModal (drop zone → persisted)
  */
-function InvoiceActionButtons({ triggerEdit, onEmail, canSendToSif, sifLabelKey = 'sendToSifLabelSii', onOpenSif, canAddPayment, addPaymentBlockedByDraft, onAddPayment, isSalesInvoice, onDownloadPdf, hasPdf, readOnly = false }) {
+// The tooltip of a disabled add-payment action. The remittance reason wins: deleting a draft would
+// not unblock an invoice whose outstanding is in a confirmed remittance (ETP-6247).
+function addPaymentBlockedTitle({ addPaymentBlockedByRemittance, addPaymentBlockedByDraft, ui }) {
+  if (addPaymentBlockedByRemittance) return ui('cpAddPaymentBlockedByRemittance');
+  if (addPaymentBlockedByDraft) return ui('cpAddPaymentBlockedByDraft');
+  return undefined;
+}
+
+function InvoiceActionButtons({ triggerEdit, onEmail, canSendToSif, sifLabelKey = 'sendToSifLabelSii', onOpenSif, canAddPayment, addPaymentBlockedByDraft, addPaymentBlockedByRemittance = false, onAddPayment, isSalesInvoice, onDownloadPdf, hasPdf, readOnly = false }) {
   const ui = useUI();
   return (
     <>
@@ -84,7 +92,7 @@ function InvoiceActionButtons({ triggerEdit, onEmail, canSendToSif, sifLabelKey 
         className="gap-1 px-2 py-1 h-8 rounded-lg text-sm font-medium bg-card border-border shadow-sm text-foreground disabled:opacity-40 disabled:cursor-not-allowed [&_svg]:size-5"
         disabled={!canAddPayment}
         onClick={canAddPayment ? onAddPayment : undefined}
-        title={addPaymentBlockedByDraft ? ui('cpAddPaymentBlockedByDraft') : undefined}
+        title={addPaymentBlockedTitle({ addPaymentBlockedByRemittance, addPaymentBlockedByDraft, ui })}
         data-testid="Button__cf88e6">
         <WalletIcon className="text-muted-foreground" data-testid="Wallet__cf88e6" />
         {ui(isSalesInvoice ? 'invoicePreviewAddCollection' : 'invoicePreviewAddPayment')}
@@ -116,7 +124,7 @@ function InvoiceActionButtons({ triggerEdit, onEmail, canSendToSif, sifLabelKey 
 
 // ── General tab content ───────────────────────────────────────────────────────
 
-function InvoiceGeneralTab({ invoice, relatedDocs, partnerName, badgeProps, statusLabel, installments, payments, loadingPayments, totalOutstanding, canAddPayment, addPaymentBlockedByDraft, isFullyPaid, isCreditNote: isNC, specName, apiBaseUrl, token, profile, territory, earliestSiiCutoverDate, earliestTbaiCutoverDate, earliestVerifactuCutoverDate, onAddPayment, onSend, orgCurrencyCode, exchangeRate, orgGrandTotal, ratePrecision, emailsRefreshSignal }) {
+function InvoiceGeneralTab({ invoice, relatedDocs, partnerName, badgeProps, statusLabel, installments, payments, loadingPayments, totalOutstanding, totalRemitted = 0, canAddPayment, addPaymentBlockedByDraft, addPaymentBlockedByRemittance = false, isFullyPaid, isCreditNote: isNC, specName, apiBaseUrl, token, profile, territory, earliestSiiCutoverDate, earliestTbaiCutoverDate, earliestVerifactuCutoverDate, onAddPayment, onSend, orgCurrencyCode, exchangeRate, orgGrandTotal, ratePrecision, emailsRefreshSignal }) {
   const ui = useUI();
   const fiscalTargets = getInvoiceFiscalTargets(specName, profile, territory);
   // ETP-5229 (corrected): the status VALUE below still reads directly off the
@@ -212,8 +220,10 @@ function InvoiceGeneralTab({ invoice, relatedDocs, partnerName, badgeProps, stat
         payments={payments}
         currencyCode={currencyCode}
         totalOutstanding={totalOutstanding}
+        totalRemitted={totalRemitted}
         canAddPayment={canAddPayment}
         addPaymentBlockedByDraft={addPaymentBlockedByDraft}
+        addPaymentBlockedByRemittance={addPaymentBlockedByRemittance}
         isFullyPaid={isFullyPaid}
         isCreditNote={isNC}
         loading={loadingPayments}
@@ -408,8 +418,10 @@ export default function InvoicePreview({ invoice, token, apiBaseUrl, windowName,
           payments={p.payments}
           loadingPayments={p.loadingPayments}
           totalOutstanding={p.totalOutstanding}
+          totalRemitted={p.totalRemitted}
           canAddPayment={canAddPayment}
           addPaymentBlockedByDraft={p.addPaymentBlockedByDraft}
+          addPaymentBlockedByRemittance={p.addPaymentBlockedByRemittance}
           isDraft={p.isDraft}
           isFullyPaid={p.isFullyPaid}
           isCreditNote={isCreditNote(p.displayInvoice)}
@@ -446,6 +458,7 @@ export default function InvoicePreview({ invoice, token, apiBaseUrl, windowName,
       onOpenSif={() => p.setShowSifModal(true)}
       canAddPayment={canAddPayment}
       addPaymentBlockedByDraft={p.addPaymentBlockedByDraft}
+      addPaymentBlockedByRemittance={p.addPaymentBlockedByRemittance}
       onAddPayment={() => p.setShowPaymentModal(true)}
       isSalesInvoice={p.isSalesInvoice}
       onDownloadPdf={isDownloadable ? handleDownloadPdf : undefined}
@@ -474,6 +487,7 @@ export default function InvoicePreview({ invoice, token, apiBaseUrl, windowName,
           invoiceId={p.displayInvoice?.id}
           invoiceData={p.displayInvoice}
           outstanding={p.freeToAllocate}
+          scheduleId={p.paymentScheduleId || undefined}
           apiBaseUrl={apiBaseUrl}
           onClose={() => p.setShowPaymentModal(false)}
           onSaved={async () => {

@@ -16,16 +16,22 @@
 // `const isCreditInstrument = grandTotal < 0`.
 
 import { isCompletedStatus } from '../../../lib/docStatus.js';
+import { invoiceRemittedAmount } from './invoiceRemittance.js';
 
 /** Amounts below this are treated as zero — guards against float dust in sums. */
 const EPSILON = 0.001;
 
 /**
- * @typedef {'draft'|'credit-available'|'credit-applied'|'transfer-error'|'transfer-in-progress'|'paid'|'partial'|'pending'} PaymentBadgeKind
- * @typedef {{ kind: PaymentBadgeKind, amount: number, isCredit: boolean }} PaymentBadge
+ * @typedef {'draft'|'credit-available'|'credit-applied'|'transfer-error'|'transfer-in-progress'|'remitted'|'partially-remitted'|'paid'|'partial'|'pending'} PaymentBadgeKind
+ * @typedef {{ kind: PaymentBadgeKind, amount: number, isCredit: boolean, remittedAmount?: number }} PaymentBadge
  *   `amount` is always non-negative and is the figure to display for that state:
  *   the remaining credit for `credit-available`, the amount still owed for
- *   `pending`/`partial`, the amount settled for `paid`, and 0 for the rest.
+ *   `pending`/`partial`, the amount settled for `paid`, the part still owed that is
+ *   FREE to register for `partially-remitted`, the amount the remittance will collect
+ *   for `remitted`, and 0 for the rest.
+ *
+ *   `remittedAmount` is set only on the two remittance kinds (ETP-6247): the part of
+ *   the outstanding that a confirmed remittance will collect.
  *
  *   `isCredit` reports whether the document IS a credit instrument (negative total),
  *   which is a property of the document itself — it stays true for a draft, where
@@ -89,6 +95,20 @@ export function resolveInvoicePaymentBadge(record) {
     return remaining < EPSILON
       ? { kind: 'credit-applied', amount: 0, isCredit: true }
       : { kind: 'credit-available', amount: remaining, isCredit: true };
+  }
+
+  // ETP-6247 — a due in a CONFIRMED remittance (payment REM_SENT, not collected yet). The
+  // outstanding is still the truth for every total, but the remitted part is no longer the user's to
+  // register: offering it as "Pendiente" invites a payment the remittance will collect a second
+  // time. Read from the record's `etgoRemittedAmt`; absent reads as 0, i.e. as before.
+  const remitted = invoiceRemittedAmount(record);
+  if (outstanding > EPSILON && remitted > EPSILON) {
+    if (remitted >= outstanding - EPSILON) {
+      return { kind: 'remitted', amount: outstanding, isCredit: false, remittedAmount: outstanding };
+    }
+    return {
+      kind: 'partially-remitted', amount: outstanding - remitted, isCredit: false, remittedAmount: remitted,
+    };
   }
 
   const paid = grandTotal - outstanding;
