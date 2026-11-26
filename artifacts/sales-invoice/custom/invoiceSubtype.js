@@ -33,3 +33,21 @@ export function getArSubtype(row) {
   }
   return 'FAC';
 }
+
+/**
+ * The document type a send of this sales invoice names in its email (the subject and the
+ * "Te enviamos tu {documentType} …" line): «Factura rectificativa» / "Credit Note" for a
+ * rectificative invoice ({@link getArSubtype}, the same rule as the list's type badge), the
+ * window's own label («Factura de Venta» / "Sales Invoice") otherwise (ETP-6209, QA pass 2).
+ *
+ * It mirrors the module catalog's `sales-invoice-send.documentType` and
+ * `sales-invoice-send.documentType.creditNote`, so an app send names the document as an MCP send
+ * does; `defaultCopyInSync.vitest.js` keeps the two in sync. Every sales-invoice send path calls it.
+ *
+ * @param {object|null|undefined} row the invoice record
+ * @param {{ tMenu: (key: string) => string, ui: (key: string) => string }} labels
+ * @returns {string}
+ */
+export function salesInvoiceSendDocumentType(row, { tMenu, ui }) {
+  return getArSubtype(row) === 'RECTIFICATIVA' ? ui('sendDocumentTypeCreditNote') : tMenu('Sales Invoice');
+}

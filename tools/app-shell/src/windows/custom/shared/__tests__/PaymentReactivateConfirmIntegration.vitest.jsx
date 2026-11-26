@@ -1,3 +1,6 @@
+// @covers tools/app-shell/src/components/contract-ui/DetailView.jsx
+// @covers artifacts/payment-in/custom/ReactivarConfirmModal.jsx
+// @covers artifacts/payment-out/custom/ReactivarConfirmModal.jsx
 /**
  * Integration regression test for ETP-4332: clicking "Reactivar" on a
  * deposited payment's FORM/DETAIL toolbar must show a confirmation modal
@@ -215,6 +218,15 @@ describe.each([
   it('renders the toolbar Reactivar button for a deposited (non-RPAP) payment', async () => {
     await renderDetail(Page, windowName);
     expect(screen.getByText('processReactivate')).toBeInTheDocument();
+  });
+
+  // ETP-6247 — a voided payment (e.g. undone by a remittance return) offers no action at all, as in
+  // Classic. Guards the generated displayLogicRaw coming from decisions.json, on the real page.
+  it('renders no Reactivar button for a voided (RPVOID) payment', async () => {
+    mockHook.selected = { id: '123', documentNo: 'PAY-001', status: 'RPVOID' };
+    mockHook.editing = { id: '123', documentNo: 'PAY-001', status: 'RPVOID' };
+    await renderDetail(Page, windowName);
+    expect(screen.queryByText('processReactivate')).toBeNull();
   });
 
   it('shows the confirmation modal on click WITHOUT calling handleProcess yet (regression guard)', async () => {

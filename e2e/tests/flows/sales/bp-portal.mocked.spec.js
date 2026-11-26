@@ -5,6 +5,12 @@
 // @covers tools/app-shell/src/pages/portal/PortalHomeView.jsx
 // @covers tools/app-shell/src/pages/portal/PortalDecisionActions.jsx
 // @covers tools/app-shell/src/pages/PortalDecisionPage.jsx
+// @covers tools/app-shell/src/lib/portal/portalLinkSession.js
+// @covers tools/app-shell/src/lib/portal/scrubPortalUrl.boot.js
+// @covers tools/app-shell/src/pages/portal/PortalListDesktop.jsx
+// @covers tools/app-shell/src/pages/portal/PortalDetailPanel.jsx
+// @covers tools/app-shell/src/pages/portal/PortalListMobile.jsx
+// @covers tools/app-shell/src/pages/portal/PortalShell.jsx
 import { test, expect } from '../../helpers/test.js';
 
 /**
@@ -14,21 +20,38 @@ import { test, expect } from '../../helpers/test.js';
  *    filters it by status group (a tab) and date, opens another document and downloads its PDF.
  * B. An expired link renews itself: exactly one POST /renew, then the "new link sent" message.
  * C. A pending quotation is rejected (with a reason) or accepted: the request only emails a
- *    confirmation; the email's landing (`/portal/decision/:token`) confirms it and opens the portal
- *    on the quotation, with no notice.
+ *    confirmation; the email's landing (`/portal/{clientId}/decision/{token}`) confirms it and opens
+ *    the portal on the quotation, with no notice.
  * D. The landing's confirmation is lost on the way back: its one automatic resend answers "already
  *    applied", and the customer reads that instead of the failure card.
+ * E. On a phone (redesign 2026-11-25): a quotation card's options open the decision popup, the
+ *    funnel opens the type / status / date filters, and "Más" holds the language switch.
+ *
+ * No journey may reach a marketing or telemetry host (Google Tag Manager, HubSpot, Datadog,
+ * Mixpanel): the portal is a public page for someone else's customers. Those requests are aborted
+ * and recorded, and every journey asserts there were none. In a bundle with no provider
+ * configuration that is also true of the app, so the check guards against a portal page that loads
+ * a tracker on its own (a hardcoded script, an SDK started without configuration); the per-route
+ * gate itself is unit-tested (gtm.vitest.js, observability-browser.test.js).
  *
  * The portal is a public page: no `login()`, no session. Every `/sws/portal/*` route is mocked here
  * and answers 401 unless the request carries the token in the `X-Portal-Token` header, so a request
  * that lost the header shows up as the dead-link page instead of passing silently. Any other
  * `/sws/**` call (shared configuration the shell may read) gets an empty 200.
  *
+ * Links are `/portal/{clientId}/{token}` (QA CP-43): the boot scrub (main.jsx's first import) moves
+ * the token into sessionStorage and rewrites the URL to `/portal/{clientId}` before any script can
+ * read `location`. This is the only suite where that scrub runs for real (a full page load), so every
+ * journey asserts the address bar never keeps the token. Requests name the tenant in
+ * `X-Portal-Client`.
+ *
  * It lives under `flows/sales/` because every spec belongs to a cell (`e2e/support/test-cell.mjs`)
  * and the portal shows sales documents.
  */
 
 const TOKEN = 'tok-e2e-portal-0123456789abcdef';
+/** The tenant (AD_Client_ID) the link names before its token. */
+const CLIENT = '0123456789ABCDEF0123456789ABCDEF';
 
 const INVOICES = [
   {
@@ -40,6 +63,11 @@ const INVOICES = [
     documentStatus: 'CO', currency: 'EUR', taxBase: 413.22, grandTotal: 500, outstandingAmount: 500,
   },
 ];
+
+/** The kind's all-time figure on the home tile: deliberately NOT the list's totalCount. */
+const INVOICE_TILE_COUNT = 40;
+/** The backend's totals of the whole filtered set, which the totals row shows (not a sum of rows). */
+const LIST_TOTALS = [{ currency: 'EUR', taxBase: 1239.67, grandTotal: 1500 }];
 
 function detail(invoice) {
   return {
@@ -53,6 +81,11 @@ function detail(invoice) {
   };
 }
 
+/** FV/0001 relates to FV/0002, still owed: its related row must read the DOCUMENT status. */
+const RELATED_OF = {
+  'inv-1': [{ kind: 'INVOICE', id: 'inv-2', documentNo: 'FV/0002', date: '2026-08-02', documentStatus: 'CO', grandTotal: 500, outstandingAmount: 500 }],
+};
+
 /** A quotation the customer can still answer, Aceptar included (PORTAL_ACCEPT_ENABLED is on). */
 const QUOTATION = {
   ...detail({
@@ -60,10 +93,30 @@ const QUOTATION = {
     currency: 'EUR', taxBase: 100, grandTotal: 121,
   }),
   hasPdf: false,
-  decision: { canDecide: true, acceptAvailable: true },
+  // Both gates (QA CP-49): the decision's and the row's own — emailed to this link's address.
+  canDecide: true,
+  decision: { canDecide: true, acceptAvailable: true, confirmationRecipients: ['compras@cliente.es'] },
 };
 
 const DECISION_TOKEN = 'dec-e2e-0123456789abcdef';
+
+/** A quotation as a list row carries it: its own `canDecide`, no decision block. */
+const QUOTATION_ROW = {
+  kind: 'QUOTATION', id: 'q-1', documentNo: 'PR/0001', date: '2026-08-01', validUntil: '2999-01-10',
+  documentStatus: 'UE', currency: 'EUR', taxBase: 100, grandTotal: 121, canDecide: true,
+};
+
+/** Marketing and telemetry hosts the portal must never reach. */
+const TRACKING_HOSTS = [
+  /(^|\.)googletagmanager\.com$/,
+  /(^|\.)google-analytics\.com$/,
+  /(^|\.)hubspot\.com$/,
+  /(^|\.)hs-scripts\.com$/,
+  /(^|\.)hs-analytics\.net$/,
+  /(^|[.-])datadoghq\.(eu|com)$/,
+  /(^|\.)mixpanel\.com$/,
+  /(^|\.)mxpnl\.com$/,
+];
 
 const json = (route, body, status = 200) => route.fulfill({
   status, contentType: 'application/json', body: JSON.stringify(body),
@@ -77,6 +130,11 @@ const json = (route, body, status = 200) => route.fulfill({
  */
 async function installPortalMock(page, { me, confirmAnswer = null, loseFirstConfirm = false }) {
   const requests = [];
+  requests.tracking = [];
+  await page.route((url) => TRACKING_HOSTS.some((host) => host.test(url.hostname)), async (route) => {
+    requests.tracking.push(new URL(route.request().url()).hostname);
+    await route.abort();
+  });
   await page.route('**/sws/**', (route) => json(route, {}));
   await page.route('**/sws/portal/**', async (route) => {
     const request = route.request();
@@ -85,11 +143,15 @@ async function installPortalMock(page, { me, confirmAnswer = null, loseFirstConf
     // The confirmation landing carries the decision token in its own header, never the portal one.
     if (path === '/decisions/confirm' && request.method() === 'POST') {
       requests.decisionConfirms = (requests.decisionConfirms ?? 0) + 1;
+      requests.decisionClients = [...(requests.decisionClients ?? []), request.headers()['x-portal-client']];
       if (loseFirstConfirm && requests.decisionConfirms === 1) return route.abort('connectionreset');
       return request.headers()['x-portal-decision-token'] === DECISION_TOKEN
         ? json(route, confirmAnswer) : json(route, {}, 401);
     }
-    requests.push({ method: request.method(), path, url: request.url(), token: request.headers()['x-portal-token'] });
+    requests.push({
+      method: request.method(), path, url: request.url(),
+      token: request.headers()['x-portal-token'], client: request.headers()['x-portal-client'],
+    });
 
     if (request.headers()['x-portal-token'] !== TOKEN) return json(route, {}, 401);
 
@@ -98,7 +160,7 @@ async function installPortalMock(page, { me, confirmAnswer = null, loseFirstConf
     if (path === '/home') {
       return json(route, {
         balances: [{ currency: 'EUR', outstanding: 500, pendingCount: 1, overdue: 0, overdueCount: 0 }],
-        tiles: { INVOICE: { count: INVOICES.length } },
+        tiles: { INVOICE: { count: INVOICE_TILE_COUNT } },
         recent: INVOICES,
       });
     }
@@ -107,8 +169,11 @@ async function installPortalMock(page, { me, confirmAnswer = null, loseFirstConf
       return json(route, { state: 'sent', email: 'compras@cliente.es' });
     }
     if (path === '/documents/quotation/q-1') return json(route, QUOTATION);
+    if (path === '/documents' && url.searchParams.get('type') === 'quotation') {
+      return json(route, { documents: [QUOTATION_ROW], totalCount: 1, statuses: ['UE'] });
+    }
     if (path === '/documents') {
-      return json(route, { documents: INVOICES, totalCount: INVOICES.length, statuses: ['CO', 'CL'], totals: [] });
+      return json(route, { documents: INVOICES, totalCount: INVOICES.length, statuses: ['CO', 'CL'], totals: LIST_TOTALS });
     }
     const pdf = path.match(/^\/documents\/invoice\/([^/]+)\/pdf$/);
     if (pdf) {
@@ -116,20 +181,33 @@ async function installPortalMock(page, { me, confirmAnswer = null, loseFirstConf
     }
     const document = path.match(/^\/documents\/invoice\/([^/]+)$/);
     const found = document && INVOICES.find((invoice) => invoice.id === decodeURIComponent(document[1]));
-    if (found) return json(route, detail(found));
+    if (found) return json(route, { ...detail(found), related: RELATED_OF[found.id] ?? [] });
     // Anything else, the logo included (`hasLogo: false`), is not there.
     return json(route, {}, 404);
   });
   return requests;
 }
 
-/** Every portal request carried the header, and none put the token in its URL (plan §5.4). */
+/**
+ * Every portal request carried the token header and the tenant, and none put the token in its URL
+ * (plan §5.4, CP-43).
+ */
 function expectTokenOnlyInHeader(requests) {
   expect(requests.length).toBeGreaterThan(0);
+  expect(requests.tracking, 'a portal page reached a tracking host').toEqual([]);
   for (const request of requests) {
     expect(request.token, `${request.method} ${request.path} without X-Portal-Token`).toBe(TOKEN);
+    expect(request.client, `${request.method} ${request.path} without X-Portal-Client`).toBe(CLIENT);
     expect(request.url).not.toContain(TOKEN);
   }
+}
+
+/** CP-43: the address bar keeps no token, and the page sends no off-origin referrer. */
+async function expectTokenOutOfAddressBar(page, expectedPath) {
+  await expect.poll(() => new URL(page.url()).pathname).toBe(expectedPath);
+  expect(page.url()).not.toContain(TOKEN);
+  expect(page.url()).not.toContain(DECISION_TOKEN);
+  await expect(page.locator('meta[name="referrer"]')).toHaveAttribute('content', 'same-origin');
 }
 
 test.describe('Customer portal — mocked', () => {
@@ -137,39 +215,55 @@ test.describe('Customer portal — mocked', () => {
     const requests = await installPortalMock(page, {
       me: {
         state: 'valid', businessPartnerName: 'Cliente Uno', tenantName: 'Acme SA', hasLogo: false,
-        entryDocument: { kind: 'INVOICE', id: 'inv-1' },
+        clientId: CLIENT, entryDocument: { kind: 'INVOICE', id: 'inv-1' },
       },
     });
 
-    await page.goto(`/portal/${TOKEN}`);
+    await page.goto(`/portal/${CLIENT}/${TOKEN}`);
 
-    // The link opens the document it was sent with.
+    // The link opens the document it was sent with, from a URL that no longer holds the token.
     await expect(page.getByTestId('portal-document-detail')).toBeVisible();
     await expect(page.getByTestId('portal-panel-title')).toContainText('FV/0001');
+    await expectTokenOutOfAddressBar(page, `/portal/${CLIENT}`);
+
+    // Its related invoice reads its DOCUMENT status, never a payment state (QA 24/11 d).
+    const related = page.getByTestId('portal-related-item').filter({ hasText: 'FV/0002' });
+    await expect(related.getByTestId('portal-document-status')).toHaveAttribute('data-status', 'CO');
+    await expect(related.getByTestId('portal-payment-status')).toHaveCount(0);
 
     // Back to that kind's list.
     await page.getByTestId('portal-panel-close').click();
     const list = page.getByTestId('portal-document-list');
     await expect(list.locator('[data-kind="INVOICE"]')).toBeVisible();
     await expect(page.getByTestId('portal-document-row')).toHaveCount(INVOICES.length);
+    // The header counts the set shown (totalCount), not the home tile's all-time figure (QA 24/11 f).
+    await expect(page.getByTestId('portal-view-header').getByTestId('portal-view-count'))
+      .toHaveText(String(INVOICES.length));
+    // The totals row is the backend's total of the whole filtered set, not the sum of loaded rows.
+    await expect(page.getByTestId('portal-document-totals')).toHaveCount(1);
+    await expect(page.getByTestId('portal-document-totals')).toContainText(/1[.\s\u00a0]?500,00/);
     const initial = requests.filter((request) => request.path === '/documents').at(-1);
     const initialFrom = new URL(initial.url).searchParams.get('dateFrom');
     // A plain list opens on the rolling last month (D-2).
     expect(initialFrom).toBeTruthy();
 
-    // Status filter: the tab's customer-facing group goes to the backend, and to the URL.
-    const byGroup = page.waitForRequest((request) => request.url().includes('/sws/portal/documents?')
-      && new URL(request.url()).searchParams.get('group') === 'pending');
+    // Status filter: the tab's customer-facing group goes to the backend, and to the URL. «Pendiente»
+    // is a state tab, so it lists the whole history: no date range (QA pass 2, CP-18b).
+    const byGroup = page.waitForRequest((request) => {
+      if (!request.url().includes('/sws/portal/documents?')) return false;
+      const params = new URL(request.url()).searchParams;
+      return params.get('group') === 'pending' && !params.get('dateFrom') && !params.get('dateTo');
+    });
     await page.getByTestId('portal-status-tab-pending').click();
     await byGroup;
     await expect(page.getByTestId('portal-status-tab-pending')).toHaveAttribute('aria-selected', 'true');
     expect(new URL(page.url()).searchParams.get('group')).toBe('pending');
 
-    // Date filter: a preset replaces the default range, and the group stays applied.
+    // Date filter: a preset narrows the all-time state tab, and the group stays applied.
     const byDate = page.waitForRequest((request) => {
       if (!request.url().includes('/sws/portal/documents?')) return false;
       const params = new URL(request.url()).searchParams;
-      return params.get('group') === 'pending' && params.get('dateFrom') !== initialFrom;
+      return params.get('group') === 'pending' && Boolean(params.get('dateFrom')) && params.get('dateFrom') !== initialFrom;
     });
     await list.getByTestId('portal-date-range').click();
     await page.getByRole('button', { name: /últimos 12 meses|last 12 months/i }).click();
@@ -190,18 +284,19 @@ test.describe('Customer portal — mocked', () => {
     expect(requests.some((request) => request.path === '/documents/invoice/inv-2/pdf')).toBe(true);
 
     await expect(page.getByTestId('portal-invalid-link')).toHaveCount(0);
-    expect(new URL(page.url()).search).not.toContain(TOKEN);
+    expect(page.url()).not.toContain(TOKEN);
     expectTokenOnlyInHeader(requests);
   });
 
   test('B: an expired link sends exactly one renewal and says a new link was sent', async ({ page }) => {
     const requests = await installPortalMock(page, {
-      me: { state: 'expired', businessPartnerName: 'Cliente Uno', tenantName: 'Acme SA', hasLogo: false },
+      me: { state: 'expired', businessPartnerName: 'Cliente Uno', tenantName: 'Acme SA', hasLogo: false, clientId: CLIENT },
     });
 
-    await page.goto(`/portal/${TOKEN}`);
+    await page.goto(`/portal/${CLIENT}/${TOKEN}`);
 
     await expect(page.getByTestId('portal-renewed')).toBeVisible();
+    await expectTokenOutOfAddressBar(page, `/portal/${CLIENT}`);
     await page.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => {});
 
     const renewals = requests.filter((request) => request.path === '/renew');
@@ -242,16 +337,16 @@ test.describe('Customer portal — mocked', () => {
       const requests = await installPortalMock(page, {
         me: {
           state: 'valid', businessPartnerName: 'Cliente Uno', tenantName: 'Acme SA', hasLogo: false,
-          entryDocument: { kind: 'QUOTATION', id: 'q-1' },
+          clientId: CLIENT, entryDocument: { kind: 'QUOTATION', id: 'q-1' },
         },
         confirmAnswer: {
           state: 'confirmed', appliedNow: true, documentNo: 'PR/0001', tenantName: 'Acme SA',
-          ...expectedBody, portalToken: TOKEN, quotationId: 'q-1',
+          ...expectedBody, portalToken: TOKEN, quotationId: 'q-1', clientId: CLIENT,
         },
       });
 
       // In the portal: the request applies nothing, it says where the confirmation email went.
-      await page.goto(`/portal/${TOKEN}`);
+      await page.goto(`/portal/${CLIENT}/${TOKEN}`);
       await expect(page.getByTestId('portal-panel-title')).toContainText('PR/0001');
       await answer(page);
       await expect(page.getByTestId('portal-decision-sent')).toContainText('compras@cliente.es');
@@ -259,15 +354,19 @@ test.describe('Customer portal — mocked', () => {
 
       // The email's button: the landing confirms once and shows the result; "Portal de clientes"
       // opens the quotation, with no notice (the Figma has none).
-      await page.goto(`/portal/decision/${DECISION_TOKEN}`);
+      await page.goto(`/portal/${CLIENT}/decision/${DECISION_TOKEN}`);
       await expect(page.getByTestId('portal-decision-applied')).toBeVisible();
+      await expectTokenOutOfAddressBar(page, `/portal/${CLIENT}/decision`);
+      expect(requests.decisionClients).toEqual([CLIENT]);
       await page.getByTestId('portal-decision-enter').click();
       expect(requests.decisionConfirms).toBe(1);
+      // The fresh portal token is remembered for the tab; the URL names only the tenant.
+      await expect.poll(() => new URL(page.url()).pathname).toBe(`/portal/${CLIENT}`);
       const landed = new URL(page.url());
-      expect(landed.pathname).toBe(`/portal/${TOKEN}`);
       expect(Object.fromEntries(landed.searchParams)).toEqual({ view: 'doc', kind: 'QUOTATION', id: 'q-1' });
       await expect(page.getByTestId('portal-panel-title')).toContainText('PR/0001');
-      await expect(page.getByTestId('portal-arrival-notice')).toHaveCount(0);
+      // "With no notice": the one notice the portal shows on arrival is the gone-entry one.
+      await expect(page.getByTestId('portal-entry-unavailable')).toHaveCount(0);
       expect(requests.decisionConfirms).toBe(1);
       expectTokenOnlyInHeader(requests);
     });
@@ -275,16 +374,17 @@ test.describe('Customer portal — mocked', () => {
 
   test('D: a confirmation lost on the way back is resent once and reads as already applied', async ({ page }) => {
     const requests = await installPortalMock(page, {
-      me: { state: 'valid', businessPartnerName: 'Cliente Uno', tenantName: 'Acme SA', hasLogo: false },
+      me: { state: 'valid', businessPartnerName: 'Cliente Uno', tenantName: 'Acme SA', hasLogo: false, clientId: CLIENT },
       loseFirstConfirm: true,
       confirmAnswer: {
         state: 'confirmed', appliedNow: false, decision: 'REJECT', documentNo: 'PR/0001', tenantName: 'Acme SA',
       },
     });
 
-    await page.goto(`/portal/decision/${DECISION_TOKEN}`);
+    await page.goto(`/portal/${CLIENT}/decision/${DECISION_TOKEN}`);
 
     await expect(page.getByTestId('portal-decision-confirmed')).toBeVisible();
+    await expectTokenOutOfAddressBar(page, `/portal/${CLIENT}/decision`);
     await expect(page.getByTestId('portal-decision-summary-number')).toContainText('PR/0001');
     await expect(page.getByTestId('portal-decision-failed')).toHaveCount(0);
     await expect(page.getByTestId('portal-decision-applied')).toHaveCount(0);
@@ -292,5 +392,64 @@ test.describe('Customer portal — mocked', () => {
     expect(requests.decisionConfirms).toBe(2);
     // The resend answered: the read-only view, the last resort, was never needed.
     expect(requests.some((request) => request.path === '/decisions/view')).toBe(false);
+    expect(requests.tracking).toEqual([]);
+  });
+
+  test('E: on a phone, card options, the filter funnel and the language in "Más"', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    const requests = await installPortalMock(page, {
+      me: { state: 'valid', businessPartnerName: 'Cliente Uno', tenantName: 'Acme SA', hasLogo: false, clientId: CLIENT },
+    });
+
+    await page.goto(`/portal/${CLIENT}/${TOKEN}`);
+    await expect(page.getByTestId('portal-pending-hero')).toBeVisible();
+    await expect(page.getByTestId('portal-mobile-tenant-name')).toHaveText('Acme SA');
+    await expectTokenOutOfAddressBar(page, `/portal/${CLIENT}`);
+
+    // A quotation card's ⋮ → Aceptar re-reads the detail and opens the detail's own popup.
+    await page.getByTestId('portal-bottom-nav-quotation').click();
+    const card = page.getByTestId('portal-document-card').filter({ hasText: 'PR/0001' });
+    await expect(card).toBeVisible();
+    await card.getByTestId('portal-card-menu').click();
+    await page.getByTestId('portal-card-menu-accept').click();
+    const accept = page.getByTestId('portal-accept-modal');
+    await expect(accept).toBeVisible();
+    await expect(accept).toContainText('compras@cliente.es');
+    expect(requests.some((request) => request.path === '/documents/quotation/q-1')).toBe(true);
+    await accept.getByTestId('portal-accept-cancel').click();
+    await expect(accept).toHaveCount(0);
+    expect(requests.decisionBodies).toBeUndefined();
+
+    // The funnel: document type, status and date range, as on desktop.
+    await page.getByTestId('portal-bottom-nav-invoice').click();
+    await expect(page.getByTestId('portal-document-card')).toHaveCount(INVOICES.length);
+    await page.getByTestId('portal-list-filters-mobile').click();
+    const filters = page.getByTestId('portal-list-filters-mobile-panel');
+    await expect(filters.getByTestId('portal-list-filters-mobile-range')).toBeVisible();
+    const bySubtype = page.waitForRequest((request) => request.url().includes('/sws/portal/documents?')
+      && new URL(request.url()).searchParams.get('subtype') === 'creditNote');
+    await filters.getByTestId('portal-list-subtype-creditnote-mobile').click();
+    await bySubtype;
+    const byGroup = page.waitForRequest((request) => request.url().includes('/sws/portal/documents?')
+      && new URL(request.url()).searchParams.get('group') === 'pending');
+    await filters.getByTestId('portal-list-filter-pending-mobile').click();
+    await byGroup;
+    await expect(filters.getByTestId('portal-list-filter-pending-mobile')).toHaveAttribute('aria-pressed', 'true');
+    await page.keyboard.press('Escape');
+
+    // "Más" → the customer's entry → the language. Spanish first, so the switch to English is a
+    // real change whatever language the browser starts in.
+    const more = page.getByTestId('portal-bottom-nav-more');
+    const user = page.getByTestId('portal-more-user');
+    await more.click();
+    await expect(user).toContainText('Cliente Uno');
+    await user.getByTestId('portal-language-es').click();
+    await expect(page.getByTestId('portal-bottom-nav-home')).toContainText('Inicio');
+    if (!(await user.isVisible())) await more.click();
+    await user.getByTestId('portal-language-en').click();
+    await expect(page.getByTestId('portal-bottom-nav-home')).toContainText('Home');
+
+    await expect(page.getByTestId('portal-invalid-link')).toHaveCount(0);
+    expectTokenOnlyInHeader(requests);
   });
 });

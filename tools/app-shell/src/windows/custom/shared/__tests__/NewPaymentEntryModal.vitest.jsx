@@ -1,3 +1,4 @@
+// @covers tools/app-shell/src/windows/custom/shared/NewPaymentEntryModal.jsx
 // Mocks must be hoisted before imports (Vitest hoisting)
 // NOTE (ETP-4314): the mock now interpolates params (rather than swallowing them)
 // so fmtCur()'s output (ExcessBand's excess amount, the PIS "dinero"/"credito"
@@ -89,6 +90,7 @@ import { useState } from 'react';
 import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import NewPaymentEntryModal from '../NewPaymentEntryModal.jsx';
+import { pickPaymentInstallment } from '../invoiceRemittance.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -724,6 +726,28 @@ describe('NewPaymentEntryModal', () => {
       // surfaces the paymentRequestFailed validation instead of crashing.
       fireEvent.click(screen.getByText('save').closest('button'));
       await waitFor(() => expect(screen.getByText('paymentRequestFailed')).toBeInTheDocument());
+    });
+
+    it('skips a fully remitted installment and posts to the next one with a free amount', async () => {
+      // The first installment keeps its full outstanding, but it is all in a confirmed remittance
+      // (payableAmount 0): the backend would refuse a payment there (ETGO_InvoiceInRemittance).
+      mockApiFetch = buildApiFetch({
+        plan: [
+          { finPaymentScheduleID: 'sched-remitted', outstandingAmount: '400', remittedAmount: '400', payableAmount: '0' },
+          { finPaymentScheduleID: 'sched-free', outstandingAmount: '300', payableAmount: '300' },
+        ],
+      });
+      renderModal({ scheduleId: undefined });
+      await waitFor(() => expect(mockApiFetch).toHaveBeenCalled());
+      const confirm = screen.getByTestId('cp-confirm');
+      await waitFor(() => expect(confirm).not.toBeDisabled());
+      fireEvent.click(confirm);
+
+      await waitFor(() => {
+        const call = mockApiFetch.mock.calls.find(c => c[0].includes('registerPayment'));
+        expect(call).toBeTruthy();
+        expect(JSON.parse(call[1].body).scheduleId).toBe('sched-free');
+      });
     });
 
     it('falls back to plan[0] when no installment has an outstanding amount', async () => {
@@ -3608,5 +3632,64 @@ describe('NewPaymentEntryModal', () => {
         });
       });
     });
+  });
+});
+
+// The pick lives in invoiceRemittance.js since ETP-6247 (the payments modal and the preview share it
+// to cap a new payment at the chosen installment); the entry modal still calls it for its lookup.
+describe('pickPaymentInstallment', () => {
+  it('picks the first installment with a free (payable) amount, skipping a fully remitted one', () => {
+    const plan = [
+      { id: 'a', outstandingAmount: '400', payableAmount: '0' },
+      { id: 'b', outstandingAmount: '300', payableAmount: '300' },
+    ];
+    expect(pickPaymentInstallment(plan).id).toBe('b');
+  });
+
+  it('takes a partly remitted installment while something is still free on it', () => {
+    const plan = [
+      { id: 'a', outstandingAmount: '400', payableAmount: '100' },
+      { id: 'b', outstandingAmount: '300', payableAmount: '300' },
+    ];
+    expect(pickPaymentInstallment(plan).id).toBe('a');
+  });
+
+  it('falls back to outstandingAmount when the backend sends no payableAmount', () => {
+    const plan = [
+      { id: 'a', outstandingAmount: '0' },
+      { id: 'b', outstandingAmount: '250' },
+    ];
+    expect(pickPaymentInstallment(plan).id).toBe('b');
+  });
+
+  it('falls back to the first outstanding installment when every installment is remitted', () => {
+    const plan = [
+      { id: 'paid', outstandingAmount: '0', payableAmount: '0' },
+      { id: 'remitted', outstandingAmount: '400', payableAmount: '0' },
+    ];
+    expect(pickPaymentInstallment(plan).id).toBe('remitted');
+  });
+
+  it('falls back to plan[0] when nothing is outstanding', () => {
+    const plan = [
+      { id: 'first', outstandingAmount: '0' },
+      { id: 'second', outstandingAmount: '0' },
+    ];
+    expect(pickPaymentInstallment(plan).id).toBe('first');
+  });
+
+  it('returns undefined for an empty plan', () => {
+    expect(pickPaymentInstallment([])).toBeUndefined();
+  });
+
+  it('keeps the outstanding rule when a draft is being edited (its installment reads payable 0)', () => {
+    // payableAmount leaves out what the edited draft already links, so the draft's own installment
+    // would read 0 and be skipped; editing picks by outstanding instead.
+    const plan = [
+      { id: 'draft-holds-this', outstandingAmount: '400', payableAmount: '0' },
+      { id: 'other', outstandingAmount: '300', payableAmount: '300' },
+    ];
+    expect(pickPaymentInstallment(plan, { editing: true }).id).toBe('draft-holds-this');
+    expect(pickPaymentInstallment(plan).id).toBe('other');
   });
 });

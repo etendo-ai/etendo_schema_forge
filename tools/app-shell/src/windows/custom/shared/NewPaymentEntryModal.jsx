@@ -12,7 +12,8 @@ import { useApiFetch } from '@/auth/useApiFetch.js';
 import { useAuth } from '@/auth/AuthContext.jsx';
 import { useUI } from '@/i18n';
 import { isValidIban, normalizeIban } from '@/lib/validateIban.js';
-import { extractBackendMessageKeys, translateBackendError } from '@/lib/backendErrors.js';
+import { extractBackendMessageKeys, extractBackendMessageParams, translateBackendError } from '@/lib/backendErrors.js';
+import { pickPaymentInstallment } from './invoiceRemittance.js';
 import { openCenteredPopup } from '@/lib/popupWindow.js';
 import { parseCalendarDate, todayCalendarISO } from '@/lib/dateOnly.js';
 import { usePaymentBalance, formatPlain, parseMaskedAmount, round2 } from './usePaymentBalance.js';
@@ -415,13 +416,17 @@ function pickDefaultAccountId(accList, methodId, bpPreferredAccountId) {
   return firstSupporting?.id || '';
 }
 
-/** Resolves the first pending installment's schedule id from the payment plan. */
-async function fetchPendingSchedule(apiFetch, specName, invoiceId) {
+/**
+ * Resolves the schedule id of the installment a new payment goes to, from the payment plan. The
+ * pick is `pickPaymentInstallment` (invoiceRemittance.js, ETP-6247): the first installment with
+ * something FREE to register. Only used when the caller did not hand the schedule id over.
+ */
+async function fetchPendingSchedule(apiFetch, specName, invoiceId, options) {
   const res = await apiFetch(
     `/${specName}/paymentPlan?parentId=${invoiceId}&_startRow=0&_endRow=50`).catch(() => null);
   if (!res?.ok) return '';
   const plan = (await res.json())?.response?.data || [];
-  const pending = plan.find(p => parseFloat(p.outstandingAmount) > 0) || plan[0];
+  const pending = pickPaymentInstallment(plan, options);
   return pending ? (pending.finPaymentScheduleID || pending.id || '') : '';
 }
 
@@ -447,7 +452,12 @@ function extractSaveError(json, ui) {
   if (!raw || typeof raw !== 'string') return ui('cpSaveFailed');
   // ETP-5577 — the identity too: a payment dated in a period that is not open is keyed
   // `PeriodNotAvailable` and must read like every other "period not open" refusal.
-  return translateBackendError(raw, ui, { messageKeys: extractBackendMessageKeys(json) }) || raw;
+  // ETP-6247 — the params too: a remittance refusal (ETGO_InvoiceInRemittance) renders in the UI
+  // language with the remittance number and the payable amount formatted (extractBackendMessageParams).
+  return translateBackendError(raw, ui, {
+    messageKeys: extractBackendMessageKeys(json),
+    messageParams: extractBackendMessageParams(json),
+  }) || raw;
 }
 
 /**
@@ -1297,7 +1307,7 @@ export default function NewPaymentEntryModal({
     (async () => {
       if (scheduleIdProp) return;
       try {
-        const sched = await fetchPendingSchedule(apiFetch, specName, invoiceId);
+        const sched = await fetchPendingSchedule(apiFetch, specName, invoiceId, { editing: !!payment });
         if (sched && !cancelled) setScheduleId(sched);
       } catch { /* silent — submit's own !scheduleId guard reports it in the UI language */ }
       // Resolved means "the lookup finished", NOT "we got an id": an invoice with no pending

@@ -375,7 +375,7 @@ not a shared component, so these changes affect no other window.
 
 **Copy per edge (ETP-6053).** `certExpiryCopy(ui, daysLeft, isCritical)` (exported from the banner,
 shared by both variants) picks the text: an expired certificate shows "El certificado digital ha
-caducado" with a body telling the user to upload a valid one from Configuración fiscal; `0` shows "El
+caducado" with a body telling the user to upload a valid one from Configuración Fiscal; `0` shows "El
 certificado digital vence hoy"; `1` uses the singular `_one` key ("El certificado vence en 1 día");
 any other count keeps the plural key. Before ETP-6053 these edges read "vence en -12 días" / "0 días" /
 "1 días" — they surfaced only once `GET /certificate` started returning ISO dates and `daysUntil`

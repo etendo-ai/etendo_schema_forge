@@ -242,10 +242,14 @@ export default function PurchaseInvoiceHeaderTable(props) {
           // A credit instrument has no meaningful due date — no colour, no dot.
           // Sign-based (ETP-4841), so a POSITIVE rectificativa keeps its due-date
           // state like any other payable invoice.
-          if (resolveInvoicePaymentBadge(row).isCredit) {
+          const dueBadge = resolveInvoicePaymentBadge(row);
+          if (dueBadge.isCredit) {
             return <span>{formatCalendarDate(d, locale)}</span>;
           }
-          const state = getDueDateState(d, row.outstandingAmount);
+          // ETP-6247 — a due fully in a confirmed remittance is the bank's to pay, not overdue for
+          // the user: neutral dot, never the red one. A partial remittance keeps the date state,
+          // since the free part is still owed to the supplier.
+          const state = dueBadge.kind === 'remitted' ? 'ok' : getDueDateState(d, row.outstandingAmount);
           return (
             <span className="inline-flex items-center gap-1.5" style={getDueDateTextStyle(state)}>
               <span className="inline-block h-2 w-2 rounded-full shrink-0" style={getDueDateDotStyle(state)} />
@@ -346,6 +350,22 @@ export default function PurchaseInvoiceHeaderTable(props) {
               </button>
             );
           }
+          // ETP-6247 — the whole outstanding is in a CONFIRMED payment remittance: the bank pays it,
+          // so no amount to register is offered. Same chip shape as the transfer states above,
+          // opening the payments modal where the remitted payment and its remittance live.
+          if (badge.kind === 'remitted') {
+            return (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setPaymentRow(row); }}
+                data-testid="invoice-remitted"
+                style={{...NOWRAP_FLEX,display:'inline-flex',alignItems:'center',gap:7,font:'500 12px/18px Inter',padding:'3px 10px',borderRadius:999,background:'var(--status-warning-bg)',border:'none',color:'var(--status-warning-fg)',cursor:'pointer'}}
+              >
+                <span style={{width:8,height:8,borderRadius:'50%',background:'var(--status-warning-fg)',flexShrink:0,display:'inline-block'}}/>
+                {ui('remittanceInvoiceChip')}
+              </button>
+            );
+          }
           if (badge.kind === 'paid') {
             return (
               <span style={{...NOWRAP_FLEX,display:'inline-flex',alignItems:'center',gap:5,font:'500 12px/18px Inter',padding:'3px 10px',borderRadius:999,background:'var(--status-success-bg)',color:'var(--status-success-fg)'}}>
@@ -353,6 +373,8 @@ export default function PurchaseInvoiceHeaderTable(props) {
               </span>
             );
           }
+          // `pending` / `partial` show what is still owed; `partially-remitted` (ETP-6247) shows only
+          // the FREE part, like any pending invoice — the remitted part is in the payments modal.
           return (
             <button
               type="button"
