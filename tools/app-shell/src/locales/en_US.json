@@ -17120,6 +17120,7 @@
     "importHeaderCustomer": "Customer",
     "importHeaderVendor": "Vendor",
     "importErrorInvalidEmail": "Not a valid email address.",
+    "importErrorInvalidPhone": "The phone number can only contain digits and the + ( ) - . characters, up to 15 characters.",
     "importErrorNotANumber": "The value \"{value}\" is not a valid number. Use 1234.56 or 1,234.56.",
     "importErrorFkUnmatched": "The value \"{value}\" could not be matched to an existing record.",
     "importSkipDuplicateInFile": "Duplicate row: this value is repeated earlier in the file.",

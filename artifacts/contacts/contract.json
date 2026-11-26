@@ -295,6 +295,7 @@
               "telefono",
               "teléfono"
             ],
+            "isPhone": true,
             "label": "Phone",
             "example": "910 000 001",
             "column": "EM_Etgo_Phone",
@@ -5777,6 +5778,7 @@
               "telefono",
               "teléfono"
             ],
+            "isPhone": true,
             "label": "Phone",
             "example": "910 000 001",
             "column": "EM_Etgo_Phone",

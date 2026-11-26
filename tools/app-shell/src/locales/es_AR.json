@@ -17315,6 +17315,7 @@
     "importHeaderCustomer": "Cliente",
     "importHeaderVendor": "Proveedor",
     "importErrorInvalidEmail": "El correo electrónico no es válido.",
+    "importErrorInvalidPhone": "El teléfono solo puede contener números y los caracteres + ( ) - ., hasta 15 caracteres.",
     "importErrorNotANumber": "El valor \"{value}\" no es un número válido. Usá 1234,56 o 1.234,56.",
     "importErrorFkUnmatched": "El valor \"{value}\" no coincide con ningún registro existente.",
     "importSkipDuplicateInFile": "Fila duplicada: este valor ya aparece antes en el archivo.",
