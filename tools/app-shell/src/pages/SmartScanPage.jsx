@@ -18,6 +18,10 @@ import {
   PulseIcon,
 } from '@phosphor-icons/react';
 
+// ETP-4802 — GO feature id of Smart Scan: the role's GO Access row, or the legacy anchor grant while
+// it has none (backend `GoFeatureAccess`, published as `windowAccess['smart-scan']`).
+const SMART_SCAN_FEATURE_ID = 'smart-scan';
+
 const STATUS_VARIANT = {
   Matched: 'default',
   Review: 'secondary',
@@ -79,11 +83,11 @@ export default function SmartScanPage() {
   // user, any role, could reach it by URL regardless of the menu). Checked
   // here, after every other hook, so hook order stays stable across renders
   // regardless of the tier (mirrors custom/financial-account/index.jsx).
-  const windowAccessTier = useWindowAccess('33705E0F52874D91B0BB2FF8BB648B8E');
+  const windowAccessTier = useWindowAccess(SMART_SCAN_FEATURE_ID);
   if (windowAccessTier === 'none') {
     return (
       <WindowAccessGuard
-        windowId="33705E0F52874D91B0BB2FF8BB648B8E"
+        windowId={SMART_SCAN_FEATURE_ID}
         data-testid="WindowAccessGuard__smart-scan"
       />
     );

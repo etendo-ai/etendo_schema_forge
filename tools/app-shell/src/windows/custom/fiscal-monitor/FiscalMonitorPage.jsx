@@ -22,6 +22,10 @@ import VfSolveErrorModal from './VfSolveErrorModal.jsx';
 import FiscalMonitorDebugPanel from './FiscalMonitorDebugPanel.jsx';
 import './fiscal-monitor.css';
 
+// ETP-4802 — GO feature id of "Monitor fiscal": the role's GO Access row, or the legacy SII Monitor
+// grant while it has none (backend `GoFeatureAccess`, published as `windowAccess['fiscal-monitor']`).
+const FISCAL_MONITOR_FEATURE_ID = 'fiscal-monitor';
+
 const PROFILE_LABELS = {
   sii:          'SII',
   tbai:         'TBAI',
@@ -195,9 +199,9 @@ export default function FiscalMonitorPage({ token, apiBaseUrl }) {
   // genuine permission denial. Checked after every other hook so hook order stays stable
   // regardless of the tier. Respects debugOverrideActive (like the loading/error gates just
   // below) so the developer-only debug/mock preview isn't blocked by a real tier check.
-  const windowAccessTier = useWindowAccess('FEF76C3E0F104F06A89AAD15A4A4A35C');
+  const windowAccessTier = useWindowAccess(FISCAL_MONITOR_FEATURE_ID);
   if (!debugOverrideActive && windowAccessTier === 'none') {
-    return <WindowAccessGuard windowId="FEF76C3E0F104F06A89AAD15A4A4A35C" data-testid="WindowAccessGuard__fiscal-monitor" />;
+    return <WindowAccessGuard windowId={FISCAL_MONITOR_FEATURE_ID} data-testid="WindowAccessGuard__fiscal-monitor" />;
   }
 
   function handleRefresh() {

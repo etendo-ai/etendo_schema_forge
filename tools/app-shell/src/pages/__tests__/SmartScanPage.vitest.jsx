@@ -1,3 +1,4 @@
+// @covers tools/app-shell/src/pages/SmartScanPage.jsx
 // ETP-5116 — SmartScanPage had zero real access control (any authenticated
 // user, any role, could reach it by URL regardless of the menu). This suite
 // covers the useWindowAccess()/WindowAccessGuard gate added to close that
@@ -56,14 +57,14 @@ describe('SmartScanPage — window access gate (ETP-5116)', () => {
     expect(screen.queryByTestId('window-access-guard')).not.toBeInTheDocument();
   });
 
-  it('renders the WindowAccessGuard (windowId 33705E0F52874D91B0BB2FF8BB648B8E) instead of the page when the access tier is none', () => {
+  it('renders the WindowAccessGuard (feature id smart-scan) instead of the page when the access tier is none', () => {
     currentWindowAccessTier = 'none';
     render(<SmartScanPage />);
 
-    expect(useWindowAccess).toHaveBeenCalledWith('33705E0F52874D91B0BB2FF8BB648B8E');
+    expect(useWindowAccess).toHaveBeenCalledWith('smart-scan');
     expect(screen.getByTestId('window-access-guard')).toHaveAttribute(
       'data-window-id',
-      '33705E0F52874D91B0BB2FF8BB648B8E',
+      'smart-scan',
     );
     expect(screen.queryByTestId('smartscan-page')).not.toBeInTheDocument();
   });

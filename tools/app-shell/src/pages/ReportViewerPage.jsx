@@ -59,23 +59,25 @@ export function buildReportFilename(reportId, format, suffix = '') {
   return `${reportId}${suffix}-${dd}-${mm}-${yyyy}.${format}`;
 }
 
-// ETP-5116 — report categories with a real permission-anchor AD_Window (see
-// menu.json's matching windowId for each). A category not listed here (e.g.
-// "purchases") is intentionally NOT gated by window access — it's kept
-// menu-hidden only, a deliberate decision made earlier in this same ticket.
-const REPORT_CATEGORY_WINDOW_IDS = {
-  finance: 'D647D118F5014D00AF47A636B2CD0DD3',
+// ETP-5116 — report categories with a permission anchor (see menu.json's matching accessFeature
+// for each). ETP-4802: the anchor is the GO feature `financial-reports` / `inventory-stock-report`
+// (the role's GO Access row, or the legacy anchor-window grant while it has none), published by the
+// backend as `windowAccess[<feature id>]`. A category not listed here (e.g. "purchases") is
+// intentionally NOT gated by feature access — it's kept menu-hidden only, a deliberate decision made
+// earlier in ETP-5116.
+const REPORT_CATEGORY_ACCESS_KEYS = {
+  finance: 'financial-reports',
   // ETP-6389 — Tesorería › Informes shares the Financial Reports anchor window: the aging reports
   // moved out of the finance category, not out of that permission.
-  treasury: 'D647D118F5014D00AF47A636B2CD0DD3',
+  treasury: 'financial-reports',
   // ETP-6380 — Impuestos › Informes shares it too: the Tax Report moved out of the finance
   // category, not out of that permission.
-  taxes: 'D647D118F5014D00AF47A636B2CD0DD3',
-  inventory: '6346B88619F948F9A42224BDB0B239FA',
+  taxes: 'financial-reports',
+  inventory: 'inventory-stock-report',
 };
 
 // ETP-5402 QA follow-up — the report ids ReportAccessCatalog.java actually covers, one array per
-// REPORT_CATEGORY_WINDOW_IDS key (a category absent from that map has no per-report catalog
+// REPORT_CATEGORY_ACCESS_KEYS key (a category absent from that map has no per-report catalog
 // entries either, and stays permissive/ungated exactly as it does today). Used to (a) let a role
 // through the category gate below via a real per-report grant even without the coarse window
 // grant (e.g. Sales holds `aging-receivable` but not the Financial Reports window), and (b)
@@ -2151,7 +2153,7 @@ export default function ReportViewerPage() {
   // permission anchor; a category absent from this map (e.g. "purchases",
   // deliberately still menu-hidden only, per this ticket's own decision) is
   // never gated here — useWindowAccess(null) already fails closed to 'none',
-  // so categoryWindowId must be checked as well, not just the tier.
+  // so categoryAccessKey must be checked as well, not just the tier.
   // useWindowAccess fails closed to 'none' while windowAccess is still loading,
   // so an authorized user briefly sees the guard too until it resolves, then
   // the effect below re-fires once categoryAccessDenied flips to false.
@@ -2162,12 +2164,12 @@ export default function ReportViewerPage() {
   // against the fetched `reportAccess` map. Both checks fail closed while their own data is
   // still loading, so `categoryAccessDenied` briefly stays true (same transient guard flash the
   // window-only version already had) until whichever resolves last flips it.
-  const categoryWindowId = REPORT_CATEGORY_WINDOW_IDS[categoryFilter] ?? null;
-  const categoryWindowAccessTier = useWindowAccess(categoryWindowId);
+  const categoryAccessKey = REPORT_CATEGORY_ACCESS_KEYS[categoryFilter] ?? null;
+  const categoryWindowAccessTier = useWindowAccess(categoryAccessKey);
   const categoryReportIds = REPORT_CATEGORY_REPORT_IDS[categoryFilter] ?? null;
   const hasAccessibleReportInCategory = Boolean(categoryReportIds) && Boolean(reportAccess)
     && categoryReportIds.some((id) => reportAccess[id] !== undefined);
-  const categoryAccessDenied = Boolean(categoryWindowId) && categoryWindowAccessTier === 'none'
+  const categoryAccessDenied = Boolean(categoryAccessKey) && categoryWindowAccessTier === 'none'
     && !hasAccessibleReportInCategory;
 
   useEffect(() => {
@@ -2192,7 +2194,7 @@ export default function ReportViewerPage() {
   // ANY REPORT_CATEGORY_REPORT_IDS list, regardless of the current `categoryFilter` — this page
   // also renders every category mixed together with no `?category=` at all) only shows when the
   // caller's own `reportAccess` map has an entry for it. A non-catalog row (e.g. "purchases",
-  // deliberately ungated per ETP-5116's own decision — see REPORT_CATEGORY_WINDOW_IDS above)
+  // deliberately ungated per ETP-5116's own decision — see REPORT_CATEGORY_ACCESS_KEYS above)
   // always passes through unfiltered. While `reportAccess` is still loading (`null`), every row
   // passes through unfiltered too — the same transient "not gated yet" window the category-level
   // guard above already has, not a new behavior.
@@ -2230,14 +2232,14 @@ export default function ReportViewerPage() {
   // real access control (any authenticated user, any role, could reach either
   // by URL regardless of the menu). ReportViewerPage is shared across every
   // report category, so the gate must apply ONLY to categories with a real
-  // permission-anchor window (REPORT_CATEGORY_WINDOW_IDS) — other categories
+  // permission-anchor window (REPORT_CATEGORY_ACCESS_KEYS) — other categories
   // sharing this same page (e.g. "purchases") are unaffected. categoryAccessDenied
   // is computed above (before the fetch effect) so both the effect and this
   // render guard stay in lock-step.
   if (categoryAccessDenied) {
     return (
       <WindowAccessGuard
-        windowId={categoryWindowId}
+        windowId={categoryAccessKey}
         data-testid={`WindowAccessGuard__report-viewer-${categoryFilter}`}
       />
     );

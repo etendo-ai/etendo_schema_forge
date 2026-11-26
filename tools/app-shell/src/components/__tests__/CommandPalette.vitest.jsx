@@ -114,7 +114,7 @@ vi.mock('../../menu.json', () => ({
           { name: 'match-rule', label: 'Match Rule', hidden: true, routeOnly: true, windowId: 'W-MATCH' },
           {
             name: 'report-viewer-treasury', label: 'Reports', path: 'report-viewer?category=treasury',
-            accessWindowId: 'D647D118F5014D00AF47A636B2CD0DD3', requiresGroupReport: true,
+            accessFeature: 'financial-reports', requiresGroupReport: true,
           },
           // Moved from Configuración; the last visible Treasury entry, like the real menu.
           { name: 'payment-term', label: 'Payment Term', windowId: '141' },

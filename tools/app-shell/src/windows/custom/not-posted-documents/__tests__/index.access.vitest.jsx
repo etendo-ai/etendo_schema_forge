@@ -1,3 +1,4 @@
+// @covers tools/app-shell/src/windows/custom/not-posted-documents/index.jsx
 // @vitest-environment jsdom
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
@@ -10,29 +11,45 @@ vi.mock('@/i18n', () => ({
   useLocaleSwitch: () => ({ locale: 'es_ES', setLocale: vi.fn() }),
 }));
 vi.mock('@/components/layout/PageMetaContext', () => ({ useSetPageMeta: () => vi.fn() }));
-vi.mock('@/hooks/useRoleMenu.js', () => ({ useRoleMenu: vi.fn() }));
 
-import { useRoleMenu } from '@/hooks/useRoleMenu.js';
-import NotPostedDocumentsRoute from '../index.jsx';
+let currentTier = 'full';
+// The page's own table reads the real AuthContext (no provider: it degrades to "nothing loaded");
+// only the access hook and the guard are replaced.
+vi.mock('@/auth/AuthContext.jsx', async (importOriginal) => ({
+  ...(await importOriginal()),
+  useWindowAccess: vi.fn(() => currentTier),
+  WindowAccessGuard: ({ windowId }) => (
+    <div data-testid="window-access-denied" data-window-id={windowId} />
+  ),
+}));
 
-// ETP-5485 (BUG-2) — the route entry registered in `windows/registry.js`
-// (`'not-posted-documents'`) must gate the page on the "Not Posted Documents" OBUIAPP process
-// (the same id the sidebar filters this entry by), so a role without it never mounts the page
-// and never fires its requests.
+import { useWindowAccess } from '@/auth/AuthContext.jsx';
+import NotPostedDocumentsRoute, { NOT_POSTED_DOCUMENTS_FEATURE_ID } from '../index.jsx';
+
+// ETP-5485 (BUG-2) / ETP-4802 — the route entry registered in `windows/registry.js`
+// (`'not-posted-documents'`) gates the page on the GO feature `not-posted-documents`, the same
+// decision the backend handler and the sidebar entry use, so a role without it never mounts the
+// page and never fires its requests.
 describe('not-posted-documents route entry', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     globalThis.fetch = vi.fn(() => Promise.resolve({ ok: true, json: async () => ({ rows: [] }) }));
   });
 
-  it('shows the access-denied screen and never mounts the page for a role without the process', () => {
-    useRoleMenu.mockReturnValue(new Set(['unrelated']));
+  it('checks access against the GO feature id, not the OBUIAPP process id', () => {
+    expect(NOT_POSTED_DOCUMENTS_FEATURE_ID).toBe('not-posted-documents');
+  });
+
+  it('shows the access-denied screen and never mounts the page for a role without the feature', () => {
+    currentTier = 'none';
     render(<NotPostedDocumentsRoute token="t" apiBaseUrl="/swebsf/not-posted-documents" />);
-    expect(screen.getByTestId('window-access-denied')).toBeInTheDocument();
+    expect(useWindowAccess).toHaveBeenCalledWith('not-posted-documents');
+    expect(screen.getByTestId('window-access-denied')).toHaveAttribute('data-window-id', 'not-posted-documents');
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
-  it('mounts the page for a role holding the process', async () => {
-    useRoleMenu.mockReturnValue(new Set(['D6AB95CE52D34E1599590526115E26C6']));
+  it.each(['full', 'read-only'])('mounts the page for a role with the %s tier', async (tier) => {
+    currentTier = tier;
     render(
       <MemoryRouter initialEntries={['/not-posted-documents']}>
         <NotPostedDocumentsRoute token="t" apiBaseUrl="/swebsf/not-posted-documents" />

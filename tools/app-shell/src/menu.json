@@ -235,7 +235,7 @@
           "label": "Reports",
           "favname": "Inventory Reports",
           "path": "report-viewer?category=inventory",
-          "accessWindowId": "6346B88619F948F9A42224BDB0B239FA"
+          "accessFeature": "inventory-stock-report"
         },
         {
           "name": "warehouse-storage-bins",
@@ -323,7 +323,7 @@
           "label": "Reports",
           "favname": "Treasury Reports",
           "path": "report-viewer?category=treasury",
-          "accessWindowId": "D647D118F5014D00AF47A636B2CD0DD3",
+          "accessFeature": "financial-reports",
           "requiresGroupReport": true
         },
         {
@@ -452,7 +452,7 @@
           "label": "Reports",
           "favname": "Finance Reports",
           "path": "report-viewer?category=finance",
-          "accessWindowId": "D647D118F5014D00AF47A636B2CD0DD3"
+          "accessFeature": "financial-reports"
         },
         {
           "name": "balance-sheet",
@@ -517,14 +517,15 @@
           "name": "fiscal-monitor",
           "label": "Fiscal Monitor",
           "favname": "Fiscal Monitor",
-          "windowId": "FEF76C3E0F104F06A89AAD15A4A4A35C"
+          "windowId": "FEF76C3E0F104F06A89AAD15A4A4A35C",
+          "accessFeature": "fiscal-monitor"
         },
         {
           "name": "report-viewer-taxes",
           "label": "Reports",
           "favname": "Taxes Reports",
           "path": "report-viewer?category=taxes",
-          "accessWindowId": "D647D118F5014D00AF47A636B2CD0DD3",
+          "accessFeature": "financial-reports",
           "requiresGroupReport": true
         },
         {
@@ -607,7 +608,7 @@
           "name": "smart-scan",
           "label": "Smart Scan",
           "favname": "Smart Scan",
-          "accessWindowId": "33705E0F52874D91B0BB2FF8BB648B8E",
+          "accessFeature": "smart-scan",
           "hidden": true
         },
         {
