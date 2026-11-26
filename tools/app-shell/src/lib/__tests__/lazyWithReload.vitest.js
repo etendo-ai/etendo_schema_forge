@@ -3,7 +3,7 @@ import { Component, Suspense, createElement } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import {
-  handlePreloadError, installPreloadErrorReload, isChunkLoadError, lazyWithReload,
+  isChunkLoadError, lazyWithReload,
   reloadOnceForStaleChunk, resetReloadInProgress,
 } from '../lazyWithReload.js';
 
@@ -85,12 +85,12 @@ describe('lazyWithReload', () => {
     expect(reload).not.toHaveBeenCalled();
   });
 
-  it('clears the mark and renders when the factory resolves', async () => {
+  it('renders when the factory resolves and leaves the mark to expire', async () => {
     const storage = memoryStorage({ [MARK]: '1' });
     const Page = () => createElement('div', null, 'page ok');
     renderLazy(lazyWithReload(() => Promise.resolve({ default: Page }), { storage, reload: vi.fn() }));
     expect(await screen.findByText('page ok')).toBeTruthy();
-    expect(storage.removeItem).toHaveBeenCalledWith(MARK);
+    expect(storage.removeItem).not.toHaveBeenCalled();
   });
 
   it('propagates an unrelated error without reloading', async () => {
@@ -110,56 +110,5 @@ describe('lazyWithReload', () => {
     renderLazy(lazyWithReload(() => Promise.reject(chunkError()), { storage, reload }));
     expect(await screen.findByTestId('caught')).toBeTruthy();
     expect(reload).not.toHaveBeenCalled();
-  });
-});
-
-describe('handlePreloadError', () => {
-  it('reloads and prevents default when there is no mark', () => {
-    const event = { preventDefault: vi.fn() };
-    const reload = vi.fn();
-    handlePreloadError(event, { storage: memoryStorage(), reload });
-    expect(reload).toHaveBeenCalledTimes(1);
-    expect(event.preventDefault).toHaveBeenCalledTimes(1);
-  });
-
-  it('does neither with a recent mark', () => {
-    const event = { preventDefault: vi.fn() };
-    const reload = vi.fn();
-    handlePreloadError(event, { storage: memoryStorage({ [MARK]: String(Date.now()) }), reload });
-    expect(reload).not.toHaveBeenCalled();
-    expect(event.preventDefault).not.toHaveBeenCalled();
-  });
-});
-
-describe('preload error followed by a failing factory', () => {
-  it('stays silent while the page reloads (no boundary flash)', async () => {
-    const storage = memoryStorage();
-    const reload = vi.fn();
-    handlePreloadError({ preventDefault: vi.fn() }, { storage, reload });
-    renderLazy(lazyWithReload(() => Promise.reject(chunkError()), { storage, reload }));
-    await new Promise((r) => setTimeout(r, 20));
-    expect(screen.queryByTestId('caught')).toBeNull();
-    expect(reload).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe('installPreloadErrorReload', () => {
-  it('wires vite:preloadError to the one-reload policy and can be removed', () => {
-    const target = new EventTarget();
-    const remove = installPreloadErrorReload(target);
-    const event = new Event('vite:preloadError', { cancelable: true });
-    window.sessionStorage.clear();
-    const reload = vi.fn();
-    const original = window.location;
-    Object.defineProperty(window, 'location', { configurable: true, value: { ...original, reload } });
-    target.dispatchEvent(event);
-    Object.defineProperty(window, 'location', { configurable: true, value: original });
-    expect(reload).toHaveBeenCalledTimes(1);
-    expect(event.defaultPrevented).toBe(true);
-    remove();
-    window.sessionStorage.clear();
-    resetReloadInProgress();
-    target.dispatchEvent(new Event('vite:preloadError', { cancelable: true }));
-    expect(reload).toHaveBeenCalledTimes(1);
   });
 });

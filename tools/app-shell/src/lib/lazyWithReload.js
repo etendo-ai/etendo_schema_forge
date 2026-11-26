@@ -44,25 +44,11 @@ export function reloadOnceForStaleChunk({
   return true;
 }
 
-/** `vite:preloadError` handler: same one-reload policy, `preventDefault` only when reloading. */
-export function handlePreloadError(event, deps) {
-  if (reloadOnceForStaleChunk(deps)) event.preventDefault();
-}
-
-function clearReloadMark(storage) {
-  try {
-    storage.removeItem(RELOAD_MARK_KEY);
-  } catch {
-    // Nothing to clear.
-  }
-}
-
 /** `lazy()` whose chunk failures reload the page once (see `reloadOnceForStaleChunk`). */
 export function lazyWithReload(factory, { storage = defaultStorage(), reload } = {}) {
   return lazy(async () => {
     try {
       const module = await factory();
-      clearReloadMark(storage);
       return module;
     } catch (error) {
       if (isChunkLoadError(error) && (reloadInProgress || reloadOnceForStaleChunk({ storage, reload }))) {
@@ -74,14 +60,7 @@ export function lazyWithReload(factory, { storage = defaultStorage(), reload } =
   });
 }
 
-/** Test helper: forgets that a reload was triggered. */
+/** @internal Test helper: forgets that a reload was triggered. */
 export function resetReloadInProgress() {
   reloadInProgress = false;
-}
-
-/** Registers the `vite:preloadError` listener that reloads once on a stale build. */
-export function installPreloadErrorReload(target = window) {
-  const listener = (event) => handlePreloadError(event);
-  target.addEventListener('vite:preloadError', listener);
-  return () => target.removeEventListener('vite:preloadError', listener);
 }

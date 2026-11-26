@@ -1,5 +1,7 @@
 // @covers tools/app-shell/src/runtime-routes.jsx
 // Kept apart from runtime-routes.vitest.js: it needs vi.mock of lazy pages, which would break that file's real imports.
+// Scope: boundary wiring only. The reload-once policy (a factory rejecting with a chunk error) is
+// covered in lib/__tests__/lazyWithReload.vitest.js; Vitest wraps errors thrown by a mocked factory.
 // ETP-6400 — a failing lazy chunk ends in the boundary, not in "Loading...", and a later
 // navigation to a healthy lazy route recovers.
 import { afterEach, describe, expect, it, vi } from 'vitest';

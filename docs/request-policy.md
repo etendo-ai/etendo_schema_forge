@@ -564,7 +564,7 @@ and a lazy page (e.g. onboarding) stays on "Loading..." forever. The app-shell h
 - A chunk load failure (`isChunkLoadError`) reloads the page **once**: the mark lives in
   `sessionStorage` under `go:chunk-reload` and is honoured for 10 s. A second failure inside the
   window, or no usable storage, lets the error through so it can never loop.
-- `main.jsx` installs `vite:preloadError` through `installPreloadErrorReload()` with the same policy.
+- `vite:preloadError` has a single policy, `installVitePreloadRecovery()` (ETP-6441); `lazyWithReload` only handles the factory-level rejection. The mark is never cleared on success: it expires after its window.
 - Every lazy route in `runtime-routes.jsx` MUST use `lazyWithReload`/`lazyElement`, not bare
   `lazy()`; `RouteChunkErrorBoundary` shows a message and a reload button when the chunk still
   cannot load. It only handles chunk errors; any other render error reaches the next boundary up.
