@@ -11,7 +11,7 @@ const fields = [
   { key: 'stocked', column: 'IsStocked', type: 'checkbox', label: 'Stocked', required: true, section: 'principal', defaultValue: 'Y', displayLogic: (record) => record.productType === 'I', readOnlyLogic: (record) => record['productType'] === 'R' || record['productType'] === 'E' || record['productType'] === 'O' },
   { key: 'returnable', column: 'Returnable', type: 'checkbox', label: 'Returnable', required: true, section: 'principal', defaultValue: 'Y', displayLogic: (record) => record.productType === 'I' },
   { key: 'active', column: 'IsActive', type: 'checkbox', label: 'Active', required: true, section: 'principal', defaultValue: 'Y' },
-  { key: 'description', column: 'Description', type: 'textarea', label: 'Description', section: 'principal', maxLength: 255, span: 3 },
+  { key: 'description', column: 'Description', type: 'textarea', label: 'Description', section: 'principal', maxLength: 255, span: 3, rows: 2 },
   { key: 'image', column: 'AD_Image_ID', type: 'image', label: 'Image', section: 'principal' },
 ];
 // @sf-generated-end fields:product
