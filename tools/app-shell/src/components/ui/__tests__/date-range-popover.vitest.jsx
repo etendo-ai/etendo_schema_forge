@@ -1,4 +1,5 @@
-// Trigger-label contract of the shared date-range picker.
+// @covers tools/app-shell/src/components/ui/date-range-popover.jsx
+// Trigger-label contract of the shared date-range picker, and its opt-in compact layout.
 //
 // ETP-4956: "all time" is emitted as `value === null` (see handlePresetSelect),
 // which is indistinguishable from "nothing chosen" — so the trigger label for
@@ -25,7 +26,7 @@ vi.mock('@/i18n', () => ({
   useLocaleSwitch: () => ({ locale: 'es_ES' }),
 }));
 
-import { DateRangePopover, computeTriggerLabel } from '../date-range-popover.jsx';
+import { DateRangePopover, DateRangePopoverContent, computeTriggerLabel } from '../date-range-popover.jsx';
 
 // Radix's Popover needs pointer capture + scrollIntoView, neither of which
 // jsdom implements (same polyfill the other Radix suites install).
@@ -167,4 +168,47 @@ describe('DateRangePopover — opt-in extraPresets (last3m / last6m)', () => {
       expect(screen.getByText(label)).toBeInTheDocument();
     },
   );
+});
+
+// ETP-6209 — `layout="compact"` for a phone-width panel: wrapping preset pills, the custom range's
+// two calendars stacked (each still owning its end), a full-width footer. Default stays as is.
+describe('DateRangePopoverContent — layout="compact"', () => {
+  it('lists the presets as pressed-state pills and hides the calendars until "custom"', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const onClose = vi.fn();
+    render(<DateRangePopoverContent value={{ presetId: 'last7' }} onChange={onChange} onClose={onClose} layout="compact" />);
+
+    expect(screen.getByTestId('date-range-compact')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'dateRangeLast7Days' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'dateRangeToday' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.queryByText('filterFrom')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'dateRangeLast30Days' }));
+    expect(onChange).toHaveBeenCalledWith({ presetId: 'last30' });
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('stacks "from" over "to" for a custom range, seeded from the value, with the footer', () => {
+    render(
+      <DateRangePopoverContent
+        value={{ from: new Date(2026, 9, 1), to: new Date(2026, 9, 31) }}
+        onChange={() => {}}
+        onClose={() => {}}
+        layout="compact" />,
+    );
+
+    expect(screen.getByRole('button', { name: 'dateRangeCustom' })).toHaveAttribute('aria-pressed', 'true');
+    const from = screen.getByText('filterFrom');
+    const to = screen.getByText('filterTo');
+    // eslint-disable-next-line no-bitwise
+    expect(from.compareDocumentPosition(to) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'dateRangeApply' })).toBeEnabled();
+  });
+
+  it('leaves the default layout untouched (presets column, no compact wrapper)', () => {
+    render(<DateRangePopoverContent value={null} onChange={() => {}} onClose={() => {}} />);
+    expect(screen.queryByTestId('date-range-compact')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'dateRangeToday' })).not.toHaveAttribute('aria-pressed');
+  });
 });

@@ -3027,7 +3027,7 @@ Selection is cleared whenever the filters object reference changes (every dropdo
 
 All three tabs — Movimientos, Extractos importados, Conciliación — fetch **unfiltered** and evaluate
 the `AdvancedFilterBuilder` condition tree in memory through `applyConditions`
-(`advancedFilterApply.js`). The backend criteria path (`gridQuery.js` → `ListView`) is **not**
+(`advancedFilterApply.js`). The backend criteria path (`@etendo-ai/app-shell-core/lib/gridQuery.js` → `ListView`) is **not**
 involved here, so a filter defect in this window is always a client-side one.
 
 `applyConditions(rows, filter, deriveRow, columnsByKey)` takes the filter-column metadata as its
@@ -3135,7 +3135,7 @@ Two different mechanisms, because the LIST and the DETAIL tabs are two different
 
 The list is a generic `DataTable` inside the `AccountsHeaderTable` slot, so it sorts the way
 every other window does: `ListView` owns the state, `useEntity` turns it into NEO's `_sortBy`
-(`resolveBackendSort`, `lib/gridQuery.js`), and the whole dataset is ordered — not just the
+(`resolveBackendSort`, `@etendo-ai/app-shell-core/lib/gridQuery.js`), and the whole dataset is ordered — not just the
 loaded page. `DataTable` treats `sortable` as **opt-out** (`col.sortable !== false`), and the
 slot declares `sortable: true` on every data column. Row actions no longer belong to the column
 array: they render through
@@ -3405,7 +3405,7 @@ hand-written, reached through a wrapper that branches on `recordId`. Its grids r
 
   Becoming a real field **retired two workarounds** that existed only because `appendVirtualFields` (`resolve-curated.js`, in `schema_forge_core`) copies a closed whitelist excluding `cellType` and `gridLabelKey`: the `VIRTUAL_FIELD_CELL_TYPES` map in `accountCellTypes.jsx` is gone (`resolveCellType` is now a plain `col.cellType` read), and `window.labelOverrides` is gone (the header resolves through the normal `gridLabelKey` → `financeAccountsColPending` path). Keep those two routes in mind for any *other* virtual field, and re-read this note before adding one.
 
-  What did **not** change: its contract `type` is still `"integer"`, and `DataTable` right-aligns header **and** cell for any column whose `type` is in its numeric set — which only ever fights the `reconcilePill` renderer, since the column never displays a raw number. `AccountsHeaderTable`'s `GRID_TYPE_OVERRIDE` still forces this one column's DataTable-facing `type` to `"string"` so it stays left-aligned like every other status cell (ETP-4764 follow-up). That override is presentation-only and does not affect sorting: `gridQuery`'s `inferSortMode` maps both `"string"` and `"integer"` to `'raw'`, so `_sortBy` carries the column key either way and the backend orders by the real integer.
+  What did **not** change: its contract `type` is still `"integer"`, and `DataTable` right-aligns header **and** cell for any column whose `type` is in its numeric set — which only ever fights the `reconcilePill` renderer, since the column never displays a raw number. `AccountsHeaderTable`'s `GRID_TYPE_OVERRIDE` still forces this one column's DataTable-facing `type` to `"string"` so it stays left-aligned like every other status cell (ETP-4764 follow-up). That override is presentation-only and does not affect sorting: `inferSortMode` in `@etendo-ai/app-shell-core/lib/gridQuery.js` maps both `"string"` and `"integer"` to `'raw'`, so `_sortBy` carries the column key either way and the backend orders by the real integer.
 
   **It counts two different things, one per account type (ETP-4795), and the SQL function preserves that.** `PENDING_BY_ACCOUNT_SQL` in `FinancialAccountsPageHandler` originally had a single branch: unmatched `fin_bankstatementline` rows (since ETP-5581, unmatched **and not discarded**: a PSD2 line discarded as part of a bounce pair is resolved, `em_psd2_is_discarded = 'N'` in the function). A cash drawer never imports a bank statement, so for every cash account the figure was **structurally zero** — not "nothing pending", but "this query cannot see cash". It blinded three surfaces at once: the list's *Por conciliar* column, the sidebar's *Cuentas con pendientes* filter, and the Conciliación tab badge. A second branch counts unreconciled cash movements (`processed='Y'`, `fin_reconciliation_id IS NULL`, `status <> 'RPPC'`, `fa.type='C'`), so a cash account reports the movements awaiting their next close. `etgo_account_pending_count` **sums both branches** rather than `UNION ALL`-ing them, which reproduces the `Map.merge(..., Integer::sum)` the old read loop needed for an account that is cash-type *and* has imported bank statements.
 

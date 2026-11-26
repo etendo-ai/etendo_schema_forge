@@ -1,3 +1,4 @@
+// @covers tools/app-shell/src/components/contract-ui/ListView.jsx
 /**
  * ETP-5129 — SelectionToolbar's bulk-print button had no loading/disabled
  * state at all: a slow print (one client render per selected document plus
@@ -91,7 +92,7 @@ vi.mock('../DocumentPrintDrawer.jsx', () => ({
 vi.mock('../ListFilterBar.jsx', () => ({ ListFilterBar: () => <div data-testid="list-filter-bar" /> }));
 import { noOpExtractQueryParamConditions } from './testUtils/gridQueryMock.js';
 
-vi.mock('@/lib/gridQuery', () => ({
+vi.mock('@etendo-ai/app-shell-core/lib/gridQuery.js', () => ({
   buildAdvancedFilterCriteria: () => null,
   extractQueryParamConditions: noOpExtractQueryParamConditions,
 }));

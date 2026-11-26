@@ -358,17 +358,51 @@ export async function fetchPortalHome(fetchImpl, token, { months = 12 } = {}) {
 }
 
 /**
- * The header search across every kind: newest matches first, a handful at most. A blank query
- * resolves to an empty list without a request.
+ * The search's results by document kind (ETP-6209), in the order the server gives them, each
+ * `{ kind, count, documents }`. The server's `groups` (`count`: every match of that kind, the
+ * `documents` a handful of them) when it sends them; otherwise the flat `documents` grouped here,
+ * in first-appearance order (newest first), `count` then `null` — only a sample was received.
+ */
+export function groupPortalSearchResults(data) {
+  if (Array.isArray(data?.groups)) {
+    return data.groups
+      .map((group) => ({
+        kind: String(group?.kind ?? '').toUpperCase(),
+        count: Number.isFinite(Number(group?.count)) ? Number(group.count) : null,
+        documents: Array.isArray(group?.documents) ? group.documents.map(normalizePortalDocument) : [],
+      }))
+      .filter((group) => group.kind && group.documents.length > 0);
+  }
+  const groups = new Map();
+  for (const row of Array.isArray(data?.documents) ? data.documents : []) {
+    const document = normalizePortalDocument(row);
+    const kind = String(document.kind ?? '').toUpperCase();
+    if (!kind) continue;
+    if (!groups.has(kind)) groups.set(kind, { kind, count: null, documents: [] });
+    groups.get(kind).documents.push(document);
+  }
+  return [...groups.values()];
+}
+
+/**
+ * The header search across every kind: `documents`, newest matches first and a handful at most,
+ * and the same results by kind (`groups`, see {@link groupPortalSearchResults}). A blank query
+ * resolves to empty results without a request.
+ *
+ * @returns {Promise<{ documents: object[], groups: Array<{kind: string, count: number|null,
+ *   documents: object[]}> }>}
  */
 export async function searchPortalDocuments(fetchImpl, token, query) {
   const trimmed = String(query ?? '').trim();
-  if (!trimmed) return [];
+  if (!trimmed) return { documents: [], groups: [] };
   const response = await portalGet(fetchImpl, token, `/search?q=${encodeURIComponent(trimmed)}`, {
     invalidOn: INVALID_TOKEN_STATUSES_PDF,
   });
   const data = await response.json().catch(() => ({}));
-  return Array.isArray(data?.documents) ? data.documents.map(normalizePortalDocument) : [];
+  return {
+    documents: Array.isArray(data?.documents) ? data.documents.map(normalizePortalDocument) : [],
+    groups: groupPortalSearchResults(data),
+  };
 }
 
 /**

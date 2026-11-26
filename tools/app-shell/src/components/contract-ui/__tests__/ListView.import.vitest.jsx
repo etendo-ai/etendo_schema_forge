@@ -56,7 +56,7 @@ vi.mock('../ListFilterBar.jsx', () => ({
 }));
 import { noOpExtractQueryParamConditions } from './testUtils/gridQueryMock.js';
 
-vi.mock('@/lib/gridQuery', () => ({
+vi.mock('@etendo-ai/app-shell-core/lib/gridQuery.js', () => ({
   buildAdvancedFilterCriteria: () => null,
   extractQueryParamConditions: noOpExtractQueryParamConditions,
 }));
