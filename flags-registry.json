@@ -528,7 +528,7 @@
           }
         ]
       },
-      "$retiredComment": "Flag retired: ETP-5443's DemoDataTransferFlag gate is no longer in com.etendoerp.go (no FLAG_DEMO_DATA_TRANSFER constant, no etendo.go.flags.demo-data-transfer property), so the durable job is not gated. The feature keeps scoring its paths, tests and deferred items. Re-adding a gate means a header flag plus a GoFeatureFlags constant and a contribution with flagKey. The frontend names it still references: useDemoDataTransfer, demoDataTransferStep, demoDataTransfer, DataTransferAction, firstStepsDemoDataTransfer."
+      "$flagRetiredComment": "Flag retired: ETP-5443's DemoDataTransferFlag gate is no longer in com.etendoerp.go (no FLAG_DEMO_DATA_TRANSFER constant, no etendo.go.flags.demo-data-transfer property), so the durable job is not gated. The feature keeps scoring its paths, tests and deferred items. Re-adding a gate means a header flag plus a GoFeatureFlags constant and a contribution with flagKey. The frontend names it still references: useDemoDataTransfer, demoDataTransferStep, demoDataTransfer, DataTransferAction, firstStepsDemoDataTransfer."
     },
     {
       "id": "environment-access-enforcement-kill-switch",
@@ -996,7 +996,6 @@
         "ttlNote": "Set by the user for ETP-5716: by 2027-01-01 the 390 is released to every tenant and the flag retires on the ship branch (unwrap the two toggle points in NeoFiscalModelsCatalogService and the two in useFiscalModelsCatalog.js/FmCatalogPage.jsx, delete FiscalModel390Flag.java and catalogAvailability.js, remove the `catalogAvailability.js` line from the model-id guardrail ALLOWLIST in fiscal-models/__tests__/modelRegistry.vitest.js, delete the flag object, keep this entry).",
         "symbols": [
           "fiscal-model-390",
-          "FiscalModel390Flag",
           "catalogAvailability",
           "splitCatalogAnswer",
           "filterAvailableModels",
