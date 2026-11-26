@@ -1,3 +1,4 @@
+// @covers cli/src/flags-panel.js
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 
