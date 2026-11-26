@@ -26,8 +26,15 @@ const SEPARATOR_EM = 0.3;
 /** Estimated rendered width, in px, of a short axis label at `fontSize`. */
 export function estimateTextWidth(text, fontSize) {
   let em = 0;
-  for (const ch of String(text ?? '')) em += /\d/.test(ch) ? DIGIT_EM : /[.,\s']/.test(ch) ? SEPARATOR_EM : DIGIT_EM + 0.05;
+  for (const ch of String(text ?? '')) em += glyphWidthEm(ch);
   return em * fontSize;
+}
+
+// Width of one glyph in em: a digit, a separator, or (any other letter / symbol) a digit plus a little.
+function glyphWidthEm(ch) {
+  if (/\d/.test(ch)) return DIGIT_EM;
+  if (/[.,\s']/.test(ch)) return SEPARATOR_EM;
+  return DIGIT_EM + 0.05;
 }
 
 // Space between a y label's right edge and the plot (the label sits at plotLeft - Y_LABEL_GAP), plus 1 px of slack
@@ -121,27 +128,39 @@ function labelExtent(l, range, plotWidth, fontSize, showsYear) {
 function dropCollidingLabels(labels, range, plotWidth, fontSize) {
   const kept = [];
   for (const l of labels) {
-    const prev = kept[kept.length - 1];
-    if (prev) {
-      // The year line only counts for a label that shows it: the first visible one and the one after a year change.
-      const [, prevRight] = labelExtent(prev, range, plotWidth, fontSize, kept.length === 1 || prev.year !== kept[kept.length - 2].year);
-      const [left] = labelExtent(l, range, plotWidth, fontSize, l.year !== prev.year);
-      if (left - prevRight < X_LABEL_MIN_GAP_PX) {
-        if (kept.length === 1 && prev.partialStart) {
-          kept.pop();
-        } else {
-          continue;
-        }
+    if (collidesWithLastKept(kept, l, range, plotWidth, fontSize)) {
+      if (isPartialStartAlone(kept)) {
+        kept.pop();
+      } else {
+        continue;
       }
     }
     kept.push(l);
   }
-  const [first] = kept;
-  if (first && first.anchor !== 'start') {
-    const x = dayFraction(first.day, range) * plotWidth;
-    if (x < 14) first.anchor = 'start';
-  }
+  anchorFirstLabelNearLeftEdge(kept[0], range, plotWidth);
   return kept;
+}
+
+// Whether `label` would sit closer than X_LABEL_MIN_GAP_PX to the last kept label (false when none is kept yet).
+function collidesWithLastKept(kept, label, range, plotWidth, fontSize) {
+  const prev = kept[kept.length - 1];
+  if (!prev) return false;
+  // The year line only counts for a label that shows it: the first visible one and the one after a year change.
+  const prevShowsYear = kept.length === 1 || prev.year !== kept[kept.length - 2].year;
+  const [, prevRight] = labelExtent(prev, range, plotWidth, fontSize, prevShowsYear);
+  const [left] = labelExtent(label, range, plotWidth, fontSize, label.year !== prev.year);
+  return left - prevRight < X_LABEL_MIN_GAP_PX;
+}
+
+// The only kept label so far is the partial start-of-range month: the one that gives way on a collision.
+function isPartialStartAlone(kept) {
+  return kept.length === 1 && kept[0].partialStart;
+}
+
+// A label left first within 14 px of the plot's left edge is anchored `start` (the design's rule), else it stays.
+function anchorFirstLabelNearLeftEdge(first, range, plotWidth) {
+  if (!first || first.anchor === 'start') return;
+  if (dayFraction(first.day, range) * plotWidth < 14) first.anchor = 'start';
 }
 
 /**

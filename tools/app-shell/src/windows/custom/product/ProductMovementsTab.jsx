@@ -450,6 +450,44 @@ function MovementsFilterBar({ ui, direction, onDirectionChange, dateRange, onDat
   );
 }
 
+/**
+ * The tab survives a change of record, so nothing of the previous product may outlive it: its warehouses and its
+ * warehouse filter (an option the new product may not have). The state is reset while rendering, so the effects of
+ * this same commit already see the clean filters; resetting it in an effect would let the first page of the new
+ * product go out with the warehouse of the old one.
+ */
+function useResetOnProductChange(productId, activeAndStorable, setters) {
+  const [stateProductId, setStateProductId] = useState(productId);
+  if (stateProductId !== productId) {
+    setStateProductId(productId);
+    setters.setWarehouseId(null);
+    setters.setWarehouses([]);
+    setters.setEverActive(activeAndStorable);
+    setters.setProbe(null);
+    setters.setTotals(null);
+    setters.setState({ rows: [], loading: true, loadingMore: false, error: null, hasMore: false });
+  }
+}
+
+/**
+ * Sizing of the table's scroll box. It is bounded by the room left in the content column (inline maxHeight wins
+ * over the class, which only stays as the pre-measure fallback), so the page itself never scrolls. `fill` also sets
+ * the height to that room, so the total row sits at the card bottom whether there are few rows or many. With the
+ * hook's measured floor (min of 200 px and the natural height of header + rows) a short table does not keep 340 px
+ * of empty box; before it is measured, and in the skeleton / error states, the floor stays 340. The scroll tolerance
+ * is off while more pages can load, so the scrollbar is never hidden then.
+ */
+function useMovementsScrollBox({ isActive, state }) {
+  const fitContent = !state.loading && !state.error;
+  const minHeight = fitContent ? MOVEMENTS_TABLE_COMPACT_MIN_HEIGHT : MOVEMENTS_TABLE_MIN_HEIGHT;
+  const scrollTolerance = state.hasMore ? 0 : MOVEMENTS_TABLE_SCROLL_TOLERANCE_PX;
+  const remaining = useRemainingHeight({
+    active: Boolean(isActive), minHeight, bottomGap: TOTAL_ROW_BOTTOM_GAP_PX, fill: true, fitContent, scrollTolerance,
+  });
+  const scrollBoxStyle = { minHeight: MOVEMENTS_TABLE_MIN_HEIGHT, ...remaining.style, scrollPaddingBottom: TOTAL_ROW_RESERVE_PX };
+  return { remaining, scrollBoxStyle };
+}
+
 export default function ProductMovementsTab({ data, apiBaseUrl, isActive, onVisibilityChange }) {
   const ui = useUI();
   const { locale } = useLocaleSwitch();
@@ -478,29 +516,11 @@ export default function ProductMovementsTab({ data, apiBaseUrl, isActive, onVisi
   // Period totals of the first page: { key, value }, `key` ties them to the product + filters they were
   // computed for (a sort does not change it), `value` is null when the backend sent none.
   const [totals, setTotals] = useState(null);
-  // The tab's own scroll box is bounded by the room left in the content column (inline maxHeight wins
-  // over the class, which only stays as the pre-measure fallback), so the page itself never scrolls. `fill` also sets
-  // the height to that room, so the total row sits at the card bottom whether there are few rows or many.
-  const fitContent = !state.loading && !state.error;
-  const remaining = useRemainingHeight({ active: Boolean(isActive), minHeight: fitContent ? MOVEMENTS_TABLE_COMPACT_MIN_HEIGHT : MOVEMENTS_TABLE_MIN_HEIGHT, bottomGap: TOTAL_ROW_BOTTOM_GAP_PX, fill: true, fitContent, scrollTolerance: state.hasMore ? 0 : MOVEMENTS_TABLE_SCROLL_TOLERANCE_PX });
-  // With the hook's measured floor (min of 200 px and the natural height of header + rows) a short table does not
-  // keep 340 px of empty box; before it is measured, and in the skeleton / error / empty states, the floor stays 340.
-  const scrollBoxStyle = { minHeight: MOVEMENTS_TABLE_MIN_HEIGHT, ...remaining.style, scrollPaddingBottom: TOTAL_ROW_RESERVE_PX };
+  const { remaining, scrollBoxStyle } = useMovementsScrollBox({ isActive, state });
 
-  // The tab survives a change of record, so nothing of the previous product may outlive it: its
-  // warehouses and its warehouse filter (an option the new product may not have). The state is reset
-  // while rendering, so the effects of this same commit already see the clean filters; resetting it in an
-  // effect would let the first page of the new product go out with the warehouse of the old one.
-  const [stateProductId, setStateProductId] = useState(productId);
-  if (stateProductId !== productId) {
-    setStateProductId(productId);
-    setWarehouseId(null);
-    setWarehouses([]);
-    setEverActive(activeAndStorable);
-    setProbe(null);
-    setTotals(null);
-    setState({ rows: [], loading: true, loadingMore: false, error: null, hasMore: false });
-  }
+  useResetOnProductChange(productId, activeAndStorable, {
+    setWarehouseId, setWarehouses, setEverActive, setProbe, setTotals, setState,
+  });
 
   // Side effects of that change cannot run while rendering: the pages of the old product still in flight
   // are dropped by bumping the generation.
