@@ -1,8 +1,8 @@
 // @covers tools/app-shell/src/hooks/useEnvironmentSwitch.js
 import { render, renderHook, act, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { AuthProvider, createMemoryAuthStorage, useAuth as useCoreAuth } from '@etendosoftware/app-shell-core/auth';
-import { DataProvider, createQueryCache } from '@etendosoftware/app-shell-core/data';
+import { AuthProvider, createMemoryAuthStorage, useAuth as useCoreAuth } from '@etendo-ai/app-shell-core/auth';
+import { DataProvider, createQueryCache } from '@etendo-ai/app-shell-core/data';
 
 /**
  * ETP-5202 phase 2 — entering a tenant the user has no role in.
@@ -24,7 +24,7 @@ import { DataProvider, createQueryCache } from '@etendosoftware/app-shell-core/d
 const fetchEnvironments = vi.fn();
 const loginEnvironment = vi.fn();
 
-vi.mock('@etendosoftware/etendo-go-core/onboarding/api', () => ({
+vi.mock('@etendo-ai/etendo-go-core/onboarding/api', () => ({
   fetchEnvironments: (...args) => fetchEnvironments(...args),
   loginEnvironment: (...args) => loginEnvironment(...args),
 }));

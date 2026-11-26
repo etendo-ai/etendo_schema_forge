@@ -73,7 +73,7 @@ vi.mock('../PaymentLifecycleConfirmModal', () => ({
 // and stubbing it would swallow the component's OWN requests (it went through the raw `fetch`
 // before, it goes through this hook now), so the stub is gone. What the component needs is a
 // session to read the token from, which is what this mock supplies.
-vi.mock('@etendosoftware/app-shell-core/auth', async (importOriginal) => ({
+vi.mock('@etendo-ai/app-shell-core/auth', async (importOriginal) => ({
   ...(await importOriginal()),
   useAuthOptional: () => ({ token: 'tok-1' }),
 }));
@@ -90,7 +90,7 @@ vi.mock('../ConfirmPaymentModal', () => ({
 // --- Imports ---
 
 import { render, screen, waitFor, within } from '@testing-library/react';
-import { setSessionCredentials, CREDENTIAL_MODES } from '@etendosoftware/app-shell-core/auth/sessionCredentials.js';
+import { setSessionCredentials, CREDENTIAL_MODES } from '@etendo-ai/app-shell-core/auth/sessionCredentials.js';
 import userEvent from '@testing-library/user-event';
 import { toast } from 'sonner';
 import { formatCurrency } from '@/lib/formatCurrency.js';
@@ -797,14 +797,15 @@ describe('PaymentHeaderTableBase — delete flow', () => {
 });
 
 describe('PaymentHeaderTableBase — rowQuickActions contract', () => {
-  it('never hides delete when the record is complete, gates edit as always-hidden and restricts delete to non-void rows', () => {
+  it('never hides delete when the record is complete, gates edit as always-hidden and restricts delete to non-void, non-remitted rows', () => {
     render(<PaymentHeaderTableBase {...BASE_PROPS} dir="in" data={[]} onDataMutated={vi.fn()} />);
     const { rowQuickActions } = dataTableSpy.current;
     expect(rowQuickActions.hideDeleteWhenComplete).toBe(false);
     expect(rowQuickActions.statusField).toBe('status');
     expect(rowQuickActions.sendDocument).toBeNull();
     expect(rowQuickActions.actions.edit.visibleWhen).toBe("@status@='__hidden__'");
-    expect(rowQuickActions.actions.delete.visibleWhen).toBe("@status@!='RPVOID'");
+    // ETP-6247 — nor for a payment a remittance owns (REM_SENT / REM_CANCEL).
+    expect(rowQuickActions.actions.delete.visibleWhen).toBe("@status@!='RPVOID' & @status@!='REM_SENT' & @status@!='REM_CANCEL'");
   });
 
   it('preserves any rowQuickActions passed in via props while adding its own overrides', () => {

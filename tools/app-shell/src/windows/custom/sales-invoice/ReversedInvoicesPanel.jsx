@@ -17,7 +17,7 @@ import { parseCalendarDate } from '@/lib/dateOnly.js';
 import { toast } from 'sonner';
 
 import { useApiFetch } from '@/auth/useApiFetch.js';
-import { isNetworkError } from '@etendosoftware/app-shell-core/auth';
+import { isNetworkError } from '@etendo-ai/app-shell-core/auth';
 import SharedInvoicePickerModal from '@/components/contract-ui/InvoicePickerModal.jsx';
 import { useFiscalModelsCatalog, isModelActive } from '@/windows/custom/fiscal-models/useFiscalModelsCatalog.js';
 import { isVoidedStatus } from '../../../lib/docStatus.js';

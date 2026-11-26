@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { WarningIcon, FileTextIcon, UsersIcon } from '@phosphor-icons/react';
+import { WarningIcon, FileTextIcon, UserIcon, UsersIcon } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { useLocaleSwitch, useUI } from '@/i18n';
 import { useApiFetch } from '@/auth/useApiFetch.js';
@@ -56,6 +56,9 @@ export function confirmSummary(readiness, linesTotal, record) {
 // label key a card falls back to when its option carries none (the single «Sin agrupar» card without a param).
 const GROUPING_CARD = {
   [GROUPING_NONE]: { labelKey: 'remittanceGroupingNone', descriptionKey: 'remittanceGroupingNoneDescription', icon: FileTextIcon },
+  // ETP-6247 — GGP: one payment per business partner, whatever the due dates (the backend's own
+  // grouping value next to P and GGPD). One person icon, where GGPD's group icon reads «several».
+  GGP: { descriptionKey: 'remittanceGroupingByBpDescription', icon: UserIcon },
   GGPD: { descriptionKey: 'remittanceGroupingByBpAndDueDateDescription', icon: UsersIcon },
 };
 
@@ -97,8 +100,8 @@ function ConfirmedRow({ label, children, testId }) {
 /**
  * ETP-6247 — the success step of «Confirmar remesa» («¡Remesa confirmada!»), in the same modal:
  * a summary card (remittance, status chip, invoices, total, type, fecha de cargo/abono, account
- * with a masked IBAN) and «Descargar fichero» (the card's own download path), «Cerrar». Nothing is
- * downloaded by itself. Every way of leaving (Cerrar, ×, Esc, the backdrop) goes through
+ * with a masked IBAN) and «Descargar fichero» (the on-the-fly `downloadFile`, as everywhere else: the file is
+ * not stored on the remittance), «Cerrar». Nothing is downloaded by itself. Every way of leaving (Cerrar, ×, Esc, the backdrop) goes through
  * `onFinish`, which refreshes the page behind the modal and closes it.
  */
 function ConfirmedStep({ record, summary, result, apiBaseUrl, onFinish }) {
@@ -125,7 +128,7 @@ function ConfirmedStep({ record, summary, result, apiBaseUrl, onFinish }) {
     setDownloading(true);
     setDownloadError(null);
     try {
-      await downloadRemittanceFile(rootApiFetch, { attachmentId: result.attachmentId, fileName: result.fileName });
+      await downloadRemittanceFile(apiFetch, record.id);
     } catch (err) {
       setDownloadError(fileActionErrorMessage(err, ui, 'remittanceFileDownloadError'));
     } finally {
@@ -149,7 +152,6 @@ function ConfirmedStep({ record, summary, result, apiBaseUrl, onFinish }) {
       primaryLabel={ui('remittanceFileDownload')}
       loadingLabel={ui('remittanceFileDownload')}
       cancelLabel={ui('close')}
-      primaryDisabled={!result.attachmentId}
       testId="remittance-confirmed-dialog"
       data-testid="ActionChoiceModal__remittance-confirmed">
       <div className="flex flex-col gap-5" data-testid="remittance-confirmed-body">
@@ -192,8 +194,8 @@ function ConfirmedStep({ record, summary, result, apiBaseUrl, onFinish }) {
  * (invoices, total, fecha de cargo/abono), asks the grouping and warns that confirming cannot be
  * undone: the payments are created AND settled and the remittance ends Cobrada or Pagada. Confirming
  * posts the atomic `confirm` action itself (not DetailView's `handleProcess`, which would drop its
- * response), toasts that the SEPA file is generated (it is NOT downloaded: the user takes it from
- * «Fichero SEPA» when they want) and refreshes the record. A refusal keeps
+ * response) and moves to the success step, which offers «Descargar fichero» (generated on the fly by
+ * `downloadFile`, nothing is stored on the remittance); the record is refreshed when the user leaves. A refusal keeps
  * the dialog open; a readiness refusal lists its problems.
  */
 export default function RemittanceConfirmDialog({ process, record, apiBaseUrl, onRefresh, onClose }) {
@@ -238,16 +240,11 @@ export default function RemittanceConfirmDialog({ process, record, apiBaseUrl, o
     setBusy(true);
     try {
       const confirmed = await confirmRemittance(apiFetch, remittanceId, grouping ?? GROUPING_NONE);
-      if (confirmed.attachmentId) {
-        // The success step lives in this dialog's own state: the page behind is refreshed only when
-        // the user leaves it (finish), so nothing unmounts the modal under them.
-        setResult(confirmed);
-        setBusy(false);
-        return;
-      }
-      toast.success(ui('remittanceConfirmSuccessNoFile'));
-      onRefresh?.();
-      onClose?.();
+      // The success step lives in this dialog's own state: the page behind is refreshed only when
+      // the user leaves it (finish), so nothing unmounts the modal under them. It always offers the
+      // download: the file is generated on the fly, nothing has to be attached first.
+      setResult(confirmed);
+      setBusy(false);
     } catch (err) {
       const refused = problemsFromError(err);
       if (refused.length > 0) setProblems(refused);

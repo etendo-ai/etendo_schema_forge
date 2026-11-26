@@ -15,9 +15,9 @@
  * catches.
  *
  * vitest, not `node --test`: the helpers come from
- * `@etendosoftware/app-shell-core/walkthrough`, which only Vite's resolver maps.
+ * `@etendo-ai/app-shell-core/walkthrough`, which only Vite's resolver maps.
  */
-import { findMissingFlowLabelKeys, normalizeFlows } from '@etendosoftware/app-shell-core/walkthrough';
+import { findMissingFlowLabelKeys, normalizeFlows } from '@etendo-ai/app-shell-core/walkthrough';
 
 import { WALKTHROUGH_FLOWS } from '../flows/index.js';
 import en_US from '@/locales/en_US.json';

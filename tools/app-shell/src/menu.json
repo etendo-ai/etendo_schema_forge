@@ -298,6 +298,13 @@
           "windowId": "6F8F913FA60F4CBD93DC1D3AA696E76E"
         },
         {
+          "name": "remittance",
+          "label": "Remittance",
+          "favname": "Remittance",
+          "accessWindowId": "FF8080812E71F7C7012E71FD0499001B",
+          "capability": "sepaRemittances"
+        },
+        {
           "name": "financial-account",
           "label": "Accounts",
           "favname": "Accounts",
@@ -348,13 +355,6 @@
       "icon": "Building2",
       "section": "Finance",
       "items": [
-        {
-          "name": "remittance",
-          "label": "Remittance",
-          "favname": "Remittance",
-          "accessWindowId": "FF8080812E71F7C7012E71FD0499001B",
-          "capability": "sepaRemittances"
-        },
         {
           "name": "chart-of-accounts",
           "label": "Chart of Accounts",
@@ -607,7 +607,6 @@
           "label": "Accounting Process",
           "favname": "Accounting Process",
           "icon": "Cog",
-          "featureFlag": "acct-process-monitor",
           "capability": "isAdminOrClientAdmin"
         },
         {

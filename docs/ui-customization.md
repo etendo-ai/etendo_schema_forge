@@ -101,8 +101,8 @@ replaced; only brand marks (logo, isotype) keep their own artwork.
 
 `@phosphor-icons/react` is in the `dedupe` lists of `vite.config.js` / `vitest.config.js` so core icons share
 the app's single Phosphor instance (and its `IconContext`). `lucide-react` stays in
-`tools/app-shell/package.json` (and those lists) for one reason only: the published `@etendosoftware/app-shell-core` and
-`@etendosoftware/etendo-go-core` packages still import it at runtime (and declare it as a peer
+`tools/app-shell/package.json` (and those lists) for one reason only: the published `@etendo-ai/app-shell-core` and
+`@etendo-ai/etendo-go-core` packages still import it at runtime (and declare it as a peer
 dependency). The app-shell source itself has no lucide import (enforced by
 `test/icon-library-policy.test.js`). Uninstall it once those core packages are migrated to Phosphor
 and a release is consumed here.
@@ -145,7 +145,7 @@ Exception (ETP-4997, SHELL-02): the list toolbar Export/Import buttons follow th
   `svg`, so find a rendered icon with `findIcon(root, Icon)` (`src/test/iconGlyph.js`).
 - Guardrail: `tools/app-shell/test/icon-library-policy.test.js` fails on a file that imports
   or mocks lucide-react or one of the replaced hand-drawn icon modules.
-- Icons rendered by `@etendosoftware/app-shell-core` (dialogs, selects, date pickers) are owned by
+- Icons rendered by `@etendo-ai/app-shell-core` (dialogs, selects, date pickers) are owned by
   that package and migrate there.
 
 ---
@@ -419,7 +419,7 @@ Injects custom components into specific structural slots of `DetailView`. Each k
 | `topbarSecondary` | `topbarSecondary={X}` | Left side of detail topbar, before Save/Confirm — see §3b | `data`, `recordId`, `token`, `apiBaseUrl`, `api`, `onProcess`, `onRefresh`, `onSave`, `isDirty`, `saveGate` |
 | `topbarRight` | `topbarRight={X}` | Right side of detail topbar (replaces status badge), after Save/Confirm | `data`, `recordId`, `token`, `apiBaseUrl`, `api`, `onProcess`, `onRefresh`, `onSave`, `isDirty`, `saveGate` |
 | `subHeader` | `headerContent={(data) => <X data={data} />}` | Full-width strip between the toolbar and the form — the first child of the detail content container | `data` |
-| `bottomSection` | `bottomSection={X}` | Bottom of detail view (replaces totals + footer) | `recordId`, `data`, `token`, `apiBaseUrl`, `api`, `summary`, `notesField`, `onFieldChange`, `notesFocused`, `setNotesFocused` |
+| `bottomSection` | `bottomSection={X}` | Bottom of detail view (replaces totals + footer) | `recordId`, `data`, `token`, `apiBaseUrl`, `api`, `summary`, `notesField`, `onFieldChange`, `notesFocused`, `setNotesFocused`, `onHeaderRefresh` (re-reads the header totals after the panel writes a child row itself, as the custom tabs' prop — ETP-6284, used by purchase-invoice's import-tax card) |
 | `sidePanel` | `sidePanel={X}` | Right-side panel alongside the detail form | `recordId`, `data`, `token`, `apiBaseUrl` |
 | `sidePanelStyle` | `sidePanelStyle={…}` | CSS style for the side panel container | — (style object, not a component) |
 | `sidebarFormScrollPaddingX` | `sidebarFormScrollPaddingX=""` (DetailView prop, opt-in, hand-built windows only) | Replaces the detail content column's padding when the window HAS a side panel / sidebar (default there: `px-2 pb-2` inline/compact, `pr-2` otherwise). `""` removes it. Ignored without a sidebar; independent of `formScrollPaddingX`. | — (string) |
@@ -1943,7 +1943,7 @@ Clicking either the chevron or the hover action toggles the same expand state �
 
 **Shared building blocks:** `tools/app-shell/src/components/contract-ui/DimensionsPanel.jsx` exports `DimBadge`, `DimSummary`, `DimensionGrid`. `InlineLinesPanel` only uses `DimensionGrid` now (the expanded content). **Update (same ticket, follow-up pass):** `AmortizationLinesTable.jsx` also stopped using `DimSummary`/`DimBadge` — it hand-patched the same static Layers/"Edit dimensions" hover-action pattern (see below) instead of the permanent grid-column summary it used to render. `DimSummary`/`DimBadge` currently have no consumer left in this repo but remain exported as reusable building blocks.
 
-**Pipeline-generator support (unchanged by ETP-4610):** `generateTableComponent` (`schema_forge_core`'s `cli/src/generate-frontend.js`) still emits this column type directly from `decisions.json` — no generator change was needed for the column-hiding requirement, since `InlineLinesPanel` (a generic component owned entirely by this functional repo, not part of `@etendosoftware/app-shell-core`) decides how the metadata renders, not the generator. Flag a field `"dimensionsPanel": true` (any `grid` value; see `docs/decisions-reference.md`) and the generator collects it into the synthetic column automatically for the pipeline-generated `<Window>LineTable.jsx`/`LinesTable.jsx`/`GoodsShipmentLineTable.jsx`/`GoodsReceiptLineTable.jsx` files. Fully additive — an entity with zero `dimensionsPanel: true` fields generates byte-for-byte the same `columns` array as before.
+**Pipeline-generator support (unchanged by ETP-4610):** `generateTableComponent` (`schema_forge_core`'s `cli/src/generate-frontend.js`) still emits this column type directly from `decisions.json` — no generator change was needed for the column-hiding requirement, since `InlineLinesPanel` (a generic component owned entirely by this functional repo, not part of `@etendo-ai/app-shell-core`) decides how the metadata renders, not the generator. Flag a field `"dimensionsPanel": true` (any `grid` value; see `docs/decisions-reference.md`) and the generator collects it into the synthetic column automatically for the pipeline-generated `<Window>LineTable.jsx`/`LinesTable.jsx`/`GoodsShipmentLineTable.jsx`/`GoodsReceiptLineTable.jsx` files. Fully additive — an entity with zero `dimensionsPanel: true` fields generates byte-for-byte the same `columns` array as before.
 
 **Real example:** the generated `LinesTable.jsx` (sales-invoice, purchase-invoice), `GoodsShipmentLineTable.jsx`/`GoodsReceiptLineTable.jsx` (goods-shipment, goods-receipt), and `GLJournalLineTable.jsx` (manual-journals) — all driven purely by `decisions.json`, all 5 in-scope windows regenerated and validated as part of ETP-4610. `goods-shipment` needed two extra local-DB regen attempts reverted (this sandbox's incomplete `AD_Ref_List_Trl` es_ES data silently strips unrelated translations on this window) before ultimately regenerating clean via the pre-push hook's offline/cached-AD-snapshot pipeline run — see `docs/feedback.md` for the full trail.
 
@@ -2445,7 +2445,7 @@ the subtitle/image and lets per-part sort/filter target the absorbed fields.
 `media.kind: "neoImage"` renders through the `useNeoImage(imageId, token, apiBaseUrl)` hook, which
 issues an **authenticated Bearer fetch** to `{apiBaseUrl}/image/{imageId}` and returns an object URL for
 an `<img>` src. On a missing id or a failed fetch it falls back to the `BoxIcon` package glyph
-(`fallback: "box"`). The hook now lives in the core package (`@etendosoftware/app-shell-core`) and is
+(`fallback: "box"`). The hook now lives in the core package (`@etendo-ai/app-shell-core`) and is
 consumed via the shim `@/hooks/useNeoImage`.
 
 #### Validation (rule F18)
@@ -3881,7 +3881,7 @@ Render each entry point only when it is defined. The reference implementation,
 an "Ask Copilot" button that calls `copilot.open`, and `useLaunchWalkthrough(source)`
 (`lib/walkthrough/useLaunchWalkthrough.js`, see `docs/walkthrough-flows.md` §9) to start a guided tutorial.
 
-The core `ImportDropzone` (`@etendosoftware/app-shell-core/components/import/ImportDropzone.jsx`) is shared
+The core `ImportDropzone` (`@etendo-ai/app-shell-core/components/import/ImportDropzone.jsx`) is shared
 by every window's `ImportDialog` and by this empty state, so its look changes everywhere at once (ETP-5600):
 by default a 1px dashed gray/200 border with no fill; on hover a 5% `#121217` overlay and a gray/400 border
 (200ms ease-in); while a file is dragged over, the primary highlight. An optional `disabled` prop (default

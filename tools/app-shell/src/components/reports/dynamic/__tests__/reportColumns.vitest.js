@@ -3,7 +3,7 @@ import {
   amountKinds, columnCount, columnModel, cellParts, COLUMN_GRAINS, exportTooLong, modeHiddenCount, modeOf, periodLimit, rowsForMode, SCREEN_PERIODS,
 } from '../reportColumns.js';
 import { periodBuckets, serializePeriods } from '../dynamicDates.js';
-import { buildPeriodValues, EXPORT_MAX_BUCKETS, SCREEN_PERIODS as CORE_SCREEN_PERIODS } from '@etendosoftware/schema-forge-cli/src/report-periods.js';
+import { buildPeriodValues, EXPORT_MAX_BUCKETS, SCREEN_PERIODS as CORE_SCREEN_PERIODS } from '@etendo-ai/schema-forge-cli/src/report-periods.js';
 
 const range = { dateFrom: '2026-07-15', dateTo: '2026-09-30' };
 const buckets = (grain, opts) => periodBuckets(range, grain, opts).buckets;

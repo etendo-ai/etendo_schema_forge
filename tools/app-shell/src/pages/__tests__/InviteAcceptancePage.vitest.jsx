@@ -2,12 +2,12 @@
 import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { AuthProvider, createMemoryAuthStorage } from '@etendosoftware/app-shell-core/auth';
+import { AuthProvider, createMemoryAuthStorage } from '@etendo-ai/app-shell-core/auth';
 import InviteAcceptancePage from '../InviteAcceptancePage.jsx';
 
 /**
  * ETP-4960: this page renders the REAL `LoginStep` / `RegisterStep` from
- * `@etendosoftware/etendo-go-core`, not stand-ins.
+ * `@etendo-ai/etendo-go-core`, not stand-ins.
  *
  * The page previously mocked the whole onboarding barrel with hand-written
  * forms whose submit handler always invoked `onAuthenticated`. That asserted
@@ -23,7 +23,7 @@ vi.mock('@/i18n', () => ({
   useUI: () => (key) => key,
 }));
 
-vi.mock('@etendosoftware/app-shell-core/i18n', () => ({
+vi.mock('@etendo-ai/app-shell-core/i18n', () => ({
   useUI: () => (key) => key,
   // No setLocale → the shared auth steps skip the language selector.
   useLocaleSwitch: () => ({ locale: 'es_ES', setLocale: null }),
@@ -33,7 +33,7 @@ vi.mock('@etendosoftware/app-shell-core/i18n', () => ({
 // a test can complete an SSO sign-in without a real Google button.
 let ssoHandlers = null;
 
-vi.mock('@etendosoftware/etendo-go-core/onboarding/sso', () => ({
+vi.mock('@etendo-ai/etendo-go-core/onboarding/sso', () => ({
   getConfiguredSsoProviders: () => ['google'],
   renderSsoProviderButton: async (provider, container, handlers) => {
     ssoHandlers = handlers;

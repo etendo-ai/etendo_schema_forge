@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { UploadSimpleIcon } from '@phosphor-icons/react';
-import { ImportDialog } from '@etendosoftware/app-shell-core/components/import/ImportDialog.jsx';
-import { useAuthOptional } from '@etendosoftware/app-shell-core/auth';
+import { ImportDialog } from '@etendo-ai/app-shell-core/components/import/ImportDialog.jsx';
+import { useAuthOptional } from '@etendo-ai/app-shell-core/auth';
 import { getSpecBaseUrl } from '@/lib/neoBaseUrl.js';
 import { useWindowImportDialog } from '@/components/contract-ui/useWindowImportDialog.js';
 import { loadImportConfig } from '@/pages/first-steps/firstStepsImport.js';

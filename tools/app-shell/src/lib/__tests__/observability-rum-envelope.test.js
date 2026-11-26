@@ -76,7 +76,7 @@ before(async () => {
 
   ({ AwsRum } = await import('../observability/sdk.js'));
   ({ createRumProvider } = await import('../rum.js'));
-  ({ createTelemetryGateway } = await import('@etendosoftware/app-shell-core/observability/gateway'));
+  ({ createTelemetryGateway } = await import('@etendo-ai/app-shell-core/observability/gateway'));
 });
 
 /** The real SDK, given static credentials so it never calls Cognito. */

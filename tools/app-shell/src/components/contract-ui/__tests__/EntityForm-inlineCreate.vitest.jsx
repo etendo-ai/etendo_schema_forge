@@ -71,7 +71,7 @@ vi.mock('../InlineCreateModal.jsx', async (importOriginal) => {
 });
 
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { NetworkError } from '@etendosoftware/app-shell-core/auth';
+import { NetworkError } from '@etendo-ai/app-shell-core/auth';
 import esES from '@/locales/es_ES.json';
 
 uiSpy.mockImplementation((key, params = {}) => {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { isNetworkError } from '@etendosoftware/app-shell-core/auth';
+import { isNetworkError } from '@etendo-ai/app-shell-core/auth';
 import { useUI } from '@/i18n';
 import { translateBackendErrorBody } from '@/lib/backendErrors.js';
 import {

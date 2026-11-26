@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { LinkSimpleIcon, PlusIcon, PrinterIcon } from '@phosphor-icons/react';
-import { DistinctValuesFilter } from '@etendosoftware/app-shell-core/components/ui/distinct-values-filter.jsx';
+import { DistinctValuesFilter } from '@etendo-ai/app-shell-core/components/ui/distinct-values-filter.jsx';
 import { useUI, useLocaleSwitch } from '@/i18n';
 import { useSetPageMeta } from '@/components/layout/PageMetaContext';
 import { useApiFetch } from '@/auth/useApiFetch.js';

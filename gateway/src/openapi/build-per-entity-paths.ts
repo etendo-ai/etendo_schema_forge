@@ -1,4 +1,4 @@
-import type { PublicApiSchema } from '@etendosoftware/api-gateway-core';
+import type { PublicApiSchema } from '@etendo-ai/api-gateway-core';
 import {
   DEFAULT_PAGE_SIZE, MAX_FILTERS, MAX_PAGE_SIZE, MAX_SORT_FIELDS, filterOperatorsFor, isReadable, isSortable, kindOf,
 } from '../public-api/json-api-query.ts';

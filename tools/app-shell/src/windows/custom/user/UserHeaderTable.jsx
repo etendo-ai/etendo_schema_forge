@@ -140,7 +140,7 @@ export default function UserHeaderTable(props) {
     // replacement field there). ETP-4906 had added `filterMode: 'identifier'` here
     // specifically to restore that picker; this reverts just that one addition.
     // `filterable: false` is the actual opt-out `isFilterableColumn()`
-    // (`@etendosoftware/app-shell-core`'s `AdvancedFilterBuilder.jsx`) checks FIRST,
+    // (`@etendo-ai/app-shell-core`'s `AdvancedFilterBuilder.jsx`) checks FIRST,
     // before its own `_ID$`-suffix inference on `column` — which would otherwise still
     // classify `Default_Ad_Role_ID` as filterable even with no `filterMode` set at all.
     // The now-correctly-positioned quick filter (`RoleQuickFilterToolbarSlot`, via
@@ -168,7 +168,7 @@ export default function UserHeaderTable(props) {
   //     directly instead of `labelOverrides` (which only matters for overriding a
   //     REAL AD dictionary entry — there is none here to override).
   //   - `filterable: true` — REQUIRED, not cosmetic: `isFilterableColumn()`
-  //     (`@etendosoftware/app-shell-core`'s `AdvancedFilterBuilder.jsx`) silently
+  //     (`@etendo-ai/app-shell-core`'s `AdvancedFilterBuilder.jsx`) silently
   //     drops any `type: 'custom'` column with no `column`/`backendFilterKey` UNLESS
   //     `filterable === true` is set explicitly — exactly the "list column silently
   //     unfilterable" trap this repo's own CLAUDE.md warns about, just for an

@@ -1,7 +1,8 @@
+// @covers tools/app-shell/src/lib/observability/browser.js
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { initBrowserObservability } from '../observability/browser.js';
+import { buildBrowserObservabilityConfig, initBrowserObservability } from '../observability/browser.js';
 
 describe('browser observability startup', () => {
   it('emits app_started once after initializing providers', async () => {
@@ -28,6 +29,40 @@ describe('browser observability startup', () => {
       ['initObservability', 'app-shell'],
       ['track', 'app_started'],
     ]);
+  });
+});
+
+// ETP-6209 — a customer-portal page has no tracking: no Datadog RUM (click actions, replay, its
+// session cookie) and no Mixpanel. AWS RUM (performance, errors, HTTP; cookies off) stays as the
+// portal's error monitoring. Every other page keeps the three providers.
+describe('browser observability on customer-portal pages', () => {
+  const providerNames = (portalPage) => buildBrowserObservabilityConfig({
+    env: {},
+    location: { hostname: 'app.etendo.ai' },
+    logger: { warn() {} },
+    storage: null,
+    ...(portalPage === undefined ? {} : { portalPage }),
+  }).providers.map((provider) => provider.name);
+
+  it('starts neither Datadog nor Mixpanel on a portal page', () => {
+    assert.deepEqual(providerNames(true), ['aws-rum']);
+  });
+
+  it('keeps every provider on any other page', () => {
+    assert.deepEqual(providerNames(false), ['datadog', 'aws-rum', 'mixpanel']);
+    assert.deepEqual(providerNames(undefined), ['datadog', 'aws-rum', 'mixpanel']);
+  });
+
+  it('hands the portal decision from initBrowserObservability to the providers', async () => {
+    let names;
+    await initBrowserObservability(
+      { env: {}, location: { hostname: 'app.etendo.ai' }, logger: { warn() {} }, storage: null, portalPage: true },
+      {
+        async initObservability(config) { names = config.providers.map((provider) => provider.name); },
+        async track() {},
+      },
+    );
+    assert.deepEqual(names, ['aws-rum']);
   });
 });
 

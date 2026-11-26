@@ -107,7 +107,7 @@ through the GO provider. It is a fallback, not an override — SMTP wins when pr
   passes `expiresAt` in the command and the copy interpolates the remaining minutes.
 - **Known debt:** the reset screen states the duration from a locale literal
   (`onboardingResetLinkDuration`), not from the server. It said 15 minutes for a 30-minute token
-  until ETP-5003 corrected it. The screen lives in `@etendosoftware/etendo-go-core`, so making it
+  until ETP-5003 corrected it. The screen lives in `@etendo-ai/etendo-go-core`, so making it
   read the real TTL needs an API change and a PR in that repo. **If you change
   `PASSWORD_RESET_TTL_SECONDS`, update that locale key too** — in `es_ES`, `es_AR` and `en_US`.
 

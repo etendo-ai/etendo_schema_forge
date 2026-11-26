@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const responses = vi.hoisted(() => ({ map: {} }));
 
-vi.mock('@etendosoftware/app-shell-core/auth/api', () => ({
+vi.mock('@etendo-ai/app-shell-core/auth/api', () => ({
   apiFetch: vi.fn(async (url) => {
     const entry = responses.map[url];
     if (entry instanceof Error) throw entry;
@@ -13,7 +13,7 @@ vi.mock('@etendosoftware/app-shell-core/auth/api', () => ({
   }),
 }));
 
-import { apiFetch } from '@etendosoftware/app-shell-core/auth/api';
+import { apiFetch } from '@etendo-ai/app-shell-core/auth/api';
 import { fetchListInvoices, fetchOriginInvoicesOf } from '../helpers.js';
 
 const BASE = '/sws/neo/sales-order';

@@ -1,6 +1,6 @@
 import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
-import { runImportRowValidator } from '@etendosoftware/app-shell-core/lib/import/rowValidators.js';
+import { runImportRowValidator } from '@etendo-ai/app-shell-core/lib/import/rowValidators.js';
 import '../contacts/contactsImportDescriptor.js';
 import '../product/productImportDescriptor.js';
 // Imported for its registration side effect: the module registers `bank-statement` on load,

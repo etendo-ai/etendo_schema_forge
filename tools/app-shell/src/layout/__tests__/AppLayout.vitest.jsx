@@ -43,6 +43,9 @@ vi.mock('react-router-dom', () => ({
   useLocation: vi.fn(() => ({ pathname: '/sales-order/123' })),
   useNavigate: () => navigateMock,
   useSearchParams: vi.fn(() => [new URLSearchParams(), vi.fn()]),
+  // HighlightProvider gates its route-change reset on this (ETP-5211): it only
+  // mounts the useLocation() watcher when a Router is actually present.
+  useInRouterContext: () => true,
 }));
 
 // AppLayout now calls useRoleMenu() (ETP-4598), which internally calls useAuth().
@@ -103,7 +106,7 @@ vi.mock('@/components/copilot/copilotApi.js', async (importOriginal) => ({
 // bare object: this barrel also publishes `apiFetch` and the header builders, and replacing it
 // wholesale would take out every other module in the tree that reaches them.
 const useAuthOptionalMock = vi.fn(() => null);
-vi.mock('@etendosoftware/app-shell-core/auth', async (importOriginal) => ({
+vi.mock('@etendo-ai/app-shell-core/auth', async (importOriginal) => ({
   ...(await importOriginal()),
   useAuthOptional: () => useAuthOptionalMock(),
 }));
@@ -327,6 +330,24 @@ describe('AppLayout — normal mode', () => {
     // ETP-4210 — the hook has to run inside the authenticated shell on every
     // mount; that's what makes it fire on a regular login, not just onboarding.
     expect(useSessionStartTracking).toHaveBeenCalled();
+  });
+
+  // ETP-5792 — keyboard users must be able to jump over the chrome to the page content.
+  it('puts the skip link before the sidebar and moves focus to <main> when activated', async () => {
+    render(<AppLayout {...defaultProps} />);
+    const skip = screen.getByTestId('SkipLink__5792');
+    const sideMenu = screen.getByTestId('side-menu');
+    expect(skip.compareDocumentPosition(sideMenu) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(skip).toHaveAttribute('href', '#main-content');
+    await userEvent.click(skip);
+    const main = document.getElementById('main-content');
+    expect(main?.tagName).toBe('MAIN');
+    expect(main).toHaveFocus();
+  });
+
+  it('renders the page inside a <main> landmark', () => {
+    render(<AppLayout {...defaultProps} />);
+    expect(screen.getByRole('main')).toContainElement(screen.getByTestId('outlet'));
   });
 
   it('renders SideMenu when not embedded', () => {

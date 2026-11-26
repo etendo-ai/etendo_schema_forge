@@ -10,7 +10,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import {
   isDuaDateAfterAccountingDate, isLcNumberPrefixOff, lcHintKey, LC_PREFIXES,
 } from '../SiiImportDuaSection.jsx';
-import SiiImportDuaSection from '../SiiImportDuaSection.jsx';
+import SiiImportDuaSection, { SiiLcPrefixHint } from '../SiiImportDuaSection.jsx';
 
 describe('isDuaDateAfterAccountingDate — DUA date vs accounting register date hint', () => {
   it('warns only when the DUA date is a later calendar day', () => {
@@ -76,11 +76,12 @@ describe('SiiImportDuaSection — rendering', () => {
 
   beforeEach(() => { flag.enabled = true; });
 
-  it('renders nothing with the flag off or a type other than F5/LC', () => {
+  it('renders nothing with the flag off; without an SII type it still renders (independent of SII)', () => {
     flag.enabled = false;
     expect(renderCard().container).toBeEmptyDOMElement();
     flag.enabled = true;
-    expect(renderCard({ siiTypeKey: 'F1' }).container).toBeEmptyDOMElement();
+    renderCard({ siiTypeKey: null });
+    expect(screen.getByTestId('SiiImportDuaSection__fields')).toBeInTheDocument();
   });
 
   it('F5: shows the DUA fields and the 18-char hint only for a wrong-length DUA', () => {
@@ -104,12 +105,9 @@ describe('SiiImportDuaSection — rendering', () => {
     expect(screen.queryByTestId('SiiImportDuaSection__fields')).toBeNull();
   });
 
-  it('LC: no counter; the prefix warning shows for a wrong prefix with the tax-type text', () => {
-    const { unmount } = renderCard({ siiTypeKey: 'LC', siiTaxType: 'IVA', values: { aeatsiiDua: 'X123' } });
+  it('LC: no counter and no prefix warning in the card (it lives in the SIF tab)', () => {
+    renderCard({ siiTypeKey: 'LC', values: { aeatsiiDua: 'X123' } });
     expect(screen.queryByTestId('SiiImportDuaSection__duaCounter')).toBeNull();
-    expect(screen.getByTestId('SiiImportDuaSection__lcHint')).toHaveTextContent('sifDataTabs.dua.lcHintIva');
-    unmount();
-    renderCard({ siiTypeKey: 'LC', siiTaxType: 'IVA', values: { aeatsiiDua: 'LC123' } });
     expect(screen.queryByTestId('SiiImportDuaSection__lcHint')).toBeNull();
   });
 
@@ -119,5 +117,69 @@ describe('SiiImportDuaSection — rendering', () => {
     unmount();
     renderCard({ values: { aeatsiiFechaDua: '2026-11-05', aeatsiiFechaRegCont: '2026-11-05' } });
     expect(screen.queryByTestId('SiiImportDuaSection__dateHint')).toBeNull();
+  });
+});
+
+describe('SiiImportDuaSection — one block, DUA required only for SII', () => {
+  const ui = key => key;
+  const getVal = () => '';
+  const base = { ui, siiTypeKey: 'F5', getVal, getDateVal: getVal, onChange: vi.fn(), readOnly: false };
+
+  beforeEach(() => { flag.enabled = true; });
+
+  it('renders the import tax lines inside the same card, after the DUA fields, with no step number', () => {
+    render(h(SiiImportDuaSection, base, h('div', { 'data-testid': 'stub-import-taxes' })));
+    const card = screen.getByTestId('SiiImportDuaSection__card');
+    const fields = screen.getByTestId('SiiImportDuaSection__fields');
+    const taxes = screen.getByTestId('stub-import-taxes');
+    expect(card).toContainElement(fields);
+    expect(card).toContainElement(taxes);
+    // eslint-disable-next-line no-bitwise
+    expect(fields.compareDocumentPosition(taxes) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByTestId('SiiImportDuaSection__card__step')).toBeNull();
+  });
+
+  it('shows no card subtitle, but keeps the Fecha DUA helper', () => {
+    render(h(SiiImportDuaSection, base));
+    expect(screen.queryByTestId('SiiImportDuaSection__card__subtitle')).toBeNull();
+    expect(screen.queryByText('sifDataTabs.dua.subtitle')).toBeNull();
+    expect(screen.getByTestId('DuaField__sif-duaDate_helper')).toHaveTextContent('sifDataTabs.dua.dateHelper');
+  });
+
+  it('marks DUA and Fecha DUA required (asterisk + outline) only when SII requires them', () => {
+    const { unmount } = render(h(SiiImportDuaSection, { ...base, duaRequired: true }));
+    expect(screen.getByTestId('RequiredMark__sif_sif-dua')).toBeInTheDocument();
+    expect(screen.getByTestId('RequiredMark__sif_sif-duaDate')).toBeInTheDocument();
+    expect(screen.getByTestId('Input__siiDua')).toHaveAttribute('aria-invalid', 'true');
+    unmount();
+    render(h(SiiImportDuaSection, { ...base, duaRequired: false }));
+    expect(screen.queryByTestId('RequiredMark__sif_sif-dua')).toBeNull();
+    expect(screen.queryByTestId('RequiredMark__sif_sif-duaDate')).toBeNull();
+    expect(screen.getByTestId('Input__siiDua')).not.toHaveAttribute('aria-invalid');
+  });
+
+  it('defaults to optional, and Multiple DUA or read-only drop the requirement', () => {
+    const { unmount } = render(h(SiiImportDuaSection, base));
+    expect(screen.queryByTestId('RequiredMark__sif_sif-dua')).toBeNull();
+    unmount();
+    render(h(SiiImportDuaSection, { ...base, duaRequired: true, readOnly: true }));
+    expect(screen.queryByTestId('RequiredMark__sif_sif-dua')).toBeNull();
+  });
+});
+
+describe('SiiLcPrefixHint — the LC prefix warning of the SIF tab', () => {
+  const ui = key => key;
+  it('warns on LC with a wrong prefix, with the tax-type text', () => {
+    render(h(SiiLcPrefixHint, { ui, siiTypeKey: 'LC', dua: 'X123', multiDua: false, siiTaxType: 'IVA' }));
+    expect(screen.getByTestId('SiiImportDuaSection__lcHint')).toHaveTextContent('sifDataTabs.dua.lcHintIva');
+  });
+
+  it('stays silent on a right prefix, another type or Multiple DUA', () => {
+    const { container: a } = render(h(SiiLcPrefixHint, { ui, siiTypeKey: 'LC', dua: 'LC123', siiTaxType: 'IVA' }));
+    const { container: b } = render(h(SiiLcPrefixHint, { ui, siiTypeKey: 'F5', dua: 'X123' }));
+    const { container: c } = render(h(SiiLcPrefixHint, { ui, siiTypeKey: 'LC', dua: 'X123', multiDua: true }));
+    expect(a).toBeEmptyDOMElement();
+    expect(b).toBeEmptyDOMElement();
+    expect(c).toBeEmptyDOMElement();
   });
 });

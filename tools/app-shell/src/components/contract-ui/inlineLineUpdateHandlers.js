@@ -6,7 +6,7 @@
 // for its completed-document counterpart, `buildCompletedLineFieldUpdateHandler`, below.
 import { toast } from 'sonner';
 // Plain module: the core subpath, never the `@/auth/api.js` barrel (docs/request-policy.md).
-import { apiFetch } from '@etendosoftware/app-shell-core/auth/api';
+import { apiFetch } from '@etendo-ai/app-shell-core/auth/api';
 import {
   applyLocalChildRowUpdate, applySelectedItemMappings, buildRowValueCoercer, collectRowFieldValues,
   getDocumentReadOnly, mergeSelectorAuxFields, mergeSelectorContextFields, preserveGridReadOnlyValues,

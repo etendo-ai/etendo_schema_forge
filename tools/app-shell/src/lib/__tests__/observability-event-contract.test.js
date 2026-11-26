@@ -3,7 +3,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { isDeepStrictEqual } from 'node:util';
-import { REDACTED, sanitizeValue } from '@etendosoftware/app-shell-core/observability/sanitize';
+import { REDACTED, sanitizeValue } from '@etendo-ai/app-shell-core/observability/sanitize';
 import { TRUSTED_CONTEXT_KEYS, createObservability } from '../observability/core.js';
 import { OBSERVABILITY_EVENT_LIST, buildObservabilityEvent } from '../observability/events.js';
 import {

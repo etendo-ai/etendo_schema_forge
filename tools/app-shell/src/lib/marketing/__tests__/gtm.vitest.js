@@ -6,12 +6,14 @@ import {
   resolveGtmId,
   showCookieBanner,
 } from '../gtm.js';
+import { isPortalPath } from '../../portal/portalLinkSession.js';
 
 /**
  * ETP-6363 — marketing's tag container loads on the production host only, never in a support
  * session, and the cookie settings reopen HubSpot's banner.
  *
  * @covers tools/app-shell/src/lib/marketing/gtm.js
+ * @covers tools/app-shell/src/lib/portal/portalLinkSession.js
  */
 describe('resolveGtmId', () => {
   it('loads the app container on the production host', () => {
@@ -31,6 +33,38 @@ describe('resolveGtmId', () => {
     expect(resolveGtmId({ hostname: 'local.etendo.ai', env })).toBe('GTM-TEST1');
     expect(resolveGtmId({ hostname: 'app.etendo.ai', env })).toBeNull();
     expect(resolveGtmId({ hostname: 'app.etendo.ai', env: { VITE_GTM_ID: 'not-a-container' } })).toBeNull();
+  });
+});
+
+// ETP-6209 — the customer portal loads no tags at all (no tracking without a consent banner);
+// every other page of the production host keeps the container. Same call main.jsx makes.
+describe('resolveGtmId on customer-portal pages', () => {
+  const gtmFor = (pathname, routerBase = '/') => resolveGtmId({
+    hostname: 'app.etendo.ai',
+    portalPage: isPortalPath({ pathname, routerBase }),
+  });
+
+  it.each([
+    ['/portal'],
+    ['/portal/0123456789ABCDEF0123456789ABCDEF'],
+    ['/portal/0123456789ABCDEF0123456789ABCDEF/decision'],
+    ['/portal/decision'],
+    ['/go/portal/0123456789ABCDEF0123456789ABCDEF', '/go'],
+  ])('installs nothing on %s', (pathname, routerBase) => {
+    expect(gtmFor(pathname, routerBase)).toBeNull();
+    const win = {};
+    expect(installGtm(gtmFor(pathname, routerBase), { win, doc: document })).toBe(false);
+    expect(isGtmInstalled(win)).toBe(false);
+  });
+
+  it.each([
+    ['/onboarding'],
+    ['/dashboard'],
+    ['/sales-order/0123456789ABCDEF0123456789ABCDEF'],
+    ['/portals'],
+    ['/go/onboarding', '/go'],
+  ])('keeps the container on %s', (pathname, routerBase) => {
+    expect(gtmFor(pathname, routerBase)).toBe(DEFAULT_GTM_ID);
   });
 });
 
