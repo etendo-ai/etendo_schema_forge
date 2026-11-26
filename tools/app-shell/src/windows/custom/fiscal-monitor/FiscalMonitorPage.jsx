@@ -178,7 +178,9 @@ export default function FiscalMonitorPage({ token, apiBaseUrl }) {
     title: ui('fiscalMonitor.title'),
     breadcrumb: `${ui('taxes')} / ${ui('fiscalMonitor.title')}`,
     recordCount: _totalCountMeta,
-  });
+  // useSetPageMeta re-publishes only on title/breadcrumb plus these deps: the count is known only
+  // once the KPIs load, so it must be a dep or the 0 published while loading sticks (ETP-6380).
+  }, [_totalCountMeta]);
 
   // ETP-5395 Fix 3 follow-up — this custom window never delegated to a generated Page.jsx
   // (registry.js loads FiscalMonitorPage.jsx directly for "fiscal-monitor"), so it never
