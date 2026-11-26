@@ -73,11 +73,49 @@ const ACCEPT_ERROR_UI_KEYS = {
 // not as flat `{ code, message }`. Reading `data.code` never matched, so every failed accept fell
 // through to the generic branch. Both shapes are read so a flat body still works. Only the code
 // is returned: the backend text is English and is deliberately never shown (see ACCEPT_ERROR_UI_KEYS).
-function readApiError(data) {
+function readApiErrorCode(data) {
   const nested = data?.error && typeof data.error === 'object' ? data.error : null;
-  return {
-    code: nested?.code ?? data?.code ?? null,
-  };
+  return nested?.code ?? data?.code ?? null;
+}
+
+// ETP-5385: pieces shared by both signed-in layouts, kept out of the page body so the page
+// gains no extra branches. `variant` only switches the class names of each layout.
+function ErrorScreenButton({ signedIn, navigate, ui, className }) {
+  return (
+    <Button
+      variant="outline"
+      className={className}
+      onClick={() => navigate(signedIn ? '/' : '/login')}
+      data-testid={signedIn ? ERROR_GO_TO_APP_TESTID : ERROR_SIGN_IN_TESTID}
+    >
+      {ui(signedIn ? GO_TO_APP_KEY : 'invitePageSignIn')}
+    </Button>
+  );
+}
+
+function JoinActions({ showNotice, mismatch, submitting, onAccept, onSignOut, ui, compact }) {
+  const noticeClass = compact ? 'text-sm text-muted-foreground' : 'mb-3 text-base text-muted-foreground sm:text-xl';
+  const outlineClass = compact ? 'w-full' : 'h-12 w-full rounded-lg text-base font-medium';
+  const primaryClass = compact
+    ? 'w-full gap-2'
+    : 'h-12 w-full gap-2 rounded-lg bg-primary text-base font-medium text-primary-foreground hover:bg-accent-highlight hover:text-accent-highlight-foreground';
+  const iconClass = compact ? 'h-4 w-4' : 'h-5 w-5';
+  return (
+    <>
+      {showNotice && <p className={noticeClass}>{ui('invitePageAuthenticatedNotice')}</p>}
+      {mismatch ? (
+        <Button variant="outline" className={outlineClass} onClick={onSignOut} data-testid="action-mismatch-sign-out">
+          {ui(SIGN_OUT_CONTINUE_KEY)}
+        </Button>
+      ) : (
+        <Button className={primaryClass} onClick={onAccept} disabled={submitting} data-testid="action-accept-invitation">
+          {submitting
+            ? <CircleNotchIcon className={`${iconClass} animate-spin`} data-testid="Loader2__fa3cd9" />
+            : <><span>{ui('invitePageAcceptButton')}</span><ArrowRightIcon className="h-4 w-4" data-testid="ArrowRight__fa3cd9" /></>}
+        </Button>
+      )}
+    </>
+  );
 }
 
 function readStoredValue(key) {
@@ -187,7 +225,7 @@ export default function InviteAcceptancePage({ apiBase = import.meta.env.VITE_AP
         if (!isMounted) return;
 
         if (!res.ok || data.error) {
-          setErrorState(readApiError(data).code || 'invalid_token');
+          setErrorState(readApiErrorCode(data) || 'invalid_token');
           setLoading(false);
           return;
         }
@@ -452,7 +490,7 @@ export default function InviteAcceptancePage({ apiBase = import.meta.env.VITE_AP
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.error) {
-        const { code } = readApiError(data);
+        const code = readApiErrorCode(data);
         // The accept was attempted with a platform token this page never verified (it is read
         // straight from storage). When that token is the problem, dropping back to the login
         // step is recoverable; showing the error alone would dead-end a user who skipped the
@@ -541,7 +579,7 @@ export default function InviteAcceptancePage({ apiBase = import.meta.env.VITE_AP
       if (!res.ok || data.error) {
         // ETP-5258 — translate by code only: `data.message` is the backend's English text, and
         // WEAK_PASSWORD used to show the unrelated "passwords must match" copy.
-        setActionError(ui(AUTH_ERROR_UI_KEYS[readApiError(data).code] || 'invitePageInvalidDescription'));
+        setActionError(ui(AUTH_ERROR_UI_KEYS[readApiErrorCode(data)] || 'invitePageInvalidDescription'));
         setSubmitting(false);
         return;
       }
@@ -585,7 +623,7 @@ export default function InviteAcceptancePage({ apiBase = import.meta.env.VITE_AP
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || data.error) {
-      const { code } = readApiError(data);
+      const code = readApiErrorCode(data);
       // Translated by code (ETP-5258): the backend text is English.
       const error = new Error(ui(AUTH_ERROR_UI_KEYS[code] || 'invitePageInvalidDescription'));
       error.code = code || 'INVITATION_ERROR';
@@ -792,14 +830,7 @@ export default function InviteAcceptancePage({ apiBase = import.meta.env.VITE_AP
           <p className="mt-3 text-base text-muted-foreground sm:text-xl">
             {ui('invitePageInvalidDescription')}
           </p>
-          <Button
-            variant="outline"
-            className="mt-6 h-12 w-full rounded-lg text-base font-medium"
-            onClick={() => navigate(errorButtonSignedIn ? '/' : '/login')}
-            data-testid={errorButtonSignedIn ? ERROR_GO_TO_APP_TESTID : ERROR_SIGN_IN_TESTID}
-          >
-            {ui(errorButtonSignedIn ? GO_TO_APP_KEY : 'invitePageSignIn')}
-          </Button>
+          <ErrorScreenButton signedIn={errorButtonSignedIn} navigate={navigate} ui={ui} className="mt-6 h-12 w-full rounded-lg text-base font-medium" />
         </div>
       </AuthShell>
     );
@@ -907,32 +938,7 @@ export default function InviteAcceptancePage({ apiBase = import.meta.env.VITE_AP
               {actionError}
             </div>
           )}
-          {showJoinNotice && (
-            <p className="mb-3 text-base text-muted-foreground sm:text-xl">
-              {ui('invitePageAuthenticatedNotice')}
-            </p>
-          )}
-          {accountMismatch ? (
-            <Button
-              variant="outline"
-              className="h-12 w-full rounded-lg text-base font-medium"
-              onClick={handleCloseSessionAndContinue}
-              data-testid="action-mismatch-sign-out"
-            >
-              {ui(SIGN_OUT_CONTINUE_KEY)}
-            </Button>
-          ) : (
-            <Button
-              className="h-12 w-full gap-2 rounded-lg bg-primary text-base font-medium text-primary-foreground hover:bg-accent-highlight hover:text-accent-highlight-foreground"
-              onClick={handleAcceptExisting}
-              disabled={submitting}
-              data-testid="action-accept-invitation"
-            >
-              {submitting
-                ? <CircleNotchIcon className="h-5 w-5 animate-spin" data-testid="Loader2__fa3cd9" />
-                : <><span>{ui('invitePageAcceptButton')}</span><ArrowRightIcon className="h-4 w-4" data-testid="ArrowRight__fa3cd9" /></>}
-            </Button>
-          )}
+          <JoinActions showNotice={showJoinNotice} mismatch={accountMismatch} submitting={submitting} onAccept={handleAcceptExisting} onSignOut={handleCloseSessionAndContinue} ui={ui} />
         </div>
       </AuthShell>
     );
@@ -982,14 +988,7 @@ export default function InviteAcceptancePage({ apiBase = import.meta.env.VITE_AP
               </p>
             </div>
             <div className="pt-2">
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => navigate(errorButtonSignedIn ? '/' : '/login')}
-                data-testid={errorButtonSignedIn ? ERROR_GO_TO_APP_TESTID : ERROR_SIGN_IN_TESTID}
-              >
-                {ui(errorButtonSignedIn ? GO_TO_APP_KEY : 'invitePageSignIn')}
-              </Button>
+              <ErrorScreenButton signedIn={errorButtonSignedIn} navigate={navigate} ui={ui} className="w-full" />
             </div>
           </div>
         )}
@@ -1072,16 +1071,7 @@ export default function InviteAcceptancePage({ apiBase = import.meta.env.VITE_AP
 
             {existingAuthenticated ? (
               <div className="space-y-3" data-testid="invite-authenticated-step">
-                {showJoinNotice && <p className="text-sm text-muted-foreground">{ui('invitePageAuthenticatedNotice')}</p>}
-                {accountMismatch ? (
-                  <Button variant="outline" className="w-full" onClick={handleCloseSessionAndContinue} data-testid="action-mismatch-sign-out">
-                    {ui(SIGN_OUT_CONTINUE_KEY)}
-                  </Button>
-                ) : (
-                  <Button className="w-full gap-2" onClick={handleAcceptExisting} disabled={submitting} data-testid="action-accept-invitation">
-                    {submitting ? <CircleNotchIcon className="h-4 w-4 animate-spin" data-testid="Loader2__fa3cd9" /> : <><span>{ui('invitePageAcceptButton')}</span><ArrowRightIcon className="h-4 w-4" data-testid="ArrowRight__fa3cd9" /></>}
-                  </Button>
-                )}
+                <JoinActions compact showNotice={showJoinNotice} mismatch={accountMismatch} submitting={submitting} onAccept={handleAcceptExisting} onSignOut={handleCloseSessionAndContinue} ui={ui} />
               </div>
             ) : null}
           </div>
