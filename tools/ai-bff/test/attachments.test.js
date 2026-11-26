@@ -94,5 +94,5 @@ test('rejects a highly compressible workbook before parsing it (decompression bo
     filename: 'bomb.xlsx',
     url: `data:application/octet-stream;base64,${Buffer.from(bomb).toString('base64')}`,
   }), limits);
-  assert.match(textOf(out), /^\[Archivo adjunto "bomb\.xlsx" demasiado grande/);
+  assert.match(textOf(out), /^\[Archivo adjunto "bomb\.xlsx" demasiado grande: el contenido descomprimido supera 8 MB\]$/);
 });

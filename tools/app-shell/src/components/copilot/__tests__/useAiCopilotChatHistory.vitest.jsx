@@ -23,6 +23,7 @@ vi.mock('@ai-sdk/react', async () => {
       const [status, setStatus] = React.useState('ready');
       const [error, setError] = React.useState(undefined);
       globalThis.__chat = { setMessages, setStatus, setError, messages };
+      globalThis.__chatOptions = options;
       const api = globalThis.__chatApi;
       return {
         messages, status, error, setMessages,
@@ -391,5 +392,23 @@ describe('agent chat file attachments', () => {
     expect(sent.parts[0]).toEqual({ type: 'text', text: '[Archivo adjunto "c.csv"]' });
     expect(JSON.stringify(globalThis.__chat.messages)).not.toContain('data:');
     expect(result.current.messages[0]).toEqual({ id: 'u1', role: 'user', text: 'importa', files: [{ name: 'c.csv' }] });
+  });
+
+  it('drops the data URL before the first automatic resend of the same turn', async () => {
+    const { result } = setup();
+    const assistant = { id: 'a1', role: 'assistant', parts: [{ type: 'step-start' }, { type: 'tool-navigate_to', toolCallId: 't1', state: 'output-available', input: {}, output: {} }] };
+    await act(async () => {
+      globalThis.__chat.setMessages([
+        { id: 'u1', role: 'user', parts: [{ type: 'file', mediaType: 'text/csv', filename: 'c.csv', url: 'data:text/csv;base64,YSxi' }, text('importa')] },
+        assistant,
+      ]);
+    });
+    let resend;
+    await act(async () => { resend = await globalThis.__chatOptions.sendAutomaticallyWhen({ messages: globalThis.__chat.messages }); });
+    expect(resend).toBe(true);
+    // What the second request would carry.
+    expect(JSON.stringify(globalThis.__chat.messages)).not.toContain('data:');
+    expect(globalThis.__chat.messages[0].parts[0]).toEqual({ type: 'text', text: '[Archivo adjunto "c.csv"]' });
+    expect(result.current.messages[0].files).toEqual([{ name: 'c.csv' }]);
   });
 });

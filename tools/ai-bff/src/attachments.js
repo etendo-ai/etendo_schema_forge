@@ -31,6 +31,10 @@ function unsupported(filename) {
   return `[Archivo adjunto "${filename}" no soportado en este chat: solo CSV, TSV, TXT o XLSX]`;
 }
 
+function tooLargeUncompressed(filename) {
+  return `[Archivo adjunto "${filename}" demasiado grande: el contenido descomprimido supera ${MAX_XLSX_UNCOMPRESSED_BYTES / 1024 / 1024} MB]`;
+}
+
 function tooLarge(filename, maxBytes) {
   return `[Archivo adjunto "${filename}" demasiado grande: máximo ${Math.round(maxBytes / 1024)} KB]`;
 }
@@ -116,7 +120,10 @@ async function partToText(part, limits) {
     if (bytes.length > limits.maxBytes) return tooLarge(filename, limits.maxBytes);
     return kind === 'text' ? textToSection(filename, bytes, limits) : await xlsxToSections(filename, bytes, limits);
   } catch (error) {
-    return error instanceof WorkbookTooLargeError ? tooLarge(filename, limits.maxBytes) : unsupported(filename);
+    if (error instanceof WorkbookTooLargeError) return tooLargeUncompressed(filename);
+    // Name and message only, never the file content.
+    console.warn(`[ai-bff:attachments] could not read an attachment: ${error?.name}: ${error?.message}`);
+    return unsupported(filename);
   }
 }
 

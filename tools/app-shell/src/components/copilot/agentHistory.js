@@ -9,7 +9,10 @@ const TOOL_DONE_STATES = ['output-available', 'output-error', 'output-denied'];
 /** The note a sent attachment is reduced to; it labels the file, it is not message text. */
 export const ATTACHED_NOTE = /^\[Archivo adjunto "(.*)"\]$/;
 
-/** Text of a UIMessage: only `text` parts, never tool inputs, outputs or attachment notes. */
+/**
+ * Text of a UIMessage: only `text` parts, never tool inputs, outputs or attachment notes.
+ * A message typed literally as `[Archivo adjunto "x"]` is treated as a note and left out.
+ */
 export function uiMessageText(message) {
   if (typeof message?.content === 'string') return message.content;
   return (message?.parts || [])

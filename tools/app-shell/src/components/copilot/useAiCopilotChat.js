@@ -270,6 +270,18 @@ function readFileAsDataUrl(file) {
   });
 }
 
+// useChat resends every message on each request: keep each data URL to the one request it
+// belongs to, leaving a short note (also used to show the file name).
+function filePartsToNotes(messages) {
+  return messages.map(message => (
+    message.role === 'user' && (message.parts || []).some(part => part.type === 'file')
+      ? { ...message, parts: message.parts.map(part => (
+        part.type === 'file' ? { type: 'text', text: `[Archivo adjunto "${fileNameOf(part)}"]` } : part
+      )) }
+      : message
+  ));
+}
+
 function messageText(message) {
   if (typeof message.content === 'string') return message.content;
   return (message.parts || [])
@@ -305,6 +317,7 @@ export function useAiCopilotChat({ onOpenCopilot, menuGroups }) {
     [menuSignature, menuLabel]
   );
   const location = useLocation();
+  const setMessagesRef = useRef(null);
   const addToolOutputRef = useRef(null);
   const pendingToolOutputsRef = useRef([]);
   const pageHelpAddToolOutputRef = useRef(null);
@@ -437,16 +450,20 @@ export function useAiCopilotChat({ onOpenCopilot, menuGroups }) {
     pendingRef: pageHelpPendingToolOutputsRef,
   }), [executeToolCall]);
 
-  const sendAutomaticallyWhenFor = useCallback(async ({ messages }, pendingRef) => {
+  const sendAutomaticallyWhenFor = useCallback(async ({ messages }, pendingRef, beforeResend) => {
     const pendingToolOutputs = pendingRef.current.splice(0);
     if (pendingToolOutputs.length > 0) {
       await Promise.all(pendingToolOutputs);
+      beforeResend?.();
       return true;
     }
-    return lastAssistantMessageIsCompleteWithToolCalls({ messages });
+    const resend = lastAssistantMessageIsCompleteWithToolCalls({ messages });
+    if (resend) beforeResend?.();
+    return resend;
   }, []);
+  // The first request carried the attachment: from the first client-tool round-trip on, only the note travels.
   const sendAutomaticallyWhen = useCallback(
-    options => sendAutomaticallyWhenFor(options, pendingToolOutputsRef),
+    options => sendAutomaticallyWhenFor(options, pendingToolOutputsRef, () => setMessagesRef.current?.(filePartsToNotes)),
     [sendAutomaticallyWhenFor]
   );
   const sendAutomaticallyWhenForPageHelp = useCallback(
@@ -509,6 +526,7 @@ export function useAiCopilotChat({ onOpenCopilot, menuGroups }) {
     onFinish: handleFinish,
   });
   addToolOutputRef.current = chat.addToolOutput;
+  setMessagesRef.current = chat.setMessages;
   messagesRef.current = chat.messages;
 
   statusRef.current = chat.status;
@@ -703,15 +721,8 @@ export function useAiCopilotChat({ onOpenCopilot, menuGroups }) {
     try {
       await chat.sendMessage({ text: value, files: parts });
     } finally {
-      // useChat resends every message on each request: keep each data URL to the one
-      // turn it belongs to, leaving a short note (also used to show the file name).
-      chat.setMessages(current => current.map(message => (
-        message.role === 'user' && (message.parts || []).some(part => part.type === 'file')
-          ? { ...message, parts: message.parts.map(part => (
-            part.type === 'file' ? { type: 'text', text: `[Archivo adjunto "${fileNameOf(part)}"]` } : part
-          )) }
-          : message
-      )));
+      // Fallback: the automatic resends already did this; a failed or plain send did not.
+      chat.setMessages(filePartsToNotes);
     }
   }, [chat, files, ui]);
 
