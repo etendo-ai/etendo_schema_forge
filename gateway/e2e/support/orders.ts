@@ -323,6 +323,42 @@ interface ForeignCurrencySetup { currencyId: string; rate: number; catalogPrice:
 
 const MAX_PRODUCT_CANDIDATES = 10;
 
+const MAX_RATE_PAGES = 10;
+
+type Rate = { attributes: Record<string, any> };
+
+/**
+ * The conversion rates that start at `orgCurrency`, all pages (a real tenant has far more than the 100 of
+ * one page). The server-side `filter[currency]` narrows them; if the gateway refuses it, every rate is read.
+ * `complete` is false when MAX_RATE_PAGES pages were not enough: the caller must not decide from a part.
+ */
+async function fetchConversionRates(orgCurrency: string): Promise<{ rates: Rate[]; complete: boolean }> {
+  let res = await api('GET', `conversion-rates?filter[currency]=${encodeURIComponent(orgCurrency)}&page[size]=100`);
+  if (res.status === 400) res = await api('GET', 'conversion-rates?page[size]=100');
+  expectStatus(res, 200);
+  const rates: Rate[] = [...res.json.data];
+  let next: string | null | undefined = res.json.links?.next;
+  for (let page = 1; next && page < MAX_RATE_PAGES; page += 1) {
+    const more = await api('GET', next);
+    expectStatus(more, 200);
+    rates.push(...more.json.data);
+    next = more.json.links?.next;
+  }
+  return { rates, complete: !next };
+}
+
+/**
+ * Products to probe for a catalog price. Products created through the API cannot be priced (the API
+ * publishes no price list entry and `sale_price` is read-only), so the tenant's own priced products are
+ * used: those with a positive `sale_price` first (server-side filter), else the first ones listed.
+ */
+async function pricedProductCandidates(): Promise<Array<{ id: string }>> {
+  let res = await api('GET', `product?filter[sale_price][gt]=0&page[size]=${MAX_PRODUCT_CANDIDATES}`);
+  if (res.status === 400 || !res.json?.data?.length) res = await api('GET', `product?page[size]=${MAX_PRODUCT_CANDIDATES}`);
+  expectStatus(res, 200);
+  return res.json.data;
+}
+
 /**
  * The organization currency is read from a draft order created without `currency` (Etendo defaults
  * it), and the foreign one from the first published conversion rate that starts at it and is valid
@@ -340,12 +376,11 @@ export async function findForeignCurrency(
   const orgCurrency = probe.data.attributes.currency;
   if (typeof orgCurrency !== 'string' || !orgCurrency) return `the ${kind} created without currency carries no currency: cannot tell the organization currency`;
 
-  const rates = await api('GET', 'conversion-rates?page[size]=100');
-  expectStatus(rates, 200);
+  const { rates, complete } = await fetchConversionRates(orgCurrency);
+  if (!complete) return `the tenant has more than ${MAX_RATE_PAGES * 100} conversion rates from ${orgCurrency}: not all could be read, so the applicable one cannot be told`;
   // Validity is a date-time since ETP-6365; compare calendar days, as the order date has no time.
   const day = (value: string) => value.slice(0, 10);
-  if (num(rates.json.meta?.page?.total) > 100) return 'the tenant has more than 100 conversion rates: the first page cannot tell which one applies, so the foreign-currency checks are skipped';
-  const valid = (rates.json.data as Array<{ attributes: Record<string, any> }>).filter(({ attributes: a }) =>
+  const valid = rates.filter(({ attributes: a }) =>
     a.currency === orgCurrency && a.to_currency && a.to_currency !== orgCurrency && a.multiple_rate_by != null && Number(a.multiple_rate_by) > 0
     && (!a.valid_from_date || day(a.valid_from_date) <= orderDate)
     && (!a.valid_to_date || day(a.valid_to_date) >= orderDate));
@@ -362,9 +397,7 @@ export async function findForeignCurrency(
   if (!unambiguous) return `every target currency from ${orgCurrency} has several conversion rates valid on ${orderDate}: the applied one is ambiguous, foreign-currency checks skipped`;
   const match = unambiguous[0];
 
-  const products = await api('GET', `product?page[size]=${MAX_PRODUCT_CANDIDATES}`);
-  expectStatus(products, 200);
-  for (const product of products.json.data as Array<{ id: string }>) {
+  for (const product of await pricedProductCandidates()) {
     const res = await api('POST', `${kind}/${probe.id}/lines`, {
       body: resource(`${kind}-lines`, { ordered_quantity: 1, discount: 0 }, { product: ['product', product.id] }),
     });
@@ -436,9 +469,7 @@ export function describeOrderDocumentRules(kind: 'sales-order' | 'purchase-order
         // Products created through the API have no price: two products with different catalog prices
         // are looked for among the tenant's own (the price a line takes when it is created without list_price).
         const priced = new Map<string, { id: string; price: number }>();
-        const candidates = await api('GET', 'product?page[size]=10');
-        expectStatus(candidates, 200);
-        for (const product of candidates.json.data as Array<{ id: string }>) {
+        for (const product of await pricedProductCandidates()) {
           if (priced.size >= 2) break;
           const probe = await api('POST', `${kind}/${header.id}/lines`, {
             body: resource(`${kind}-lines`, { ordered_quantity: 1, discount: 0 }, { product: ['product', product.id] }),
@@ -478,12 +509,7 @@ export function describeOrderDocumentRules(kind: 'sales-order' | 'purchase-order
         setup = await scoped(() => findForeignCurrency(kind, ctx, orderDate));
       });
 
-      const fetchRates = async () => {
-        const rates = await api('GET', 'conversion-rates?page[size]=100');
-        expectStatus(rates, 200);
-        return rates.json.data as Array<{ attributes: Record<string, any> }>;
-      };
-      const rateOn = (rates: Awaited<ReturnType<typeof fetchRates>>, from: ForeignCurrencySetup, day: string): number | undefined => {
+      const rateOn = (rates: Rate[], from: ForeignCurrencySetup, day: string): number | undefined => {
         const matches = rates.filter(({ attributes: a }) =>
           a.currency === from.orgCurrency && a.to_currency === from.currencyId && a.multiple_rate_by != null && Number(a.multiple_rate_by) > 0
           && (!a.valid_from_date || a.valid_from_date.slice(0, 10) <= day) && (!a.valid_to_date || a.valid_to_date.slice(0, 10) >= day));
@@ -514,7 +540,8 @@ export function describeOrderDocumentRules(kind: 'sales-order' | 'purchase-order
       it('changing order_date without sending currency_rate replaces a rate set by hand with the one valid on the new date', async (t) => {
         if (typeof setup === 'string') return t.skip(setup);
         const found = setup;
-        const rates = await fetchRates();
+        const { rates, complete } = await fetchConversionRates(found.orgCurrency);
+        if (!complete) return t.skip('not all conversion rates could be read');
         let newDate = '';
         let expected: number | undefined;
         for (let back = 1; back <= 60 && expected === undefined; back += 1) {

@@ -1,7 +1,7 @@
 // @covers gateway/src/public-api/public-api.controller.ts
 // List queries (docs/public-api.md 4.10): pagination, links, the page[size] limit, sort and the
 // filter operators. The suite creates three product categories of its own and scopes every query to
-// them with `filter[search_key][contains]=<RUN_PREFIX>`, so totals and orders are exact whatever else
+// them with `filter[description][contains]=<RUN_PREFIX>`, so totals and orders are exact whatever else
 // the tenant holds. Conversion rates (read-only, published for everyone) cover number operators.
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
@@ -12,7 +12,9 @@ import { createProductCategory } from './support/fixtures.ts';
 
 after(cleanupCreated);
 
-const SCOPE = `filter[search_key][contains]=${RUN_PREFIX}`;
+// The scope uses `description`, a field no test below filters on: two filters on one field collide
+// (one value per filter parameter; the shorthand and an operator on one field are parsed together).
+const SCOPE = `filter[description][contains]=${RUN_PREFIX}`;
 const LABELS = ['pg-a', 'pg-b', 'pg-c'];
 const keyOf = (label: string) => `${RUN_PREFIX}-${label}`;
 
@@ -30,7 +32,7 @@ describe('list queries on product-category', () => {
   const ids = new Map<string, string>();
 
   before(async () => {
-    for (const label of LABELS) ids.set(label, (await createProductCategory(label)).id);
+    for (const label of LABELS) ids.set(label, (await createProductCategory(label, { description: `${RUN_PREFIX}-scope` })).id);
   });
 
   describe('pagination', () => {
@@ -73,6 +75,21 @@ describe('list queries on product-category', () => {
       }
       assert.deepEqual(new Set(seen).size, 3, 'three distinct records');
       assert.deepEqual(new Set(seen), new Set(ids.values()));
+    });
+
+    // docs 4.10: `meta.page.total` is the exact number of matching records. Suspected bug when this fails:
+    // without `_noCount=false` core skips the count and answers "rows shown + offset (+1 when the page is
+    // full)", a grid scroll hint (DefaultJsonDataService.fetch, preventCountOperation), and the REST path
+    // never sends `_noCount=false` (only the MCP list does, McpToolRouter). A 3-record set read with
+    // page[size]=2 happens to give 3 that way, so only a page size that does not coincide shows it.
+    it('meta.page.total is the real count of matches on any page size, and links.last points at the last page', async () => {
+      const res = await api('GET', `product-category?${SCOPE}&sort=search_key&page[size]=1`);
+      expectStatus(res, 200);
+      assert.equal(res.json.meta.page.total, 3, 'three records match, whatever the page size');
+      assert.ok(decoded(res.json.links.last)!.includes('page[number]=3'), 'links.last is page 3');
+      const filtered = await api('GET', `product-category?${SCOPE}&filter[search_key][ne]=${keyOf('pg-a')}&page[size]=1`);
+      expectStatus(filtered, 200);
+      assert.equal(filtered.json.meta.page.total, 2);
     });
 
     it('a page beyond the last answers 200 with an empty page, the real total and a prev that points at the last page', async () => {
@@ -195,6 +212,7 @@ describe('list queries on product-category', () => {
       await expectInvalidQuery(`${SCOPE}&filter[updated][gte]=2026-02-30`); // a day that does not exist
       await expectInvalidQuery(`${SCOPE}&filter[updated][gte]=2026-10-01T10:00:00Z`); // a timestamp, not a day
       await expectInvalidQuery(`${SCOPE}&filter[name]=a&filter[name]=b`); // repeated: use `in`
+      await expectInvalidQuery(`${SCOPE}&filter[name]=a&filter[name][contains]=b`); // the shorthand and an operator on one field (the message of this one is confusing: it names the value as an operator)
       await expectInvalidQuery(`${SCOPE}&filter[name][in]=a,,b`); // empty member
       await expectInvalidQuery(`${SCOPE}&filter[name][contains]=`); // empty value
     });
