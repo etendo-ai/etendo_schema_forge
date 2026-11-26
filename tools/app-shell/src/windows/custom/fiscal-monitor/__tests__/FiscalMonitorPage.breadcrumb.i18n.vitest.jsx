@@ -145,9 +145,11 @@ describe('FiscalMonitorPage — breadcrumb against the real locale dictionary (E
     expect(lastCall.breadcrumb).toBe('Taxes / Fiscal Monitor');
   });
 
-  // ETP-6380 CP-3 — with no fiscal system the profile has no label, so the title used to be ''.
-  // TopBar renders its left block (title AND breadcrumb) only when the title is truthy, so the
-  // whole "Impuestos / Monitor Fiscal" header vanished. The title now falls back to the window name.
+  // ETP-6380 — the title is always the plain window name, as in the menu. CP-3: with no fiscal
+  // system the title used to be '' and TopBar (which renders title AND breadcrumb only for a
+  // non-empty title) dropped the whole "Impuestos / Monitor Fiscal" header. Later QA round: with a
+  // configured system the title was the profile label ("SII", "SII + TBAI", ...); the system is
+  // shown in the page body instead.
   it.each([
     ['unconfigured', realUiEs, 'Monitor Fiscal', 'Impuestos / Monitor Fiscal', 'No hay sistema fiscal configurado para esta organización.'],
     [null, realUiEs, 'Monitor Fiscal', 'Impuestos / Monitor Fiscal', 'No hay sistema fiscal configurado para esta organización.'],
@@ -165,12 +167,16 @@ describe('FiscalMonitorPage — breadcrumb against the real locale dictionary (E
     expect(lastCall.breadcrumb).toBe(breadcrumb);
   });
 
-  it('keeps the profile label as the title when a fiscal system is configured', async () => {
-    activeUi = realUiEs;
+  it.each([
+    ['sii', realUiEs, 'Monitor Fiscal'],
+    ['sii', realUiEn, 'Fiscal Monitor'],
+  ])('uses the window name, not the system label, as the title when the profile is %s', async (profile, ui, title) => {
+    activeProfile = profile;
+    activeUi = ui;
     render(<FiscalMonitorPage {...baseProps} />);
     await waitFor(() => {
       expect(screen.getByTestId('sii-section')).toBeInTheDocument();
     });
-    expect(setMetaMock.mock.calls.at(-1)[0].title).toBe('SII');
+    expect(setMetaMock.mock.calls.at(-1)[0].title).toBe(title);
   });
 });

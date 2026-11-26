@@ -22,14 +22,6 @@ import VfSolveErrorModal from './VfSolveErrorModal.jsx';
 import FiscalMonitorDebugPanel from './FiscalMonitorDebugPanel.jsx';
 import './fiscal-monitor.css';
 
-const PROFILE_LABELS = {
-  sii:          'SII',
-  tbai:         'TBAI',
-  'sii+tbai':   'SII + TBAI',
-  'sii-navarra':'SII Navarra',
-  verifactu:    'VERI*FACTU',
-};
-
 
 const FmEmpty = ({ ui }) => {
   const navigate = useNavigate();
@@ -180,9 +172,10 @@ export default function FiscalMonitorPage({ token, apiBaseUrl }) {
   const _totalCountMeta = getTotalCountForProfile(profile, _siiTotalMeta, _tbaiTotalMeta, _vfTotalMeta);
 
   useSetPageMeta({
-    // ETP-6380 — with no profile label (unconfigured, loading, error, conflict) fall back to the
-    // window name: TopBar renders title and breadcrumb only when the title is non-empty.
-    title: PROFILE_LABELS[profile] ?? ui('fiscalMonitor.title'),
+    // ETP-6380 — always the plain window name, as in the menu, whatever the profile (also when
+    // unconfigured: TopBar renders title and breadcrumb only when the title is non-empty). The
+    // active system is shown in the page body.
+    title: ui('fiscalMonitor.title'),
     breadcrumb: `${ui('taxes')} / ${ui('fiscalMonitor.title')}`,
     recordCount: _totalCountMeta,
   });

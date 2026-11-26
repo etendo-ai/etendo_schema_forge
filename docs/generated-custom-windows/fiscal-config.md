@@ -190,7 +190,7 @@ NEO Headless reads fiscal-config records with `NO_ACTIVE_FILTER=true` (see `NeoC
 ## Interaction model
 
 - Route: `/fiscal-config` (custom window, not generated).
-- Visibility: visible in the Impuestos (`Taxes`) menu group, Finance section (moved from Settings in ETP-6380). Breadcrumb: `Impuestos / <page title>` (e.g. "Impuestos / Configuración Fiscal VERI*FACTU", `` `${ui('taxes')} / ${pageTitle}` `` in `FiscalConfigPage.jsx` and `OnboardingWizard.jsx`); it used to read "Configuración / Monitor fiscal / …". The wizard's location hints (`fiscal.onboarding.skipped.hint`, `fiscal.onboarding.confirm.subtitle*`) say "Impuestos → Configuración fiscal".
+- Visibility: visible in the Impuestos (`Taxes`) menu group, Finance section (moved from Settings in ETP-6380). Title: the plain window name `ui('fiscal.title')` ("Configuración Fiscal" / "Fiscal Configuration", same as the menu) in `FiscalConfigPage.jsx` and in the wizard's detail screen (`OnboardingWizard.jsx`). Breadcrumb: `Impuestos / Configuración Fiscal` (`` `${ui('taxes')} / ${pageTitle}` ``). Neither carries the active system any more (ETP-6380 CP-17; it used to read e.g. "Configuración Fiscal SII + TBAI"): the system is shown in the page body — the "Estado" panel and the system tabs. Before ETP-6380 the breadcrumb read "Configuración / Monitor fiscal / …". The wizard's location hints (`fiscal.onboarding.skipped.hint`, `fiscal.onboarding.confirm.subtitle*`) say "Impuestos → Configuración fiscal".
 - Implementation type: `layoutType: "custom"` — loaded from `customLoaders` in `tools/app-shell/src/windows/registry.js`.
 - Entry point: `FiscalConfigPage.jsx` — determines profile and delegates to wizard or section components.
 
@@ -617,7 +617,7 @@ The window no longer builds or posts the config records itself. The onboarding w
 |---|---|
 | `GET /sii-config/siiConfiguration/{orgId}/action/fiscalSystemCatalog` (`useFiscalCatalog`) | `systems` per territory: the manual screen's choices (`allowedSystemsFor`) and the SII veto of `resolveSystem` (Ceuta/Melilla → VERI*FACTU). The record values per territory: which territory a stored configuration belongs to (`territoryOfRecords`, the "Estado" panel). A failed read shows a `fiscal.catalog.err.load` banner over the wizard |
 | `POST /sii-config/siiConfiguration/{orgId}/action/configureFiscalSystem` `{system, territory}` | The wizard's "Confirmar": the server validates and creates the records; the window reads them back (`fetchCreatedRecords`) for the detail step |
-| same, `{system: 'SII'}` | "Añadir SII" (`useFiscalConfig.createComplementary(orgId)`, offered only on a TicketBAI-alone profile): no territory, the server takes the TicketBAI's. The created SII record is put straight into the hook's state and the profile re-detected, so the page title and the "Estado" panel show SII + TicketBAI at once — not a refetch, which would flip `loading` and unmount the tab being edited |
+| same, `{system: 'SII'}` | "Añadir SII" (`useFiscalConfig.createComplementary(orgId)`, offered only on a TicketBAI-alone profile): no territory, the server takes the TicketBAI's. The created SII record is put straight into the hook's state and the profile re-detected, so the "Estado" panel and the tabs show SII + TicketBAI at once — not a refetch, which would flip `loading` and unmount the tab being edited |
 
 **Which access gates them.** Both actions hang off `sii-config`, so NEO gates them on the role's
 access to the **SII Configuration window** — the window this page is gated on (see "Window-access
