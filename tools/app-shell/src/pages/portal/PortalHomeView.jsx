@@ -28,6 +28,9 @@ import { formatCalendarDate } from '@/lib/dateOnly.js';
 import {
   PORTAL_CHART_MONTHS, PORTAL_ERROR, searchPortalDocuments,
 } from '@/lib/portal/portalApi.js';
+import {
+  GlobalSearchEmpty, GlobalSearchGroup, GlobalSearchItem, GlobalSearchList,
+} from '@/components/global-search/GlobalSearchPrimitives.jsx';
 import { PORTAL_KIND_ICONS, PortalLogoTile } from './PortalShell.jsx';
 import {
   PortalDate, PortalDesktopHeader, PortalMain, PortalMoney, PortalRowBadge, PortalSearchPill,
@@ -67,6 +70,9 @@ export default function PortalHomeView({
   // and that is the list it most likely continues.
   const viewAll = () => onNavigate({ view: 'list', kind: recent[0]?.kind ?? 'INVOICE' });
 
+  // "Ver todos en …" of the search: that kind's list, opened on the same search (ETP-6209).
+  const searchInKind = (kind) => onNavigate({ view: 'list', kind, q: search.input.trim() });
+
   const searchBox = (
     <PortalSearchPill
       value={search.input}
@@ -75,7 +81,11 @@ export default function PortalHomeView({
       label={ui('portalSearch')}
       testId="portal-global-search"
       data-testid="PortalSearchPill__beaeb4">
-      <SearchResults search={search} onOpen={openFrom('search')} data-testid="SearchResults__beaeb4" />
+      <SearchResults
+        search={search}
+        onOpen={openFrom('search')}
+        onSeeAll={searchInKind}
+        data-testid="SearchResults__beaeb4" />
     </PortalSearchPill>
   );
 
@@ -219,6 +229,7 @@ export default function PortalHomeView({
 /** The header search across every kind, debounced; 401 ends on the page's re-check. */
 function usePortalSearch(apiFetch, token, onInvalid) {
   const [input, setInput] = useState('');
+  // `null` until a query is sent; then `{ documents, groups }` (searchPortalDocuments).
   const [results, setResults] = useState(null);
 
   useEffect(() => {
@@ -229,12 +240,12 @@ function usePortalSearch(apiFetch, token, onInvalid) {
     }
     let active = true;
     const timer = setTimeout(() => {
-      searchPortalDocuments(apiFetch, token, query).then((documents) => {
-        if (active) setResults(documents);
+      searchPortalDocuments(apiFetch, token, query).then((found) => {
+        if (active) setResults(found);
       }).catch((error) => {
         if (!active) return;
         if (error?.code === PORTAL_ERROR.invalidLink) onInvalid();
-        else setResults([]);
+        else setResults({ documents: [], groups: [] });
       });
     }, SEARCH_DEBOUNCE_MS);
     return () => {
@@ -246,30 +257,64 @@ function usePortalSearch(apiFetch, token, onInvalid) {
   return { input, setInput, results };
 }
 
-function SearchResults({ search, onOpen }) {
+/**
+ * The search's dropdown, as the app's global search draws its results (ETP-6209: the
+ * `GlobalSearch*` primitives of `CommandPalette`): one group per document kind, headed by the
+ * kind's plural name, with its matching documents and a last "Ver todos en <kind>" item that opens
+ * that kind's list on the same search — the portal's "which window to go into". A kind the bundle
+ * does not know is left out.
+ */
+function SearchResults({ search, onOpen, onSeeAll }) {
   const ui = useUI();
   if (search.results == null) return null;
+  const groups = (search.results.groups ?? []).filter((group) => PORTAL_KIND_META[group.kind]);
   return (
     <div
-      className="absolute inset-x-0 top-full z-30 mt-1.5 overflow-hidden rounded-lg border border-border bg-card py-1 shadow-lg"
+      className="absolute inset-x-0 top-full z-30 mt-1.5 overflow-hidden rounded-lg border border-border bg-card shadow-lg"
       data-testid="portal-search-results"
     >
-      {search.results.length === 0 ? (
-        <p className="px-3.5 py-3 text-sm text-muted-foreground">{ui('portalSearchNoResults')}</p>
-      ) : search.results.map((document) => (
-        <button
-          key={`${document.kind}:${document.id}`}
-          type="button"
-          onClick={() => onOpen(document)}
-          className={`flex w-full cursor-pointer items-center gap-2.5 px-3.5 py-2 text-left text-sm hover:bg-muted ${PORTAL_ROW_FOCUS}`}
-          data-testid="portal-search-result"
-        >
-          <span className="min-w-0 flex-1 truncate">
-            {ui(documentLabelKey(document))} <span className="text-muted-foreground">{document.documentNo}</span>
-          </span>
-          <PortalRowBadge document={document} data-testid="PortalRowBadge__beaeb4" />
-        </button>
-      ))}
+      <GlobalSearchList className="max-h-[min(480px,60vh)]" data-testid="GlobalSearchList__beaeb4">
+        {groups.length === 0 ? (
+          <GlobalSearchEmpty data-testid="GlobalSearchEmpty__beaeb4">{ui('portalSearchNoResults')}</GlobalSearchEmpty>
+        ) : groups.map((group) => {
+          const kindKey = group.kind.toLowerCase();
+          const plural = ui(PORTAL_KIND_META[group.kind].pluralKey);
+          // "See all in Invoices" / "Ver todos en facturas": Spanish lowercases the kind mid-sentence.
+          return (
+            <GlobalSearchGroup
+              key={group.kind}
+              heading={plural}
+              data-testid={`portal-search-group-${kindKey}`}>
+              {group.documents.map((document) => (
+                <GlobalSearchItem
+                  key={`${document.kind}:${document.id}`}
+                  onSelect={() => onOpen(document)}
+                  className={`gap-2.5 ${PORTAL_ROW_FOCUS}`}
+                  data-testid="portal-search-result"
+                >
+                  <span className="min-w-0 flex-1 truncate">
+                    {ui(documentLabelKey(document))} <span className="text-muted-foreground">{document.documentNo}</span>
+                  </span>
+                  <PortalRowBadge document={document} data-testid="PortalRowBadge__beaeb4" />
+                </GlobalSearchItem>
+              ))}
+              <GlobalSearchItem
+                onSelect={() => onSeeAll(group.kind)}
+                className={`text-muted-foreground ${PORTAL_ROW_FOCUS}`}
+                data-testid={`portal-search-see-all-${kindKey}`}
+              >
+                <MagnifyingGlassIcon size={16} aria-hidden="true" className="shrink-0" data-testid="MagnifyingGlass__beaeb4" />
+                <span className="min-w-0 flex-1 truncate">{ui('portalSearchSeeAllIn', { kind: plural, kindLower: plural.toLocaleLowerCase() })}</span>
+                {group.count != null ? (
+                  <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs tabular-nums" data-testid="portal-search-group-count">
+                    {group.count}
+                  </span>
+                ) : null}
+              </GlobalSearchItem>
+            </GlobalSearchGroup>
+          );
+        })}
+      </GlobalSearchList>
     </div>
   );
 }

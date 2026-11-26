@@ -22800,6 +22800,7 @@
     "portalViewAll": "Ver todos",
     "portalSearchAllPlaceholder": "Buscar presupuestos, pedidos, facturas…",
     "portalSearchNoResults": "Ningún documento coincide con tu búsqueda.",
+    "portalSearchSeeAllIn": "Ver todos en {kindLower}",
     "portalSearch": "Buscar",
     "portalCreatedWith": "Creado con Etendo",
     "portalLearnMore": "Conocé más",
