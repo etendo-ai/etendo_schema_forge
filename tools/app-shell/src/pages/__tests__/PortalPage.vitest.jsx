@@ -4,6 +4,7 @@
 // @covers tools/app-shell/src/pages/portal/PortalDocumentListView.jsx
 // @covers tools/app-shell/src/pages/portal/PortalListDesktop.jsx
 // @covers tools/app-shell/src/pages/portal/PortalListMobile.jsx
+// @covers tools/app-shell/src/pages/portal/PortalListFilters.jsx
 // @covers tools/app-shell/src/pages/portal/PortalDocumentDetailView.jsx
 // @covers tools/app-shell/src/pages/portal/PortalDetailPanel.jsx
 // @covers tools/app-shell/src/pages/portal/PortalBits.jsx
@@ -2450,5 +2451,30 @@ describe('PortalPage — state tabs and the period range', () => {
     await waitFor(() => expect(listQueries().at(-1).get('group')).toBeNull());
     expect(listQueries().at(-1).get('dateFrom')).toBe(monthFrom);
     expect(screen.getByTestId('portal-date-range')).not.toHaveTextContent('dateRangeAllTime');
+  });
+
+  // The date button carries the app toolbar's active border only when the range is not the tab's
+  // default: the rolling month on a period tab, all time on a state tab.
+  it('marks the date button active only when the range differs from the tab default', async () => {
+    const user = userEvent.setup();
+    const pickPreset = async (name) => {
+      await user.click(screen.getByTestId('portal-date-range'));
+      await user.click(await screen.findByRole('button', { name }));
+    };
+    const isActive = () => screen.getByTestId('portal-date-range').className.includes('border-primary/40');
+    renderPortal(`/portal/${TOKEN}?view=list&kind=INVOICE`);
+    await listReady();
+    expect(isActive()).toBe(false);
+
+    await pickPreset('dateRangeLast7Days');
+    await waitFor(() => expect(isActive()).toBe(true));
+
+    await user.click(screen.getByTestId('portal-status-tab-overdue'));
+    await waitFor(() => expect(listQueries().at(-1).get('group')).toBe('overdue'));
+    expect(isActive()).toBe(false);
+
+    await pickPreset('dateRangeLast7Days');
+    await waitFor(() => expect(listQueries().at(-1).get('dateFrom')).toBeTruthy());
+    expect(isActive()).toBe(true);
   });
 });
