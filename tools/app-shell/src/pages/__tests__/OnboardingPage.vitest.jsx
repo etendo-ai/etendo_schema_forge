@@ -446,7 +446,7 @@ describe('OnboardingPage', () => {
     await waitFor(() => {
       expect(registerAccount).toHaveBeenCalledWith(expect.any(Function), '', expect.objectContaining({
         language: 'en_US',
-      }));
+      }), expect.any(Object));
     });
   });
 
@@ -465,7 +465,7 @@ describe('OnboardingPage', () => {
     await waitFor(() => {
       expect(registerAccount).toHaveBeenCalledWith(expect.any(Function), '', expect.objectContaining({
         language: 'es_ES',
-      }));
+      }), expect.any(Object));
     });
   });
 
