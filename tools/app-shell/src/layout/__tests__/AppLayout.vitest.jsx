@@ -646,6 +646,32 @@ describe('AppLayout shipped permission-anchor menu (ETP-5240)', () => {
     expectSidebarAnchors([]);
   });
 
+  // invoice-inbox now has a real AD_Menu node: it is identified by `windowId` (role-menu membership)
+  // plus the `invoiceInbox` capability, not by an accessWindowId anchor, so the anchors loop above
+  // no longer covers it.
+  it('invoice-inbox follows role-menu membership and the invoiceInbox capability with the real menu', () => {
+    const INBOX_WINDOW = '81AC659E93504927B459E0CAE80CE923';
+    const menuGroups = buildMenuGroups();
+    const inboxVisible = () => JSON.parse(screen.getByTestId('side-menu-groups').textContent)
+      .flatMap(group => group.items.map(item => item.name)).includes('invoice-inbox');
+
+    vi.mocked(useRoleMenu).mockReturnValue(new Set(['108', INBOX_WINDOW]));
+    vi.mocked(useCapabilitiesSafe).mockReturnValue({ invoiceInbox: true });
+    const { rerender } = render(<AppLayout menuGroups={menuGroups} />);
+    expect(inboxVisible()).toBe(true);
+
+    // Revoked: the window id leaves the role's menu.
+    vi.mocked(useRoleMenu).mockReturnValue(new Set(['108']));
+    rerender(<AppLayout menuGroups={menuGroups} />);
+    expect(inboxVisible()).toBe(false);
+
+    // Granted again but the capability is off.
+    vi.mocked(useRoleMenu).mockReturnValue(new Set(['108', INBOX_WINDOW]));
+    vi.mocked(useCapabilitiesSafe).mockReturnValue({ invoiceInbox: false });
+    rerender(<AppLayout menuGroups={menuGroups} />);
+    expect(inboxVisible()).toBe(false);
+  });
+
   it.each([{}, null])('shows all anchors for admin/client-admin with map %j', windowAccess => {
     const { allowedIds, capabilities } = navigationPermissions();
     vi.mocked(useRoleMenu).mockReturnValue(allowedIds);
