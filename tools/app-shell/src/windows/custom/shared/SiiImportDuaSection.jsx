@@ -11,42 +11,43 @@ import { useCapabilitiesSafe } from '@/hooks/useCapabilitiesSafe.js';
 import { SII_IMPORT_DUA_CAPABILITY, isCapabilityVisible } from '@/lib/capabilityVisibility.js';
 
 /**
- * ETP-6284 — "Importación (DUA)" card of the purchase-invoice SII panel (SifTab.jsx), behind the
- * `siiImportDua` capability (backend flag `sii-import-dua`, see `useSiiImportDuaEnabled`).
- * Renders nothing while it is off or unknown, so the SIF tab stays as it was.
+ * ETP-6284 — the import-with-DUA block of the purchase invoice, shown in the Lines tab while the
+ * header check "Importación con DUA" (`etgoImportDua`, `ImportDuaLinesSection`) is on, behind the
+ * `siiImportDua` capability (backend flag `sii-import-dua`, see `useSiiImportDuaEnabled`). One
+ * card, no step numbers: the DUA data first, then `children` — the import tax lines
+ * (`SiiImportTaxesSection`). It does NOT depend on SII: an organization that imports but does not
+ * file SII from Etendo uses it too. SII reads the same columns (C_Invoice.EM_Aeatsii_Dua /
+ * _Fecha_Dua / _Multi_Dua) when it sends.
  *
- * Mirrors the Classic display logic of the purchase invoice header (C_Invoice, module SII):
- *   - Multiple DUA (`aeatsiiMultiDua`): org in SII AND invoice type key is F5 or LC. Shown as the
- *     "Múltiple DUA" switch at the top right of the card (Classic label, same field).
- *   - DUA (`aeatsiiDua`) and DUA date (`aeatsiiFechaDua`): the same AND Multiple DUA unchecked
- *     (switch off). With Multiple DUA on they move to each import tax line (SiiImportTaxesSection).
- * "Org in SII" is the caller's `showSii` gate: the card is mounted inside the SII panel only.
+ *   - Multiple DUA (`aeatsiiMultiDua`): the "Múltiple DUA" switch at the top right of the card.
+ *   - DUA (`aeatsiiDua`) and DUA date (`aeatsiiFechaDua`): shown while Multiple DUA is off. With
+ *     Multiple DUA on they move to each import tax line (SiiImportTaxesSection).
  *
- * Read-only: every control follows the lock of the invoice type key it depends on (`readOnly`,
- * SifTab's `siiFieldReadOnly`: sent to SII, processed, or a read-only role) — a superset of
- * Classic's `(estado CO | AE | DocStatus VO) & Processed`.
+ * Read-only: `readOnly` from the caller (completed, sent to SII, or a read-only role).
  *
- * Required: Classic (`FacturasEventHandler.checkDUAFields`) refuses an F5 or an LC without DUA
- * and DUA date unless Multiple DUA is checked, so both carry the red `*` (and the error outline
- * while empty) in that case.
+ * Required (`duaRequired`): only when the organization files SII for the invoice (the caller
+ * resolves it like the SIF tab: `getInvoiceFiscalTargets(...).showSii` plus the SII adoption date
+ * vs the accounting date). Then DUA and DUA date are required unless Multiple DUA is checked
+ * (com.etendoerp.go `PurchaseInvoiceImportDua` refuses the save otherwise, on every channel), so
+ * both carry the red `*` (and the error outline while empty). For any other organization they stay
+ * optional: no `*`, no outline.
  *
- * LC (customs complementary liquidation): the field holds the liquidation number, not a DUA —
- * no 18-character counter; a non-blocking warning when it does not start with the accepted
- * prefixes (IVA: LC, A01, A02 — AEAT error 1271; IGIC: CLC, 599), see `isLcNumberPrefixOff`.
+ * LC (customs complementary liquidation, SII invoice type): the field holds the liquidation number,
+ * not a DUA — no 18-character counter when `siiTypeKey` is LC. The LC prefix warning belongs to the
+ * SII panel of the SIF tab (`SiiLcPrefixHint`), next to the invoice type it is about.
  *
  * DUA format: a DUA has 18 characters. The counter and the warning are a hint only — the SII
  * module checks the DUA format for IGIC organizations only, so for IVA it must never block a save.
  *
  * DUA date vs accounting register date: a non-blocking warning when the DUA date is later than
- * Fecha registro contable (`aeatsiiFechaRegCont`). Classic checks it only at send time
- * (`SIIUtils.invoicePreviousValidations`), and the automatic background send skips the invoice
- * without a message, so the user is told here. With Multiple DUA the same warning is shown by the
- * import-taxes card over its rows' dates (`isDuaDateAfterAccountingDate`).
+ * Fecha registro contable (`aeatsiiFechaRegCont`); no warning while that date is empty. Classic
+ * checks it only at send time (`SIIUtils.invoicePreviousValidations`), and the automatic background
+ * send skips the invoice without a message, so the user is told here. With Multiple DUA the same
+ * warning is shown by the import-taxes section over its rows' dates (`isDuaDateAfterAccountingDate`).
  *
- * Writes go through `onChange` into DetailView's shared editing state, like every other SIF
+ * Writes go through `onChange` into DetailView's shared editing state, like every other header
  * field; the header save persists them.
  */
-const DUA_TYPE_KEYS = new Set(['F5', 'LC']);
 export const DUA_LENGTH = 18;
 const ERROR_OUTLINE = 'border-destructive focus-visible:ring-destructive focus-within:ring-destructive';
 
@@ -124,14 +125,33 @@ export function useSiiImportDuaEnabled() {
   return isCapabilityVisible(useCapabilitiesSafe(), SII_IMPORT_DUA_CAPABILITY);
 }
 
+/**
+ * ETP-6284 — the LC prefix warning of the SII panel (SIF tab): with SII invoice type LC and a
+ * single DUA, warns when the liquidation number does not start with an accepted prefix. Hint only.
+ */
+export function SiiLcPrefixHint({ ui, siiTypeKey, dua, multiDua, siiTaxType = null, className }) {
+  if (siiTypeKey !== 'LC' || multiDua || !isLcNumberPrefixOff(dua, siiTaxType)) return null;
+  return (
+    <InfoBanner
+      tone="warning"
+      icon={WarningIcon}
+      dismissible={false}
+      className={className}
+      data-testid="SiiImportDuaSection__lcHint">
+      {ui(lcHintKey(siiTaxType))}
+    </InfoBanner>
+  );
+}
+
 export default function SiiImportDuaSection({
-  ui, siiTypeKey, getVal, getDateVal, onChange, readOnly, step, siiTaxType = null,
+  ui, siiTypeKey = null, getVal, getDateVal, onChange, readOnly, duaRequired: siiRequires = false,
+  children,
 }) {
   const enabled = useSiiImportDuaEnabled();
-  if (!enabled || !DUA_TYPE_KEYS.has(siiTypeKey)) return null;
+  if (!enabled) return null;
 
   const multiDua = isChecked(getVal('aeatsiiMultiDua'));
-  const duaRequired = !multiDua && !readOnly;
+  const duaRequired = siiRequires && !multiDua && !readOnly;
   const dua = String(getVal('aeatsiiDua') ?? '');
   const duaDate = getDateVal('aeatsiiFechaDua');
   const duaMissing = duaRequired && !dua.trim();
@@ -139,7 +159,6 @@ export default function SiiImportDuaSection({
   // LC: the field holds the customs complementary-liquidation number, not an 18-char DUA.
   const isLc = siiTypeKey === 'LC';
   const showLengthHint = !isLc && isDuaLengthOff(dua);
-  const showLcHint = isLc && isLcNumberPrefixOff(dua, siiTaxType);
   const showDateHint = isDuaDateAfterAccountingDate(duaDate, getDateVal('aeatsiiFechaRegCont'));
 
   const modeControl = (
@@ -158,9 +177,7 @@ export default function SiiImportDuaSection({
 
   return (
     <SiiPanelCard
-      step={step}
       title={ui('sifDataTabs.option.importDua')}
-      subtitle={ui('sifDataTabs.dua.subtitle')}
       action={modeControl}
       testId="SiiImportDuaSection__card"
       data-testid="SiiPanelCard__siiImportDua">
@@ -215,16 +232,6 @@ export default function SiiImportDuaSection({
               {ui('sifDataTabs.dua.lengthHint')}
             </InfoBanner>
           )}
-          {showLcHint && (
-            <InfoBanner
-              tone="warning"
-              icon={WarningIcon}
-              dismissible={false}
-              className="col-span-2"
-              data-testid="SiiImportDuaSection__lcHint">
-              {ui(lcHintKey(siiTaxType))}
-            </InfoBanner>
-          )}
           {showDateHint && (
             <InfoBanner
               tone="warning"
@@ -237,6 +244,7 @@ export default function SiiImportDuaSection({
           )}
         </div>
       )}
+      {children}
     </SiiPanelCard>
   );
 }

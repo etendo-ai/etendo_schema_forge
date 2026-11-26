@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildPerEntityOpenApiPaths } from '../../src/openapi/build-per-entity-paths.ts';
-import type { PublicApiSchema } from '@etendosoftware/api-gateway-core';
+import type { PublicApiSchema } from '@etendo-ai/api-gateway-core';
 
 const schema: PublicApiSchema = {
   apiVersion: 'v1',

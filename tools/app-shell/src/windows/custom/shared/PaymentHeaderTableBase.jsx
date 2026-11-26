@@ -568,7 +568,9 @@ export default function PaymentHeaderTableBase({ dir, specName, data, onNavigate
             onDelete: (row) => { if (row?.id) setConfirm({ action: 'delete', row }); },
             actions: {
               edit: { visibleWhen: "@status@='__hidden__'" },
-              delete: { visibleWhen: "@status@!='RPVOID'" },
+              // ETP-6247 — nor for a payment a remittance owns (REM_SENT remitted, REM_CANCEL
+              // settled through it): same statuses as the form's DELETE_ACTION_HIDDEN_STATUSES.
+              delete: { visibleWhen: "@status@!='RPVOID' & @status@!='REM_SENT' & @status@!='REM_CANCEL'" },
             },
           }}
           data-testid="PaymentDataTable__743b1b"

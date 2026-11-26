@@ -23,7 +23,7 @@ vi.mock('@/hooks/useCopyLinkAction.js', () => ({ useCopyPageLink: () => vi.fn() 
 vi.mock('@/components/layout/PageMetaContext', () => ({ useSetPageMeta: () => {} }));
 
 // Toolbar and drawers are out of scope: stubs that render nothing.
-vi.mock('@etendosoftware/app-shell-core/components/ui/distinct-values-filter.jsx', () => ({ DistinctValuesFilter: () => null }));
+vi.mock('@etendo-ai/app-shell-core/components/ui/distinct-values-filter.jsx', () => ({ DistinctValuesFilter: () => null }));
 vi.mock('@/components/ui/date-field', () => ({ DateField: () => null }));
 vi.mock('@/components/contract-ui/RefreshButton.jsx', () => ({ RefreshButton: () => null }));
 vi.mock('@/components/contract-ui/ListSortPopover.jsx', () => ({ ListSortPopover: () => null }));

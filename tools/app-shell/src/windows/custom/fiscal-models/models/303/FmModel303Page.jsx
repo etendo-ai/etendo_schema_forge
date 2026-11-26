@@ -1265,7 +1265,7 @@ export default function FmModel303Page({ decl, onBack, onStatusChange, onSubmitt
     // '' }` on the inner `apiFetch` call. This `apiFetch` (this component's own, bound to
     // `apiBaseUrl` e.g. "/sws/neo/fiscal-models") ALWAYS re-prepends its own base unless
     // told not to (see `createApiFetch`/`resolveApiUrl` in
-    // @etendosoftware/app-shell-core/auth/api.js — a plain string concat with only a
+    // @etendo-ai/app-shell-core/auth/api.js — a plain string concat with only a
     // same-prefix escape hatch, which a `neoBase(apiBaseUrl)`-prefixed path does not hit
     // here since it diverges from `apiBaseUrl` after the shared "/sws/neo" segment). Without
     // the override, the real request went out as

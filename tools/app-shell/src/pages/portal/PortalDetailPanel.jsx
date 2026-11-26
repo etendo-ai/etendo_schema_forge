@@ -1,9 +1,9 @@
-import { ArrowsCounterClockwiseIcon, CaretRightIcon } from '@phosphor-icons/react';
+import { ArrowsCounterClockwiseIcon, CaretRightIcon, FileIcon } from '@phosphor-icons/react';
 import { useUI } from '@/i18n';
 import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/formatCurrency.js';
 import {
-  PortalDate, PortalDocumentStatus, PortalPaymentStatus, PortalRowBadge, PORTAL_ROW_FOCUS,
+  PortalDate, PortalDocumentStatus, PortalPaymentStatus, PORTAL_ROW_FOCUS,
 } from './PortalBits.jsx';
 import { documentLabelKey } from './portalPresentation.js';
 
@@ -83,12 +83,15 @@ export function PortalDetailsCard({ document }) {
 
 /**
  * "Documentos relacionados": a 12/16 heading with a round refresh button, then one row per related
- * document — its kind and number, its date, its status (or an invoice's payment state) and a
- * chevron. The open document is not listed (user decision). Opening a row opens that document.
+ * document — its kind and number, its date, its document status (never an invoice's payment
+ * state) and a chevron. The open document is not listed (user decision). Opening a row opens that document.
  */
-export function PortalRelatedList({ related, refreshing, onRefresh, onOpen }) {
+export function PortalRelatedList({ related, refreshing, onRefresh, onOpen, variant = 'panel' }) {
   const ui = useUI();
   const rows = related ?? [];
+  if (variant === 'mobile') {
+    return <MobileRelatedList rows={rows} onOpen={onOpen} data-testid="MobileRelatedList__d3c1a0" />;
+  }
   return (
     <section className="flex flex-col" data-testid="portal-related-panel">
       <div className="flex items-center justify-between pb-1">
@@ -124,8 +127,49 @@ export function PortalRelatedList({ related, refreshing, onRefresh, onOpen }) {
                     <span className="text-sm leading-6 text-[#1B1A1F]">{label}</span>
                     <span className="text-xs leading-5 text-[#6B7280]"><PortalDate value={item.date} data-testid="PortalDate__d3c1a0" /></span>
                   </span>
-                  <PortalRowBadge document={item} palette="figma" className={PANEL_BADGE} data-testid="PortalRowBadge__d3c1a0" />
+                  {/* The DOCUMENT status for every kind, invoices and credit notes included, as the
+                      app's related-documents panel shows it (QA 24/11 d): a payment state here made
+                      one invoice read "Completado" from its shipment and "Pendiente" from its order. */}
+                  <PortalDocumentStatus status={item.documentStatus} palette="figma" className={PANEL_BADGE} data-testid="PortalDocumentStatus__d3c1a0" />
                   <CaretRightIcon size={20} className="ml-1 shrink-0 text-[#81848F]" aria-hidden="true" data-testid="CaretRight__d3c1a0" />
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+/**
+ * Mobile "Documentos relacionados" (designer's redesign, 2026-11-25): a white list, each row a
+ * file icon, "<Tipo> #<número>" and the document status as coloured text (no badge). The document
+ * status, never an invoice's payment state, as on desktop (QA 24/11 d).
+ */
+function MobileRelatedList({ rows, onOpen }) {
+  const ui = useUI();
+  return (
+    <section className="flex flex-col gap-2" data-testid="portal-related">
+      <h2 className="px-2 text-base font-medium leading-6 text-[#2C3142] [font-family:inherit]">{ui('relatedDocuments')}</h2>
+      {rows.length === 0 ? (
+        <p className="px-2 text-sm text-[#6B7280]" data-testid="portal-related-empty-mobile">{ui('noRelatedDocuments')}</p>
+      ) : (
+        <ul className="flex flex-col rounded-xl bg-white px-4">
+          {rows.map((item) => {
+            const label = `${ui(documentLabelKey(item))} #${item.documentNo ?? ''}`;
+            return (
+              <li key={`${item.kind}:${item.id}`} className="border-b border-[#E3E7EC] last:border-b-0">
+                <button
+                  type="button"
+                  onClick={() => onOpen(item)}
+                  aria-label={label}
+                  className={`flex w-full items-center gap-2 py-3 text-left ${PORTAL_ROW_FOCUS}`}
+                  data-testid="portal-related-item-mobile"
+                >
+                  <FileIcon size={16} className="shrink-0 text-[#81848F]" aria-hidden="true" data-testid="File__d3c1a0" />
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium leading-6 text-[#1B1A1F]">{label}</span>
+                  <PortalDocumentStatus status={item.documentStatus} palette="text" data-testid="PortalDocumentStatus__d3c1a0" />
                 </button>
               </li>
             );

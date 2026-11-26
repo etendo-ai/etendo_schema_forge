@@ -19,8 +19,7 @@ import RequiredMark from '@/components/ui/required-mark.jsx';
 // The one rule that says which SIF fields are mandatory, shared with the "Datos fiscales" step.
 import { isSifFieldRequired } from '@/windows/custom/shared/sifRequiredFields.js';
 // ETP-6284: purchase imports with DUA, behind the siiImportDua capability (renders nothing when off).
-import SiiImportDuaSection, { useSiiImportDuaEnabled } from '@/windows/custom/shared/SiiImportDuaSection.jsx';
-import SiiImportTaxesSection, { useSiiDeferredVat, DUA_TYPE_KEYS } from '@/windows/custom/shared/SiiImportTaxesSection.jsx';
+import { SiiLcPrefixHint } from '@/windows/custom/shared/SiiImportDuaSection.jsx';
 
 import { useApiFetch } from '@/auth/useApiFetch.js';
 import { isVoidedStatus } from '../../../lib/docStatus.js';
@@ -320,62 +319,6 @@ function isErrorRegistralReadOnly(data, accessReadOnly) {
     || !['CO', 'AE'].includes(data?.aeatsiiEstado ?? '') || isVoidedStatus(data?.documentStatus);
 }
 
-/** The id of a saved record, or null while it is new. */
-function savedRecordId(isNew, data, recordId) {
-  return isNew ? null : (data?.id || recordId);
-}
-
-/**
- * ETP-6284: deferred VAT of a purchase import (siiImportDua capability, F5/LC) — the import-taxes
- * card offers the compensatory line only then. Refetched on every header save (the record's
- * `updated` changes).
- */
-function useSifImportDeferredVat({ apiBaseUrl, recordId, isNew, data, isPurchaseInvoice, showSii, siiType }) {
-  const importDuaEnabled = useSiiImportDuaEnabled();
-  return useSiiDeferredVat({
-    apiBaseUrl,
-    recordId: savedRecordId(isNew, data, recordId),
-    enabled: importDuaEnabled && isPurchaseInvoice && showSii && DUA_TYPE_KEYS.has(siiType),
-    refreshKey: `${data?.updated ?? ''}|${siiType ?? ''}`,
-  });
-}
-
-/** ETP-6284: the DUA and import-taxes cards of the SII panel (purchase invoices only). */
-function SiiImportCards({
-  ui, isPurchaseInvoice, siiTypeKey, getVal, getDateVal, onChange, siiFieldReadOnly, isDraft,
-  siiTaxType, recordId, data, apiBaseUrl, token, onHeaderRefresh, deferredVat,
-}) {
-  if (!isPurchaseInvoice) return null;
-  return (
-    <>
-      <SiiImportDuaSection
-        ui={ui}
-        siiTypeKey={siiTypeKey}
-        getVal={getVal}
-        getDateVal={getDateVal}
-        onChange={onChange}
-        readOnly={siiFieldReadOnly}
-        siiTaxType={siiTaxType}
-        step={1}
-        data-testid="SiiImportDuaSection__b99c8b" />
-      <SiiImportTaxesSection
-        ui={ui}
-        siiTypeKey={siiTypeKey}
-        multiDua={isYes(getVal('aeatsiiMultiDua'))}
-        recordId={recordId}
-        data={data}
-        apiBaseUrl={apiBaseUrl}
-        token={token}
-        readOnly={siiFieldReadOnly || !isDraft}
-        onHeaderRefresh={onHeaderRefresh}
-        deferredVat={deferredVat}
-        accountingRegisterDate={getDateVal('aeatsiiFechaRegCont')}
-        step={2}
-        data-testid="SiiImportTaxesSection__b99c8b" />
-    </>
-  );
-}
-
 function applyCalloutMessages(messages) {
   let hasError = false;
   for (const msg of messages) {
@@ -391,7 +334,7 @@ function applyCalloutMessages(messages) {
 
 
 export default function SifTab({
-  recordId, data, token, apiBaseUrl, onChange, onVisibilityChange, onHeaderRefresh, isNew = false,
+  recordId, data, token, apiBaseUrl, onChange, onVisibilityChange,
   accessReadOnly = false,
 }) {
   const {
@@ -414,10 +357,6 @@ export default function SifTab({
     siiTaxType,
   } = useSifFieldPatcher({ data, recordId, token, apiBaseUrl, onChange, locked: accessReadOnly });
   const apiFetch = useApiFetch(apiBaseUrl);
-
-  const deferredVat = useSifImportDeferredVat({
-    apiBaseUrl, recordId, isNew, data, isPurchaseInvoice, showSii, siiType: getVal(siiTypeField),
-  });
 
   // ETP-4751 (Block B): exempt-tax signal served by the invoice-header NeoHandler
   // (AbstractInvoiceHeaderHandler#enrichHasExemptTaxes). Refreshed on every line
@@ -668,6 +607,18 @@ export default function SifTab({
                 </SelectContent>
               </Select>
             </Field>
+            {/* ETP-6284: LC holds a customs complementary-liquidation number, SII only. The DUA and
+                import-tax cards live in the Lines tab ("Importación con DUA"). */}
+            {isPurchaseInvoice && (
+              <SiiLcPrefixHint
+                ui={ui}
+                siiTypeKey={getVal(siiTypeField)}
+                dua={getVal('aeatsiiDua')}
+                multiDua={isYes(getVal('aeatsiiMultiDua'))}
+                siiTaxType={siiTaxType}
+                className="col-span-2"
+                data-testid="SiiLcPrefixHint__b99c8b" />
+            )}
             {getVal(siiTypeField) === 'R' && (
               <Field
                 label={ui('sifDataTabs.field.rectificationReason')}
@@ -765,23 +716,6 @@ export default function SifTab({
                 </div>
               </Field>
             )}
-            <SiiImportCards
-              ui={ui}
-              isPurchaseInvoice={isPurchaseInvoice}
-              siiTypeKey={getVal(siiTypeField)}
-              getVal={getVal}
-              getDateVal={getDateVal}
-              onChange={onChange}
-              siiFieldReadOnly={siiFieldReadOnly}
-              isDraft={isDraft}
-              siiTaxType={siiTaxType}
-              recordId={savedRecordId(isNew, data, recordId)}
-              data={data}
-              apiBaseUrl={apiBaseUrl}
-              token={token}
-              onHeaderRefresh={onHeaderRefresh}
-              deferredVat={deferredVat}
-              data-testid="SiiImportCards__b99c8b" />
             <SifAttachmentsSection
               tableName="aeatsii_facturas"
               recordId={data?.aeatsiiFacturaId}

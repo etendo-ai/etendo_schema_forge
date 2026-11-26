@@ -20,7 +20,7 @@ import { renderHook, act, waitFor } from '@testing-library/react';
 const SESSION = Object.freeze({ token: 'test-token', isAuthenticated: true });
 const authState = vi.hoisted(() => ({ value: null }));
 
-vi.mock('@etendosoftware/app-shell-core/auth', async (importOriginal) => ({
+vi.mock('@etendo-ai/app-shell-core/auth', async (importOriginal) => ({
   ...(await importOriginal()),
   useAuthOptional: () => authState.value,
 }));

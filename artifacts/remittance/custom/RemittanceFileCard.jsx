@@ -211,12 +211,12 @@ function ReadinessCard({ data, apiBaseUrl, creditorValid = false }) {
 
 /**
  * ETP-6247 — the SEPA file block under «Datos para el fichero SEPA»: «Antes de confirmar» while the
- * remittance is pending, «Fichero SEPA» once it is processed. Nothing for an unsaved remittance (the
- * actions need a record). Rendered by RemittanceSepaFileData, the window's `headerExtra.customForm`.
+ * remittance is pending. Nothing once it is processed (the file is generated on the fly by «Descargar
+ * fichero», in the top bar and the row menu, whose toast mentions any returned lines) and nothing for an
+ * unsaved remittance (the actions need a record). Rendered by RemittanceSepaFileData, the window's
+ * `headerExtra.customForm`.
  */
 export default function RemittanceFileCard({ data, apiBaseUrl, creditorValid = false }) {
-  // ETP-6247 — a processed remittance shows no card here any more: «Descargar fichero» is a button in the
-  // top bar and «Regenerar fichero» an item of the detail kebab (the file name is in «Adjuntos»).
   if (!data?.id || isProcessedRemittance(data)) return null;
   return <ReadinessCard data={data} apiBaseUrl={apiBaseUrl} creditorValid={creditorValid} data-testid="ReadinessCard__remittance" />;
 }

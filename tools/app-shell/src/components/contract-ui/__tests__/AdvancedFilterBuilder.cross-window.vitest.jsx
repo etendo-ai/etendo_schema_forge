@@ -62,7 +62,7 @@ vi.mock('../DistinctValuesList.jsx', () => ({
 // AdvancedFilterBuilder.vitest.jsx for the full rationale): the rendered
 // component's internal imports resolve through the core package's exports map,
 // so the '@/...' mocks above no longer bind. Mock the core subpath instead.
-vi.mock('@etendosoftware/app-shell-core/components/ui/select.jsx', () => ({
+vi.mock('@etendo-ai/app-shell-core/components/ui/select.jsx', () => ({
   Select: ({ children, value, onValueChange, disabled }) => (
     <select
       data-testid="select-control"
@@ -81,7 +81,7 @@ vi.mock('@etendosoftware/app-shell-core/components/ui/select.jsx', () => ({
   SelectItem: ({ children, value }) => <option value={value}>{children}</option>,
 }));
 
-vi.mock('@etendosoftware/app-shell-core/hooks/useDistinctValues.js', () => ({
+vi.mock('@etendo-ai/app-shell-core/hooks/useDistinctValues.js', () => ({
   useDistinctValues: () => ({
     values: [],
     loading: false,
@@ -93,7 +93,7 @@ vi.mock('@etendosoftware/app-shell-core/hooks/useDistinctValues.js', () => ({
   }),
 }));
 
-vi.mock('@etendosoftware/app-shell-core/components/contract-ui/DistinctValuesList.jsx', () => ({
+vi.mock('@etendo-ai/app-shell-core/components/contract-ui/DistinctValuesList.jsx', () => ({
   DistinctValuesList: () => null,
 }));
 

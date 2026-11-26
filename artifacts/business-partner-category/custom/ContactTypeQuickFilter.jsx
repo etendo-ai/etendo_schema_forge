@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { DistinctValuesFilter } from '@etendosoftware/app-shell-core/components/ui/distinct-values-filter.jsx';
+import { DistinctValuesFilter } from '@etendo-ai/app-shell-core/components/ui/distinct-values-filter.jsx';
 import { useLabel, useUI } from '@/i18n';
 import { useFeatureFlag, CONTACT_CATEGORY_TYPE } from '@/lib/flags';
 import { CONTACT_TYPE_FILTERS, CONTACT_TYPE_FILTER_CODES } from './bpCategoryContactTypes.js';

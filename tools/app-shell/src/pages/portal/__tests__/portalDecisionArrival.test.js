@@ -6,15 +6,28 @@ import assert from 'node:assert/strict';
 import { portalEntryPath } from '../portalDecisionArrival.js';
 
 describe('portalEntryPath', () => {
-  it('opens the portal on the quotation, with the token path-encoded and the view in the query', () => {
-    const path = portalEntryPath({ portalToken: 'tok/a b+c', quotationId: 'q-1' });
+  const CLIENT = '0123456789ABCDEF0123456789ABCDEF';
+  const OTHER = 'FEDCBA9876543210FEDCBA9876543210';
+  for (const [label, result, fallback, expectedPath, expectedClient] of [
+    ['the answer names the tenant', { portalToken: 'tok/a b+c', quotationId: 'q-1', clientId: CLIENT }, OTHER,
+      `/portal/${CLIENT}`, CLIENT],
+    ['only the landing URL names the tenant', { portalToken: 'tok/a b+c', quotationId: 'q-1' }, CLIENT,
+      `/portal/${CLIENT}`, CLIENT],
+    ['no tenant is known (pre-CP-43 link)', { portalToken: 'tok/a b+c', quotationId: 'q-1' }, null,
+      '/portal', null],
+  ]) {
+    it(`opens the portal on the quotation with a token-free path when ${label}`, () => {
+      const entry = portalEntryPath(result, fallback);
 
-    const [pathname, search] = path.split('?');
-    assert.equal(pathname, `/portal/${encodeURIComponent('tok/a b+c')}`);
-    assert.deepEqual(Object.fromEntries(new URLSearchParams(search)), {
-      view: 'doc', kind: 'QUOTATION', id: 'q-1',
+      const [pathname, search] = entry.path.split('?');
+      assert.equal(pathname, expectedPath);
+      assert.ok(!entry.path.includes('tok'), 'the token never goes into the URL');
+      assert.deepEqual(Object.fromEntries(new URLSearchParams(search)), {
+        view: 'doc', kind: 'QUOTATION', id: 'q-1',
+      });
+      assert.deepEqual(entry.link, { clientId: expectedClient, token: 'tok/a b+c' });
     });
-  });
+  }
 
   for (const [label, result] of [
     ['no answer', null],

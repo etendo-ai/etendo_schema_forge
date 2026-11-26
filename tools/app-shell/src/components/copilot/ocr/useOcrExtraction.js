@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { isNetworkError } from '@etendosoftware/app-shell-core/auth';
+import { isNetworkError } from '@etendo-ai/app-shell-core/auth';
 import { executeTool, extractAnswerText, uploadFile } from '../copilotApi';
 
 /**

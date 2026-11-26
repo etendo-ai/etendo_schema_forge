@@ -18,7 +18,7 @@
  * i.e. as Mixpanel would actually receive it.
  *
  * vitest, not `node --test`: the module under test now imports
- * `@etendosoftware/app-shell-core/walkthrough`, and only Vite's resolver maps
+ * `@etendo-ai/app-shell-core/walkthrough`, and only Vite's resolver maps
  * that (to local source under LOCAL_CORE, to the package otherwise) — the same
  * reason `components/layout/TopBar/__tests__/TopBar.vitest.jsx` is a vitest file.
  */

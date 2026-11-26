@@ -16,7 +16,7 @@ import { isProductivePlan } from '@/pages/first-steps/firstStepsConfig.js';
  * reorders both the launcher and the invitation; there is no separate graph.
  *
  * These are pure DATA: the engine that runs them lives in
- * `@etendosoftware/app-shell-core/walkthrough` and knows nothing about
+ * `@etendo-ai/app-shell-core/walkthrough` and knows nothing about
  * contacts, products or orders. Adding a flow means dropping a JSON file next
  * to these, adding its locale keys to `en_US.json` AND `es_ES.json`, and
  * listing it here — no engine change, no new component.

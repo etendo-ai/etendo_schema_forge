@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useUI } from '@/i18n';
-import { fetchAccount } from '@etendosoftware/etendo-go-core/onboarding/api';
+import { fetchAccount } from '@etendo-ai/etendo-go-core/onboarding/api';
 import {
   removeAuthMethod,
   resolveAuthMethodErrorKey,

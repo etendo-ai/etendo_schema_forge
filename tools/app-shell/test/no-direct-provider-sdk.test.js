@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import {
   findBannedProviderImports,
   BANNED_PROVIDER_PREFIXES,
-} from '@etendosoftware/app-shell-core/observability/providerImportGuard';
+} from '@etendo-ai/app-shell-core/observability/providerImportGuard';
 
 /**
  * ETP-4578 guardrail — provider SDKs have exactly one home in the host.

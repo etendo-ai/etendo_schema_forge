@@ -432,3 +432,127 @@ describe('useEntity — list row id derivation', () => {
     expect(result.current.items.map(r => r.id)).toEqual(['A', 'B']);
   });
 });
+
+describe('useEntity — overlapping list loads (latest wins)', () => {
+  /** A fetch response whose resolution the test controls. */
+  function deferredResponse() {
+    let resolve;
+    const promise = new Promise((r) => { resolve = r; });
+    return {
+      promise,
+      resolveWith: (rows) => resolve({ ok: true, json: async () => ({ response: { data: rows } }) }),
+    };
+  }
+
+  const rowsOf = (n, prefix) => Array.from({ length: n }, (_, i) => ({ id: `${prefix}-${i}` }));
+
+  beforeEach(() => {
+    globalThis.fetch = vi.fn();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('keeps the newer filtered page when the older unfiltered load resolves last', async () => {
+    const unfiltered = deferredResponse();
+    const filtered = deferredResponse();
+    globalThis.fetch
+      .mockReturnValueOnce(unfiltered.promise)
+      .mockReturnValueOnce(filtered.promise);
+
+    const criteria = JSON.stringify({ fieldName: 'name', operator: 'iContains', value: 'Vuelo' });
+    const { result, rerender } = renderHook(
+      ({ trailingFilter }) => useEntity('header', null, { ...defaultOpts, trailingFilter }),
+      { initialProps: { trailingFilter: '' } },
+    );
+
+    // The restored filter arrives after mount, as it does when the Table reports its columns.
+    rerender({ trailingFilter: `criteria=${encodeURIComponent(criteria)}` });
+    act(() => { result.current.refresh(); });
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledTimes(2));
+    expect(criteriaOfCall(0)).toEqual([]);
+    expect(criteriaOfCall(1)).toHaveLength(1);
+
+    await act(async () => { filtered.resolveWith(rowsOf(2, 'filtered')); });
+    await waitFor(() => expect(result.current.items).toHaveLength(2));
+
+    await act(async () => { unfiltered.resolveWith(rowsOf(14, 'all')); });
+
+    expect(result.current.items.map((r) => r.id)).toEqual(['filtered-0', 'filtered-1']);
+    expect(result.current.loading).toBe(false);
+  });
+
+  it('ignores a failure of a superseded load instead of emptying the newer result', async () => {
+    let rejectOld;
+    const old = new Promise((_, reject) => { rejectOld = reject; });
+    const newer = deferredResponse();
+    globalThis.fetch
+      .mockReturnValueOnce(old)
+      .mockReturnValueOnce(newer.promise);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { result } = renderHook(() => useEntity('header', null, defaultOpts));
+    act(() => { result.current.refresh(); });
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledTimes(2));
+
+    await act(async () => { newer.resolveWith(rowsOf(3, 'new')); });
+    await act(async () => { rejectOld(new Error('500')); });
+
+    expect(result.current.items).toHaveLength(3);
+    expect(result.current.hasMore).toBe(false);
+  });
+
+  it('keeps hasMore when a superseded next page fails after a reload', async () => {
+    globalThis.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ response: { data: rowsOf(75, 'p0') } }),
+    });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { result } = renderHook(() => useEntity('header', null, defaultOpts));
+    await waitFor(() => expect(result.current.items).toHaveLength(75));
+
+    let rejectPage;
+    const stalePage = new Promise((_, reject) => { rejectPage = reject; });
+    const reload = deferredResponse();
+    globalThis.fetch
+      .mockReturnValueOnce(stalePage)
+      .mockReturnValueOnce(reload.promise);
+
+    act(() => { result.current.loadMore(); });
+    act(() => { result.current.refresh(); });
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledTimes(3));
+
+    await act(async () => { reload.resolveWith(rowsOf(75, 'reload')); });
+    await act(async () => { rejectPage(new Error('500')); });
+
+    expect(result.current.items[0].id).toBe('reload-0');
+    expect(result.current.hasMore).toBe(true);
+    expect(result.current.loadingMore).toBe(false);
+  });
+
+  it('drops a next page that belongs to a query replaced by a reload', async () => {
+    globalThis.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ response: { data: rowsOf(75, 'p0') } }),
+    });
+    const { result } = renderHook(() => useEntity('header', null, defaultOpts));
+    await waitFor(() => expect(result.current.items).toHaveLength(75));
+
+    const stalePage = deferredResponse();
+    const reload = deferredResponse();
+    globalThis.fetch
+      .mockReturnValueOnce(stalePage.promise)
+      .mockReturnValueOnce(reload.promise);
+
+    act(() => { result.current.loadMore(); });
+    act(() => { result.current.refresh(); });
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledTimes(3));
+
+    await act(async () => { reload.resolveWith(rowsOf(3, 'reload')); });
+    await act(async () => { stalePage.resolveWith(rowsOf(10, 'stale')); });
+
+    expect(result.current.items.map((r) => r.id)).toEqual(['reload-0', 'reload-1', 'reload-2']);
+    expect(result.current.loadingMore).toBe(false);
+  });
+});

@@ -17,13 +17,17 @@ import { buildLineSelectorContext } from '@/lib/selectorContext.js';
 import { buildUrlWithParams } from '@/lib/buildUrlWithParams.js';
 import { translateBackendErrorResponse } from '@/lib/backendErrors.js';
 import { normalizeDateInputValue } from '@/windows/custom/fiscal-config/fiscalConfig.utils.js';
-import SiiPanelCard from '@/windows/custom/shared/SiiPanelCard.jsx';
 import { InfoBanner } from '@/components/InfoBanner.jsx';
 import { isDuaDateAfterAccountingDate, useSiiImportDuaEnabled } from '@/windows/custom/shared/SiiImportDuaSection.jsx';
 
 /**
- * ETP-6284 — "Impuestos de importación" card of the purchase-invoice SII panel, right after
- * "Importación (DUA)" and behind the same `siiImportDua` capability (`useSiiImportDuaEnabled`).
+ * ETP-6284 — "Impuestos de importación" section of the purchase invoice: the second part of the
+ * import-with-DUA block of the Lines tab, rendered inside it right after the DUA data
+ * (`SiiImportDuaSection` children, mounted by `ImportDuaLinesSection` while the header check
+ * "Importación con DUA" is on), behind the same `siiImportDua` capability
+ * (`useSiiImportDuaEnabled`). Independent of SII. No summary of its own: the invoice totals panel
+ * below the Lines tab already includes the manual rows (C_INVOICETAX_TRG2 adds their tax amount to
+ * the grand total), so only the per-row amounts are shown here.
  *
  * Classic parity (module SII, purchase invoice "Tax" tab): an import is declared by adding manual
  * tax lines (`C_InvoiceTax` with `Recalculate = 'N'`) next to the ones the invoice lines generate.
@@ -43,9 +47,11 @@ import { isDuaDateAfterAccountingDate, useSiiImportDuaEnabled } from '@/windows/
  * A saved row only PATCHes when a value really changed. Each write re-reads the rows and the header
  * totals (`onHeaderRefresh`).
  *
- * DUA / DUA date are REQUIRED per line with Multiple DUA. Classic declares that rule in
- * `InvoiceTaxEventHandler` but its `showMsg` never throws, so the backend does not enforce it —
- * this card is the only place it holds.
+ * DUA / DUA date per line with Multiple DUA: REQUIRED only when the organization files SII for the
+ * invoice (`duaRequired`, resolved by the caller like the SIF tab). Classic declares that rule in
+ * `InvoiceTaxEventHandler` but its `showMsg` never throws; GO enforces it in com.etendoerp.go
+ * (`PurchaseInvoiceTaxExtension`, with the import check on or SII type F5 / LC, for an
+ * organization adopted to SII) on every channel. Otherwise they are optional.
  *
  * Tax picker: the purchase-line tax selector (`/lines/selectors/tax`, `C_Tax_IsSOTrx_Date` rule:
  * purchase or both, valid at the invoice date), restricted to import taxes only
@@ -56,8 +62,7 @@ import { isDuaDateAfterAccountingDate, useSiiImportDuaEnabled } from '@/windows/
  * hidden committed item). Its items carry the rate shown in the Tipo column (`labelPrefix`, the same
  * rate the line pickers show); a saved row falls back to `tax.rate`.
  */
-export const DUA_TYPE_KEYS = new Set(['F5', 'LC']);
-// The card is mounted on purchase invoices only (SifTab's `isPurchaseInvoice` gate).
+// The card is mounted on purchase invoices only (the purchase-invoice Lines tab).
 const WINDOW_CATEGORY = 'purchases';
 const CATALOG_PAGE = 100;
 const CATALOG_MAX_PAGES = 5;
@@ -238,15 +243,19 @@ export function nextTaxLineNo(rows) {
 }
 
 /**
- * The required cells a row still lacks (`tax`, `taxableAmount`, and with Multiple DUA `aeatsiiDua`
- * and `aeatsiiFechaDua`). `taxAmount` is not a cell the user fills: it comes from the callout, and a
- * row without it is simply not saved yet.
+ * The required cells a row still lacks (`tax`, `taxableAmount`, and with Multiple DUA on an
+ * organization that files SII `aeatsiiDua` and `aeatsiiFechaDua`). `taxAmount` is not a cell the
+ * user fills: it comes from the callout, and a row without it is simply not saved yet.
+ *
+ * @param {object} row the row
+ * @param {boolean} multiDua whether the invoice is multi-DUA
+ * @param {boolean} [duaRequired=true] whether SII requires the DUA per line (org adopted to SII)
  */
-export function missingImportTaxFields(row, multiDua) {
+export function missingImportTaxFields(row, multiDua, duaRequired = true) {
   const missing = new Set();
   if (!row?.tax) missing.add('tax');
   if (row?.taxableAmount == null) missing.add('taxableAmount');
-  if (multiDua) {
+  if (multiDua && duaRequired) {
     if (!String(row?.aeatsiiDua ?? '').trim()) missing.add('aeatsiiDua');
     if (!row?.aeatsiiFechaDua) missing.add('aeatsiiFechaDua');
   }
@@ -261,8 +270,9 @@ export function buildImportTaxBody(row, multiDua) {
     taxAmount: row.taxAmount,
   };
   if (multiDua) {
-    body.aeatsiiDua = String(row.aeatsiiDua ?? '').trim();
-    body.aeatsiiFechaDua = row.aeatsiiFechaDua;
+    // Optional for an organization not in SII: an empty DUA or date travels as null.
+    body.aeatsiiDua = String(row.aeatsiiDua ?? '').trim() || null;
+    body.aeatsiiFechaDua = row.aeatsiiFechaDua || null;
   }
   return body;
 }
@@ -273,17 +283,6 @@ export function isImportTaxRowDirty(row, persisted, multiDua) {
   const body = buildImportTaxBody(row, multiDua);
   const stored = buildImportTaxBody(persisted, multiDua);
   return Object.keys(body).some(k => (body[k] ?? '') !== (stored[k] ?? ''));
-}
-
-/** Sums of the import-tax rows (`total` = base + tax amount); compensatory =0% lines excluded. */
-export function summarizeImportTaxes(rows) {
-  let base = 0;
-  let amount = 0;
-  for (const r of (rows ?? []).filter(row => !isCompensatoryTaxName(row?.taxLabel))) {
-    base += toNumberOrNull(r?.taxableAmount) ?? 0;
-    amount += toNumberOrNull(r?.taxAmount) ?? 0;
-  }
-  return { base, amount, total: base + amount };
 }
 
 function serverRowToRow(row) {
@@ -411,14 +410,16 @@ function DuaSubRowField({ ui, htmlFor, labelKey, required, children }) {
  * stacked labels and two equal-width controls — so the table keeps its 4 columns + delete and
  * never needs a horizontal scroll.
  */
-function DuaSubRow({ ui, row, editable, locale, missing, disabled, colSpan, onDuaChange, onDuaBlur, onDateChange }) {
+function DuaSubRow({
+  ui, row, editable, required, locale, missing, disabled, colSpan, onDuaChange, onDuaBlur, onDateChange,
+}) {
   const duaId = `sif-importTax-dua-${row.key}`;
   const dateId = `sif-importTax-duaDate-${row.key}`;
   return (
     <tr data-testid={`SiiImportTaxesSection__duaRow_${row.key}`}>
       <td colSpan={colSpan} className={`${CELL_X} pt-0 pb-3`} data-testid="SiiImportTaxesSection__tdDuaGroup">
         <div className="grid grid-cols-2 gap-3 max-w-md" data-testid="SiiImportTaxesSection__duaFields">
-          <DuaSubRowField ui={ui} htmlFor={duaId} labelKey="sifDataTabs.field.dua" required={editable} data-testid="DuaSubRowField__dua">
+          <DuaSubRowField ui={ui} htmlFor={duaId} labelKey="sifDataTabs.field.dua" required={required} data-testid="DuaSubRowField__dua">
             {editable ? (
               <Input
                 id={duaId}
@@ -435,7 +436,7 @@ function DuaSubRow({ ui, row, editable, locale, missing, disabled, colSpan, onDu
               <p className="text-sm text-text-primary" data-testid="SiiImportTaxesSection__duaValue">{row.aeatsiiDua || '—'}</p>
             )}
           </DuaSubRowField>
-          <DuaSubRowField ui={ui} htmlFor={dateId} labelKey="sifDataTabs.field.duaDate" required={editable} data-testid="DuaSubRowField__duaDate">
+          <DuaSubRowField ui={ui} htmlFor={dateId} labelKey="sifDataTabs.field.duaDate" required={required} data-testid="DuaSubRowField__duaDate">
             {editable ? (
               <DateField
                 id={dateId}
@@ -457,17 +458,18 @@ function DuaSubRow({ ui, row, editable, locale, missing, disabled, colSpan, onDu
 }
 
 function ImportTaxRow({
-  ui, row, multiDua, editable, currency, locale, rateMap, taxCatalogs, token,
+  ui, row, multiDua, duaRequired, editable, currency, locale, rateMap, taxCatalogs, token,
   onTaxChange, onBaseCommit, onDuaChange, onDuaBlur, onDateChange, onDelete,
 }) {
   const cell = `${CELL_X} py-2 align-middle`;
-  const missing = editable ? missingImportTaxFields(row, multiDua) : new Set();
+  const missing = editable ? missingImportTaxFields(row, multiDua, duaRequired) : new Set();
   const disabled = Boolean(row.saving);
   const subRow = multiDua && (
     <DuaSubRow
       ui={ui}
       row={row}
       editable={editable}
+      required={editable && duaRequired}
       locale={locale}
       missing={missing}
       disabled={disabled}
@@ -550,15 +552,6 @@ function ImportTaxRow({
   );
 }
 
-function SummaryLine({ label, value, strong, testId }) {
-  return (
-    <div className={`flex items-center justify-between gap-6 text-sm ${strong ? 'font-semibold text-foreground' : 'text-muted-foreground'}`} data-testid={testId}>
-      <span data-testid={`${testId}_label`}>{label}</span>
-      <span className="tabular-nums" data-testid={`${testId}_value`}>{value}</span>
-    </div>
-  );
-}
-
 function useTaxRateCatalog(apiFetch, selectorUrl, selectorContext) {
   const [catalogState, setCatalogState] = useState({ rateMap: {}, catalog: [] });
   const contextKey = JSON.stringify(selectorContext ?? {});
@@ -592,7 +585,8 @@ function useTaxRateCatalog(apiFetch, selectorUrl, selectorContext) {
 /**
  * ETP-6284 — whether the saved purchase invoice is an import of deferred VAT (F5/LC, IVA
  * organization in SII, `SIIUtils.isDeferredVATInvoice`), which is when the card offers the
- * compensatory line. Served by `GET <neo>/purchase-invoice/header/{id}/action/siiDeferredVat`
+ * compensatory line (import check on, supplier outside the EU or in Canarias / Ceuta / Melilla —
+ * no SII configuration involved). Served by `GET <neo>/purchase-invoice/header/{id}/action/siiDeferredVat`
  * (com.etendoerp.go, body `{ deferredVat }` at the top level). Fetched while `enabled`, refetched
  * whenever `refreshKey` changes; `false` while loading or on any failure.
  */
@@ -618,8 +612,8 @@ export function useSiiDeferredVat({ apiBaseUrl, recordId, enabled, refreshKey })
 }
 
 function ImportTaxesBlock({
-  ui, multiDua, recordId, data, apiBaseUrl, token, readOnly, onHeaderRefresh, step, deferredVat = false,
-  accountingRegisterDate = null,
+  ui, multiDua, duaRequired = true, recordId, data, apiBaseUrl, token, readOnly, onHeaderRefresh,
+  deferredVat = false, accountingRegisterDate = null,
 }) {
   const apiFetch = useApiFetch(apiBaseUrl);
   const { locale } = useLocaleSwitch();
@@ -692,7 +686,7 @@ function ImportTaxesBlock({
 
   const saveRow = useCallback(async (row) => {
     if (!row || row.saving || inFlightRef.current.has(row.key)) return;
-    if (missingImportTaxFields(row, multiDua).size > 0 || row.taxAmount == null) return;
+    if (missingImportTaxFields(row, multiDua, duaRequired).size > 0 || row.taxAmount == null) return;
     if (row.id && !isImportTaxRowDirty(row, persistedRef.current[row.id], multiDua)) return;
     const flightKey = row.key;
     inFlightRef.current.add(flightKey);
@@ -725,7 +719,7 @@ function ImportTaxesBlock({
     } finally {
       inFlightRef.current.delete(flightKey);
     }
-  }, [multiDua, patchRow, apiFetch, recordId, allServerRows, load, onHeaderRefresh, ui]);
+  }, [multiDua, duaRequired, patchRow, apiFetch, recordId, allServerRows, load, onHeaderRefresh, ui]);
 
   const recomputeAndSave = useCallback(async (row) => {
     const next = await withCalloutAmount(row);
@@ -781,7 +775,6 @@ function ImportTaxesBlock({
     }
   }, [deleteTarget, apiFetch, load, onHeaderRefresh, ui]);
 
-  const summary = summarizeImportTaxes(rows);
   const compensation = planCompensatoryLines(rows,
     row => parseRate(row.tax ? rateMap[row.tax] : null) ?? parseRate(row.serverRate), catalog, multiDua);
   let compensationHint = null;
@@ -827,12 +820,12 @@ function ImportTaxesBlock({
   };
 
   return (
-    <SiiPanelCard
-      step={step}
-      title={ui('sifDataTabs.importTaxes.title')}
-      subtitle={ui('sifDataTabs.importTaxes.subtitle')}
-      testId="SiiImportTaxesSection__card"
-      data-testid="SiiPanelCard__siiImportTaxes">
+    <section className="space-y-4 border-t border-border pt-4" data-testid="SiiImportTaxesSection__card">
+      <header data-testid="SiiImportTaxesSection__card__header">
+        <span className="text-sm font-semibold text-foreground leading-5" data-testid="SiiImportTaxesSection__card__title">
+          {ui('sifDataTabs.importTaxes.title')}
+        </span>
+      </header>
       {!recordId ? (
         <p className="text-xs text-muted-foreground" data-testid="SiiImportTaxesSection__saveFirst">
           {ui('sifDataTabs.importTaxes.saveFirst')}
@@ -862,6 +855,7 @@ function ImportTaxesBlock({
                       ui={ui}
                       row={row}
                       multiDua={multiDua}
+                      duaRequired={duaRequired}
                       editable={editable}
                       currency={currency}
                       locale={locale}
@@ -893,9 +887,8 @@ function ImportTaxesBlock({
               {ui('sifDataTabs.importTaxes.empty')}
             </p>
           )}
-          <div className="flex flex-wrap items-start justify-between gap-4" data-testid="SiiImportTaxesSection__footer">
+          {editable && (
             <div className="flex flex-wrap items-center gap-2" data-testid="SiiImportTaxesSection__footerActions">
-            {editable ? (
               <button
                 type="button"
                 onClick={() => setRows(prev => [...prev, newDraftRow()])}
@@ -904,41 +897,21 @@ function ImportTaxesBlock({
                 <PlusIcon className="h-4 w-4" data-testid="Plus__siiImportTax" />
                 {ui('sifDataTabs.importTaxes.add')}
               </button>
-            ) : <span data-testid="SiiImportTaxesSection__footerSpacer" />}
-            {editable && deferredVat && (
-              <span title={compensationHint ?? undefined} className="inline-flex" data-testid="SiiImportTaxesSection__compensateWrap">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={addCompensatoryLines}
-                  disabled={Boolean(compensationHint) || compensating}
-                  data-testid="Button__siiImportTaxCompensate">
-                  {ui('sifDataTabs.importTaxes.addCompensatory')}
-                </Button>
-              </span>
-            )}
+              {deferredVat && (
+                <span title={compensationHint ?? undefined} className="inline-flex" data-testid="SiiImportTaxesSection__compensateWrap">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={addCompensatoryLines}
+                    disabled={Boolean(compensationHint) || compensating}
+                    data-testid="Button__siiImportTaxCompensate">
+                    {ui('sifDataTabs.importTaxes.addCompensatory')}
+                  </Button>
+                </span>
+              )}
             </div>
-            <div className="min-w-56 space-y-1.5" data-testid="SiiImportTaxesSection__summary">
-              <SummaryLine
-                label={ui('sifDataTabs.importTaxes.taxableAmount')}
-                value={formatCurrency(currency, summary.base)}
-                testId="SiiImportTaxesSection__sumBase"
-                data-testid="SummaryLine__base" />
-              <SummaryLine
-                label={ui('sifDataTabs.importTaxes.summaryTaxAmount')}
-                value={formatCurrency(currency, summary.amount)}
-                testId="SiiImportTaxesSection__sumAmount"
-                data-testid="SummaryLine__amount" />
-              <div className="border-t border-border/60" data-testid="SiiImportTaxesSection__sumSeparator" />
-              <SummaryLine
-                label={ui('sifDataTabs.importTaxes.duaTotal')}
-                value={formatCurrency(currency, summary.total)}
-                strong
-                testId="SiiImportTaxesSection__sumTotal"
-                data-testid="SummaryLine__total" />
-            </div>
-          </div>
+          )}
         </>
       )}
       <DeleteConfirmDialog
@@ -949,27 +922,27 @@ function ImportTaxesBlock({
         onClose={() => { if (!deleting) setDeleteTarget(null); }}
         testIdScope="sii-import-tax-delete"
         data-testid="DeleteConfirmDialog__siiImportTax" />
-    </SiiPanelCard>
+    </section>
   );
 }
 
 export default function SiiImportTaxesSection({
-  ui, siiTypeKey, multiDua, recordId, data, apiBaseUrl, token, readOnly, onHeaderRefresh, step,
+  ui, multiDua, duaRequired = true, recordId, data, apiBaseUrl, token, readOnly, onHeaderRefresh,
   deferredVat = false, accountingRegisterDate = null,
 }) {
   const enabled = useSiiImportDuaEnabled();
-  if (!enabled || !DUA_TYPE_KEYS.has(siiTypeKey)) return null;
+  if (!enabled) return null;
   return (
     <ImportTaxesBlock
       ui={ui}
       multiDua={multiDua}
+      duaRequired={duaRequired}
       recordId={recordId}
       data={data}
       apiBaseUrl={apiBaseUrl}
       token={token}
       readOnly={readOnly}
       onHeaderRefresh={onHeaderRefresh}
-      step={step}
       deferredVat={deferredVat}
       accountingRegisterDate={accountingRegisterDate}
       data-testid="ImportTaxesBlock__siiImportTax" />

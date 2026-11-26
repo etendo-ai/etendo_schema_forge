@@ -1,4 +1,4 @@
-import { apiFetch } from '@etendosoftware/app-shell-core/auth/api';
+import { apiFetch } from '@etendo-ai/app-shell-core/auth/api';
 import { detectBaseUrl, normalizeConversation, normalizeMessage, parseJsonResponse } from './copilotApi.js';
 
 /**

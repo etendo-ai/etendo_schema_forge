@@ -30,7 +30,7 @@ import { login } from '../../helpers/auth.js';
  *      and applying the filter must narrow the GRID to the matching rows.
  *   4. Filtrar por Tipo (an `enumLabel` column) and validate the grid
  *      narrows correctly — as of ETP-4956 (published in
- *      `@etendosoftware/app-shell-core` 0.3.45), `inSet` ("Es cualquiera de")
+ *      `@etendo-ai/app-shell-core` 0.3.45), `inSet` ("Es cualquiera de")
  *      was removed from `OPERATORS_BY_MODE.enumLabel`: enum columns no
  *      longer offer it as a freshly-selectable operator, because their
  *      values are now picked through a multi-select checkbox popover

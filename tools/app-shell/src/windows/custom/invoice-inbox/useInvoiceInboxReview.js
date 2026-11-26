@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { isNetworkError } from '@etendosoftware/app-shell-core/auth';
+import { isNetworkError } from '@etendo-ai/app-shell-core/auth';
 import { fetchReview } from './invoiceInboxApi.js';
 import { reviewErrorKey } from './invoiceInboxReviewModel.js';
 

@@ -17,7 +17,7 @@ import { loadLocaleDictionary, makeRealUI } from '../../shared/__tests__/testUti
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
-vi.mock('@etendosoftware/app-shell-core', () => ({
+vi.mock('@etendo-ai/app-shell-core', () => ({
   useUI: () => (key) => key,
 }));
 vi.mock('../fiscal-models.css', () => ({}));

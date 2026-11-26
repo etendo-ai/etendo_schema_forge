@@ -718,11 +718,15 @@ describe('PurchaseInvoiceWindow — SIF send entry points', () => {
 });
 
 describe('allowConfirmWithManualTaxLines — import invoice confirmed with tax lines only', () => {
-  it('allows an empty invoice only when the header reports manual tax lines', () => {
-    expect(allowConfirmWithManualTaxLines({ hasManualTaxLines: true })).toBe(true);
-    expect(allowConfirmWithManualTaxLines({ hasManualTaxLines: 'Y' })).toBe(true);
-    expect(allowConfirmWithManualTaxLines({ hasManualTaxLines: false })).toBe(false);
-    expect(allowConfirmWithManualTaxLines({ hasManualTaxLines: 'N' })).toBe(false);
+  it('allows an empty import with DUA only when the header reports manual tax lines', () => {
+    expect(allowConfirmWithManualTaxLines({ etgoImportDua: true, hasManualTaxLines: true })).toBe(true);
+    expect(allowConfirmWithManualTaxLines({ etgoImportDua: 'Y', hasManualTaxLines: 'Y' })).toBe(true);
+    expect(allowConfirmWithManualTaxLines({ etgoImportDua: true, hasManualTaxLines: false })).toBe(false);
+    expect(allowConfirmWithManualTaxLines({ etgoImportDua: true, hasManualTaxLines: 'N' })).toBe(false);
+    // A legacy F5 / LC import counts as checked; another SII type does not.
+    expect(allowConfirmWithManualTaxLines({ hasManualTaxLines: true, aeatsiiClaveTipoFc: 'F5' })).toBe(true);
+    expect(allowConfirmWithManualTaxLines({ hasManualTaxLines: true, aeatsiiClaveTipoFc: 'F1' })).toBe(false);
+    expect(allowConfirmWithManualTaxLines({ etgoImportDua: false, hasManualTaxLines: true })).toBe(false);
     expect(allowConfirmWithManualTaxLines({})).toBe(false);
     expect(allowConfirmWithManualTaxLines(null)).toBe(false);
   });

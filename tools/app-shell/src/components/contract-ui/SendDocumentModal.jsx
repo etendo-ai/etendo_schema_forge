@@ -10,7 +10,7 @@ import {
 } from '@phosphor-icons/react';
 import { useUI, useLocaleSwitch } from '@/i18n';
 import { hasClientPdf, buildClientPdfBlob } from '@/windows/custom/shared/documentPdfRegistry.js';
-import { sendDocumentEmail } from './documentEmailSend.js';
+import { documentEmailBodyKey, sendDocumentEmail } from './documentEmailSend.js';
 import RecipientChipEditor from './RecipientChipEditor.jsx';
 import { buildRecipientEdits, normalizeRecipientList } from './recipientEdits.js';
 
@@ -627,7 +627,8 @@ export default function SendDocumentModal({ documentType = 'Document', documentN
   // ⚠ KEEP IN SYNC with the module's message catalog, which owns the same two sentences for a send
   // that carries no edits:
   //   com.etendoerp.go/.../email/render/messages/emails_*.properties
-  //   → document.subject.withRecipient  and  document.body
+  //   → document.subject.withRecipient  and  document.body (or `<contract>.body` when the catalog
+  //     declares one — supplier documents, ETP-6209; see DOCUMENT_EMAIL_BODY_KEYS)
   // They are composed here rather than fetched, to save the round trip. That trade only holds while
   // both sides say the same thing — they diverged once already, and the operator read one subject
   // while the customer received another. `defaultCopyInSync.test.js` fails when they drift; fix the
@@ -638,7 +639,7 @@ export default function SendDocumentModal({ documentType = 'Document', documentN
   // The module skips its own greeting whenever a message is supplied, so this is the only one.
   const defaultMessage = [
     bpName ? ui('sendModalDefaultGreeting', { bpName }) : null,
-    ui('sendModalDefaultMessage', { documentType, documentNo }),
+    ui(documentEmailBodyKey(windowName), { documentType, documentNo }),
   ].filter(Boolean).join('\n\n');
   const [subject, setSubject] = useState(defaultSubject);
   const handleSubjectChange = useCallback((value) => {

@@ -1,4 +1,4 @@
-import { createTelemetryGateway } from '@etendosoftware/app-shell-core/observability/gateway';
+import { createTelemetryGateway } from '@etendo-ai/app-shell-core/observability/gateway';
 import { buildEventPayload, SAFE_EVENT_PROPERTY_KEYS, sanitizeEventProperties } from './payload.js';
 
 /**

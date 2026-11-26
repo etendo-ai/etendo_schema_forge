@@ -1,4 +1,4 @@
-import { apiFetch } from '@etendosoftware/app-shell-core/auth/api';
+import { apiFetch } from '@etendo-ai/app-shell-core/auth/api';
 /**
  * Instance-wide currency number-formatting configuration (thousands/decimal separators,
  * and the per-currency symbol side).
@@ -22,7 +22,7 @@ import { apiFetch } from '@etendosoftware/app-shell-core/auth/api';
  * using the default es-ES-style separators (`.`/`,`) and every currency renders symbol-after
  * (the pre-fix behavior) — a config outage must never break currency rendering.
  *
- * Imports `authHeaders` from `@etendosoftware/app-shell-core/auth/api`, NOT from
+ * Imports `authHeaders` from `@etendo-ai/app-shell-core/auth/api`, NOT from
  * `@/auth/api.js`. The local alias re-exports the core's `auth` barrel, which pulls in
  * `.jsx` files that plain `node --test` (used by formatCurrency.js's own test suite)
  * cannot load — so importing it here would make this whole module unloadable in that
