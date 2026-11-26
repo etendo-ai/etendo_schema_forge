@@ -55,12 +55,12 @@ export function enterFeature(feature, { emit = defaultEmit } = {}) {
   firstRoute = false;
 
   const identityChanged = changed(lastAccount, account) || changed(lastClient, client);
-  if (identityChanged) leaveFeature();
+  if (identityChanged) Promise.resolve(leaveFeature()).catch(() => {});
   lastAccount = account ?? lastAccount;
   lastClient = client ?? lastClient;
 
   if (!feature) {
-    if (lastKey !== null) leaveFeature();
+    if (lastKey !== null) Promise.resolve(leaveFeature()).catch(() => {});
     return;
   }
   const key = feature.key;

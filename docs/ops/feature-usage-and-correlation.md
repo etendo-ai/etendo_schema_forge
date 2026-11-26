@@ -68,8 +68,9 @@ repaired. The key is bound to the account it was set under: another account, or 
 carries it. It is read when the request is dispatched: a read carries the feature current when it was
 issued; a queued write (serialised per record) carries the one current when it leaves the queue.
 
-Tooling note: `@etendosoftware/app-shell-core` must be released with `auth/featureContext.js`
-before this app builds against the published package; until then build and test with `LOCAL_CORE=1`.
+Tooling note: `auth/featureContext.js` and the `X-Etendo-Feature` header in `apiFetch` ship in the
+published `@etendosoftware/app-shell-core` 0.3.122 (schema_forge_core PR #431), which this app pins.
+No `LOCAL_CORE=1` build is needed.
 
 ## 4. Backend context (com.etendoerp.go)
 
@@ -122,7 +123,7 @@ Pending: nothing below is configured by this change.
 CloudWatch logs alone are not Java APM. For a RUM resource to link to a Java trace and its log:
 
 1. `dd-java-agent` attached to Tomcat (`-javaagent:...`) with `DD_SERVICE`, `DD_ENV`, `DD_VERSION`
-   and `DD_LOGS_INJECTION=true` (writes `dd.trace_id`/`dd.span_id` into the log4j2 context), or an
+   and `DD_LOGS_INJECTION=true` (writes `dd.trace_id`/`dd.span_id` into the log4j2 context data; the backend line copies them from `ThreadContext` when present, otherwise Datadog attaches them from the log event itself, so remap them from either place), or an
    OTel collector with compatible W3C propagation. Neither is enabled by this change.
 2. Browser: `VITE_DATADOG_TRACE_API_BASES` set to the NEO API origin(s) so RUM injects trace
    headers on those requests, and `VITE_DATADOG_TRACE_SAMPLE_RATE` (default 20).
@@ -136,7 +137,7 @@ CloudWatch logs alone are not Java APM. For a RUM resource to link to a Java tra
 ## 7. Analytics, adoption and cardinality
 
 **Adoption denominator (explicit):** distinct `ad_user_id` with `session_started` in the period, in
-the same tenant (`ad_client_id`), excluding internal and support sessions (`internal`,
+the same tenant (`ad_client_id`), excluding internal and support sessions (null-safe filter `not (internal_user == true)`,
 `support_session`). Adoption of a feature = distinct users with `feature_opened` for its key over
 that denominator. Tenant adoption = distinct tenants with the feature over tenants active
 (`session_started`) in the period.
@@ -171,7 +172,7 @@ credentials were available, so it has not been created or rendered. The Mixpanel
 
 | Evidence | Status |
 |---|---|
-| Deterministic tests (menu, direct URL, missing context, tabs, concurrency, identity switch/logout, failure/rollback, MDC cleanup, trusted origins) | Done: core `featureContext.test.js`, app-shell `featureCatalog.vitest.js`, `featureUsage.vitest.js`, `ObservabilityRouteTracker.vitest.jsx`, backend `NeoRequestContextFilterTest` |
+| Deterministic tests (menu, direct URL, missing context, tabs, concurrency, identity switch/logout, failure/rollback, MDC cleanup, trusted origins) | Done: core `featureContext.test.js` (schema_forge_core, released in 0.3.122), app-shell `featureCatalog.vitest.js`, `featureUsage.vitest.js`, `ObservabilityRouteTracker.vitest.jsx`, backend `NeoRequestContextFilterTest` |
 | Live RUM resource -> Java APM trace -> CloudWatch-forwarded log | **Pending**: needs Datadog credentials, the Java agent on Tomcat and the Forwarder |
 | Dashboard rendered with live data | **Pending** (definition committed) |
 | Product Analytics server intake for server-side funnel steps | Optional follow-up, not included |

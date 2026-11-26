@@ -8,12 +8,8 @@ describe('feature catalog (ETP-5646)', () => {
     expect(keys.length).toBeGreaterThan(40);
     expect(new Set(keys).size).toBe(keys.length);
     for (const key of keys) expect(key).toMatch(/^(window|process|report|custom)\.[a-z0-9][a-z0-9-]*$/);
-    const names = menuConfig.menu.flatMap(group => group.items.filter(item => !item.redirect).map(item => item.name));
-    for (const name of names) {
-      const item = menuConfig.menu.flatMap(g => g.items).find(i => i.name === name);
-      const key = item.reportId ? `report.${item.reportId}` : null;
-      if (key) expect(FEATURE_CATALOG.has(key)).toBe(true);
-    }
+    const reports = menuConfig.menu.flatMap(group => group.items).filter(item => !item.redirect && item.reportId);
+    for (const item of reports) expect(FEATURE_CATALOG.has(`report.${item.reportId}`)).toBe(true);
   });
 
   it('maps windows, processes, reports and custom pages by their menu metadata', () => {
