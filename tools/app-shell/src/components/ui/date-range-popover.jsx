@@ -116,23 +116,58 @@ function PresetChip({ active, onClick, children }) {
  */
 export function DateRangePopoverContent({ value, onChange, onClose, extraPresets, layout = 'default' }) {
   const ui = useUI();
-
   const datePresets = useMemo(
     () => resolvePresets(extraPresets).map(({ id, labelKey }) => ({ id, label: ui(labelKey) })),
     [ui, extraPresets],
   );
+  const draft = useRangeDraft({ value, onChange, onClose });
+  const Layout = layout === 'compact' ? CompactRangeLayout : DefaultRangeLayout;
+  return <Layout presets={datePresets} draft={draft} onClose={onClose} data-testid="RangeLayout__482ed1" />;
+}
 
+const IN_RANGE_CLASS_NAMES = { inRange: 'bg-muted [&>button]:rounded-none' };
+
+/** The left calendar's first month: the custom range's start, else last month. */
+function initialLeftMonth(value, isCustom) {
+  if (isCustom) return new Date(value.from);
+  const d = new Date();
+  d.setMonth(d.getMonth() - 1);
+  return d;
+}
+
+/** "5 ene 2026 – 12 ene 2026", one end alone, or '' while neither is picked. */
+function rangeSummaryText(fromDate, toDate, fmtDay) {
+  if (fromDate && toDate) return `${fmtDay(fromDate)} – ${fmtDay(toDate)}`;
+  if (fromDate) return fmtDay(fromDate);
+  if (toDate) return fmtDay(toDate);
+  return '';
+}
+
+/** Highlights the days strictly between the two ends; null until both are set in order. */
+function inRangeModifierFor(fromDate, toDate) {
+  if (!fromDate || !toDate || fromDate.getTime() >= toDate.getTime()) return null;
+  const fromTs = fromDate.getTime();
+  const toTs = toDate.getTime();
+  return (day) => {
+    const ts = day.getTime();
+    return ts > fromTs && ts < toTs;
+  };
+}
+
+/**
+ * The picker's draft, shared by both layouts: the custom mode, the two ends (seeded from `value`
+ * once at mount — the content remounts when the popover reopens), the props of each calendar
+ * (the left one sets the start, the right one the end) and the preset / apply handlers.
+ */
+function useRangeDraft({ value, onChange, onClose }) {
   const activePresetId = value && 'presetId' in value ? value.presetId : null;
   const isCustom = !!value && 'from' in value && 'to' in value;
   const hasActiveValue = !!value;
 
-  // Drafts seeded from `value` once at mount (content remounts when popover reopens)
   const [customMode, setCustomMode] = useState(isCustom);
   const [fromDate, setFromDate] = useState(isCustom ? value.from : null);
   const [toDate, setToDate] = useState(isCustom ? value.to : null);
-  const [leftMonth, setLeftMonth] = useState(() =>
-    isCustom ? new Date(value.from) : (() => { const d = new Date(); d.setMonth(d.getMonth() - 1); return d; })(),
-  );
+  const [leftMonth, setLeftMonth] = useState(() => initialLeftMonth(value, isCustom));
   const [rightMonth, setRightMonth] = useState(() => (isCustom ? new Date(value.to) : new Date()));
 
   const handlePresetSelect = (presetId) => {
@@ -150,146 +185,137 @@ export function DateRangePopoverContent({ value, onChange, onClose, extraPresets
     onClose?.();
   };
 
-  const inRangeModifier = useMemo(() => {
-    if (!fromDate || !toDate || fromDate.getTime() >= toDate.getTime()) return null;
-    const fromTs = fromDate.getTime();
-    const toTs = toDate.getTime();
-    return (day) => {
-      const ts = day.getTime();
-      return ts > fromTs && ts < toTs;
-    };
-  }, [fromDate, toDate]);
+  const inRangeModifier = useMemo(() => inRangeModifierFor(fromDate, toDate), [fromDate, toDate]);
+  const modifiers = inRangeModifier ? { inRange: inRangeModifier } : undefined;
 
   const { locale: appLocale } = useLocaleSwitch();
   const bcpLocale = (appLocale || 'es_ES').replace('_', '-');
   const fmtDay = (d) =>
     d.toLocaleDateString(bcpLocale, { day: 'numeric', month: 'short', year: 'numeric' });
 
-  const rangeSummary = (() => {
-    if (fromDate && toDate) return `${fmtDay(fromDate)} – ${fmtDay(toDate)}`;
-    if (fromDate) return fmtDay(fromDate);
-    if (toDate) return fmtDay(toDate);
-    return '';
-  })();
-
   const presetActive = (presetId) => (presetId === 'allTime'
     ? (!hasActiveValue && !customMode)
     : (activePresetId === presetId && !customMode));
 
-  if (layout === 'compact') {
-    return (
-      <div className="flex w-full min-w-0 flex-col" data-layout="compact" data-testid="date-range-compact">
-        <div className="flex flex-wrap gap-1.5 p-2">
-          {datePresets.map((preset) => (
-            <PresetChip
-              key={preset.id}
-              active={presetActive(preset.id)}
-              onClick={() => handlePresetSelect(preset.id)}
-              data-testid="PresetChip__482ed1">
-              {preset.label}
-            </PresetChip>
-          ))}
-          <PresetChip active={customMode} onClick={() => setCustomMode(true)} data-testid="PresetChip__482ed1">
-            {ui('dateRangeCustom')}
-          </PresetChip>
-        </div>
-        {customMode ? (
-          <>
-            <div className="flex flex-col items-center border-t border-border-subtle">
-              <p className="w-full px-3 pt-2 text-xs font-semibold leading-4 text-muted-foreground">{ui('filterFrom')}</p>
-              <CalendarWithPicker
-                month={leftMonth}
-                onMonthChange={setLeftMonth}
-                selected={fromDate ?? undefined}
-                onSelect={(d) => { setFromDate(d || null); setCustomMode(true); }}
-                modifiers={inRangeModifier ? { inRange: inRangeModifier } : undefined}
-                modifiersClassNames={{ inRange: 'bg-muted [&>button]:rounded-none' }}
-                data-testid="CalendarWithPicker__482ed1" />
-              <p className="w-full border-t border-border-subtle px-3 pt-2 text-xs font-semibold leading-4 text-muted-foreground">{ui('filterTo')}</p>
-              <CalendarWithPicker
-                month={rightMonth}
-                onMonthChange={setRightMonth}
-                selected={toDate ?? undefined}
-                onSelect={(d) => { setToDate(d || null); setCustomMode(true); }}
-                modifiers={inRangeModifier ? { inRange: inRangeModifier } : undefined}
-                modifiersClassNames={{ inRange: 'bg-muted [&>button]:rounded-none' }}
-                data-testid="CalendarWithPicker__482ed1" />
-            </div>
-            <div className="flex flex-col gap-2 border-t border-border-subtle px-3 py-3">
-              {rangeSummary ? <span className="text-sm font-medium text-muted-foreground">{rangeSummary}</span> : null}
-              <RangeFooterButtons
-                onCancel={onClose}
-                onApply={handleApplyCustom}
-                canApply={canApplyCustom}
-                stretch
-                data-testid="RangeFooterButtons__482ed1" />
-            </div>
-          </>
-        ) : null}
-      </div>
-    );
-  }
+  return {
+    customMode,
+    enterCustomMode: () => setCustomMode(true),
+    presetActive,
+    handlePresetSelect,
+    handleApplyCustom,
+    canApplyCustom,
+    rangeSummary: rangeSummaryText(fromDate, toDate, fmtDay),
+    leftCalendar: {
+      month: leftMonth,
+      onMonthChange: setLeftMonth,
+      selected: fromDate ?? undefined,
+      onSelect: (d) => { setFromDate(d || null); setCustomMode(true); },
+      modifiers,
+      modifiersClassNames: IN_RANGE_CLASS_NAMES,
+    },
+    rightCalendar: {
+      month: rightMonth,
+      onMonthChange: setRightMonth,
+      selected: toDate ?? undefined,
+      onSelect: (d) => { setToDate(d || null); setCustomMode(true); },
+      modifiers,
+      modifiersClassNames: IN_RANGE_CLASS_NAMES,
+    },
+  };
+}
 
+/** The compact layout (ETP-6209): wrapping preset pills, then the stacked calendars and footer. */
+function CompactRangeLayout({ presets, draft, onClose }) {
+  const ui = useUI();
+  return (
+    <div className="flex w-full min-w-0 flex-col" data-layout="compact" data-testid="date-range-compact">
+      <div className="flex flex-wrap gap-1.5 p-2">
+        {presets.map((preset) => (
+          <PresetChip
+            key={preset.id}
+            active={draft.presetActive(preset.id)}
+            onClick={() => draft.handlePresetSelect(preset.id)}
+            data-testid="PresetChip__482ed1">
+            {preset.label}
+          </PresetChip>
+        ))}
+        <PresetChip active={draft.customMode} onClick={draft.enterCustomMode} data-testid="PresetChip__482ed1">
+          {ui('dateRangeCustom')}
+        </PresetChip>
+      </div>
+      {draft.customMode ? (
+        <>
+          <div className="flex flex-col items-center border-t border-border-subtle">
+            <p className="w-full px-3 pt-2 text-xs font-semibold leading-4 text-muted-foreground">{ui('filterFrom')}</p>
+            <CalendarWithPicker {...draft.leftCalendar} data-testid="CalendarWithPicker__482ed1" />
+            <p className="w-full border-t border-border-subtle px-3 pt-2 text-xs font-semibold leading-4 text-muted-foreground">{ui('filterTo')}</p>
+            <CalendarWithPicker {...draft.rightCalendar} data-testid="CalendarWithPicker__482ed1" />
+          </div>
+          <div className="flex flex-col gap-2 border-t border-border-subtle px-3 py-3">
+            {draft.rangeSummary ? <span className="text-sm font-medium text-muted-foreground">{draft.rangeSummary}</span> : null}
+            <RangeFooterButtons
+              onCancel={onClose}
+              onApply={draft.handleApplyCustom}
+              canApply={draft.canApplyCustom}
+              stretch
+              data-testid="RangeFooterButtons__482ed1" />
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+/** One row of the default layout's preset column, checked when active. */
+function PresetRow({ active, onClick, children }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'relative flex h-8 items-center px-2 text-left text-sm leading-6 text-foreground transition-colors',
+        active ? 'bg-muted' : 'hover:bg-muted',
+      )}
+    >
+      <span className="flex-1">{children}</span>
+      {active ? <CheckIcon className="mr-3 h-4 w-4 shrink-0" data-testid="Check__482ed1" /> : null}
+    </button>
+  );
+}
+
+/** The default layout: the presets column beside the two calendars and their footer. */
+function DefaultRangeLayout({ presets, draft, onClose }) {
+  const ui = useUI();
   return (
     <div className="flex">
       {/* Preset list */}
       <div className="flex w-[193px] flex-col border-r border-border-subtle py-1">
-        {datePresets.map((preset) => {
-          const active = presetActive(preset.id);
-          return (
-            <button
-              key={preset.id}
-              type="button"
-              onClick={() => handlePresetSelect(preset.id)}
-              className={cn(
-                'relative flex h-8 items-center px-2 text-left text-sm leading-6 text-foreground transition-colors',
-                active ? 'bg-muted' : 'hover:bg-muted',
-              )}
-            >
-              <span className="flex-1">{preset.label}</span>
-              {active ? <CheckIcon className="mr-3 h-4 w-4 shrink-0" data-testid="Check__482ed1" /> : null}
-            </button>
-          );
-        })}
-        <button
-          type="button"
-          onClick={() => setCustomMode(true)}
-          className={cn(
-            'relative flex h-8 items-center px-2 text-left text-sm leading-6 text-foreground transition-colors',
-            customMode ? 'bg-muted' : 'hover:bg-muted',
-          )}
-        >
-          <span className="flex-1">{ui('dateRangeCustom')}</span>
-          {customMode ? <CheckIcon className="mr-3 h-4 w-4 shrink-0" data-testid="Check__482ed1" /> : null}
-        </button>
+        {presets.map((preset) => (
+          <PresetRow
+            key={preset.id}
+            active={draft.presetActive(preset.id)}
+            onClick={() => draft.handlePresetSelect(preset.id)}
+            data-testid="PresetRow__482ed1">
+            {preset.label}
+          </PresetRow>
+        ))}
+        <PresetRow active={draft.customMode} onClick={draft.enterCustomMode} data-testid="PresetRow__482ed1">
+          {ui('dateRangeCustom')}
+        </PresetRow>
       </div>
       {/* Calendars + footer */}
       <div className="flex flex-col">
         <div className="flex border-b border-border-subtle">
-          <CalendarWithPicker
-            month={leftMonth}
-            onMonthChange={setLeftMonth}
-            selected={fromDate ?? undefined}
-            onSelect={(d) => { setFromDate(d || null); setCustomMode(true); }}
-            modifiers={inRangeModifier ? { inRange: inRangeModifier } : undefined}
-            modifiersClassNames={{ inRange: 'bg-muted [&>button]:rounded-none' }}
-            data-testid="CalendarWithPicker__482ed1" />
+          <CalendarWithPicker {...draft.leftCalendar} data-testid="CalendarWithPicker__482ed1" />
           <div className="border-l border-border-subtle" />
-          <CalendarWithPicker
-            month={rightMonth}
-            onMonthChange={setRightMonth}
-            selected={toDate ?? undefined}
-            onSelect={(d) => { setToDate(d || null); setCustomMode(true); }}
-            modifiers={inRangeModifier ? { inRange: inRangeModifier } : undefined}
-            modifiersClassNames={{ inRange: 'bg-muted [&>button]:rounded-none' }}
-            data-testid="CalendarWithPicker__482ed1" />
+          <CalendarWithPicker {...draft.rightCalendar} data-testid="CalendarWithPicker__482ed1" />
         </div>
         <div className="flex h-16 items-center justify-between gap-2 px-5 py-3">
-          <span className="text-sm font-medium text-muted-foreground">{rangeSummary}</span>
+          <span className="text-sm font-medium text-muted-foreground">{draft.rangeSummary}</span>
           <RangeFooterButtons
             onCancel={onClose}
-            onApply={handleApplyCustom}
-            canApply={canApplyCustom}
+            onApply={draft.handleApplyCustom}
+            canApply={draft.canApplyCustom}
             data-testid="RangeFooterButtons__482ed1" />
         </div>
       </div>
