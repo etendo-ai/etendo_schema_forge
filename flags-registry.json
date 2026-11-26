@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "$comment": "The FEATURE is the unit of accounting; the flag is a temporary attribute of it. Durable facts (paths, testSpecs, deferredItems, debt) live on the feature and survive flag retirement. Retiring a flag = delete its `flag` object (after removing the code per the playbook), never the feature entry. Previous $comment: Source of truth for feature flag METADATA. Debt is always DERIVED from this file by cli/src/flag-debt.js — never stored here. See docs/flag-debt.md.",
+  "$comment": "The FEATURE is the unit of accounting; the flag is a temporary attribute of it. Durable facts (paths, testSpecs, deferredItems, debt) live on the feature and survive flag retirement. Retiring a flag = pass `make flag-retire-check FLAG=<key>` first (open items resolved with evidence or accepted by a named human, recorded in the feature's `retirement` object, which the gate reads and the scorer ignores; docs/flag-retirement.md), then delete its `flag` object (after removing the code per the playbook), never the feature entry. Previous $comment: Source of truth for feature flag METADATA. Debt is always DERIVED from this file by cli/src/flag-debt.js — never stored here. See docs/flag-debt.md.",
   "roots": {
     "frontend": ".",
     "backend": "etendo_core/modules/com.etendoerp.go"

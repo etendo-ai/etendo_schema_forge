@@ -170,6 +170,14 @@ Any new or changed `GoFeatureFlags.isEnabled(...)` call: look at the `FeatureFla
 - Check: `grep -rn "forAccount(null)\\|FeatureFlagContext.environment()" src/` on the changed files; each hit must be an operational flag. Confirm a test asserts the email reaches the context for per-user flags.
 Full rule: `feature-debt` skill, Step 1.
 
+### Flag Retirement Without the Gate (BLOCKER)
+
+A PR that deletes a `flag` object from `flags-registry.json`, a key from `lib/flags/flag-keys.js`, a `GoFeatureFlags.FLAG_*` constant, or turns a backend `flagKey` into `contribution: true`, is a retirement.
+- BLOCKER unless `make flag-retire-check FLAG=<key> VERIFY=1` prints `RESULT: CLEAR` on the PR branch (with the com.etendoerp.go checkout available).
+- BLOCKER if the PR adds `retirement.accepted`, `retirement.signOff`, a ticket item `accepted`, or flips a spec to `acceptedDebt: true`, and its `ref` does not open to a decision written by that human. An author named like a bot is never valid.
+- Compare `retirement.ticketItems` with the ticket's debt/acceptance sections: a line missing from the record is a BLOCKER.
+- Green tests are not evidence here — they check the code, not the debt (ETP-6425). Full procedure: `docs/flag-retirement.md`.
+
 ### Pipeline-Level Fixes (BLOCKER)
 Never fix a generated output file directly. If a generated file has a bug or wrong content, the fix must be in the generator (`generate-frontend.js`, `generate-contract.js`, `resolve-curated.js`, etc.) so it applies to all windows.
 

@@ -133,6 +133,12 @@ entry — do not soften the wording.
 
 ## Step 6 — Retiring a flag
 
+**Use the `retire-flag` skill — it owns this step.** Its first action is the blocking gate
+`make flag-retire-check FLAG=<key>` plus the ticket's debt list; no code is edited until
+every item is resolved with evidence or explicitly accepted by a human
+([`docs/flag-retirement.md`](../../../docs/flag-retirement.md)). What follows is the shape
+of the two branches, for orientation only.
+
 What expires at the TTL is the **ability to hide**, never the feature. Retiring is
 committing to one of two branches — decide which first, with the human:
 

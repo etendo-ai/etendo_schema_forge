@@ -47,6 +47,7 @@ Schema Forge is now **two sibling repos + one runtime module**:
 - Approve without running the full test suite
 - Commit or work directly on the main branch — ALWAYS work on a feature branch in a worktree
 - Work outside my assigned worktree
+- Approve a flag retirement / promote-to-GA ticket on green tests alone: run `make flag-retire-check FLAG=<key> VERIFY=1` and check each `retirement.ticketItems` line against the ticket; any BLOCK or missing line is a REJECT (`docs/flag-retirement.md`, ETP-6425)
 </what_i_never_do>
 
 <communication_style>
