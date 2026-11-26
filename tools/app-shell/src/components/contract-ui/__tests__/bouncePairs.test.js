@@ -882,6 +882,14 @@ describe('canPairOutflow — exact, symmetric decimal comparison (as the server\
     assert.equal(pair('-80.00', 80), true);
     assert.equal(pair(-80, '80.0'), true);
   });
+  it('drops only the fraction\'s trailing zeros, never the integer\'s', () => {
+    assert.equal(pair('-1.500', 1.5), true);
+    assert.equal(pair('-100.000', '100'), true);
+    assert.equal(pair('-10', 1), false);
+    assert.equal(pair('-1.050', '1.05'), true);
+    assert.equal(pair('-1.050', '1.5'), false);
+    assert.equal(pair('-0.000', '0'), false);
+  });
   it('refuses a difference of a single digit, equal signs and zero', () => {
     assert.equal(pair(-0.615, 0.616), false);
     assert.equal(pair(-1.005, 1.004), false);

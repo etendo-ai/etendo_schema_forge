@@ -4,7 +4,6 @@ import { toast } from 'sonner';
 import { useUI } from '@/i18n';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
-import { MoneyAmount } from '@/components/ui/money-amount';
 import { formatCurrency } from '@/lib/formatCurrency.js';
 import { translateBackendError, translateBackendErrorBody } from '@/lib/backendErrors.js';
 import { useApplySuggestions } from '@/hooks/useReconciliation';

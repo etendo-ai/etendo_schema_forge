@@ -510,6 +510,11 @@ async function installMocks(page, { processed = true } = {}) {
  * the `autoMatch` mock became state-aware, the processed-statement cases DO produce a group. The
  * effect disarms itself on the same pass, so a dismissed modal stays dismissed.
  *
+ * The modal has no Cancel button: it is closed from its header link "Ir a conciliación manual"
+ * (`automatch-modal-open-reconciliation`). With rows checked (a high-confidence group is checked by
+ * default) that link asks first through `automatch-close-confirm`, which "Cerrar"
+ * (`automatch-close-confirm-action`) confirms; with nothing checked it closes straight away.
+ *
  * @param {import('@playwright/test').Page} page
  * @param {string} tab
  */
@@ -520,7 +525,15 @@ async function openTab(page, tab) {
 
   const automatch = page.getByTestId('automatch-suggestion-modal');
   if (await automatch.isVisible().catch(() => false)) {
-    await page.getByTestId('automatch-modal-cancel').click();
+    await page.getByTestId('automatch-modal-open-reconciliation').click();
+    // Confirm only if the close asked first (rows were checked): either the confirmation shows up
+    // or the modal is already gone.
+    const closeConfirm = page.getByTestId('automatch-close-confirm');
+    await expect.poll(async () => (await closeConfirm.isVisible()) || !(await automatch.isVisible()))
+      .toBe(true);
+    if (await closeConfirm.isVisible()) {
+      await page.getByTestId('automatch-close-confirm-action').click();
+    }
     await expect(automatch).toHaveCount(0);
   }
 }

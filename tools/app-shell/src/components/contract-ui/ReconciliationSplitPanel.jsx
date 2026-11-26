@@ -32,14 +32,13 @@ import {
   STATUS_CODES, countForStatus, matchesStatus,
 } from './reconciliationStatusFilter.js';
 import {
-  BOUNCE_STATE, buildBounceOutflows, buildBouncePairRows, canPairOutflow, countBouncePairs,
-  isBounceReviewLine, pendingLinesStatusParam,
+  BOUNCE_STATE, canPairOutflow, isBounceReviewLine, pendingLinesStatusParam,
 } from './bouncePairs.js';
 import { pairBadgeAndReason } from './AutoMatchBounceSection.jsx';
 import {
   AiPercentText, BounceFooter, BounceNotice, chooseLabel,
 } from './BouncePairPanel.jsx';
-import { useBounceLines, useBouncePairPanel } from './useBouncePairReview.jsx';
+import { useBounceLines, useBouncePairPanel, useBouncePairRows } from './useBouncePairReview.jsx';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DistinctValuesFilter } from '@/components/ui/distinct-values-filter';
 import { DateRangePopover } from '@/components/ui/date-range-popover';
@@ -2138,39 +2137,13 @@ export function ReconciliationSplitPanel({
     });
   }, [lines, leftSearch, leftStatus]);
 
-  // ETP-6359 — "Posibles rechazos": one row per pair. `bouncePairCount` is the filter's figure (null
-  // while the backend reports no bounce count, which keeps the entry out of the filter anyway).
-  const pairMode = leftStatus === BOUNCE_STATE;
-  const bouncePairRows = useMemo(
-    () => (pairMode ? buildBouncePairRows(lines, { query: leftSearch }) : null),
-    [pairMode, lines, leftSearch],
-  );
-  const bounceOutflows = useMemo(
-    () => (pairMode ? buildBounceOutflows(lines, { query: leftSearch }) : []),
-    [pairMode, lines, leftSearch],
-  );
-  // While "Descartadas" is shown, or the lines are still loading, `lines` does not hold the default
-  // answer: the last settled figure is kept (like the counts, see useBounceLines), so the filter
-  // never flashes 0 meanwhile.
-  const currentPairCount = useMemo(() => countBouncePairs(lines), [lines]);
-  const pairCountSettled = !linesLoading && leftStatus !== 'discarded' && statusCounts?.bounce != null;
-  const [lastPairCount, setLastPairCount] = useState(null);
-  useEffect(() => {
-    if (pairCountSettled) setLastPairCount(currentPairCount);
-  }, [pairCountSettled, currentPairCount]);
-  let bouncePairCount = null;
-  if (statusCounts?.bounce != null) bouncePairCount = pairCountSettled ? currentPairCount : lastPairCount;
-
-  // A pair's original / candidate line selected under another filter reads as its pair here: the
-  // selection moves to the pair's bounce row (the anchor), which the pair panel's model keys on.
-  useEffect(() => {
-    const pair = selectedLine?.bouncePair;
-    if (!pairMode || !pair || pair.role === 'bounce' || !bouncePairRows) return;
-    const entry = bouncePairRows.find((e) => e.groupKey === pair.groupKey);
-    if (entry && entry.anchor.bouncePair.role === 'bounce' && entry.anchor.id !== selectedLine.id) {
-      selectLine(entry.anchor);
-    }
-  }, [pairMode, selectedLine, bouncePairRows, selectLine]);
+  // ETP-6359 — "Posibles rechazos": one row per pair, and the pair count shown in the filter.
+  const {
+    pairMode, bouncePairRows, bounceOutflows, bouncePairCount,
+  } = useBouncePairRows({
+    lines, search: leftSearch, status: leftStatus, loading: linesLoading, statusCounts, selectedLine,
+    selectLine,
+  });
 
   const visibleTotal = useMemo(
     () => Number(visibleLines.reduce((s, l) => s + (Number(l.amount) || 0), 0).toFixed(2)),

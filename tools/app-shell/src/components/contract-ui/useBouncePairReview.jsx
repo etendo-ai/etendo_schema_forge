@@ -7,8 +7,8 @@ import {
   useDiscardPair, useDismissPair, usePendingLineCounts, useRestorePair,
 } from '@/hooks/useBouncePairActions.js';
 import {
-  BOUNCE_STATE, DISCARDED_STATE, bouncePanelModel, countsWithDismissedPairs, dismissPairPayload,
-  pendingLinesStatusParam,
+  BOUNCE_STATE, DISCARDED_STATE, bouncePanelModel, buildBounceOutflows, buildBouncePairRows,
+  countBouncePairs, countsWithDismissedPairs, dismissPairPayload, pendingLinesStatusParam,
   withDismissedPairs,
 } from './bouncePairs.js';
 import { CHOICE_SOURCE_AI, CHOICE_SOURCE_USER, isAiStaleError } from './bounceAi.js';
@@ -20,7 +20,8 @@ import { BouncePairPanel } from './BouncePairPanel.jsx';
  * Two hooks, called by ReconciliationSplitPanel at the two points it needs them: the lines (before
  * the selection is resolved) and the right panel (once a line is selected). With the backend flag
  * `bank-bounce-suggestions` off and no discarded line, both are pass-throughs: the lines, counts and
- * filter codes come out exactly as they went in, and no panel is ever returned.
+ * filter codes come out exactly as they went in, and no panel is ever returned. A third hook
+ * (`useBouncePairRows`, ETP-6359) builds the one-row-per-pair list of the "Posibles rechazos" filter.
  */
 
 const EMPTY_COUNTS = {};
@@ -410,4 +411,58 @@ export function useBouncePairPanel({
     : null;
 
   return { panel, parts };
+}
+
+/**
+ * The "Posibles rechazos" view of the split panel's left list (ETP-6359): ONE ROW PER PAIR instead
+ * of one row per line, the outflows a pair's original can be picked from, and the pair count the
+ * status filter shows for that entry.
+ *
+ * - `pairMode` is whether the "Posibles rechazos" filter is the active one; outside it the rows are
+ *   `null` and the outflows empty, so the host lists its lines as always.
+ * - `bouncePairCount` is `null` while the backend reports no bounce count (which keeps the entry out
+ *   of the filter anyway). While "Descartadas" is shown, or the lines are still loading, `lines`
+ *   does not hold the default answer: the last settled figure is kept (like the counts, see
+ *   {@link useBounceLines}), so the filter never flashes 0 meanwhile.
+ * - A pair's original / candidate line selected under another filter reads as its pair here: the
+ *   selection moves (through `selectLine`) to the pair's bounce row, the anchor the pair panel's
+ *   model keys on.
+ *
+ * @param {{ lines: Array<object>, search: string, status: string|null, loading: boolean,
+ *   statusCounts: object|null|undefined, selectedLine: object|null,
+ *   selectLine: (line: object) => void }} args
+ * @returns {{ pairMode: boolean, bouncePairRows: Array<object>|null, bounceOutflows: Array<object>,
+ *   bouncePairCount: number|null }}
+ */
+export function useBouncePairRows({
+  lines, search, status, loading, statusCounts, selectedLine, selectLine,
+}) {
+  const pairMode = status === BOUNCE_STATE;
+  const bouncePairRows = useMemo(
+    () => (pairMode ? buildBouncePairRows(lines, { query: search }) : null),
+    [pairMode, lines, search],
+  );
+  const bounceOutflows = useMemo(
+    () => (pairMode ? buildBounceOutflows(lines, { query: search }) : []),
+    [pairMode, lines, search],
+  );
+  const currentPairCount = useMemo(() => countBouncePairs(lines), [lines]);
+  const pairCountSettled = !loading && status !== DISCARDED_STATE && statusCounts?.bounce != null;
+  const [lastPairCount, setLastPairCount] = useState(null);
+  useEffect(() => {
+    if (pairCountSettled) setLastPairCount(currentPairCount);
+  }, [pairCountSettled, currentPairCount]);
+  let bouncePairCount = null;
+  if (statusCounts?.bounce != null) bouncePairCount = pairCountSettled ? currentPairCount : lastPairCount;
+
+  useEffect(() => {
+    const pair = selectedLine?.bouncePair;
+    if (!pairMode || !pair || pair.role === 'bounce' || !bouncePairRows) return;
+    const entry = bouncePairRows.find((e) => e.groupKey === pair.groupKey);
+    if (entry && entry.anchor.bouncePair.role === 'bounce' && entry.anchor.id !== selectedLine.id) {
+      selectLine(entry.anchor);
+    }
+  }, [pairMode, selectedLine, bouncePairRows, selectLine]);
+
+  return { pairMode, bouncePairRows, bounceOutflows, bouncePairCount };
 }

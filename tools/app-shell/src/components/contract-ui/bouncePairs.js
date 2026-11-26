@@ -894,6 +894,19 @@ export function canPairOutflow(outflow, bounce) {
 }
 
 /**
+ * A digit string without its trailing zeros ('500' -> '5', '000' -> ''). An index scan rather than
+ * a `/0+$/` replace, which backtracks super-linearly on a long run of zeros not at the end.
+ *
+ * @param {string} digits
+ * @returns {string}
+ */
+function withoutTrailingZeros(digits) {
+  let end = digits.length;
+  while (end > 0 && digits[end - 1] === '0') end -= 1;
+  return digits.slice(0, end);
+}
+
+/**
  * A decimal amount (number or numeric string) as its sign and canonical absolute digits, so two
  * amounts compare EXACTLY and symmetrically, like the server's BigDecimal compare (no scaling by
  * 100 and rounding, which is asymmetric for negatives: -1.005 vs 1.005). A number is read through
@@ -911,7 +924,7 @@ function decimalParts(value) {
   const m = /^([+-]?)(\d*)(?:\.(\d*))?$/.exec(text);
   if (!m || (m[2] === '' && !m[3])) return null;
   const int = m[2].replace(/^0+/, '') || '0';
-  const frac = (m[3] ?? '').replace(/0+$/, '');
+  const frac = withoutTrailingZeros(m[3] ?? '');
   const abs = frac ? `${int}.${frac}` : int;
   return { neg: m[1] === '-' && abs !== '0', abs };
 }

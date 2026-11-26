@@ -1,3 +1,4 @@
+// @covers tools/app-shell/src/components/contract-ui/ReconciliationDifference.jsx
 import { test, expect } from '../../helpers/test.js';
 import { login } from '../../helpers/auth.js';
 
@@ -254,6 +255,10 @@ async function installMocks(page, {
  * Entering that tab MAY pop the automatch suggestions modal (ETP-4922: only when the engine finds
  * at least one suggestion for the mocked account), and while it is open its overlay swallows every
  * click on the panel behind it — so it has to be dismissed before anything else, deep link or not.
+ * The modal has no Cancel button: it is closed from its header link "Ir a conciliación manual"
+ * (`automatch-modal-open-reconciliation`). With rows checked that link asks first through
+ * `automatch-close-confirm`, which "Cerrar" (`automatch-close-confirm-action`) confirms; with
+ * nothing checked it closes straight away.
  *
  * @param {import('@playwright/test').Page} page
  * @returns {Promise<import('@playwright/test').Locator>}
@@ -265,7 +270,15 @@ async function openReconciliationTab(page) {
 
   const automatch = page.getByTestId('automatch-suggestion-modal');
   if (await automatch.isVisible().catch(() => false)) {
-    await page.getByTestId('automatch-modal-cancel').click();
+    await page.getByTestId('automatch-modal-open-reconciliation').click();
+    // Confirm only if the close asked first (rows were checked): either the confirmation shows up
+    // or the modal is already gone.
+    const closeConfirm = page.getByTestId('automatch-close-confirm');
+    await expect.poll(async () => (await closeConfirm.isVisible()) || !(await automatch.isVisible()))
+      .toBe(true);
+    if (await closeConfirm.isVisible()) {
+      await page.getByTestId('automatch-close-confirm-action').click();
+    }
     await expect(automatch).toHaveCount(0);
   }
 
