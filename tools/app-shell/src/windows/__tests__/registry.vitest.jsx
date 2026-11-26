@@ -298,18 +298,21 @@ describe('registry', () => {
       });
     });
 
-    // ETP-6148 — the real menu.json entry, not a synthetic one: Finance › Remittance is gated by
-    // the Classic Remittance window grant AND the per-account sepaRemittances capability.
+    // ETP-6148 — the real menu.json entry, not a synthetic one: Treasury › Remittance (moved from
+    // Finance in ETP-6247) is gated by the Classic Remittance window grant AND the per-account
+    // sepaRemittances capability.
     describe('remittance menu entry (accessWindowId + sepaRemittances)', () => {
       const REMITTANCE_WINDOW = 'FF8080812E71F7C7012E71FD0499001B';
       const visible = (capabilities, windowAccess) => filterMenuGroupsByAccess(
         buildMenuGroups(), new Set(), capabilities, windowAccess,
       ).flatMap(g => g.items.map(i => i.name)).includes('remittance');
 
-      it('is declared in Finance with its window anchor and capability', () => {
-        const finance = menuConfig.menu.find(g => g.items.some(i => i.name === 'remittance'));
-        const item = finance.items.find(i => i.name === 'remittance');
-        expect(finance.group).toBe('Finance');
+      it('is declared in Treasury, right after Payment Out, with its window anchor and capability', () => {
+        const treasury = menuConfig.menu.find(g => g.items.some(i => i.name === 'remittance'));
+        const item = treasury.items.find(i => i.name === 'remittance');
+        expect(treasury.group).toBe('Treasury');
+        const names = treasury.items.map(i => i.name);
+        expect(names.indexOf('remittance')).toBe(names.indexOf('payment-out') + 1);
         expect(item).toMatchObject({ accessWindowId: REMITTANCE_WINDOW, capability: 'sepaRemittances' });
         expect(item.windowId).toBeUndefined();
       });

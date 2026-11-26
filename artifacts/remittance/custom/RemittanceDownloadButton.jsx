@@ -1,43 +1,29 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { DownloadSimpleIcon, CircleNotchIcon } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { useUI } from '@/i18n';
 import { useApiFetch } from '@/auth/useApiFetch.js';
-import { getApiBase } from '@/hooks/useNeoResource.js';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
-import {
-  FILE_STATUSES,
-  downloadRemittanceFile,
-  fileActionErrorMessage,
-  resolveLatestRemittanceFile,
-} from './remittanceFileApi.js';
+import { FILE_STATUSES, downloadRemittanceFileNotifying } from './remittanceFileApi.js';
 
 /**
  * ETP-6247 — «Descargar fichero» in the detail's top action bar (the `topbarSecondary` slot, left of
  * Reactivar / Guardar), an icon-only 40x40 square button with a tooltip, the same chrome as Copy link / Clone / Send (CopyRecordLinkButton). Visible on a confirmed remittance
- * (PR, SB, CT, PT, CP, PP; the same rule as the row menu's item). It only downloads: the main SEPA file
- * is resolved like everywhere else (`resolveLatestRemittanceFile`: `fileReadiness.latestFile`, then the
- * newest `.xml` attachment) and saved with `downloadRemittanceFile`. A spinner shows while it runs; no
- * file and a failure toast their translated message.
+ * (PR, SB, CT, PT, CP, PP; the same rule as the row menu's item). The SEPA file is not stored: the
+ * read-only `downloadFile` action generates it on the fly, like Classic, and it is saved as a file
+ * (`downloadRemittanceFileNotifying`). A spinner shows while it runs; a file that still carries
+ * returned receipts toasts an informative notice, and a refusal its translated message.
  */
 export default function RemittanceDownloadButton({ data, apiBaseUrl }) {
   const ui = useUI();
   const apiFetch = useApiFetch(apiBaseUrl);
-  const rootApiFetch = useApiFetch(useMemo(() => getApiBase(), []));
   const [busy, setBusy] = useState(false);
   if (!data?.id || !FILE_STATUSES.has(data.remittanceStatus)) return null;
 
   const download = async () => {
     setBusy(true);
     try {
-      const file = await resolveLatestRemittanceFile(apiFetch, rootApiFetch, data.id);
-      if (!file) {
-        toast.error(ui('remittanceFileNone'));
-        return;
-      }
-      await downloadRemittanceFile(rootApiFetch, file);
-    } catch (err) {
-      toast.error(fileActionErrorMessage(err, ui, 'remittanceFileDownloadError'));
+      await downloadRemittanceFileNotifying(apiFetch, data.id, ui, toast);
     } finally {
       setBusy(false);
     }

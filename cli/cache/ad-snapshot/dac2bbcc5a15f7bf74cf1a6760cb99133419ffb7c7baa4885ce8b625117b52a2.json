@@ -11643,7 +11643,7 @@
       ]
     },
     "71ffdfc8865e7daf652e4f855e18d8bb6126fff59ba2b01e651989778533de54": {
-      "checksum": "21df7babc2d163ae76e4f4a7eb0f2957aa5660bb4d1011f61a81e8b01defc6ed",
+      "checksum": "efb309a1497c8e7e9b96d1cb07df7f2bc9cf03b62dc060bf23a973eab55b5632",
       "params": [
         "FF8080812E71F7C7012E71FD0499001B"
       ],
@@ -11870,18 +11870,6 @@
           "displaylogic": null,
           "field_id": "C231EBC20B05482987AB0358A22FCA88",
           "name": "Direct Debit Scheme",
-          "readonlylogic": "@Processed@='Y'",
-          "tab_id": "FF8080812E71F7C7012E71FE49BB0021",
-          "tab_name": "Remittance",
-          "table_id": "FF8080812E6C2859012E6D0271E1009D",
-          "table_name": "REM_Remittance"
-        },
-        {
-          "column_id": "133447821EA54D0ABD2B97631D333B12",
-          "columnname": "IsFinanced",
-          "displaylogic": null,
-          "field_id": "8C6797472FA249B1B1B17A15891B2C64",
-          "name": "Financed",
           "readonlylogic": "@Processed@='Y'",
           "tab_id": "FF8080812E71F7C7012E71FE49BB0021",
           "tab_name": "Remittance",

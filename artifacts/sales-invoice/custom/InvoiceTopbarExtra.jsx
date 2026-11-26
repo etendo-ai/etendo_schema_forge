@@ -8,20 +8,34 @@ import { formatCurrency } from '@/lib/formatCurrency.js';
 import { salesInvoiceSendDocumentType } from './invoiceSubtype.js';
 import { useApiFetch } from '@/auth/useApiFetch.js';
 import BadgeAmount, { BADGE_CHIP_FIT_CLASS } from '@/windows/custom/shared/BadgeAmount.jsx';
+import {
+  REMITTANCE_EPSILON,
+  installmentFreeAmount,
+  installmentRemittedAmount,
+} from '@/windows/custom/shared/invoiceRemittance.js';
 
 function fmt(val, curr) {
   const n = typeof val === 'string' ? parseFloat(val) : (val ?? 0);
   return formatCurrency(curr, n);
 }
 
-/** Classify an installment into a status category */
+/**
+ * Classify an installment into a status category.
+ *
+ * ETP-6247 — an installment whose whole outstanding is in a CONFIRMED remittance is `remitted`: the
+ * bank collects it, so it is neither pending for the customer nor overdue (no red badge for a due
+ * the remittance already covers). A partly remitted one is classified by its FREE part, which is
+ * what the customer still owes outside the remittance.
+ */
 function classifyInstallment(inst) {
   const outstanding = parseFloat(inst.outstandingAmount) || 0;
   const paid = parseFloat(inst.paidAmount) || 0;
   const overdue = parseInt(inst.daysOverdue, 10) || 0;
+  const free = installmentFreeAmount(inst);
 
   if (outstanding <= 0) return 'paid';
-  if (overdue > 0 && outstanding > 0) return 'overdue';
+  if (free <= REMITTANCE_EPSILON) return 'remitted';
+  if (overdue > 0 && free > 0) return 'overdue';
   if (paid > 0 && outstanding > 0) return 'partial';
   return 'pending';
 }
@@ -31,6 +45,8 @@ const BADGE_STYLES = {
   partial: { bg: 'var(--status-info-bg)', color: 'var(--status-info-fg)', dot: 'var(--status-info-border)', accent: 'var(--status-info-border)' },
   overdue: { bg: 'var(--status-destructive-bg)', color: 'var(--status-destructive-fg)', dot: 'var(--status-destructive-fg)', accent: 'var(--status-destructive-fg)' },
   pending: { bg: 'var(--status-warning-bg)', color: 'var(--status-warning-fg)', dot: 'var(--status-warning-border)', accent: 'var(--status-warning-border)' },
+  // ETP-6247 — amber like the remittance window's REM_SENT badge (lib/statusBadge.js `rem_sent`).
+  remitted: { bg: 'var(--status-warning-bg)', color: 'var(--status-warning-fg)', dot: 'var(--status-warning-fg)', accent: 'var(--status-warning-fg)' },
 };
 
 /**
@@ -41,6 +57,9 @@ const BADGE_STYLES = {
  * - Some partial, none overdue -> Blue "Partial . paid of total"
  * - Any overdue -> Red "Overdue . outstanding"
  * - None paid, none overdue -> Amber "Pending . outstanding"
+ * - Everything still owed is in a confirmed remittance -> Amber "In remittance . remitted"
+ *   (ETP-6247); on a partial remittance the pending/overdue figure is the FREE part, shown like
+ *   any other pending figure (the remitted part is in the payments modal)
  * - Draft -> nothing
  *
  * The badge is the ONLY entry point. Clicking it opens the payments modal.
@@ -156,18 +175,29 @@ export default function InvoiceTopbarExtra({ data, recordId, token, apiBaseUrl }
     const allPaid = classified.every(i => i._status === 'paid');
     const anyOverdue = classified.some(i => i._status === 'overdue');
     const hasSomePaid = classified.some(i => i._status === 'paid') || classified.some(i => i._status === 'partial');
+    const allRemitted = classified.every(i => i._status === 'paid' || i._status === 'remitted');
 
     const sumPaid = classified.reduce((s, i) => s + (parseFloat(i.paidAmount) || 0), 0);
-    const sumOutstanding = classified.reduce((s, i) => s + (parseFloat(i.outstandingAmount) || 0), 0);
     const sumTotal = classified.reduce((s, i) => s + (parseFloat(i.amount) || 0), 0);
+    // ETP-6247 — the figure the customer still owes outside a confirmed remittance, and the part the
+    // remittance collects. With nothing remitted, `sumFree` equals the plain outstanding sum.
+    const sumRemitted = classified.reduce((s, i) => s + installmentRemittedAmount(i), 0);
+    const sumFree = classified.reduce((s, i) => s + installmentFreeAmount(i), 0);
 
     if (allPaid) {
       return { type: 'paid', label: `${ui('statusPaid')} · ${fmt(sumTotal, currency)}`, style: BADGE_STYLES.paid };
     }
+    if (allRemitted) {
+      return {
+        type: 'remitted',
+        label: `${ui('remittanceInvoiceChip')} · ${fmt(sumRemitted, currency)}`,
+        style: BADGE_STYLES.remitted,
+      };
+    }
     if (anyOverdue) {
       return {
         type: 'overdue',
-        label: `${ui('statusOverdue')} · ${fmt(sumOutstanding, currency)}`,
+        label: `${ui('statusOverdue')} · ${fmt(sumFree, currency)}`,
         style: BADGE_STYLES.overdue,
       };
     }
@@ -178,7 +208,7 @@ export default function InvoiceTopbarExtra({ data, recordId, token, apiBaseUrl }
         style: BADGE_STYLES.partial,
       };
     }
-    return { type: 'pending', label: `${ui('statusPending')} · ${fmt(sumOutstanding, currency)}`, style: BADGE_STYLES.pending };
+    return { type: 'pending', label: `${ui('statusPending')} · ${fmt(sumFree, currency)}`, style: BADGE_STYLES.pending };
   }, [installments, installmentsLoading, currency]);
 
   // Summary amounts from installments
@@ -305,10 +335,17 @@ export default function InvoiceTopbarExtra({ data, recordId, token, apiBaseUrl }
     const isPaid = paid > 0 && outstanding <= 0;
     const isPending = outstanding > 0 && paid <= 0;
     const isPartial = paid > 0 && outstanding > 0;
+    // ETP-6247 — the header's `etgoRemittedAmt`, through the shared resolver (the same one the
+    // grids use), for an invoice whose payment plan did not load.
+    const headerBadge = resolveInvoicePaymentBadge(data);
+    const pendingFigure = headerBadge.kind === 'partially-remitted' ? headerBadge.amount : outstanding;
 
     let fallbackStyle = null;
     let fallbackLabel = null;
-    if (isPaid) {
+    if (headerBadge.kind === 'remitted') {
+      fallbackStyle = BADGE_STYLES.remitted;
+      fallbackLabel = `${ui('remittanceInvoiceChip')} · ${fmt(headerBadge.remittedAmount, currency)}`;
+    } else if (isPaid) {
       fallbackStyle = BADGE_STYLES.paid;
       fallbackLabel = `${ui('statusPaid')} · ${fmt(grandTotal, currency)}`;
     } else if (isPartial) {
@@ -316,7 +353,7 @@ export default function InvoiceTopbarExtra({ data, recordId, token, apiBaseUrl }
       fallbackLabel = `${ui('statusPartial')} · ${fmt(paid, currency)} ${ui('of')} ${fmt(grandTotal, currency)}`;
     } else if (isPending && isCompleted) {
       fallbackStyle = BADGE_STYLES.pending;
-      fallbackLabel = `${ui('statusPending')} · ${fmt(outstanding, currency)}`;
+      fallbackLabel = `${ui('statusPending')} · ${fmt(pendingFigure, currency)}`;
     }
 
     if (!fallbackStyle) return withSendModal(null);

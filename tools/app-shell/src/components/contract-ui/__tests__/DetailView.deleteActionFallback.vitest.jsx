@@ -1,3 +1,4 @@
+// @covers tools/app-shell/src/components/contract-ui/DetailView.jsx
 /**
  * Behavioral test for the per-window `deleteAction` fallback (ETP-4479).
  *
@@ -197,6 +198,20 @@ describe('DetailView — per-window deleteAction fallback (ETP-4479)', () => {
   it('payment-out voided: delete button is hidden', () => {
     currentHook = makeHook({ id: '123', documentNo: 'PAY-002', status: 'RPVOID', processed: true });
     renderDetailView({ windowName: 'payment-out', hideDeleteWhenComplete: true });
+
+    expect(screen.queryByTestId('action-delete')).toBeNull();
+  });
+
+  // ETP-6247 — a payment a remittance owns: REM_SENT (remitted, not collected yet; the backend
+  // refuses ETGO_PaymentInRemittance) and REM_CANCEL (settled through the remittance).
+  it.each([
+    ['payment-in', 'REM_SENT'],
+    ['payment-out', 'REM_SENT'],
+    ['payment-in', 'REM_CANCEL'],
+    ['payment-out', 'REM_CANCEL'],
+  ])('%s in remittance status %s: delete button is hidden', (windowName, status) => {
+    currentHook = makeHook({ id: '123', documentNo: 'PAY-003', status, processed: true });
+    renderDetailView({ windowName });
 
     expect(screen.queryByTestId('action-delete')).toBeNull();
   });
