@@ -175,6 +175,8 @@ vi.mock('../ReconciliationTab.jsx', () => ({
       <button type="button" data-testid="stub-reconcile-success" onClick={onReconcileSuccess} />
       <button type="button" data-testid="stub-panel-dismiss" onClick={() => bounceReview?.onDismiss('bp-review')} />
       <button type="button" data-testid="stub-panel-focus-consumed" onClick={() => bounceReview?.onFocusConsumed()} />
+      {/* ETP-6359 — the panel picks another outflow for the bp-review rejection (B2). */}
+      <button type="button" data-testid="stub-panel-pick" onClick={() => bounceReview?.onPick?.('B2', { id: 'O-PICK' })} />
     </div>
   ),
 }));
@@ -248,10 +250,12 @@ vi.mock('@/components/contract-ui/AutoMatchSuggestionModal', () => ({
         data-checked={(groups ?? []).filter((g) => selection?.isChecked(g)).map((g) => g.groupKey).join(',')}
         data-dismissed={[...(dismissedPairKeys ?? [])].join(',')}
         data-sent-to-panel={[...(sentToPanelKeys ?? [])].join(',')}
-        data-auto-opened={String(autoOpened)}>
+        data-auto-opened={String(autoOpened)}
+        data-review-outflow={reviewPair ? `${selection?.pairOutflow?.(reviewPair)?.line?.id ?? ''}:${selection?.pairOutflow?.(reviewPair)?.source ?? ''}` : ''}>
         <button type="button" data-testid="stub-automatch-close" onClick={onClose} />
         <button type="button" data-testid="stub-automatch-success" onClick={onSuccess} />
         <button type="button" data-testid="stub-automatch-changed" onClick={onChanged} />
+        <button type="button" data-testid="stub-automatch-changed-reload" onClick={() => onChanged?.({ reloadSuggestions: true })} />
         <button type="button" data-testid="stub-automatch-review" onClick={() => onReviewPair?.(reviewPair)} />
         <button type="button" data-testid="stub-automatch-toggle-review" onClick={() => selection?.toggle(reviewPair)} />
       </div>
@@ -564,6 +568,20 @@ describe('FinancialAccountDetail — automatch modal', () => {
     expect(reloadAutoMatchMock).not.toHaveBeenCalled();
   });
 
+  // ETP-6359 — a 409 LINE_NOT_PENDING means the suggestions are stale: the modal asks for a reload.
+  it('reloads the automatch too when the Excluir asks for it (reloadSuggestions)', () => {
+    render(<FinancialAccountDetail recordId="acc-1" />);
+    reloadAccountMock.mockClear();
+    reloadMovementsMock.mockClear();
+    reloadAutoMatchMock.mockClear();
+
+    fireEvent.click(screen.getByTestId('stub-automatch-changed-reload'));
+
+    expect(reloadAutoMatchMock).toHaveBeenCalledTimes(1);
+    expect(reloadAccountMock).toHaveBeenCalled();
+    expect(reloadMovementsMock).toHaveBeenCalled();
+  });
+
   it('remounts the reconciliation panel after an Excluir so it shows the pairs as discarded', () => {
     render(<FinancialAccountDetail recordId="acc-1" />);
     fireEvent.click(screen.getByTestId('detail-tab-reconciliation'));
@@ -780,6 +798,16 @@ describe('FinancialAccountDetail — bounce-pair review (Revisar en el panel)', 
   it('does not auto-open with zero groups and zero pairs', () => {
     landWith([]);
     expect(modal()).toHaveAttribute('data-open', 'false');
+  });
+
+  // ETP-6359 — the outflow picked in the panel is the one the modal row of that rejection shows
+  // (and a tick excludes), sourced "user".
+  it('an outflow picked in the panel reaches the modal row of that rejection, sourced "user"', () => {
+    renderWithPairs();
+    expect(modal()).toHaveAttribute('data-review-outflow', 'O2:');
+    fireEvent.click(screen.getByTestId('stub-automatch-close'));
+    fireEvent.click(screen.getByTestId('stub-panel-pick'));
+    expect(modal()).toHaveAttribute('data-review-outflow', 'O-PICK:user');
   });
 
   it('does not auto-open when every pair was dismissed in the panel', () => {

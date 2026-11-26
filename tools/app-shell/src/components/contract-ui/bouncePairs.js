@@ -17,7 +17,8 @@
 
 import { parseCalendarDate } from '../../lib/dateOnly.js';
 import {
-  aiAssessmentFor, aiDefaultChoice, sortOptionsByAi, visibleAiPercent,
+  CHOICE_SOURCE_AI, CHOICE_SOURCE_USER, aiAssessmentFor, aiDefaultChoice, sortOptionsByAi,
+  visibleAiPercent,
 } from './bounceAi.js';
 
 /** `kind` of an autoMatch group that is a bounce pair. */
@@ -102,15 +103,179 @@ export function isAmbiguousPair(pair) {
 }
 
 /**
- * Whether an autoMatch group can be checked in the modal. Every transaction group can; a bounce
- * pair only when it names both lines, i.e. it is not ambiguous.
+ * The outflows a pair can be excluded with, in the order the modal tries them (ETP-6359):
+ * - the outflow the user picked for this rejection in the reconciliation panel, first (it may be
+ *   one the detector did not offer: the two-table view pairs any outflow of the same amount);
+ * - then, for an AMBIGUOUS pair, the AI-recommended candidate (when it is among the candidates),
+ *   the rest by descending visible AI percentage, ties and unrated ones in detector order
+ *   (`sortOptionsByAi` keeps that order with no AI data or when "none" wins);
+ * - for a single-original pair, its original.
+ *
+ * @param {object|null|undefined} group an autoMatch bounce-pair group
+ * @param {Record<string, object>|null} [assessments] the answer's `bounceAiAssessments`
+ * @param {object|null} [pick] the outflow line picked in the panel for this rejection
+ * @returns {Array<object>}
+ */
+export function pairOutflowPreference(group, assessments = null, pick = null) {
+  if (!isBouncePairGroup(group)) return [];
+  const lines = pairOriginalLines(group);
+  let ordered = lines;
+  if (isAmbiguousPair(group)) {
+    const assessment = aiAssessmentFor(assessments, group.counterpartLine?.id);
+    const aiId = aiDefaultChoice(assessment, lines);
+    const sorted = sortOptionsByAi(lines, assessment);
+    ordered = aiId == null
+      ? sorted
+      : [...sorted.filter((l) => l.id === aiId), ...sorted.filter((l) => l.id !== aiId)];
+  }
+  if (!pick?.id) return ordered;
+  return [pick, ...ordered.filter((l) => l.id !== pick.id)];
+}
+
+/**
+ * The panel pick of a pair that counts as a choice: none for a single-original pair whose pick is its
+ * own original (re-clicking it changes nothing, as in the panel's `explicitPick`).
+ *
+ * @param {object} group an autoMatch bounce-pair group
+ * @param {object|null} pick the outflow picked in the panel for this rejection
+ * @returns {object|null}
+ */
+export function effectivePairPick(group, pick) {
+  if (pick?.id == null) return null;
+  if (!isAmbiguousPair(group) && pick.id === pairOriginalLines(group)[0]?.id) return null;
+  return pick;
+}
+
+/**
+ * The `choiceSource` a pair is excluded with when the modal shows `line` (ETP-6359). ONE rule with
+ * the panel's discard (`discardChoiceSource`, useBouncePairReview.jsx):
+ * - `user` when the shown outflow is the one the user picked in the panel, even when that pick is
+ *   the AI recommendation or there is no AI data;
+ * - otherwise, with AI data for an ambiguous pair: `ai` when the shown outflow IS the recommended
+ *   candidate (the backend then refuses the group as stale if the recommendation no longer holds),
+ *   `user` when it is another;
+ * - null (the field is left out) with no AI data and no pick.
+ *
+ * @param {object} group an autoMatch bounce-pair group
+ * @param {object|null} line the outflow the row shows
+ * @param {Record<string, object>|null} [assessments]
+ * @param {object|null} [pick] the outflow picked in the panel for this rejection
+ * @returns {'ai'|'user'|null}
+ */
+export function pairChoiceSource(group, line, assessments = null, pick = null) {
+  if (!line || !isBouncePairGroup(group)) return null;
+  const own = effectivePairPick(group, pick);
+  if (own && line.id === own.id) return CHOICE_SOURCE_USER;
+  const assessment = isAmbiguousPair(group) ? aiAssessmentFor(assessments, group.counterpartLine?.id) : null;
+  if (!assessment) return null;
+  return aiDefaultChoice(assessment, pairOriginalLines(group)) === line.id ? CHOICE_SOURCE_AI : CHOICE_SOURCE_USER;
+}
+
+/**
+ * The outflow a pair shows in the modal, and a tick excludes it with, when no other row competes
+ * for it: the first of {@link pairOutflowPreference} and its {@link pairChoiceSource}. The modal
+ * itself goes through {@link resolvePairOutflows}, which also keeps two checked rows off the same
+ * outflow.
+ *
+ * @param {object|null|undefined} group an autoMatch bounce-pair group
+ * @param {Record<string, object>|null} [assessments] the answer's `bounceAiAssessments`
+ * @returns {{ line: object|null, source: 'ai'|'user'|null }}
+ */
+export function shownOutflow(group, assessments = null) {
+  if (!isBouncePairGroup(group)) return { line: null, source: null };
+  const line = pairOutflowPreference(group, assessments)[0] ?? null;
+  return { line, source: pairChoiceSource(group, line, assessments) };
+}
+
+/**
+ * The outflow every bounce pair of the modal shows, and whether its row can be checked (ETP-6359).
+ *
+ * Two rejections may list the same outflow. Excluding both with it makes the backend refuse the
+ * second (409 `LINE_NOT_PENDING`: one call takes each line once), so:
+ * - a CHECKED pair keeps the outflow it held when it was ticked (`pins`), whatever happens to the
+ *   other rows; a pair checked by default (no pin) takes the first of its
+ *   {@link pairOutflowPreference}. Checked pairs go first, in check order (`checkedKeys`). A pinned
+ *   outflow that is no longer available (it left the pair's options, or an earlier checked pair
+ *   holds it) leaves the pair unchecked;
+ * - only the UNCHECKED pairs re-resolve: each shows the first outflow no checked pair holds. When
+ *   none is left it shows none and cannot be checked (`blocked`) until a checked pair that holds one
+ *   is unchecked; then it shows its original choice again.
+ *
+ * An ambiguous pair with no AI assessment for its rejection (AI off or failed, or the assessment
+ * dropped after a stale refusal) is never matched to a candidate by the modal: without a panel pick
+ * it cannot be checked (`needsPanel`, it shows its first free candidate for reference only); with
+ * one it can, with exactly that outflow, and while another checked pair holds it the pair shows none
+ * and is `blocked`.
+ *
+ * @param {Array<object>} pairs the bounce pairs, in the modal's order
+ * @param {{ assessments?: Record<string, object>|null, picks?: Map<string, object>|null,
+ *   checkedKeys?: Array<string>, pins?: Map<string, string>|null }} [options] `picks`: the outflow
+ *   picked in the panel, by bounce line id; `checkedKeys`: the `groupKey`s checked, in check order;
+ *   `pins`: the outflow line id each user-checked pair was ticked with, by `groupKey`
+ * @returns {Map<string, { line: object|null, source: 'ai'|'user'|null, checkable: boolean,
+ *   checked: boolean, blocked: boolean, needsPanel: boolean, picked: boolean }>} by `groupKey`;
+ *   `picked`: the rejection has a panel pick that counts ({@link effectivePairPick})
+ */
+export function resolvePairOutflows(pairs, {
+  assessments = null, picks = null, checkedKeys = [], pins = null,
+} = {}) {
+  const byKey = new Map();
+  for (const pair of pairs ?? []) {
+    if (isBouncePairGroup(pair) && pair.groupKey != null) byKey.set(pair.groupKey, pair);
+  }
+  const taken = new Set();
+  const out = new Map();
+  const free = (l) => l?.id != null && !taken.has(l.id);
+  const assign = (group, wantsCheck) => {
+    const bounceId = group.counterpartLine?.id ?? null;
+    const pick = effectivePairPick(group, (bounceId == null ? null : picks?.get?.(bounceId)) ?? null);
+    const noAi = isAmbiguousPair(group) && !aiAssessmentFor(assessments, bounceId);
+    // Without AI data the modal never chooses a candidate on its own: only the panel pick counts.
+    const preference = noAi && pick ? [pick] : pairOutflowPreference(group, assessments, pick);
+    const pin = wantsCheck ? (pins?.get?.(group.groupKey) ?? null) : null;
+    const pinned = pin == null ? null : preference.find((l) => l?.id === pin && free(l)) ?? null;
+    // A pinned outflow that is gone: the pair is resolved later, with the unchecked ones, so it can
+    // never show an outflow a checked pair after it holds.
+    if (pin != null && !pinned) return;
+    const line = pinned ?? preference.find(free) ?? null;
+    const needsPanel = noAi && !(pick && line?.id === pick.id);
+    const blocked = line == null && preference.length > 0;
+    const checkable = isSelectableGroup(group) && line != null && !needsPanel;
+    const checked = wantsCheck && checkable;
+    if (checked) taken.add(line.id);
+    out.set(group.groupKey, {
+      line,
+      source: pairChoiceSource(group, line, assessments, pick),
+      checkable,
+      checked,
+      blocked,
+      needsPanel,
+      picked: pick != null,
+    });
+  };
+  for (const key of checkedKeys ?? []) {
+    const group = byKey.get(key);
+    if (group && !out.has(key)) assign(group, true);
+  }
+  for (const [key, group] of byKey) {
+    if (!out.has(key)) assign(group, false);
+  }
+  return out;
+}
+
+/**
+ * Whether an autoMatch group can be checked in the modal, by its shape alone. Every transaction
+ * group can; a bounce pair when it names both lines; an ambiguous pair when it has a rejection and
+ * at least one candidate. Whether it can be checked NOW (its outflow is free, an ambiguous pair has
+ * AI data or a panel pick) is {@link resolvePairOutflows}.
  *
  * @param {object|null|undefined} group
  * @returns {boolean}
  */
 export function isSelectableGroup(group) {
   if (!isBouncePairGroup(group)) return true;
-  return !isAmbiguousPair(group) && !!group.statementLine?.id && !!group.counterpartLine?.id;
+  if (isAmbiguousPair(group)) return !!group.counterpartLine?.id && pairOriginalLines(group).length > 0;
+  return !!group.statementLine?.id && !!group.counterpartLine?.id;
 }
 
 /**
@@ -122,20 +287,29 @@ export function isSelectableGroup(group) {
  */
 export function defaultGroupChecked(group) {
   if (!isBouncePairGroup(group)) return true;
-  return isSelectableGroup(group) && group.confidence === HIGH_CONFIDENCE;
+  // An ambiguous pair is never checked by default: excluding discards data, the user ticks it.
+  return !isAmbiguousPair(group) && isSelectableGroup(group) && group.confidence === HIGH_CONFIDENCE;
 }
 
 /**
  * The `applySuggestions` body entry of a bounce pair.
  *
  * @param {object} group a selectable bounce-pair group
- * @returns {{ kind: string, statementLineId: string, counterpartLineId: string }}
+ * @param {object|null} [picked] the outflow the modal row shows (its `statementLineId`): a
+ *   candidate of an ambiguous pair, or an outflow the user picked in the panel; without it, the
+ *   pair's own original
+ * @param {'ai'|'user'|null} [choiceSource] how an ambiguous pair's outflow was chosen: `ai` when the
+ *   shown outflow is the AI-recommended one (the backend then refuses the group as stale if the
+ *   recommendation no longer holds), `user` when the AI rated the pair but the shown one is not the
+ *   recommended; omitted without AI data
+ * @returns {{ kind: string, statementLineId: string, counterpartLineId: string, choiceSource?: string }}
  */
-export function bouncePairPayload(group) {
+export function bouncePairPayload(group, picked = null, choiceSource = null) {
   return {
     kind: BOUNCE_PAIR_KIND,
-    statementLineId: group.statementLine?.id,
+    statementLineId: picked?.id ?? group.statementLine?.id,
     counterpartLineId: group.counterpartLine?.id,
+    ...(choiceSource ? { choiceSource } : {}),
   };
 }
 
@@ -156,8 +330,8 @@ export const BOUNCE_DECISION = Object.freeze({
 
 /**
  * The {@link BOUNCE_DECISIONS_KEY} entries of an apply: one per shown pair that is not checked
- * (an ambiguous pair, which cannot be checked, included). A checked pair is not listed: it travels
- * in `groups` as before. Only the `groupKey` goes, never a line id, amount or text.
+ * (one that cannot be checked right now included). A checked pair is not listed: it travels in
+ * `groups` as before. Only the `groupKey` goes, never a line id, amount or text.
  *
  * @param {Array<object>} pairs the bounce pairs the modal shows (dismissed ones already left out)
  * @param {(group: object) => boolean} isChecked the modal's check state
@@ -536,6 +710,25 @@ export function summarizeApplyResults(results = []) {
   return { groupsOk, pairsOk, failures };
 }
 
+/** Code (and AD_MESSAGE key) of the refusal of a pair whose line is no longer pending. */
+export const LINE_NOT_PENDING_CODE = 'LINE_NOT_PENDING';
+const LINE_NOT_PENDING_MESSAGE_KEY = 'ETGO_BounceLineNotPending';
+
+/**
+ * Whether an `applySuggestions` result entry is the 409 `LINE_NOT_PENDING` refusal of a bounce pair:
+ * one of its lines was already taken (another group of the same call, or a change since the
+ * suggestions were computed). The suggestions on screen are then stale.
+ *
+ * @param {object|null|undefined} result
+ * @returns {boolean}
+ */
+export function isLineNotPendingResult(result) {
+  if (!result?.error) return false;
+  if ((result.code ?? result.error?.code) === LINE_NOT_PENDING_CODE) return true;
+  const keys = result.error?.messageKeys ?? result.messageKeys;
+  return Array.isArray(keys) && keys.includes(LINE_NOT_PENDING_MESSAGE_KEY);
+}
+
 /**
  * A pendingLines row of a detected pair, in the shape of an autoMatch bounce-pair group, so the
  * reconciliation panel's "Posibles rechazos" list renders it with the same row as the automatch
@@ -675,16 +868,17 @@ export function countBouncePairs(lines) {
   return buildBouncePairRows(lines).length;
 }
 
-/** Days a rejection may come after its original (the backend's `BankBounceDetector.WINDOW_DAYS`). */
+/** Days two lines of a pair may be apart (the backend's `BankBounceDetector.WINDOW_DAYS`). */
 export const BOUNCE_WINDOW_DAYS = 60;
 
 /**
  * Whether an outflow can be paired with a rejection, as the backend's `discardPair` validates it:
- * opposite sign and EXACTLY the same amount (to the cent), and the rejection dated on or after the
- * outflow and at most {@link BOUNCE_WINDOW_DAYS} days later (else 409 `SIGN_MISMATCH`,
- * `AMOUNT_MISMATCH` or `DISCARD_NOT_ALLOWED`). A missing date is not held against the pair. The
- * server decides in the end (a registered payment is only known there); this only keeps the panel
- * from offering what is certain to be refused.
+ * opposite sign and EXACTLY the same amount (non-zero), and the two lines at most
+ * {@link BOUNCE_WINDOW_DAYS} days apart IN EITHER DIRECTION (the server decides which line is the
+ * original by DATE and stores the roles that way, so an outflow dated after the rejection is
+ * accepted too; else 409 `SIGN_MISMATCH`, `AMOUNT_MISMATCH` or `DISCARD_NOT_ALLOWED`). A missing
+ * date is not held against the pair. The server decides in the end (a registered payment is only
+ * known there); this only keeps the panel from offering what is certain to be refused.
  *
  * @param {object|null} outflow an outflow line (`amount`, `date`)
  * @param {object|null} bounce the rejection line
@@ -696,7 +890,7 @@ export function canPairOutflow(outflow, bounce) {
   const b = decimalParts(bounce.amount);
   if (!a || !b || a.abs === '0' || a.neg === b.neg || a.abs !== b.abs) return false;
   const days = daysBetween(outflow.date, bounce.date);
-  return days == null || (days >= 0 && days <= BOUNCE_WINDOW_DAYS);
+  return days == null || Math.abs(days) <= BOUNCE_WINDOW_DAYS;
 }
 
 /**

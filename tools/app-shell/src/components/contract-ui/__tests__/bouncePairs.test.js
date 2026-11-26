@@ -42,6 +42,13 @@ import {
   dismissPairPayload,
   canPairOutflow,
   rowAsGroup,
+  shownOutflow,
+  pairOutflowPreference,
+  pairChoiceSource,
+  effectivePairPick,
+  resolvePairOutflows,
+  isLineNotPendingResult,
+  LINE_NOT_PENDING_CODE,
   buildBouncePairRows,
   buildBounceOutflows,
   countBouncePairs,
@@ -127,10 +134,14 @@ describe('isAmbiguousPair / isSelectableGroup / defaultGroupChecked', () => {
     assert.equal(defaultGroupChecked(g), false);
   });
 
-  it('never lets an ambiguous pair be selected, even when marked high', () => {
-    const g = pairGroup({ ambiguous: true, confidence: HIGH_CONFIDENCE, statementLine: null });
-    assert.equal(isSelectableGroup(g), false);
+  it('lets an ambiguous pair be ticked (it shows one outflow) but never checks it by default, even when marked high', () => {
+    const g = pairGroup({
+      ambiguous: true, confidence: HIGH_CONFIDENCE, statementLine: null, candidates: [{ line: CAND_A }, { line: CAND_B }],
+    });
+    assert.equal(isSelectableGroup(g), true);
     assert.equal(defaultGroupChecked(g), false);
+    assert.equal(isSelectableGroup(pairGroup({ ambiguous: true, statementLine: null, candidates: [] })), false);
+    assert.equal(isSelectableGroup(pairGroup({ ambiguous: true, statementLine: null, counterpartLine: null, candidates: [{ line: CAND_A }] })), false);
   });
 
   it('never lets a pair missing either line id be selected', () => {
@@ -672,7 +683,7 @@ describe('bouncePanelModel — AI second layer (bounceAiAssessments)', () => {
   it('does not change what is selectable or checked in the autoMatch group', () => {
     const ambiguous = pairGroup({ ambiguous: true, confidence: 'review', statementLine: null,
       counterpartLine: { ...BOUNCE, id: 'L-IN3' }, candidates: [{ line: CAND_A }, { line: CAND_B }] });
-    assert.equal(isSelectableGroup(ambiguous), false);
+    assert.equal(isSelectableGroup(ambiguous), true);
     assert.equal(defaultGroupChecked(ambiguous), false);
     const single = pairGroup({ confidence: 'review' });
     assert.equal(isSelectableGroup(single), true);
@@ -737,17 +748,22 @@ describe('summarizeApplyResults', () => {
   });
 });
 
-describe('canPairOutflow (the backend discardPair shape: opposite sign, exact amount, 0..60 days)', () => {
+describe('canPairOutflow (the backend discardPair shape: opposite sign, exact amount, at most 60 days apart either way)', () => {
   const bounce = { amount: 0.61, date: '2026-08-24' };
-  it('accepts an exact opposite amount dated on or before the rejection', () => {
+  it('accepts an exact opposite amount on the same day, before or AFTER the rejection', () => {
     assert.equal(canPairOutflow({ amount: -0.61, date: '2026-08-24' }, bounce), true);
+    assert.equal(canPairOutflow({ amount: -0.61, date: '2026-08-25' }, bounce), true);
     assert.equal(canPairOutflow({ amount: -0.61, date: '2026-06-25' }, bounce), true);
   });
-  it('refuses another amount, the same sign, a later outflow or one more than 60 days earlier', () => {
+  it('allows day 60 and refuses day 61, in both directions', () => {
+    assert.equal(canPairOutflow({ amount: -0.61, date: '2026-06-25' }, bounce), true); // 60 days before
+    assert.equal(canPairOutflow({ amount: -0.61, date: '2026-06-24' }, bounce), false); // 61 days before
+    assert.equal(canPairOutflow({ amount: -0.61, date: '2026-10-23' }, bounce), true); // 60 days after
+    assert.equal(canPairOutflow({ amount: -0.61, date: '2026-10-24' }, bounce), false); // 61 days after
+  });
+  it('refuses another amount or the same sign', () => {
     assert.equal(canPairOutflow({ amount: -0.62, date: '2026-08-24' }, bounce), false);
     assert.equal(canPairOutflow({ amount: 0.61, date: '2026-08-24' }, bounce), false);
-    assert.equal(canPairOutflow({ amount: -0.61, date: '2026-08-25' }, bounce), false);
-    assert.equal(canPairOutflow({ amount: -0.61, date: '2026-06-24' }, bounce), false);
     assert.equal(canPairOutflow(null, bounce), false);
     assert.equal(canPairOutflow({ amount: -0.61, date: '2026-08-24' }, null), false);
   });
@@ -917,5 +933,338 @@ describe('dismissPairPayload — only a pick among the pair\'s own originals tra
     const single = { ...line, bouncePair: { role: 'bounce', ambiguous: false, counterpartLine: c1 } };
     assert.equal(bouncePanelModel(single, { chosenOriginalId: 'C1' }).explicitPick, false);
     assert.equal(bouncePanelModel(single, { chosenOriginalId: 'F', chosenOriginalLine: foreign }).explicitPick, true);
+  });
+});
+
+describe('shownOutflow (the outflow an ambiguous pair shows in the modal and a tick excludes with)', () => {
+  const amb = (candidates = [CAND_A, CAND_B]) => pairGroup({
+    ambiguous: true, statementLine: null, candidates: candidates.map((line) => ({ line })),
+  });
+  const ai = (probabilities, recommendedLineId, none = 5) => ({ [BOUNCE.id]: { probabilities, none, recommendedLineId } });
+
+  it('without AI data it is the first candidate in detector order, with no source', () => {
+    assert.deepEqual(shownOutflow(amb(), null), { line: CAND_A, source: null });
+    assert.deepEqual(shownOutflow(amb(), {}), { line: CAND_A, source: null });
+  });
+  it('the AI-recommended candidate is shown, sourced "ai"', () => {
+    assert.deepEqual(shownOutflow(amb(), ai({ 'L-OUT-A': 10, 'L-OUT-B': 85 }, 'L-OUT-B')), { line: CAND_B, source: 'ai' });
+  });
+  it('without a recommendation the most probable candidate is shown, sourced "user"', () => {
+    assert.deepEqual(shownOutflow(amb(), ai({ 'L-OUT-A': 40, 'L-OUT-B': 60 }, null)), { line: CAND_B, source: 'user' });
+  });
+  it('when none wins the detector order is kept, still sourced "user" (the AI rated the pair)', () => {
+    assert.deepEqual(shownOutflow(amb(), ai({ 'L-OUT-A': 10, 'L-OUT-B': 40 }, null, 50)), { line: CAND_A, source: 'user' });
+  });
+  it('a recommendation that is not among the candidates is ignored', () => {
+    assert.deepEqual(shownOutflow(amb(), ai({ X: 90 }, 'X')), { line: CAND_A, source: 'user' });
+  });
+  it('answers the single original of a plain pair and nothing for a transaction group or no group', () => {
+    assert.deepEqual(shownOutflow(pairGroup()), { line: pairGroup().statementLine, source: null });
+    assert.deepEqual(shownOutflow({ groupKey: 't' }), { line: null, source: null });
+    assert.deepEqual(shownOutflow(null), { line: null, source: null });
+  });
+});
+
+describe('bouncePairPayload(group, shown, choiceSource)', () => {
+  const ambiguous = pairGroup({ ambiguous: true, statementLine: null, candidates: [{ line: CAND_A }, { line: CAND_B }] });
+  it('an ambiguous pair travels with the shown outflow as statementLineId', () => {
+    assert.deepEqual(bouncePairPayload(ambiguous, CAND_B), {
+      kind: BOUNCE_PAIR_KIND, statementLineId: 'L-OUT-B', counterpartLineId: 'L-IN',
+    });
+  });
+  it('choiceSource travels only when given; a plain pair keeps its own original unless another is shown', () => {
+    assert.equal(bouncePairPayload(ambiguous, CAND_A, 'ai').choiceSource, 'ai');
+    assert.equal(bouncePairPayload(ambiguous, CAND_A, 'user').choiceSource, 'user');
+    assert.equal('choiceSource' in bouncePairPayload(ambiguous, CAND_A, null), false);
+    assert.equal(bouncePairPayload(pairGroup()).statementLineId, 'L-OUT');
+    // ETP-6359 — the outflow the row shows wins: an outflow the user picked in the panel.
+    assert.equal(bouncePairPayload(pairGroup(), CAND_A).statementLineId, 'L-OUT-A');
+  });
+});
+
+// --- ETP-6359: the outflow each modal row shows, shared outflows and panel picks ------------
+
+const CAND_C = { id: 'L-OUT-C', date: '2026-03-04', amount: -80 };
+const FOREIGN = { id: 'L-OUT-F', date: '2026-02-20', amount: -80 };
+/** An ambiguous pair over `candidates`, with its own rejection line. */
+const ambPair = (key, bounceId, candidates = [CAND_A, CAND_B]) => pairGroup({
+  groupKey: key, ambiguous: true, statementLine: null,
+  counterpartLine: { ...BOUNCE, id: bounceId, amount: 80 },
+  candidates: candidates.map((line) => ({ line })),
+});
+const assess = (bounceId, probabilities, recommendedLineId = null, none = 5) => (
+  { [bounceId]: { probabilities, none, recommendedLineId } });
+
+describe('pairOutflowPreference (panel pick, then AI recommendation, then highest %, then detector order)', () => {
+  const amb = ambPair('bp-a', 'IN-A', [CAND_A, CAND_B, CAND_C]);
+  const ids = (lines) => lines.map((l) => l.id);
+
+  it('without AI data and no pick it is the detector order', () => {
+    assert.deepEqual(ids(pairOutflowPreference(amb)), ['L-OUT-A', 'L-OUT-B', 'L-OUT-C']);
+  });
+  it('the recommendation comes first even when another candidate has a higher %', () => {
+    const ai = assess('IN-A', { 'L-OUT-A': 10, 'L-OUT-B': 60, 'L-OUT-C': 30 }, 'L-OUT-C');
+    assert.deepEqual(ids(pairOutflowPreference(amb, ai)), ['L-OUT-C', 'L-OUT-B', 'L-OUT-A']);
+  });
+  it('without a recommendation the candidates go by descending %, ties in detector order', () => {
+    const ai = assess('IN-A', { 'L-OUT-A': 20, 'L-OUT-B': 50, 'L-OUT-C': 20 });
+    assert.deepEqual(ids(pairOutflowPreference(amb, ai)), ['L-OUT-B', 'L-OUT-A', 'L-OUT-C']);
+  });
+  it('a panel pick comes before the recommendation, and may be an outflow the detector did not offer', () => {
+    const ai = assess('IN-A', { 'L-OUT-A': 10, 'L-OUT-B': 85 }, 'L-OUT-B');
+    assert.deepEqual(ids(pairOutflowPreference(amb, ai, CAND_A)), ['L-OUT-A', 'L-OUT-B', 'L-OUT-C']);
+    assert.deepEqual(ids(pairOutflowPreference(amb, ai, FOREIGN)), ['L-OUT-F', 'L-OUT-B', 'L-OUT-A', 'L-OUT-C']);
+  });
+  it('a single-original pair offers its original, after a pick when there is one', () => {
+    assert.deepEqual(ids(pairOutflowPreference(pairGroup())), ['L-OUT']);
+    assert.deepEqual(ids(pairOutflowPreference(pairGroup(), null, FOREIGN)), ['L-OUT-F', 'L-OUT']);
+  });
+  it('nothing for a transaction group or no group', () => {
+    assert.deepEqual(pairOutflowPreference({ groupKey: 't' }), []);
+    assert.deepEqual(pairOutflowPreference(null), []);
+  });
+});
+
+describe('pairChoiceSource', () => {
+  const amb = ambPair('bp-a', 'IN-A');
+  const ai = assess('IN-A', { 'L-OUT-A': 10, 'L-OUT-B': 85 }, 'L-OUT-B');
+
+  it('"ai" for the recommended candidate of an ambiguous pair', () => {
+    assert.equal(pairChoiceSource(amb, CAND_B, ai), 'ai');
+  });
+  it('"user" for another outflow of an AI-rated pair (picked or not)', () => {
+    assert.equal(pairChoiceSource(amb, CAND_A, ai), 'user');
+    assert.equal(pairChoiceSource(amb, CAND_A, ai, CAND_A), 'user');
+    assert.equal(pairChoiceSource(amb, CAND_B, assess('IN-A', { 'L-OUT-A': 40, 'L-OUT-B': 60 })), 'user');
+  });
+  it('without AI data: "user" only for the panel pick, null otherwise', () => {
+    assert.equal(pairChoiceSource(amb, CAND_A, null), null);
+    assert.equal(pairChoiceSource(amb, CAND_A, null, CAND_A), 'user');
+    assert.equal(pairChoiceSource(amb, CAND_A, null, CAND_B), null);
+  });
+  it('a single-original pair: no source for its own original, "user" for another outflow picked in the panel', () => {
+    assert.equal(pairChoiceSource(pairGroup(), ORIGINAL), null);
+    assert.equal(pairChoiceSource(pairGroup(), FOREIGN, null, FOREIGN), 'user');
+  });
+  it('an AI assessment of a single-original pair is ignored', () => {
+    assert.equal(pairChoiceSource(pairGroup(), ORIGINAL, assess(BOUNCE.id, { 'L-OUT': 90 }, 'L-OUT')), null);
+  });
+  it('null with no line or no bounce pair', () => {
+    assert.equal(pairChoiceSource(amb, null, ai), null);
+    assert.equal(pairChoiceSource({ groupKey: 't' }, CAND_A, ai), null);
+  });
+});
+
+describe('resolvePairOutflows (two checked rows never share an outflow)', () => {
+  const A = ambPair('bp-a', 'IN-A');
+  const B = ambPair('bp-b', 'IN-B');
+  const C = ambPair('bp-c', 'IN-C');
+  const aiAll = {
+    ...assess('IN-A', { 'L-OUT-A': 80, 'L-OUT-B': 20 }, 'L-OUT-A'),
+    ...assess('IN-B', { 'L-OUT-A': 70, 'L-OUT-B': 30 }, 'L-OUT-A'),
+    ...assess('IN-C', { 'L-OUT-A': 60, 'L-OUT-B': 40 }, 'L-OUT-A'),
+  };
+  const shown = (plan, key) => plan.get(key).line?.id ?? null;
+
+  it('nothing checked: every row shows its own first choice and can be checked', () => {
+    const plan = resolvePairOutflows([A, B, C], { assessments: aiAll });
+    for (const key of ['bp-a', 'bp-b', 'bp-c']) {
+      assert.equal(shown(plan, key), 'L-OUT-A');
+      assert.equal(plan.get(key).checkable, true);
+      assert.equal(plan.get(key).checked, false);
+    }
+    assert.equal(plan.get('bp-a').source, 'ai');
+  });
+  it('a checked row takes its outflow; the next moves to the free one ("user"), the third is blocked', () => {
+    const plan = resolvePairOutflows([A, B, C], { assessments: aiAll, checkedKeys: ['bp-a'] });
+    assert.equal(shown(plan, 'bp-a'), 'L-OUT-A');
+    assert.equal(plan.get('bp-a').checked, true);
+    assert.equal(shown(plan, 'bp-b'), 'L-OUT-B');
+    assert.equal(plan.get('bp-b').source, 'user');
+    assert.equal(plan.get('bp-b').checkable, true);
+    const both = resolvePairOutflows([A, B, C], { assessments: aiAll, checkedKeys: ['bp-a', 'bp-b'] });
+    assert.equal(shown(both, 'bp-b'), 'L-OUT-B');
+    assert.equal(both.get('bp-c').line, null);
+    assert.equal(both.get('bp-c').blocked, true);
+    assert.equal(both.get('bp-c').checkable, false);
+  });
+  it('check order decides who keeps the outflow: the later tick moves, and a blocked wish to check is refused', () => {
+    const plan = resolvePairOutflows([A, B, C], { assessments: aiAll, checkedKeys: ['bp-c', 'bp-a', 'bp-b'] });
+    assert.equal(shown(plan, 'bp-c'), 'L-OUT-A');
+    assert.equal(shown(plan, 'bp-a'), 'L-OUT-B');
+    assert.equal(plan.get('bp-b').checked, false);
+    assert.equal(plan.get('bp-b').blocked, true);
+  });
+  it('an ambiguous pair without AI data needs the panel: not checkable, even when asked to be checked', () => {
+    const plan = resolvePairOutflows([A], { checkedKeys: ['bp-a'] });
+    assert.equal(plan.get('bp-a').needsPanel, true);
+    assert.equal(plan.get('bp-a').checkable, false);
+    assert.equal(plan.get('bp-a').checked, false);
+    assert.equal(shown(plan, 'bp-a'), 'L-OUT-A');
+  });
+  it('a panel pick makes a no-AI ambiguous pair checkable, sourced "user"', () => {
+    const picks = new Map([['IN-A', CAND_B]]);
+    const plan = resolvePairOutflows([A], { picks, checkedKeys: ['bp-a'] });
+    assert.equal(shown(plan, 'bp-a'), 'L-OUT-B');
+    assert.equal(plan.get('bp-a').needsPanel, false);
+    assert.equal(plan.get('bp-a').checked, true);
+    assert.equal(plan.get('bp-a').source, 'user');
+  });
+  it('an AI-rated row whose pick a checked row already holds falls back to its next free outflow', () => {
+    const picks = new Map([['IN-B', CAND_A]]);
+    const withAi = resolvePairOutflows([A, B], { assessments: aiAll, picks, checkedKeys: ['bp-a'] });
+    assert.equal(shown(withAi, 'bp-b'), 'L-OUT-B');
+    assert.equal(withAi.get('bp-b').checkable, true);
+  });
+  it('a single-original pair re-paired in the panel shows the pick, sourced "user"', () => {
+    const single = pairGroup({ groupKey: 'bp-s' });
+    const plan = resolvePairOutflows([single], { picks: new Map([[BOUNCE.id, FOREIGN]]) });
+    assert.equal(shown(plan, 'bp-s'), 'L-OUT-F');
+    assert.equal(plan.get('bp-s').source, 'user');
+    assert.equal(plan.get('bp-s').checkable, true);
+  });
+  it('a single-original pair whose original a checked row took is blocked', () => {
+    const single = pairGroup({ groupKey: 'bp-s', statementLine: CAND_A, counterpartLine: { ...BOUNCE, id: 'IN-S' } });
+    const plan = resolvePairOutflows([A, single], { assessments: aiAll, checkedKeys: ['bp-a'] });
+    assert.equal(plan.get('bp-s').blocked, true);
+    assert.equal(plan.get('bp-s').checkable, false);
+  });
+  it('ignores transaction groups and unknown checked keys; empty input gives an empty plan', () => {
+    const plan = resolvePairOutflows([{ groupKey: 't' }, A], { assessments: aiAll, checkedKeys: ['nope', 't'] });
+    assert.deepEqual([...plan.keys()], ['bp-a']);
+    assert.equal(resolvePairOutflows(null).size, 0);
+  });
+});
+
+describe('isLineNotPendingResult', () => {
+  it('true for the coded refusal, by code on the entry, on its error, or by message key', () => {
+    assert.equal(LINE_NOT_PENDING_CODE, 'LINE_NOT_PENDING');
+    assert.equal(isLineNotPendingResult({ code: 'LINE_NOT_PENDING', error: { message: 'x' } }), true);
+    assert.equal(isLineNotPendingResult({ error: { code: 'LINE_NOT_PENDING' } }), true);
+    assert.equal(isLineNotPendingResult({ error: { messageKeys: ['ETGO_BounceLineNotPending'] } }), true);
+    assert.equal(isLineNotPendingResult({ messageKeys: ['ETGO_BounceLineNotPending'], error: {} }), true);
+  });
+  it('false for a success, another refusal, or nothing', () => {
+    assert.equal(isLineNotPendingResult({ code: 'LINE_NOT_PENDING' }), false);
+    assert.equal(isLineNotPendingResult({ discarded: true }), false);
+    assert.equal(isLineNotPendingResult({ code: 'HAS_PAYMENT', error: { messageKeys: ['ETGO_BounceHasPayment'] } }), false);
+    assert.equal(isLineNotPendingResult(null), false);
+    assert.equal(isLineNotPendingResult(undefined), false);
+  });
+});
+
+// --- ETP-6359 (final): effective panel picks, one choiceSource rule, ticks pin their outflow ------
+
+describe('effectivePairPick', () => {
+  it('a pick of a single-original pair\'s own original is not a pick; another outflow is', () => {
+    assert.equal(effectivePairPick(pairGroup(), ORIGINAL), null);
+    assert.equal(effectivePairPick(pairGroup(), FOREIGN), FOREIGN);
+  });
+  it('any pick of an ambiguous pair counts, its first candidate included', () => {
+    const amb = ambPair('bp-a', 'IN-A');
+    assert.equal(effectivePairPick(amb, CAND_A), CAND_A);
+    assert.equal(effectivePairPick(amb, CAND_B), CAND_B);
+  });
+  it('no pick, or a pick without an id, is nothing', () => {
+    assert.equal(effectivePairPick(pairGroup(), null), null);
+    assert.equal(effectivePairPick(pairGroup(), { description: 'x' }), null);
+  });
+});
+
+describe('pairChoiceSource — one rule with the panel', () => {
+  const amb = ambPair('bp-a', 'IN-A');
+  const ai = assess('IN-A', { 'L-OUT-A': 10, 'L-OUT-B': 85 }, 'L-OUT-B');
+
+  it('a panel pick is "user" even when it is the AI recommendation', () => {
+    assert.equal(pairChoiceSource(amb, CAND_B, ai, CAND_B), 'user');
+  });
+  it('a panel pick is "user" with no AI data', () => {
+    assert.equal(pairChoiceSource(amb, CAND_A, null, CAND_A), 'user');
+  });
+  it('a pick of a single-original pair\'s own original counts as no pick: nothing is sent', () => {
+    assert.equal(pairChoiceSource(pairGroup(), ORIGINAL, null, ORIGINAL), null);
+  });
+  it('a non-ambiguous pair the AI rated but the user did not pick sends nothing', () => {
+    assert.equal(pairChoiceSource(pairGroup(), ORIGINAL, assess(BOUNCE.id, { 'L-OUT': 90 }, 'L-OUT')), null);
+  });
+  it('a pick that is not the outflow shown does not make it "user": the AI rule applies to the shown one', () => {
+    assert.equal(pairChoiceSource(amb, CAND_B, ai, CAND_A), 'ai');
+    assert.equal(pairChoiceSource(amb, CAND_A, null, CAND_B), null);
+  });
+});
+
+describe('resolvePairOutflows — a checked pair keeps the outflow it was ticked with (pins)', () => {
+  const A = ambPair('bp-a', 'IN-A');
+  const B = ambPair('bp-b', 'IN-B');
+  const C = ambPair('bp-c', 'IN-C');
+  const aiAll = {
+    ...assess('IN-A', { 'L-OUT-A': 80, 'L-OUT-B': 20 }, 'L-OUT-A'),
+    ...assess('IN-B', { 'L-OUT-A': 70, 'L-OUT-B': 30 }, 'L-OUT-A'),
+    ...assess('IN-C', { 'L-OUT-A': 60, 'L-OUT-B': 40 }, 'L-OUT-A'),
+  };
+  const shown = (plan, key) => plan.get(key).line?.id ?? null;
+
+  it('tick a, tick b, untick a: b keeps the outflow it was ticked with; only the unchecked a moves', () => {
+    const plan = resolvePairOutflows([A, B], {
+      assessments: aiAll, checkedKeys: ['bp-b'], pins: new Map([['bp-b', 'L-OUT-B']]),
+    });
+    assert.equal(shown(plan, 'bp-b'), 'L-OUT-B');
+    assert.equal(plan.get('bp-b').checked, true);
+    assert.equal(plan.get('bp-b').source, 'user');
+    assert.equal(shown(plan, 'bp-a'), 'L-OUT-A');
+    assert.equal(plan.get('bp-a').checked, false);
+  });
+  it('a pin wins over the pair\'s first preference, and the unchecked rows avoid it', () => {
+    const plan = resolvePairOutflows([A, B, C], {
+      assessments: aiAll, checkedKeys: ['bp-a'], pins: new Map([['bp-a', 'L-OUT-B']]),
+    });
+    assert.equal(shown(plan, 'bp-a'), 'L-OUT-B');
+    assert.equal(shown(plan, 'bp-b'), 'L-OUT-A');
+    assert.equal(shown(plan, 'bp-c'), 'L-OUT-A');
+  });
+  it('a pin an earlier checked pair already holds leaves the pair unchecked, re-resolved with the unchecked rows', () => {
+    const plan = resolvePairOutflows([A, B], {
+      assessments: aiAll, checkedKeys: ['bp-a', 'bp-b'], pins: new Map([['bp-a', 'L-OUT-A'], ['bp-b', 'L-OUT-A']]),
+    });
+    assert.equal(plan.get('bp-a').checked, true);
+    assert.equal(plan.get('bp-b').checked, false);
+    assert.equal(shown(plan, 'bp-b'), 'L-OUT-B');
+  });
+  it('a pin that is no longer among the pair\'s options leaves it unchecked', () => {
+    const plan = resolvePairOutflows([A], { assessments: aiAll, checkedKeys: ['bp-a'], pins: new Map([['bp-a', 'GONE']]) });
+    assert.equal(plan.get('bp-a').checked, false);
+    assert.equal(shown(plan, 'bp-a'), 'L-OUT-A');
+  });
+  it('a no-AI pair whose panel pick a checked row holds is blocked: no outflow, not checkable', () => {
+    const plan = resolvePairOutflows([A, B], {
+      assessments: assess('IN-A', { 'L-OUT-A': 80 }, 'L-OUT-A'),
+      picks: new Map([['IN-B', CAND_A]]),
+      checkedKeys: ['bp-a'],
+    });
+    assert.equal(plan.get('bp-b').line, null);
+    assert.equal(plan.get('bp-b').blocked, true);
+    assert.equal(plan.get('bp-b').checkable, false);
+  });
+  it('`picked` tells a row with an effective panel pick from one without', () => {
+    const plan = resolvePairOutflows([A, B, pairGroup({ groupKey: 'bp-s' })], {
+      picks: new Map([['IN-A', CAND_B], [BOUNCE.id, ORIGINAL]]),
+    });
+    assert.equal(plan.get('bp-a').picked, true);
+    assert.equal(plan.get('bp-b').picked, false);
+    // A pick of its own original is not a pick.
+    assert.equal(plan.get('bp-s').picked, false);
+  });
+  it('a no-AI pair with a free panel pick shows exactly that pick, checkable as "user"', () => {
+    const plan = resolvePairOutflows([A], { picks: new Map([['IN-A', CAND_B]]) });
+    assert.equal(shown(plan, 'bp-a'), 'L-OUT-B');
+    assert.equal(plan.get('bp-a').checkable, true);
+    assert.equal(plan.get('bp-a').source, 'user');
+  });
+  it('a single-original pair picked with its own original keeps its own source (no pick)', () => {
+    const plan = resolvePairOutflows([pairGroup({ groupKey: 'bp-s', confidence: 'high' })], {
+      picks: new Map([[BOUNCE.id, ORIGINAL]]), checkedKeys: ['bp-s'],
+    });
+    assert.equal(plan.get('bp-s').checked, true);
+    assert.equal(plan.get('bp-s').source, null);
   });
 });

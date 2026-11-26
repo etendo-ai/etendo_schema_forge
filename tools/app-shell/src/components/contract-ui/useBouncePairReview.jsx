@@ -39,12 +39,14 @@ function failureText(err, ui, fallbackKey) {
 }
 
 /**
- * The `choiceSource` of a discard (ETP-6359): 'ai' while the AI's preselection stands, 'user' for
- * an explicit pick on a pair the AI rated, null (the field is left out) everywhere else.
+ * The `choiceSource` of a discard (ETP-6359), ONE rule with the automatch modal (`pairChoiceSource`,
+ * bouncePairs.js): 'user' for an outflow the user picked here, even the AI-recommended one or with no
+ * AI data; 'ai' while the AI's preselection stands; null (the field is left out) otherwise. (A
+ * discard always has a chosen outflow, so an AI-rated pair is either picked or preselected here.)
  */
 function discardChoiceSource(model) {
-  if (model.aiPreselected) return CHOICE_SOURCE_AI;
-  return model.percents && (model.selectable || model.explicitPick) ? CHOICE_SOURCE_USER : null;
+  if (model.explicitPick) return CHOICE_SOURCE_USER;
+  return model.aiPreselected ? CHOICE_SOURCE_AI : null;
 }
 
 /**
@@ -253,8 +255,18 @@ export function useBouncePairPanel({
     }
     return out;
   }, [freshAssessments, aiInvalidated]);
-  // The original chosen for an ambiguous pair, remembered per bounce line.
-  const [chosen, setChosen] = useState({ lineId: null, originalId: null, original: null });
+  // The original chosen for an ambiguous pair. With the host's shared review state (ETP-6359) it is
+  // kept there, per bounce line, so the automatch modal shows and excludes the same outflow;
+  // without it the panel remembers the last one itself.
+  const [ownChosen, setOwnChosen] = useState({ lineId: null, originalId: null, original: null });
+  const sharedPicks = review?.onPick ? (review.picks ?? null) : null;
+  const onPick = review?.onPick ?? null;
+  const chosen = useMemo(() => {
+    if (!onPick) return ownChosen;
+    const lineId = selectedLine?.id ?? null;
+    const original = lineId == null ? null : (sharedPicks?.get?.(lineId) ?? null);
+    return { lineId, originalId: original?.id ?? null, original };
+  }, [onPick, ownChosen, sharedPicks, selectedLine?.id]);
 
   useFocusRequest({
     focus: review?.focus ?? null,
@@ -278,8 +290,15 @@ export function useBouncePairPanel({
   // two-table view, where it may be any outflow of the same amount, not only a detected candidate).
   const choose = useCallback((pick) => {
     const original = pick != null && typeof pick === 'object' ? pick : null;
-    setChosen({ lineId: selectedLine?.id ?? null, originalId: original ? original.id : pick, original });
-  }, [selectedLine?.id]);
+    const lineId = selectedLine?.id ?? null;
+    if (onPick) {
+      // The shared store keeps the line itself: the modal row renders it.
+      const line = original ?? model?.rows?.find((r) => r.id === pick) ?? null;
+      if (lineId != null && line) onPick(lineId, line);
+      return;
+    }
+    setOwnChosen({ lineId, originalId: original ? original.id : pick, original });
+  }, [selectedLine?.id, onPick, model]);
 
   const onDismiss = useCallback(() => {
     const groupKey = selectedLine?.bouncePair?.groupKey;

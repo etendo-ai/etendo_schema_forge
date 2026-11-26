@@ -1,6 +1,7 @@
 // @covers tools/app-shell/src/components/contract-ui/AutoMatchSuggestionModal.jsx
 // @covers tools/app-shell/src/components/contract-ui/AutoMatchBounceSection.jsx
 // @covers tools/app-shell/src/components/contract-ui/bouncePairs.js
+// @covers tools/app-shell/src/hooks/useAutoMatchReview.js
 /**
  * The "Rechazos bancarios" section of the automatch modal (bounce pairs, flag `bank-bounce-suggestions`).
  *
@@ -67,6 +68,8 @@ vi.mock('@/lib/bounceSuggestionsTelemetry.js', () => ({
 // --- Import under test (after mocks) ----------------------------------------
 
 import { AutoMatchSuggestionModal } from '../AutoMatchSuggestionModal.jsx';
+import { useEffect } from 'react';
+import { useAutoMatchReview } from '@/hooks/useAutoMatchReview.js';
 import { toast } from 'sonner';
 
 // --- Fixtures ---------------------------------------------------------------
@@ -129,6 +132,10 @@ const AMBIGUOUS = {
   isNew: false,
   difference: 0,
 };
+
+// ETP-6359 — without AI data an ambiguous pair cannot be ticked in the modal; this assessment makes
+// it tickable while keeping C1 (detector order) the outflow it shows.
+const AMB_AI_C1 = { B3: { probabilities: { C1: 85, C2: 10 }, none: 5, recommendedLineId: 'C1' } };
 
 const KPIS_OFF = { pendingLines: 8, groupsFound: 1, opsToLink: 1, willCreate: 0 };
 const KPIS_ON = { ...KPIS_OFF, bouncePairs: 3 };
@@ -224,10 +231,10 @@ describe('AutoMatchSuggestionModal — the Rechazos bancarios section', () => {
     renderModal();
     expect(screen.getByTestId('automatch-bounce-original-bp-review')).toHaveTextContent('Recibo luz');
     expect(screen.getByTestId('automatch-bounce-line-bp-review')).toHaveTextContent('RECIBO DEVUELTO');
-    // An ambiguous pair shows its first candidate and every candidate date.
+    // An ambiguous pair shows ONE candidate, with that line's own date (ETP-6359).
     const amb = screen.getByTestId('automatch-bounce-original-bp-amb');
     expect(amb).toHaveTextContent('Pago ACME 1');
-    expect(amb).toHaveTextContent('01/05/2026 · 03/05/2026');
+    expect(meta('original', 'bp-amb').textContent).toBe('01/05/2026');
   });
 
   it('tags a high pair "Confianza alta" and a review pair with its short reason', () => {
@@ -245,17 +252,18 @@ describe('AutoMatchSuggestionModal — the Rechazos bancarios section', () => {
       .toHaveTextContent(/^financeReconcileBounceReasonAmbiguousShort.*count.*2/);
   });
 
-  it('starts with high checked, review unchecked and ambiguous disabled with its aria-label', () => {
-    renderModal();
+  it('starts with high checked, review and ambiguous unchecked (the ambiguous one can be ticked)', () => {
+    renderModal({ bounceAiAssessments: AMB_AI_C1 });
     expect(checkInput('bp-high')).toHaveAttribute('aria-checked', 'true');
     expect(checkInput('bp-review')).toHaveAttribute('aria-checked', 'false');
     expect(check('bp-review')).toHaveAttribute('aria-label', 'financeReconcileAutomatchBounceCheck');
     const amb = check('bp-amb');
-    expect(checkInput('bp-amb')).toBeDisabled();
+    expect(checkInput('bp-amb')).not.toBeDisabled();
     expect(checkInput('bp-amb')).toHaveAttribute('aria-checked', 'false');
-    expect(amb).toHaveAttribute('aria-label', 'financeReconcileAutomatchBounceAmbiguousCheck');
+    expect(amb).toHaveAttribute('aria-label', 'financeReconcileAutomatchBounceCheck');
+    // Never auto-checked, but ticking it includes the pair.
     fireEvent.click(amb);
-    expect(checkInput('bp-amb')).toHaveAttribute('aria-checked', 'false');
+    expect(checkInput('bp-amb')).toHaveAttribute('aria-checked', 'true');
   });
 
   it('toggles a pair', () => {
@@ -290,25 +298,26 @@ describe('AutoMatchSuggestionModal — the Rechazos bancarios section', () => {
     expect(reviewBtn.className).not.toContain('bg-primary');
   });
 
-  it('select-all of pairs checks every selectable pair, then unchecks them; never the ambiguous one', () => {
-    renderModal();
+  it('select-all of pairs checks every pair (the ambiguous one included), then unchecks them', () => {
+    renderModal({ bounceAiAssessments: AMB_AI_C1 });
     const all = screen.getByTestId('automatch-bounce-select-all');
     expect(box('automatch-bounce-select-all')).toHaveAttribute('aria-checked', 'mixed');
     fireEvent.click(all);
     expect(checkInput('bp-high')).toHaveAttribute('aria-checked', 'true');
     expect(checkInput('bp-review')).toHaveAttribute('aria-checked', 'true');
-    expect(checkInput('bp-amb')).toHaveAttribute('aria-checked', 'false');
+    expect(checkInput('bp-amb')).toHaveAttribute('aria-checked', 'true');
     fireEvent.click(all);
     expect(checkInput('bp-high')).toHaveAttribute('aria-checked', 'false');
     expect(checkInput('bp-review')).toHaveAttribute('aria-checked', 'false');
+    expect(checkInput('bp-amb')).toHaveAttribute('aria-checked', 'false');
     expect(box('automatch-bounce-select-all')).toHaveAttribute('aria-checked', 'false');
     // The transaction group is not touched by the pairs' select-all.
     expect(applyButton()).toHaveTextContent('financeReconcileAutomatchActionReconcile:{"count":1}');
   });
 
-  it('disables the pairs select-all when only ambiguous pairs are offered', () => {
-    renderModal({ groups: [TX, AMBIGUOUS] });
-    expect(box('automatch-bounce-select-all')).toBeDisabled();
+  it('the pairs select-all is enabled when only ambiguous pairs are offered', () => {
+    renderModal({ groups: [TX, AMBIGUOUS], bounceAiAssessments: AMB_AI_C1 });
+    expect(box('automatch-bounce-select-all')).not.toBeDisabled();
   });
 
   it('hides the pairs the user dismissed (dismissedPairKeys) from rows, count and KPI', () => {
@@ -549,11 +558,18 @@ describe('AutoMatchSuggestionModal — "Excluir de la conciliación" (pairs only
     expect(props.onChanged).not.toHaveBeenCalled();
   });
 
-  it('an ambiguous pair is never sent: its checkbox stays disabled and "Excluir" ignores it', async () => {
-    applyMock.mockResolvedValue({ results: [] });
-    renderModal({ groups: [AMBIGUOUS] });
-    expect(checkInput('bp-amb')).toBeDisabled();
+  it('an ambiguous pair is not sent until it is ticked; then it goes with the outflow its row shows', async () => {
+    applyMock.mockResolvedValue({ results: [{ kind: 'bouncePair', statementLineId: 'C1', counterpartLineId: 'B3', discarded: true }] });
+    renderModal({ groups: [AMBIGUOUS], bounceAiAssessments: AMB_AI_C1 });
+    expect(checkInput('bp-amb')).not.toBeDisabled();
     expect(excludeButton()).toBeDisabled();
+    fireEvent.click(check('bp-amb'));
+    fireEvent.click(excludeButton());
+    await vi.waitFor(() => expect(applyMock).toHaveBeenCalledTimes(1));
+    // The AI-recommended candidate the row shows, sent as an AI choice.
+    expect(applyMock.mock.calls[0][0].groups).toEqual([
+      { kind: 'bouncePair', statementLineId: 'C1', counterpartLineId: 'B3', choiceSource: 'ai' },
+    ]);
   });
 
   it('suggestions reloaded by the host bring the pairs back from the server, not from the local hiding', async () => {
@@ -616,6 +632,7 @@ describe('AutoMatchSuggestionModal — the shared Checkbox of the pairs', () => 
     const review = screen.getByTestId('automatch-bounce-row-bp-review');
     expect(within(review).getByRole('checkbox', { name: 'financeReconcileAutomatchBounceCheck' }))
       .toBe(checkInput('bp-review'));
+    // Without AI data the ambiguous pair's (disabled) check says to choose in the panel (ETP-6359).
     const amb = screen.getByTestId('automatch-bounce-row-bp-amb');
     expect(within(amb).getByRole('checkbox', { name: 'financeReconcileAutomatchBounceAmbiguousCheck' }))
       .toBe(checkInput('bp-amb'));
@@ -641,7 +658,7 @@ describe('AutoMatchSuggestionModal — the shared Checkbox of the pairs', () => 
     expect(header()).toHaveAttribute('aria-checked', 'false');
   });
 
-  it('clicking the label of a disabled ambiguous pair changes nothing (no toggle, same label)', () => {
+  it('clicking the label of an ambiguous pair toggles it like any other pair', () => {
     const selection = {
       isChecked: vi.fn((g) => g.groupKey === 'bp-high' || g.groupKey === TX.groupKey),
       toggle: vi.fn(),
@@ -650,8 +667,8 @@ describe('AutoMatchSuggestionModal — the shared Checkbox of the pairs', () => 
     renderModal({ selection });
     const before = applyButton().textContent;
     fireEvent.click(check('bp-amb'));
-    expect(selection.toggle).not.toHaveBeenCalled();
-    expect(checkInput('bp-amb')).not.toBeChecked();
+    expect(selection.toggle).toHaveBeenCalledWith(AMBIGUOUS);
+    // The pairs never touch the transaction groups' button.
     expect(applyButton().textContent).toBe(before);
   });
 });
@@ -725,10 +742,9 @@ describe('AutoMatchSuggestionModal — the bank reference of a pair', () => {
     expect(screen.queryByText(/financeReconcileBounceRef/)).toBeNull();
   });
 
-  it('an ambiguous pair: the original side shows every candidate date and never a reference', () => {
+  it('an ambiguous pair: the original side shows the date and reference of the outflow it shows', () => {
     renderModal({ groups: [AMB_REF] });
-    expect(meta('original', 'bp-amb-ref').textContent).toBe('01/05/2026 · 03/05/2026');
-    expect(meta('original', 'bp-amb-ref')).not.toHaveTextContent('financeReconcileBounceRef');
+    expect(meta('original', 'bp-amb-ref').textContent).toBe(`01/05/2026 · ${refText('R-C7')}`);
     // The bounce is one line, so its own reference is shown.
     expect(meta('line', 'bp-amb-ref')).toHaveTextContent(`05/05/2026 · ${refText('R-IN-7')}`);
   });
@@ -790,22 +806,23 @@ describe('AutoMatchSuggestionModal — ambiguous pairs', () => {
     ],
   };
 
-  it('renders both pairs that share a candidate, each disabled, with its own candidates', () => {
-    renderModal({ groups: [TX, SHARED_A, SHARED_B], kpis: { ...KPIS_ON, bouncePairs: 2 } });
+  it('renders both pairs that share a candidate, each with its own candidates', () => {
+    const ai = { ...AMB_AI_C1, B10: { probabilities: { C2: 85, C9: 10 }, none: 5, recommendedLineId: 'C2' } };
+    renderModal({ groups: [TX, SHARED_A, SHARED_B], kpis: { ...KPIS_ON, bouncePairs: 2 }, bounceAiAssessments: ai });
     expect(screen.getByTestId('automatch-bounce-count')).toHaveTextContent('2');
     expect(kpiValue('financeReconcileAutomatchKpiBouncePairs')).toBe('2');
     for (const key of ['bp-amb', 'bp-amb-2']) {
       expect(screen.getByTestId(`automatch-bounce-row-${key}`)).toBeInTheDocument();
-      expect(checkInput(key)).toBeDisabled();
+      expect(checkInput(key)).not.toBeDisabled();
       expect(screen.getByTestId(`automatch-bounce-reason-${key}`))
         .toHaveTextContent('financeReconcileBounceReasonAmbiguousShort');
     }
-    expect(meta('original', 'bp-amb').textContent).toBe('01/05/2026 · 03/05/2026');
-    expect(meta('original', 'bp-amb-2').textContent).toBe('03/05/2026 · 04/05/2026');
+    expect(meta('original', 'bp-amb').textContent).toBe('01/05/2026');
+    expect(meta('original', 'bp-amb-2').textContent).toBe('03/05/2026');
     // The shared candidate is the first one shown for the second pair.
     expect(screen.getByTestId('automatch-bounce-original-bp-amb-2')).toHaveTextContent('Pago ACME 2');
-    // Neither can be checked here, so the pairs' select-all is disabled.
-    expect(box('automatch-bounce-select-all')).toBeDisabled();
+    // Both can be ticked, so the pairs' select-all is enabled.
+    expect(box('automatch-bounce-select-all')).not.toBeDisabled();
   });
 
   it('offers "Revisar en el panel" on both, each for its own pair', () => {
@@ -984,27 +1001,29 @@ describe('AutoMatchSuggestionModal — bounce_suggestions_dismissed', () => {
 // ---------------------------------------------------------------------------
 
 describe('AutoMatchSuggestionModal — the two actions never leak into each other', () => {
-  it('"Excluir" after select-all of the pairs sends every selectable pair and never the ambiguous one', async () => {
+  it('"Excluir" after select-all of the pairs sends every pair, the ambiguous one with its shown outflow', async () => {
     applyMock.mockResolvedValue({
       results: [
         { kind: 'bouncePair', statementLineId: 'O1', counterpartLineId: 'B1', discarded: true },
         { kind: 'bouncePair', statementLineId: 'O2', counterpartLineId: 'B2', discarded: true },
+        { kind: 'bouncePair', statementLineId: 'C1', counterpartLineId: 'B3', discarded: true },
       ],
     });
-    renderModal({ groups: [TX, HIGH, REVIEW, AMBIGUOUS] });
+    renderModal({ groups: [TX, HIGH, REVIEW, AMBIGUOUS], bounceAiAssessments: AMB_AI_C1 });
     fireEvent.click(screen.getByTestId('automatch-bounce-select-all'));
-    expect(excludeButton()).toHaveTextContent('financeReconcileAutomatchBounceExclude:{"count":2}');
+    expect(excludeButton()).toHaveTextContent('financeReconcileAutomatchBounceExclude:{"count":3}');
     fireEvent.click(excludeButton());
     await vi.waitFor(() => expect(applyMock).toHaveBeenCalledTimes(1));
     const sent = applyMock.mock.calls[0][0];
     expect(sent.groups).toEqual([
       { kind: 'bouncePair', statementLineId: 'O1', counterpartLineId: 'B1' },
       { kind: 'bouncePair', statementLineId: 'O2', counterpartLineId: 'B2' },
+      { kind: 'bouncePair', statementLineId: 'C1', counterpartLineId: 'B3', choiceSource: 'ai' },
     ]);
     expect(sent).not.toHaveProperty('bounceDecisions');
-    // The ambiguous pair is neither sent nor excluded locally.
+    // Every pair sent and discarded leaves the screen, the ambiguous one included.
     await vi.waitFor(() => expect(screen.queryByTestId('automatch-bounce-row-bp-review')).toBeNull());
-    expect(screen.getByTestId('automatch-bounce-row-bp-amb')).toBeInTheDocument();
+    expect(screen.queryByTestId('automatch-bounce-row-bp-amb')).toBeNull();
   });
 
   it('"Excluir" asks the backend once and never reloads: the modal only hides the rows by groupKey', async () => {
@@ -1075,15 +1094,15 @@ const AI_AMB = { B3: { probabilities: { C1: 10, C2: 85 }, none: 5, recommendedLi
 const AI_REVIEW = { B2: { probabilities: { O2: 72 }, none: 28, recommendedLineId: 'O2' } };
 
 describe('AutoMatchSuggestionModal — the AI percentage of a pair (display only)', () => {
-  it('an ambiguous pair shows the most probable candidate and its percentage, still not selectable', () => {
+  it('an ambiguous pair shows the recommended candidate and its percentage, and can be ticked', () => {
     const { props } = renderModal({ bounceAiAssessments: AI_AMB, onReviewPair: vi.fn() });
     const original = screen.getByTestId('automatch-bounce-original-bp-amb');
     expect(original).toHaveTextContent('Pago ACME 2');
     expect(original).not.toHaveTextContent('Pago ACME 1');
     expect(screen.getByTestId('automatch-bounce-ai-pct-bp-amb')).toHaveTextContent(aiPctText(85));
-    expect(checkInput('bp-amb')).toBeDisabled();
+    // Never auto-checked, even with a recommendation: the user ticks it.
+    expect(checkInput('bp-amb')).not.toBeDisabled();
     expect(checkInput('bp-amb')).toHaveAttribute('aria-checked', 'false');
-    expect(check('bp-amb')).toHaveAttribute('aria-label', 'financeReconcileAutomatchBounceAmbiguousCheck');
     expect(screen.getByTestId('automatch-bounce-review-bp-amb')).toBeInTheDocument();
     expect(props.onClose).not.toHaveBeenCalled();
   });
@@ -1091,7 +1110,9 @@ describe('AutoMatchSuggestionModal — the AI percentage of a pair (display only
   it('hides the percentage when "none of these" outweighs the best candidate (none 55 > best 40)', () => {
     renderModal({ bounceAiAssessments: { B3: { probabilities: { C1: 40, C2: 30 }, none: 55, recommendedLineId: null } } });
     expect(screen.queryByTestId('automatch-bounce-ai-pct-bp-amb')).toBeNull();
-    expect(checkInput('bp-amb')).toBeDisabled();
+    // Detector order is kept: the first candidate is the one shown.
+    expect(screen.getByTestId('automatch-bounce-original-bp-amb')).toHaveTextContent('Pago ACME 1');
+    expect(checkInput('bp-amb')).not.toBeDisabled();
   });
 
   it('shows the percentage when "none" is lower than the best candidate (none 5, best 85)', () => {
@@ -1109,10 +1130,10 @@ describe('AutoMatchSuggestionModal — the AI percentage of a pair (display only
     expect(screen.getByTestId('automatch-bounce-ai-pct-bp-amb')).toHaveTextContent(aiPctText(85));
   });
 
-  it('keeps the candidate dates in backend order while the most probable candidate is shown first', () => {
+  it('shows the most probable candidate with its own date, not every candidate date', () => {
     renderModal({ bounceAiAssessments: AI_AMB });
     expect(screen.getByTestId('automatch-bounce-original-bp-amb')).toHaveTextContent('Pago ACME 2');
-    expect(meta('original', 'bp-amb').textContent).toBe('01/05/2026 · 03/05/2026');
+    expect(meta('original', 'bp-amb').textContent).toBe('03/05/2026');
   });
 
   it('a single-candidate review pair loses its percentage when "none" wins, and keeps being unchecked', () => {
@@ -1156,7 +1177,7 @@ describe('AutoMatchSuggestionModal — the AI percentage of a pair (display only
     renderModal();
     expect(screen.queryAllByTestId(/^automatch-bounce-ai-pct-/)).toHaveLength(0);
     expect(screen.getByTestId('automatch-bounce-original-bp-amb')).toHaveTextContent('Pago ACME 1');
-    expect(screen.getByTestId('automatch-bounce-original-bp-amb')).toHaveTextContent('01/05/2026 · 03/05/2026');
+    expect(meta('original', 'bp-amb').textContent).toBe('01/05/2026');
   });
 
   it('does not change the initial checks: high checked, review and ambiguous unchecked', () => {
@@ -1179,11 +1200,381 @@ describe('AutoMatchSuggestionModal — the AI percentage of a pair (display only
     });
   });
 
+  const excludeAmbiguous = async (props = {}) => {
+    renderModal({ groups: [AMBIGUOUS], ...props });
+    fireEvent.click(check('bp-amb'));
+    fireEvent.click(excludeButton());
+    await vi.waitFor(() => expect(applyMock).toHaveBeenCalledTimes(1));
+    return applyMock.mock.calls[0][0].groups[0];
+  };
+  const OK = { results: [{ kind: 'bouncePair', statementLineId: 'C2', counterpartLineId: 'B3', discarded: true }] };
+
+  it('Excluir carries choiceSource "ai" when the shown outflow is the AI-recommended one', async () => {
+    applyMock.mockResolvedValue(OK);
+    expect(await excludeAmbiguous({ bounceAiAssessments: AI_AMB })).toEqual({
+      kind: 'bouncePair', statementLineId: 'C2', counterpartLineId: 'B3', choiceSource: 'ai',
+    });
+  });
+
+  it('Excluir carries choiceSource "user" when the AI rated the pair but the shown outflow is not the recommended one', async () => {
+    applyMock.mockResolvedValue(OK);
+    // The AI recommends nothing: the most probable candidate (C2) is shown and sent as "user".
+    const group = await excludeAmbiguous({
+      bounceAiAssessments: { B3: { probabilities: { C1: 40, C2: 60 }, none: 0, recommendedLineId: null } },
+    });
+    expect(group).toEqual({ kind: 'bouncePair', statementLineId: 'C2', counterpartLineId: 'B3', choiceSource: 'user' });
+  });
+
+  it('without AI data the ambiguous pair cannot be ticked, so Excluir never sends it', () => {
+    renderModal({ groups: [AMBIGUOUS] });
+    expect(checkInput('bp-amb')).toBeDisabled();
+    fireEvent.click(check('bp-amb'));
+    expect(excludeButton()).toBeDisabled();
+    expect(applyMock).not.toHaveBeenCalled();
+  });
+
+  it('a stale refusal keeps the pair, drops its AI data (no mark, detector order, unchecked); then it needs the panel', async () => {
+    const stale = {
+      kind: 'bouncePair', statementLineId: 'C2', counterpartLineId: 'B3', code: 'BOUNCE_AI_SUGGESTION_STALE',
+      error: { status: 409, code: 'BOUNCE_AI_SUGGESTION_STALE', message: 'stale', messageKeys: ['ETGO_BounceAiSuggestionStale'] },
+    };
+    applyMock.mockResolvedValueOnce({ results: [stale] });
+    renderModal({ groups: [AMBIGUOUS], bounceAiAssessments: AI_AMB });
+    fireEvent.click(check('bp-amb'));
+    fireEvent.click(excludeButton());
+    await vi.waitFor(() => expect(toast.error).toHaveBeenCalled());
+    expect(screen.getByTestId('automatch-bounce-row-bp-amb')).toBeInTheDocument();
+    expect(screen.queryByTestId('automatch-bounce-ai-pct-bp-amb')).toBeNull();
+    expect(screen.getByTestId('automatch-bounce-original-bp-amb')).toHaveTextContent('Pago ACME 1');
+    expect(checkInput('bp-amb')).toHaveAttribute('aria-checked', 'false');
+    // No AI data left: the row cannot be ticked again until its outflow is picked in the panel.
+    expect(checkInput('bp-amb')).toBeDisabled();
+    expect(applyMock).toHaveBeenCalledTimes(1);
+  });
+
   it('"Conciliar seleccionadas" reports the same bounceDecisions with the AI data present', async () => {
     renderModal({ bounceAiAssessments: { ...AI_AMB, ...AI_REVIEW } });
     await clickApply();
     const body = applyMock.mock.calls[0][0];
     expect(body.groups.every((g) => g.kind !== 'bouncePair')).toBe(true);
     expect(JSON.stringify(body)).not.toMatch(/choiceSource|bounceAiAssessments|probabilit/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ETP-6359 — outflows shared between rows, panel picks and the LINE_NOT_PENDING reload, with the
+// selection the financial-account host really owns (useAutoMatchReview), not a stub.
+// ---------------------------------------------------------------------------
+
+const SO1 = { id: 'SO1', description: 'Salida compartida 1', amount: -50, date: '2026-05-01', referenceNo: 'R-SO1' };
+const SO2 = { id: 'SO2', description: 'Salida compartida 2', amount: -50, date: '2026-05-02', referenceNo: 'R-SO2' };
+const sharedPair = (key, bounceId) => ({
+  kind: 'bouncePair', groupKey: key, origin: 'bounce', confidence: 'review', signal: 'counterparty',
+  signals: ['counterparty'], ambiguous: true, statementLine: null,
+  counterpartLine: { id: bounceId, description: `Abono ${bounceId}`, amount: 50, date: '2026-05-06' },
+  candidates: [{ line: SO1 }, { line: SO2 }], operations: [], isNew: false, difference: 0,
+});
+const SA = sharedPair('bp-sa', 'SB-A');
+const SB = sharedPair('bp-sb', 'SB-B');
+const SC = sharedPair('bp-sc', 'SB-C');
+const recommendSO1 = (bounceId) => ({ [bounceId]: { probabilities: { SO1: 70, SO2: 20 }, none: 10, recommendedLineId: 'SO1' } });
+const SHARED_AI = { ...recommendSO1('SB-A'), ...recommendSO1('SB-B'), ...recommendSO1('SB-C') };
+const shownDesc = (key) => screen.getByTestId(`automatch-bounce-original-${key}-desc`).textContent;
+const okPair = (statementLineId, counterpartLineId) => ({ kind: 'bouncePair', statementLineId, counterpartLineId, discarded: true });
+const lineNotPending = (statementLineId, counterpartLineId) => ({
+  kind: 'bouncePair', statementLineId, counterpartLineId, code: 'LINE_NOT_PENDING', message: 'Refused',
+  error: { status: 409, code: 'LINE_NOT_PENDING', message: 'Refused', messageKeys: ['ETGO_BounceLineNotPending'] },
+});
+
+/** The modal under the host's own review state; `picks` are panel picks made before it opens. */
+function ReviewHost({ groups, ai = null, picks = [], ...rest }) {
+  const review = useAutoMatchReview(groups, { bounceAiAssessments: ai });
+  const { pickOutflow } = review;
+  useEffect(() => {
+    for (const [bounceId, line] of picks) pickOutflow(bounceId, line);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <AutoMatchSuggestionModal
+      accountId="acc-1" accountName="Banco Santander" groups={groups} kpis={KPIS_ON} currency="EUR" open
+      selection={review.selection} dismissedPairKeys={review.dismissedKeys} bounceAiAssessments={ai}
+      {...rest} />
+  );
+}
+function renderHost(props) {
+  const callbacks = { onClose: vi.fn(), onSuccess: vi.fn(), onChanged: vi.fn() };
+  return { ...render(<ReviewHost {...callbacks} {...props} />), props: callbacks };
+}
+async function exclude() {
+  fireEvent.click(excludeButton());
+  await vi.waitFor(() => expect(applyMock).toHaveBeenCalled());
+  return applyMock.mock.calls.at(-1)[0].groups;
+}
+
+describe('AutoMatchSuggestionModal — rows sharing an outflow (host selection)', () => {
+  it('ticking a row moves the other row to the free outflow, and "Excluir" sends different outflows', async () => {
+    applyMock.mockResolvedValue({ results: [okPair('SO1', 'SB-A'), okPair('SO2', 'SB-B')] });
+    renderHost({ groups: [SA, SB], ai: SHARED_AI });
+    expect(shownDesc('bp-sa')).toBe('Salida compartida 1');
+    expect(shownDesc('bp-sb')).toBe('Salida compartida 1');
+
+    fireEvent.click(check('bp-sa'));
+    expect(shownDesc('bp-sb')).toBe('Salida compartida 2');
+    // The moved row's meta names the outflow it now shows.
+    expect(meta('original', 'bp-sb')).toHaveTextContent(refText('R-SO2'));
+    fireEvent.click(check('bp-sb'));
+    expect(excludeButton()).toHaveTextContent('financeReconcileAutomatchBounceExclude:{"count":2}');
+
+    expect(await exclude()).toEqual([
+      { kind: 'bouncePair', statementLineId: 'SO1', counterpartLineId: 'SB-A', choiceSource: 'ai' },
+      { kind: 'bouncePair', statementLineId: 'SO2', counterpartLineId: 'SB-B', choiceSource: 'user' },
+    ]);
+  });
+
+  it('a row left with no free outflow is disabled with its reason; unticking a holder restores it', () => {
+    renderHost({ groups: [SA, SB, SC], ai: SHARED_AI });
+    fireEvent.click(check('bp-sa'));
+    fireEvent.click(check('bp-sb'));
+    expect(checkInput('bp-sc')).toBeDisabled();
+    expect(checkInput('bp-sc')).toHaveAccessibleName('financeReconcileAutomatchBounceOutflowTaken');
+    // Names no outflow: every one it could take is held by a checked row (ETP-6359 N2).
+    expect(shownDesc('bp-sc')).toBe('—');
+    fireEvent.click(check('bp-sc'));
+    expect(checkInput('bp-sc')).toHaveAttribute('aria-checked', 'false');
+
+    fireEvent.click(check('bp-sb'));
+    expect(checkInput('bp-sc')).not.toBeDisabled();
+    expect(checkInput('bp-sc')).toHaveAccessibleName('financeReconcileAutomatchBounceCheck');
+    expect(shownDesc('bp-sc')).toBe('Salida compartida 2');
+  });
+
+  it('select-all checks the rows that fit and leaves the one without an outflow unchecked and disabled', async () => {
+    applyMock.mockResolvedValue({ results: [okPair('SO1', 'SB-A'), okPair('SO2', 'SB-B')] });
+    renderHost({ groups: [SA, SB, SC], ai: SHARED_AI });
+    fireEvent.click(screen.getByTestId('automatch-bounce-select-all'));
+    expect(excludeButton()).toHaveTextContent('financeReconcileAutomatchBounceExclude:{"count":2}');
+    expect(checkInput('bp-sa')).toHaveAttribute('aria-checked', 'true');
+    expect(checkInput('bp-sb')).toHaveAttribute('aria-checked', 'true');
+    expect(checkInput('bp-sc')).toHaveAttribute('aria-checked', 'false');
+    expect(checkInput('bp-sc')).toBeDisabled();
+    expect((await exclude()).map((g) => g.statementLineId)).toEqual(['SO1', 'SO2']);
+  });
+
+  it('an excluded pair keeps its outflow: the row that stays does not move back onto it', async () => {
+    applyMock.mockResolvedValueOnce({ results: [okPair('SO1', 'SB-A')] });
+    renderHost({ groups: [SA, SB], ai: SHARED_AI });
+    fireEvent.click(check('bp-sa'));
+    await exclude();
+    await vi.waitFor(() => expect(screen.queryByTestId('automatch-bounce-row-bp-sa')).toBeNull());
+    expect(shownDesc('bp-sb')).toBe('Salida compartida 2');
+
+    applyMock.mockResolvedValueOnce({ results: [okPair('SO2', 'SB-B')] });
+    fireEvent.click(check('bp-sb'));
+    expect(await exclude()).toEqual([
+      { kind: 'bouncePair', statementLineId: 'SO2', counterpartLineId: 'SB-B', choiceSource: 'user' },
+    ]);
+  });
+});
+
+describe('AutoMatchSuggestionModal — the outflow picked in the panel (host selection)', () => {
+  it('a pick of another candidate is shown and sent with "user"', async () => {
+    applyMock.mockResolvedValue({ results: [okPair('SO2', 'SB-A')] });
+    renderHost({ groups: [SA], ai: SHARED_AI, picks: [['SB-A', SO2]] });
+    expect(shownDesc('bp-sa')).toBe('Salida compartida 2');
+    fireEvent.click(check('bp-sa'));
+    expect(await exclude()).toEqual([
+      { kind: 'bouncePair', statementLineId: 'SO2', counterpartLineId: 'SB-A', choiceSource: 'user' },
+    ]);
+  });
+
+  it('a pick another checked row already holds gives way: the row shows and sends the next free outflow', async () => {
+    applyMock.mockResolvedValue({ results: [okPair('SO1', 'SB-A'), okPair('SO2', 'SB-B')] });
+    renderHost({ groups: [SA, SB], ai: SHARED_AI, picks: [['SB-B', SO1]] });
+    fireEvent.click(check('bp-sa'));
+    expect(shownDesc('bp-sb')).toBe('Salida compartida 2');
+    fireEvent.click(check('bp-sb'));
+    expect(await exclude()).toEqual([
+      { kind: 'bouncePair', statementLineId: 'SO1', counterpartLineId: 'SB-A', choiceSource: 'ai' },
+      { kind: 'bouncePair', statementLineId: 'SO2', counterpartLineId: 'SB-B', choiceSource: 'user' },
+    ]);
+  });
+
+  it('a no-AI ambiguous pair is disabled until its outflow is picked; then it is ticked and sent with "user"', async () => {
+    const { unmount } = renderHost({ groups: [AMBIGUOUS] });
+    expect(checkInput('bp-amb')).toBeDisabled();
+    expect(checkInput('bp-amb')).toHaveAccessibleName('financeReconcileAutomatchBounceAmbiguousCheck');
+    expect(box('automatch-bounce-select-all')).toBeDisabled();
+    unmount();
+
+    applyMock.mockResolvedValue({ results: [okPair('C2', 'B3')] });
+    renderHost({ groups: [AMBIGUOUS], picks: [['B3', AMBIGUOUS.candidates[1].line]] });
+    expect(checkInput('bp-amb')).not.toBeDisabled();
+    expect(checkInput('bp-amb')).toHaveAccessibleName('financeReconcileAutomatchBounceCheck');
+    expect(shownDesc('bp-amb')).toBe('Pago ACME 2');
+    fireEvent.click(check('bp-amb'));
+    expect(await exclude()).toEqual([
+      { kind: 'bouncePair', statementLineId: 'C2', counterpartLineId: 'B3', choiceSource: 'user' },
+    ]);
+  });
+
+  it('a single-original pair re-paired in the panel is shown and sent with the picked outflow', async () => {
+    const other = { id: 'OX', description: 'Otra salida', amount: -60, date: '2026-04-28' };
+    applyMock.mockResolvedValue({ results: [okPair('OX', 'B2')] });
+    renderHost({ groups: [REVIEW], picks: [['B2', other]] });
+    expect(shownDesc('bp-review')).toBe('Otra salida');
+    fireEvent.click(check('bp-review'));
+    expect(await exclude()).toEqual([
+      { kind: 'bouncePair', statementLineId: 'OX', counterpartLineId: 'B2', choiceSource: 'user' },
+    ]);
+  });
+});
+
+describe('AutoMatchSuggestionModal — a LINE_NOT_PENDING refusal asks the host to reload the suggestions', () => {
+  it('a partial exclusion with one LINE_NOT_PENDING calls onChanged({ reloadSuggestions: true }) once', async () => {
+    applyMock.mockResolvedValue({ results: [okPair('SO1', 'SB-A'), lineNotPending('SO2', 'SB-B')] });
+    const { props } = renderHost({ groups: [SA, SB], ai: SHARED_AI });
+    fireEvent.click(check('bp-sa'));
+    fireEvent.click(check('bp-sb'));
+    await exclude();
+    await vi.waitFor(() => expect(props.onChanged).toHaveBeenCalled());
+    // Exactly one call, the reload one: no second plain onChanged() for the pair that was excluded.
+    expect(props.onChanged.mock.calls).toEqual([[{ reloadSuggestions: true }]]);
+    expect(screen.queryByTestId('automatch-bounce-row-bp-sa')).toBeNull();
+  });
+
+  it('also when nothing was excluded (every pair refused as not pending)', async () => {
+    applyMock.mockResolvedValue({ results: [lineNotPending('O2', 'B2')] });
+    const { props } = renderModal({ groups: [REVIEW] });
+    fireEvent.click(check('bp-review'));
+    await exclude();
+    await vi.waitFor(() => expect(props.onChanged).toHaveBeenCalledWith({ reloadSuggestions: true }));
+    expect(props.onChanged).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('automatch-bounce-row-bp-review')).toBeInTheDocument();
+  });
+
+  it('another refusal (HAS_PAYMENT) with nothing excluded does not ask for a reload', async () => {
+    applyMock.mockResolvedValue({
+      results: [{
+        kind: 'bouncePair', statementLineId: 'O2', counterpartLineId: 'B2', code: 'HAS_PAYMENT', message: 'Refused',
+        error: { status: 409, code: 'HAS_PAYMENT', message: 'Refused', messageKeys: ['ETGO_BounceHasPayment'] },
+      }],
+    });
+    const { props } = renderModal({ groups: [REVIEW] });
+    fireEvent.click(check('bp-review'));
+    await exclude();
+    await vi.waitFor(() => expect(toast.error).toHaveBeenCalled());
+    expect(props.onChanged).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ETP-6359 (final rule): ticks pin their outflow, a panel pick releases what it contradicts, a
+// no-AI pick held by another row shows no outflow, and a panel pick is always "user".
+// ---------------------------------------------------------------------------
+
+describe('AutoMatchSuggestionModal — pinned ticks and panel picks (host selection)', () => {
+  it('tick a, tick b, untick a: b keeps its outflow and "Excluir" sends it', async () => {
+    applyMock.mockResolvedValue({ results: [okPair('SO2', 'SB-B')] });
+    renderHost({ groups: [SA, SB], ai: SHARED_AI });
+    fireEvent.click(check('bp-sa'));
+    fireEvent.click(check('bp-sb'));
+    fireEvent.click(check('bp-sa'));
+    expect(checkInput('bp-sb')).toHaveAttribute('aria-checked', 'true');
+    expect(shownDesc('bp-sb')).toBe('Salida compartida 2');
+    expect(shownDesc('bp-sa')).toBe('Salida compartida 1');
+    expect(await exclude()).toEqual([
+      { kind: 'bouncePair', statementLineId: 'SO2', counterpartLineId: 'SB-B', choiceSource: 'user' },
+    ]);
+  });
+
+  it('select-all in reverse modal order still never gives two rows the same outflow', async () => {
+    applyMock.mockResolvedValue({ results: [okPair('SO1', 'SB-C'), okPair('SO2', 'SB-B')] });
+    renderHost({ groups: [SC, SB, SA], ai: SHARED_AI });
+    fireEvent.click(screen.getByTestId('automatch-bounce-select-all'));
+    expect(checkInput('bp-sc')).toHaveAttribute('aria-checked', 'true');
+    expect(checkInput('bp-sb')).toHaveAttribute('aria-checked', 'true');
+    expect(checkInput('bp-sa')).toBeDisabled();
+    const sent = await exclude();
+    expect(sent.map((g) => [g.counterpartLineId, g.statementLineId])).toEqual([['SB-C', 'SO1'], ['SB-B', 'SO2']]);
+  });
+
+  it('a panel pick equal to the AI recommendation is sent as "user"', async () => {
+    applyMock.mockResolvedValue({ results: [okPair('SO1', 'SB-A')] });
+    renderHost({ groups: [SA], ai: SHARED_AI, picks: [['SB-A', SO1]] });
+    fireEvent.click(check('bp-sa'));
+    expect(await exclude()).toEqual([
+      { kind: 'bouncePair', statementLineId: 'SO1', counterpartLineId: 'SB-A', choiceSource: 'user' },
+    ]);
+  });
+
+  it('a default-checked pair re-picked in the panel comes back unchecked, showing the pick', () => {
+    const other = { id: 'OX', description: 'Otra salida', amount: -120, date: '2026-04-28' };
+    renderHost({ groups: [HIGH, REVIEW], picks: [['B1', other]] });
+    expect(checkInput('bp-high')).toHaveAttribute('aria-checked', 'false');
+    expect(shownDesc('bp-high')).toBe('Otra salida');
+    expect(excludeButton()).toBeDisabled();
+  });
+
+  it('a pick equal to a default-checked pair\'s own original keeps it checked, sent with no source', async () => {
+    applyMock.mockResolvedValue({ results: [okPair('O1', 'B1')] });
+    renderHost({ groups: [HIGH], picks: [['B1', HIGH.statementLine]] });
+    expect(checkInput('bp-high')).toHaveAttribute('aria-checked', 'true');
+    expect(await exclude()).toEqual([{ kind: 'bouncePair', statementLineId: 'O1', counterpartLineId: 'B1' }]);
+  });
+
+  it('a no-AI row whose panel pick another checked row holds shows "—" and the amount, disabled as OutflowTaken', () => {
+    renderHost({ groups: [SA, SB], picks: [['SB-A', SO1], ['SB-B', SO1]] });
+    // The later pick (SB-B → SO1) released nothing yet: neither row was checked.
+    fireEvent.click(check('bp-sa'));
+    expect(checkInput('bp-sa')).toHaveAttribute('aria-checked', 'true');
+    expect(checkInput('bp-sb')).toBeDisabled();
+    expect(checkInput('bp-sb')).toHaveAccessibleName('financeReconcileAutomatchBounceOutflowTaken');
+    const side = screen.getByTestId('automatch-bounce-original-bp-sb');
+    expect(shownDesc('bp-sb')).toBe('—');
+    expect(side).toHaveTextContent('-50');
+    expect(side).not.toHaveTextContent('Salida compartida');
+  });
+
+  it('the AI data turning null: a row with a panel pick keeps its check, the others are disabled', () => {
+    // The same groups array: a new one is a reload, which resets every check.
+    const trio = [SA, SB, SC];
+    const { rerender } = render(
+      <ReviewHost groups={trio} ai={SHARED_AI} picks={[['SB-B', SO2]]} onClose={vi.fn()} onChanged={vi.fn()} />,
+    );
+    fireEvent.click(check('bp-sa'));
+    fireEvent.click(check('bp-sb'));
+    rerender(<ReviewHost groups={trio} ai={null} picks={[['SB-B', SO2]]} onClose={vi.fn()} onChanged={vi.fn()} />);
+    expect(checkInput('bp-sb')).toHaveAttribute('aria-checked', 'true');
+    expect(checkInput('bp-sa')).toHaveAttribute('aria-checked', 'false');
+    expect(checkInput('bp-sa')).toBeDisabled();
+    expect(checkInput('bp-sa')).toHaveAccessibleName('financeReconcileAutomatchBounceAmbiguousCheck');
+    expect(checkInput('bp-sc')).toBeDisabled();
+    expect(excludeButton()).toHaveTextContent('financeReconcileAutomatchBounceExclude:{"count":1}');
+  });
+});
+
+describe('AutoMatchSuggestionModal — the label of a no-AI ambiguous row that cannot be ticked', () => {
+  // Two single-original pairs whose originals are the two outflows the ambiguous rejections list.
+  const single = (key, line, bounceId) => ({
+    kind: 'bouncePair', groupKey: key, origin: 'bounce', confidence: 'review', signal: 'return_text',
+    signals: ['return_text'], ambiguous: false, statementLine: line,
+    counterpartLine: { id: bounceId, description: `RECHAZO ${bounceId}`, amount: 50, date: '2026-05-06' },
+    operations: [], isNew: false, difference: 0,
+  });
+  const P1 = single('bp-p1', SO1, 'X1');
+  const P2 = single('bp-p2', SO2, 'X2');
+
+  it('no AI, no pick, every candidate held by a checked row: it still says to choose in the panel', () => {
+    renderHost({ groups: [P1, P2, SC] });
+    fireEvent.click(check('bp-p1'));
+    fireEvent.click(check('bp-p2'));
+    expect(checkInput('bp-sc')).toBeDisabled();
+    expect(checkInput('bp-sc')).toHaveAccessibleName('financeReconcileAutomatchBounceAmbiguousCheck');
+  });
+
+  it('no AI, with a panel pick another checked row holds: it says the outflow is taken', () => {
+    renderHost({ groups: [P1, SC], picks: [['SB-C', SO1]] });
+    fireEvent.click(check('bp-p1'));
+    expect(checkInput('bp-sc')).toBeDisabled();
+    expect(checkInput('bp-sc')).toHaveAccessibleName('financeReconcileAutomatchBounceOutflowTaken');
   });
 });

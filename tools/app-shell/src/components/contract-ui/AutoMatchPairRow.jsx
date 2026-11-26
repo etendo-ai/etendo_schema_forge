@@ -79,7 +79,7 @@ export function AutoMatchPairSide({
 }) {
   const value = Number(amount ?? 0);
   return (
-    <div className={cn('flex min-w-0 flex-1', compact ? 'gap-2' : 'gap-10')} data-testid={testId}>
+    <div className={cn('flex min-w-0 flex-1', compact ? 'gap-2' : 'gap-3 min-[1100px]:gap-10')} data-testid={testId}>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         {/* Clipped with an ellipsis, the full text on hover: bank descriptions often differ only
             in their last characters ("…CONCEPTO 10000268 100-1" / "…-2"). */}
@@ -102,7 +102,7 @@ export function AutoMatchPairSide({
           {reason}
         </div>
       </div>
-      <div className={cn('flex flex-none flex-col items-end gap-1', compact ? 'w-auto max-w-[45%]' : 'w-40')}>
+      <div className={cn('flex flex-none flex-col items-end gap-1', compact ? 'w-auto max-w-[45%]' : 'w-auto min-[1100px]:w-40')}>
         <MoneyAmount
           value={value}
           currency={currency || 'EUR'}

@@ -14,12 +14,13 @@ import { formatCalendarDate } from '@/lib/dateOnly';
 import { StatusBadge, automatchBadgeKind } from './reconciliationBadges.jsx';
 import { Checkbox } from '@/components/ui/checkbox';
 import { AutoMatchBounceSection } from './AutoMatchBounceSection.jsx';
+import { isAiStaleError } from './bounceAi.js';
 import { AutoMatchCard, AutoMatchCardHeader } from './AutoMatchCard.jsx';
 import { AutoMatchCloseConfirmDialog } from './AutoMatchCloseConfirmDialog.jsx';
 import { AutoMatchPairRow, AutoMatchPairSide } from './AutoMatchPairRow.jsx';
 import {
-  BOUNCE_PAIR_KIND, bouncePairPayload, defaultGroupChecked, splitAutoMatchGroups,
-  summarizeApplyResults, withBounceDecisions,
+  BOUNCE_PAIR_KIND, bouncePairPayload, defaultGroupChecked, isLineNotPendingResult,
+  isSelectableGroup, splitAutoMatchGroups, shownOutflow, summarizeApplyResults, withBounceDecisions,
 } from './bouncePairs.js';
 import {
   trackBounceSuggestionsDismissed, trackBounceSuggestionsViewed,
@@ -293,7 +294,9 @@ function notifyExcludeResults(excluded, failures, ui) {
  *   with nowhere to post it.
  *   `onSuccess` runs after "Conciliar seleccionadas" (the host reloads everything and the modal
  *   closes); `onChanged` after an "Excluir" that excluded at least one pair (the host refreshes the
- *   panel but keeps these suggestions, and so the checks of the rest).
+ *   panel but keeps these suggestions, and so the checks of the rest). When a pair was refused with
+ *   409 `LINE_NOT_PENDING` (its line is no longer pending: the suggestions are stale) it is called
+ *   with `{ reloadSuggestions: true }`, also when nothing was excluded, and the host reloads them.
  *   `selection` (ETP-5581) lifts the checks out of the modal ({@link useAutoMatchSelection}) so the
  *   host decides how long they live (the financial-account detail keeps them across a close while
  *   the suggestions do not reload); without it the modal keeps its own. `dismissedPairKeys`
@@ -302,8 +305,11 @@ function notifyExcludeResults(excluded, failures, ui) {
  *   `sentToPanelKeys` (ETP-5581) are the pairs sent to the panel during this modal session
  *   (`useAutoMatchReview().sentToPanelKeys`): "Conciliar seleccionadas" reports them as
  *   `sent_to_panel` in its `bounceDecisions`, every other pair still shown as `unchecked`.
- *   `bounceAiAssessments` (ETP-6359) is the autoMatch answer's AI layer: DISPLAY only, the most
- *   probable candidate and its percentage on a pair to review; the checks never read it.
+ *   `bounceAiAssessments` (ETP-6359) is the autoMatch answer's AI layer. It decides which outflow an
+ *   ambiguous pair shows and excludes (the recommended one, else the most probable) and whether
+ *   that pair can be ticked at all (not without AI data, until its outflow is picked in the panel),
+ *   and it shows the percentage. It never preselects a pair. Two checked rows never share an
+ *   outflow: see `resolvePairOutflows` (bouncePairs.js), through the selection's `pairOutflow`.
  *   `autoOpened` says the modal opened by itself rather than from the Automatch button, for the
  *   `bounce_suggestions_*` events: `viewed` once per opening with at least one pair, `dismissed`
  *   when that opening is closed without applying (X, Esc, backdrop, "Ir a conciliación manual" —
@@ -332,8 +338,14 @@ export function AutoMatchSuggestionModal({
 
   // The checks default to every transaction group (and every high-confidence pair) whenever the
   // suggestions (re)load. The host may own them (`selection`); otherwise the modal does.
-  const ownSelection = useAutoMatchSelection(groups);
+  const ownSelection = useAutoMatchSelection(groups, bounceAiAssessments, { dismissedKeys: dismissedPairKeys });
   const { isChecked, toggle, setMany } = selection ?? ownSelection;
+  // The AI assessments minus the rejections refused as stale, and the outflow each pair shows (a
+  // host selection without them falls back to the raw answer and to each pair on its own).
+  const {
+    assessments = bounceAiAssessments, invalidateAi = null, isCheckable = isSelectableGroup,
+    pairOutflow = null,
+  } = selection ?? ownSelection;
 
   // Pairs excluded from this modal's suggestions by "Excluir": hidden locally, by groupKey, so the
   // automatch is not asked again. A reload of the suggestions forgets them (the server no longer
@@ -436,15 +448,32 @@ export function AutoMatchSuggestionModal({
     try {
       const response = await apply({
         financialAccountId: accountId,
-        groups: sent.map(bouncePairPayload),
+        // Each pair travels with the outflow its row SHOWS (two checked rows never share one, see
+        // resolvePairOutflows) and its `choiceSource` (pairChoiceSource): 'ai' when that is the
+        // AI-recommended one (the backend refuses the group as stale if the recommendation no
+        // longer holds), 'user' when the AI rated the pair but the shown outflow is another or
+        // the user picked it in the panel, nothing otherwise.
+        groups: sent.map((g) => {
+          const { line, source } = pairOutflow?.(g) ?? shownOutflow(g, assessments);
+          return bouncePairPayload(g, line, source);
+        }),
       });
       const results = (response?.results ?? []).filter((r) => r?.kind === BOUNCE_PAIR_KIND);
       const { pairsOk, failures } = summarizeApplyResults(results);
       const done = sent.filter((_, i) => results[i] && !results[i].error).map((p) => p.groupKey);
-      if (done.length > 0) {
-        setExcludedKeys((prev) => new Set([...prev, ...done]));
-        onChanged?.();
-      }
+      // A group refused as stale (its AI recommendation no longer holds) stays on screen, unchecked,
+      // and loses its AI data: no mark, and an ambiguous pair can no longer be ticked here until its
+      // outflow is picked in the panel (`needsPanel`, see resolvePairOutflows).
+      sent.forEach((g, i) => {
+        const r = results[i];
+        if (r?.error && isAiStaleError({ code: r.code ?? r.error?.code, body: r })) invalidateAi?.(g);
+      });
+      // A line that is no longer pending means these suggestions are stale: the host reloads them
+      // (which also drops the refused row), instead of leaving a row that fails on every retry.
+      const stale = results.some(isLineNotPendingResult);
+      if (done.length > 0) setExcludedKeys((prev) => new Set([...prev, ...done]));
+      if (stale) onChanged?.({ reloadSuggestions: true });
+      else if (done.length > 0) onChanged?.();
       notifyExcludeResults(pairsOk, failures, ui);
     } catch (err) {
       toast.error(translateBackendError(err?.message, ui) || ui('financeReconcileAutomatchToastError'));
@@ -523,7 +552,9 @@ export function AutoMatchSuggestionModal({
                 onExclude={handleExclude}
                 excluding={loading}
                 onReview={onReviewPair}
-                aiAssessments={bounceAiAssessments}
+                aiAssessments={assessments}
+                isCheckable={isCheckable}
+                pairOutflow={pairOutflow}
                 currency={currency}
                 formatDate={formatLineDate}
                 data-testid="AutoMatchBounceSection__a89979" />

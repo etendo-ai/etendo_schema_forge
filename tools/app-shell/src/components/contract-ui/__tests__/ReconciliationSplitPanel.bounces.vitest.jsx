@@ -322,7 +322,7 @@ describe('ReconciliationSplitPanel — the bounce-pair panel', () => {
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith('financeReconcileBounceToastDiscarded'));
     expect(discardPairMock).toHaveBeenCalledTimes(1);
     expect(discardPairMock).toHaveBeenCalledWith({
-      financialAccountId: 'ACC-1', statementLineId: 'C2', counterpartLineId: 'B3',
+      financialAccountId: 'ACC-1', statementLineId: 'C2', counterpartLineId: 'B3', choiceSource: 'user',
     });
     expect(pending.reload).toHaveBeenCalled();
     expect(onReconcileSuccess).toHaveBeenCalled();
@@ -345,7 +345,7 @@ describe('ReconciliationSplitPanel — the bounce-pair panel', () => {
     expect(screen.getByTestId('recon-bounce-radio-C2')).toBeChecked();
     fireEvent.click(screen.getByTestId('recon-bounce-discard'));
     await waitFor(() => expect(discardPairMock).toHaveBeenCalledWith({
-      financialAccountId: 'ACC-1', statementLineId: 'C2', counterpartLineId: 'B3',
+      financialAccountId: 'ACC-1', statementLineId: 'C2', counterpartLineId: 'B3', choiceSource: 'user',
     }));
   });
 
@@ -395,7 +395,7 @@ describe('ReconciliationSplitPanel — the bounce-pair panel', () => {
     fireEvent.click(screen.getByTestId('recon-outflow-row-X1'));
     fireEvent.click(screen.getByTestId('recon-bounce-discard'));
     await waitFor(() => expect(discardPairMock).toHaveBeenCalledWith({
-      financialAccountId: 'ACC-1', statementLineId: 'X1', counterpartLineId: 'B3',
+      financialAccountId: 'ACC-1', statementLineId: 'X1', counterpartLineId: 'B3', choiceSource: 'user',
     }));
     await waitFor(() => expect(pending.reload).toHaveBeenCalled());
   });
@@ -1218,13 +1218,14 @@ describe('ReconciliationSplitPanel — discarding with the AI suggestion', () =>
       .toEqual(['counterpartLineId', 'financialAccountId', 'statementLineId']);
   });
 
-  it('no assessment on an ambiguous pair: explicit pick POSTs without choiceSource', async () => {
+  it('no assessment on an ambiguous pair: an explicit pick POSTs choiceSource "user"', async () => {
     renderPanel({ bounceReview: aiReview(null) });
     await selectLineRow('B3');
     fireEvent.click(screen.getByTestId('recon-bounce-radio-C2'));
     fireEvent.click(screen.getByTestId('recon-bounce-discard'));
     await waitFor(() => expect(discardPairMock).toHaveBeenCalledTimes(1));
-    expect('choiceSource' in discardPairMock.mock.calls[0][0]).toBe(false);
+    // One rule with the modal (ETP-6359): an outflow the user picked is 'user', with or without AI.
+    expect(discardPairMock.mock.calls[0][0].choiceSource).toBe('user');
   });
 
   it('a successful AI-sourced discard offers "Deshacer", which restores the pair', async () => {
@@ -1697,7 +1698,7 @@ describe('ReconciliationSplitPanel — after discarding with a free pick of anot
     expect(outflowRadio('X1')).toBeChecked();
     fireEvent.click(screen.getByTestId('recon-bounce-discard'));
     await waitFor(() => expect(discardPairMock).toHaveBeenCalledWith({
-      financialAccountId: 'ACC-1', statementLineId: 'X1', counterpartLineId: 'B3',
+      financialAccountId: 'ACC-1', statementLineId: 'X1', counterpartLineId: 'B3', choiceSource: 'user',
     }));
     // The selected rejection B3 is gone: placeholder, no footer, no notice, X1 no longer listed.
     await waitFor(() => expect(screen.getByTestId('recon-right-empty')).toBeInTheDocument());
@@ -1720,7 +1721,7 @@ describe('ReconciliationSplitPanel — after discarding with a free pick of anot
     fireEvent.click(screen.getByTestId('recon-bounce-discard'));
     await waitFor(() => expect(discardPairMock).toHaveBeenCalledTimes(2));
     expect(discardPairMock).toHaveBeenLastCalledWith({
-      financialAccountId: 'ACC-1', statementLineId: 'C1', counterpartLineId: 'B4',
+      financialAccountId: 'ACC-1', statementLineId: 'C1', counterpartLineId: 'B4', choiceSource: 'user',
     });
   });
 
@@ -1782,5 +1783,68 @@ describe('ReconciliationSplitPanel — accessible names of the rejection radios'
     const names = ['B3', 'B4'].map((id) => screen.getByTestId(`recon-line-radio-${id}`).getAttribute('aria-label'));
     expect(names[0]).not.toBe(names[1]);
     for (const name of names) expect(name).toMatch(/^financeReconcileBounceSelectRejection:/);
+  });
+});
+
+// ── An outflow dated AFTER the rejection, and the 60-day window in both directions ─────────────
+
+describe('ReconciliationSplitPanel — the 60-day window of a pairable outflow (two-table view)', () => {
+  const pairOf = (key, original, bounce) => {
+    const g = { groupKey: key, ambiguous: false, confidence: 'review', signal: 'counterparty', signals: ['counterparty'] };
+    const o = { ...original, state: 'bounce', status: 'pending', bouncePair: { ...g, role: 'original', counterpartLine: bounce } };
+    const b = { ...bounce, state: 'bounce', status: 'pending', bouncePair: { ...g, role: 'bounce', counterpartLine: original } };
+    return [o, b];
+  };
+
+  it('an outflow dated AFTER the rejection is pairable: a free pick keeps the rejection selected and discards with it', async () => {
+    // Y (-80) is the original of ANOTHER pair and is dated the day AFTER B3's rejection (2026-10-05).
+    const Y_SHORT = { id: 'Y1', amount: -80, date: '2026-10-06', description: 'Salida posterior' };
+    const BY_SHORT = { id: 'BY1', amount: 80, date: '2026-10-20', description: 'Abono posterior' };
+    pending.answer = () => ({ lines: [PLAIN, C1, C2, B3, ...pairOf('g-y', Y_SHORT, BY_SHORT)], counts: { ...BOUNCE_COUNTS, all: 7, bounce: 6 } });
+    renderPanel();
+    await screen.findByTestId('recon-line-row-B3');
+    openPairView();
+    fireEvent.click(screen.getByTestId('recon-outflow-row-C1'));
+    expect(screen.getByTestId('recon-line-radio-B3')).toBeChecked();
+    expect(screen.queryByTestId('recon-outflow-nomatch-Y1')).toBeNull();
+    fireEvent.click(screen.getByTestId('recon-outflow-row-Y1'));
+    // No re-target: B3 stays selected and Y1 is the pick.
+    expect(screen.getByTestId('recon-line-radio-B3')).toBeChecked();
+    expect(screen.getByTestId('recon-outflow-radio-Y1')).toBeChecked();
+    fireEvent.click(screen.getByTestId('recon-bounce-discard'));
+    await waitFor(() => expect(discardPairMock).toHaveBeenCalledWith({
+      financialAccountId: 'ACC-1', statementLineId: 'Y1', counterpartLineId: 'B3', choiceSource: 'user',
+    }));
+  });
+
+  it('day 60 is pairable (either direction), day 61 is not and says why', async () => {
+    // Rejections on 2026-10-01. V1 is dated 60 days AFTER it, W1 61 days after, U1 60 days BEFORE
+    // a rejection on 2026-12-01 and T1 61 days before.
+    const mk = (id, amount, date) => ({ id, amount, date, description: id });
+    const lines = [
+      PLAIN,
+      ...pairOf('g-60a', mk('V1', -78, '2026-11-30'), mk('RV1', 78, '2026-10-01')),
+      ...pairOf('g-61a', mk('W1', -77, '2026-12-01'), mk('RW1', 77, '2026-10-01')),
+      ...pairOf('g-60b', mk('U1', -76, '2026-10-02'), mk('RU1', 76, '2026-12-01')),
+      ...pairOf('g-61b', mk('T1', -75, '2026-10-01'), mk('RT1', 75, '2026-12-01')),
+    ];
+    pending.answer = () => ({ lines, counts: { ...BOUNCE_COUNTS, all: lines.length, bounce: lines.length - 1 } });
+    renderPanel();
+    await screen.findByTestId('recon-line-row-RV1');
+    openPairView();
+    for (const id of ['V1', 'U1']) {
+      expect(screen.queryByTestId(`recon-outflow-nomatch-${id}`)).toBeNull();
+      expect(screen.getByTestId(`recon-outflow-radio-${id}`)).not.toHaveAttribute('aria-disabled');
+    }
+    for (const id of ['W1', 'T1']) {
+      expect(screen.getByTestId(`recon-outflow-nomatch-${id}`)).toHaveTextContent('financeReconcileBounceOutflowNoMatch');
+      expect(screen.getByTestId(`recon-outflow-radio-${id}`)).toHaveAttribute('aria-disabled', 'true');
+    }
+    // Clicking day 60 selects its rejection; clicking day 61 changes nothing.
+    fireEvent.click(screen.getByTestId('recon-outflow-row-V1'));
+    expect(screen.getByTestId('recon-line-radio-RV1')).toBeChecked();
+    fireEvent.click(screen.getByTestId('recon-outflow-row-W1'));
+    expect(screen.getByTestId('recon-line-radio-RV1')).toBeChecked();
+    expect(screen.queryByTestId('recon-line-radio-RW1')).toBeNull();
   });
 });
