@@ -417,24 +417,32 @@ describe('Mixpanel observability adapter', () => {
     });
 
     assert.equal(disabledConfig.providers.find(provider => provider.name === 'mixpanel').enabled, false);
-    assert.equal(enabledConfig.providers.find(provider => provider.name === 'mixpanel').enabled, true);
+    // ETP-6363: on a production host it is on only once the cookie banner's Analytics consent
+    // arrives, which never happens here (no banner): the gateway reads `enabled()` on every call.
+    const enabled = enabledConfig.providers.find(provider => provider.name === 'mixpanel').enabled;
+    assert.equal(typeof enabled, 'function');
+    assert.equal(enabled(), false);
   });
 });
 
 // ETP-5466 — dev traffic (localhost, every Playwright context) dominated the Mixpanel project.
 describe('Mixpanel production host allowlist', () => {
   const ENABLED_ENV = { VITE_MIXPANEL_ENABLED: 'true', VITE_MIXPANEL_TOKEN: 'token-123' };
-  const mixpanelEnabledOn = (hostname, env = ENABLED_ENV) => buildBrowserObservabilityConfig({
-    env,
-    location: { hostname },
-    logger: { warn() {} },
-  }).providers.find(provider => provider.name === 'mixpanel').enabled;
+  // A production host waits for the cookie banner (ETP-6363): its `enabled` is the consent check.
+  const mixpanelEnabledOn = (hostname, env = ENABLED_ENV) => {
+    const { enabled } = buildBrowserObservabilityConfig({
+      env,
+      location: { hostname },
+      logger: { warn() {} },
+    }).providers.find(provider => provider.name === 'mixpanel');
+    return typeof enabled === 'function' ? 'after-consent' : enabled;
+  };
 
-  it('emits from the production hosts', () => {
+  it('emits from the production hosts, once the visitor accepts the Analytics cookies', () => {
     assert.deepEqual([...MIXPANEL_ALLOWED_HOSTS], ['app.etendo.software', 'app.etendo.ai']);
-    assert.equal(mixpanelEnabledOn('app.etendo.software'), true);
-    assert.equal(mixpanelEnabledOn('app.etendo.ai'), true);
-    assert.equal(mixpanelEnabledOn('APP.Etendo.Software'), true);
+    assert.equal(mixpanelEnabledOn('app.etendo.software'), 'after-consent');
+    assert.equal(mixpanelEnabledOn('app.etendo.ai'), 'after-consent');
+    assert.equal(mixpanelEnabledOn('APP.Etendo.Software'), 'after-consent');
   });
 
   it('stays disabled on localhost, 127.0.0.1 and any other host, even with a token', () => {
