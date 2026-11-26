@@ -36,18 +36,29 @@ stateDiagram-v2
 
 ## Rules
 
-- **Nothing leaves without the human's yes.** Show the plan before `apply --yes`, and the
-  final subject, body and recipient list before `notify --yes`. A plan where someone loses
-  access or an unmanaged rule is deleted needs an explicit OK even with `--force` available.
+- **Nothing is sent without the human's explicit OK, asked for every send.** That covers
+  `notify --yes`, `notify --test` (even to the human's own address) and publishing a release
+  note. Before asking, show the final subject and body and the exact recipients (the `notify`
+  dry run). An OK for one send does not cover the next one: draft, test and real send are three
+  separate questions. Saving a version (`comms <key> save`) sends nothing and needs no OK.
+- **Nothing reaches Datadog without the human's yes either.** Show the plan before
+  `apply --yes`; a plan where someone loses access or an unmanaged rule is deleted needs an
+  explicit OK even with `--force` available.
 - **Apply, verify, then announce.** `apply --yes` runs `check`; notify only when Datadog
   matches the panel. `notify` refuses a pending flag on purpose.
-- **Test-send to the human first** (`notify <key> --test`, which sends one copy to the signed-in
-  user like the panel's test button; `--test <email>` for someone else) and let them read
-  it in their inbox before the real send.
+- **Test-send to the human first** (`notify <key> --test`, one copy to the signed-in user like
+  the panel's test button; `--test <email>` for someone else), after their OK, and wait until
+  they have read it in their inbox before asking for the real send.
 - Emails follow the templates below. The panel's AI draft (`comms <key> draft`) is a starting
   point only: rewrite it into the template before saving.
 - One message version per stage. Testers added later get the same version: `notify` sends only
   to people not notified yet.
+- **Every invitation teaches how to use the feature**: numbered steps the tester can follow
+  without help. For an MCP tool there is no screen, so the steps are example phrases to ask the
+  agent (quoted with `>`), one per thing the tool does, read from the tool's description in
+  `com.etendoerp.go`. Add an "Antes de empezar" block when the feature writes real records or
+  is not atomic. Worked example: the `mcp-routines` alpha email (Cómo usarlas: exec, save, run,
+  list/describe/update/delete as four asks to the agent).
 
 ## Transitions
 
@@ -131,18 +142,24 @@ Ya puedes probar {{nombre de la funcionalidad}} en Etendo. Está en fase alfa: l
 
 **Dónde está**
 
-{{Menú o pantalla, o la herramienta del MCP y cómo pedírsela al agente.}}
+{{Menú o pantalla. Para una herramienta del MCP: «se lo pides al agente desde el cliente que ya usas con el MCP de Etendo».}}
+
+**Cómo usarla**
+
+1. {{Primer uso, paso a paso. Para el MCP, la frase exacta que hay que pedirle al agente:}}
+   > {{Frase de ejemplo}}
+2. {{Segundo uso}}
+3. {{Tercer uso}}
 
 **Qué te pedimos**
 
-- {{Tarea concreta 1}}
+- {{Tarea concreta 1: repetir los pasos de arriba con un caso real del día a día}}
 - {{Tarea concreta 2}}
-- {{Tarea concreta 3}}
 - Cuéntanos qué te ha resultado confuso, lento o poco intuitivo.
 
-**Lo que todavía no hace**
+**Antes de empezar, ten en cuenta**
 
-- {{Limitación conocida}}
+- {{Qué crea o cambia de verdad (usa datos de prueba), límites y lo que todavía no hace}}
 
 **Cómo darnos feedback**
 
