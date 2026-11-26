@@ -15,7 +15,7 @@ import userEvent from '@testing-library/user-event';
 const invalidateMock = vi.fn();
 // Stable object: the hook memoizes on `cache`, so a new object per render would hide bugs.
 const dataCacheValue = { cache: { invalidate: (...a) => invalidateMock(...a) } };
-vi.mock('@etendosoftware/app-shell-core/data', async (importOriginal) => ({
+vi.mock('@etendo-ai/app-shell-core/data', async (importOriginal) => ({
   ...(await importOriginal()),
   useOptionalDataCache: () => dataCacheValue,
 }));

@@ -40,6 +40,7 @@
 | [xml-regeneration-check.md](xml-regeneration-check.md) | **XML regeneration check**: compare original module XML vs export.database output without DB access |
 | [local-env-plugin.md](local-env-plugin.md) | **local-env plugin** (`local-env.d/plugins/etendo-go`): seeds the GO sample client into local-env's cached DB and starts one Etendo GO SPA per environment on its own `SPA_PORT`/`BFF_PORT`; how `make dev` / `make dev-local-core` honour those ports |
 | [ci-parity-install.md](ci-parity-install.md) | **CI parity install** (`make ci-parity`): bring the local Etendo checkout to the module/branch set CI installs, then clean DB + install — dry-run by default |
+| [task-pack.md](task-pack.md) | **Task pack** (`taskpack/ETP-XXXX`): several ready tasks (typically bot-worked) reviewed together, tested in one local-env environment and merged into `develop` through one PR per repo — review checklist, branch build, fixes, taking a task out |
 
 ## Field & Pipeline Reference
 
@@ -107,6 +108,7 @@ General findings about how the Etendo Application Dictionary works. Not window-s
 | Path | Description |
 |------|-------------|
 | [i18n-guide.md](i18n-guide.md) | **i18n reference**: hooks (`useUI`, `useLabel`, `useMenuLabel`), locale JSON structure, rules for adding translations, decision tree |
+| [customer-portal-link-token.md](customer-portal-link-token.md) | ETP-6209 CP-43 — how the customer portal removes its link token from the address bar (link formats, sessionStorage, referrer policy), why portal pages have no tracking (no GTM, Google Analytics, HubSpot, Datadog RUM or Mixpanel), and the access-log caveat of the first request |
 | [request-policy.md](request-policy.md) | **Request reference**: the single authenticated-`fetch` helper (`useApiFetch` / `apiFetch`), its options (`on401`, `baseUrl`, `token`), 401-to-logout wiring, how to give a test a session, and the two guardrails that keep raw `fetch` out |
 | [unsaved-changes-guard.md](unsaved-changes-guard.md) | **Unsaved-changes reference**: the single dirty-state registry, how to register a form (and give it a saver), the five consumers (unload, locale, navigation, clone, confirm), `GuardedNavLink` / `useGuardedNavigate`, and why react-router's `useBlocker` is not usable here |
 

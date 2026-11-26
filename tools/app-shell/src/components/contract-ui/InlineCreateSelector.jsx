@@ -1,6 +1,6 @@
 import { useState, useRef, useMemo } from 'react';
-import { apiFetch as defaultApiFetch } from '@etendosoftware/app-shell-core/auth/api';
-import { isNetworkError } from '@etendosoftware/app-shell-core/auth';
+import { apiFetch as defaultApiFetch } from '@etendo-ai/app-shell-core/auth/api';
+import { isNetworkError } from '@etendo-ai/app-shell-core/auth';
 import { useUI } from '@/i18n';
 import { useApiFetch } from '@/auth/useApiFetch.js';
 import { useCanCreateInSpec } from '@/hooks/useCanCreateInSpec.js';

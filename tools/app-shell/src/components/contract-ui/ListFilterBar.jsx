@@ -7,7 +7,7 @@ import {
   FunnelSimpleIcon,
   CircleNotchIcon,
 } from '@phosphor-icons/react';
-import { useLocale, useUI } from '@etendosoftware/app-shell-core';
+import { useLocale, useUI } from '@etendo-ai/app-shell-core';
 import { useDistinctValues } from '@/hooks/useDistinctValues.js';
 import { compareStatusCodes, statusLabel } from '@/lib/statusBadge.js';
 import { resolveStatusTone } from '@/lib/statusToneOverride.js';

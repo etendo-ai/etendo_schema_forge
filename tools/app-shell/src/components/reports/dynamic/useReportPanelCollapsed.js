@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useAuthOptional } from '@etendosoftware/app-shell-core/auth';
+import { useAuthOptional } from '@etendo-ai/app-shell-core/auth';
 
 const PREFIX = 'etendo.reports.panel.collapsed:';
 const keyOf = (username) => `${PREFIX}${username || 'anonymous'}`;

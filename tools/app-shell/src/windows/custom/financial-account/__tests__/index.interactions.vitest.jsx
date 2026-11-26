@@ -45,7 +45,7 @@ vi.mock('@/hooks/useBankConnectionActions.js', () => ({
 // Stable object across renders — the hook memoizes on `cache`.
 const invalidateCacheMock = vi.fn();
 const dataCacheValue = { cache: { invalidate: (...a) => invalidateCacheMock(...a) } };
-vi.mock('@etendosoftware/app-shell-core/data', async (importOriginal) => ({
+vi.mock('@etendo-ai/app-shell-core/data', async (importOriginal) => ({
   ...(await importOriginal()),
   useOptionalDataCache: () => dataCacheValue,
 }));
@@ -962,5 +962,16 @@ describe('FinancialAccountDetail — bank sync already running (ETP-6154)', () =
 
     expect(screen.queryByTestId('account-detail-bank-sync-banner')).toBeNull();
     expect(reloadAccountMock).not.toHaveBeenCalled();
+  });
+});
+
+// Cuentas lives under Tesorería: the detail's breadcrumb starts with the same label as the sidebar
+// group, not Finanzas.
+describe('FinancialAccountDetail — breadcrumb', () => {
+  it('publishes "treasury / financeAccountsPageTitle / <account name>"', () => {
+    render(<FinancialAccountDetail recordId="acc-1" />);
+    const meta = useSetPageMeta.mock.calls.at(-1)[0];
+    expect(meta.title).toBe('BBVA');
+    expect(meta.breadcrumb).toBe('treasury / financeAccountsPageTitle / BBVA');
   });
 });

@@ -37,12 +37,15 @@ const LIMITS = {
   address: 60,
   // ETP-5806 — the free-text address field was replaced by structured Street/Number/Building
   // Name/City cells; streetName is the closest conceptual replacement for this length-limit
-  // check. The input's maxLength is `STREET_NAME_MAX_LENGTH` from
-  // `@etendosoftware/app-shell-core` (`lib/locationAddress.js`), which is deliberately 60 — the
-  // width of `C_LOCATION.ADDRESS1`, the column the composed address line lands in — and NOT the
-  // 70 of `EM_OBSEPA_StrtNm`. e2e specs never import app code, so the value is mirrored here:
-  // when the constant moves, this literal moves with it.
+  // check. Its limit is `STREET_NAME_MAX_LENGTH` from `@etendo-ai/etendo-go-core`
+  // (`onboarding/fieldLimits.js`), which is deliberately 60 — the width of
+  // `C_LOCATION.ADDRESS1`, the column the composed address line lands in — and NOT the 70 of
+  // `EM_OBSEPA_StrtNm`. Like clientName, the input itself caps at a looser
+  // `STREET_NAME_INPUT_MAX_LENGTH` (70, ETP-5806 CP-13) so an overflow is kept and flagged
+  // instead of silently dropped. e2e specs never import app code, so the values are mirrored
+  // here: when the constants move, these literals move with them.
   streetName: 60,
+  streetNameInput: 70,
 };
 
 // ── Mock installer ───────────────────────────────────────────────────────────
@@ -107,6 +110,7 @@ async function registerAndReachProfile(page, ts) {
   await page.locator('#reg-name').fill('QA User');
   await page.locator('#reg-email').fill(`qa-len-${ts}@example.com`);
   await page.getByTestId('sector-select').selectOption('servicios');
+  await page.getByTestId('country-select').selectOption('ES');
   await page.getByTestId('action-register-submit').click();
   await expect(page.getByText(/vamos a dejar todo listo/i)).toBeVisible({ timeout: 5_000 });
 }
@@ -154,6 +158,7 @@ test.describe('ETP-4665 — Step 1 length limits', () => {
     await page.locator('#reg-name').fill('QA User');
     await page.locator('#reg-email').fill('qa@example.com');
     await page.getByTestId('sector-select').selectOption('servicios');
+    await page.getByTestId('country-select').selectOption('ES');
     await page.getByTestId('action-register-submit').click();
 
     await expect(page.getByText(`El campo no puede superar los ${LIMITS.email} caracteres.`))
@@ -184,6 +189,7 @@ test.describe('ETP-4665 — Step 2 length limits', () => {
 
     await page.locator('#reg-email').fill(`qa-prefill-${ts}@example.com`);
     await page.getByTestId('sector-select').selectOption('servicios');
+    await page.getByTestId('country-select').selectOption('ES');
       await page.getByTestId('action-register-submit').click();
     await expect(page.getByText(/vamos a dejar todo listo/i)).toBeVisible({ timeout: 5_000 });
 
@@ -275,18 +281,31 @@ test.describe('ETP-4665 — Step 3 length limits', () => {
     const start = page.getByRole('button', { name: /empezar|start/i });
 
     await clientName.fill('E'.repeat(100));
-    await page.locator('#streetName').fill('D'.repeat(200));
+    const streetName = page.locator('#streetName');
+    await streetName.fill('D'.repeat(200));
 
     // Over the AD limit but inside the input cap: kept, flagged inline, and not submittable.
     await expect(clientName).toHaveValue('E'.repeat(LIMITS.clientNameInput));
     await expect(clientName).toHaveAttribute('aria-invalid', 'true');
     await expect(page.getByText(new RegExp(`${LIMITS.clientName} (caracteres|characters)`))).toBeVisible();
     await expect(start).toBeDisabled();
-    // streetName's maxLength is set to the AD column limit itself (no separate looser input
-    // cap), so the overflow is truncated by the browser's native maxlength enforcement.
-    await expect(page.locator('#streetName')).toHaveValue('D'.repeat(LIMITS.streetName));
+    // ETP-5806 CP-13 — streetName behaves the same way, and deliberately NOT the way it used to.
+    // Its maxLength was the enforced cap itself, so a pasted 200-character street was truncated to
+    // 60 mid-word by the browser with no signal of any kind; this spec asserted that truncation as
+    // if it were the contract. The input now accepts up to the real column width, keeps the
+    // over-long value, flags it inline and blocks Start — the same deal clientName has had since
+    // ETP-5638.
+    await expect(streetName).toHaveValue('D'.repeat(LIMITS.streetNameInput));
+    await expect(streetName).toHaveAttribute('aria-invalid', 'true');
+    await expect(page.getByText(new RegExp(`${LIMITS.streetName} (caracteres|characters)`))).toBeVisible();
+    await expect(start).toBeDisabled();
+
+    // Back inside the enforced cap: the flag clears and the street stops blocking Start.
+    await streetName.fill('D'.repeat(LIMITS.streetName));
+    await expect(streetName).not.toHaveAttribute('aria-invalid', 'true');
 
     await clientName.fill('E'.repeat(LIMITS.clientName));
+    await page.locator('#streetName').fill('D'.repeat(LIMITS.streetName));
     await expect(clientName).not.toHaveAttribute('aria-invalid', 'true');
     // ETP-5806 — filling streetName starts the address block, which makes buildingNumber and
     // city mandatory together with it (isAddressBlockStarted/isCompanyStepValid); fill them too

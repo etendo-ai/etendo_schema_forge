@@ -23,12 +23,12 @@ those live in `schema_forge_core` and arrive as published packages:
 
 | Package (published, GitHub Packages) | Provides |
 |--------------------------------------|----------|
-| `@etendosoftware/app-shell-core`     | Shared React runtime (used by the app-shell) |
-| `@etendosoftware/schema-forge-cli`   | The `sf-*` CLI bins (`sf-regen-all`, `sf-push-neo`, …) |
-| `@etendosoftware/schema-forge-core`  | Core library used by the CLI |
+| `@etendo-ai/app-shell-core`     | Shared React runtime (used by the app-shell) |
+| `@etendo-ai/schema-forge-cli`   | The `sf-*` CLI bins (`sf-regen-all`, `sf-push-neo`, …) |
+| `@etendo-ai/schema-forge-core`  | Core library used by the CLI |
 
 The app-shell Tailwind configuration consumes the public
-`@etendosoftware/app-shell-core/tailwind-preset`. Product code may extend that
+`@etendo-ai/app-shell-core/tailwind-preset`. Product code may extend that
 preset, but must not duplicate its semantic theme palette; accessibility tokens
 and contrast policy remain owned by the core package.
 
@@ -41,8 +41,8 @@ Works only in `schema_forge` (windows, decisions, artifacts, config). Uses the
 **published** packages from `node_modules`. Nothing extra to set up.
 
 ```bash
-make dev            # React app against the published @etendosoftware/app-shell-core
-make regen ONLY=... # pipeline against the published @etendosoftware/schema-forge-cli
+make dev            # React app against the published @etendo-ai/app-shell-core
+make regen ONLY=... # pipeline against the published @etendo-ai/schema-forge-cli
 ```
 
 **Prerequisite — GitHub Packages auth.** The published packages live in GitHub
@@ -73,7 +73,7 @@ cd ../schema_forge_core && npm install
 ```bash
 make dev-local-core
 ```
-Resolves `@etendosoftware/app-shell-core` (and subpaths) from
+Resolves `@etendo-ai/app-shell-core` (and subpaths) from
 `../schema_forge_core/packages/app-shell-core/src`. React/react-dom and the shared
 runtime deps are pinned to this repo's copies (Vite `resolve.dedupe`) so there is a
 single React instance — no "Invalid hook call". Implemented in
@@ -96,11 +96,14 @@ on this repo's `artifacts/` and config — **core code over local data**.
 Override the core location with `SCHEMA_FORGE_CORE=/abs/path` if it is not the
 default sibling directory.
 
-**Gateway (`gateway/`, npm-linked local package):** the `gateway/` NestJS app
-(ETP-5345) consumes `@etendosoftware/api-gateway-core`, published from
+**Gateway (`gateway/`, published package by default):** the `gateway/` NestJS app
+(ETP-5345) consumes `@etendo-ai/api-gateway-core`, published from
 `schema_forge_core`, as a real npm dependency — not a CLI bin (so `sf-local`
 doesn't apply) and not bundler-resolved source (so the Vite alias doesn't apply
-either). For local iteration against the unpublished core source, `npm link` is
+either). Production and Public API E2E install its exact published pin from
+`gateway/package.json` without cloning Core; see the [deployment runbook](ops/public-api-gateway-deploy.md#0-published-gateway-dependency-etp-6150)
+for registry credentials and verified stable package releases.
+For local iteration against the unpublished core source, `npm link` is
 the mechanism:
 
 ```bash
@@ -198,7 +201,7 @@ copies this repo's `templates/` into a context that carries core's `cli/src`, th
 calls `node scripts/sync-report-helpers.mjs --relativize-import <context>` so the
 assembled helper imports the one form that resolves there. Skip that step and the
 container dies on startup with `ERR_MODULE_NOT_FOUND: Cannot find package
-'@etendosoftware/schema-forge-cli'` — it did, undetected, for weeks (ETP-4910). The
+'@etendo-ai/schema-forge-cli'` — it did, undetected, for weeks (ETP-4910). The
 assembly fails closed on it now, and
 `tools/app-shell/test/report-template-helpers-contract.test.js` runs the real
 assembly and pins the resolved form.

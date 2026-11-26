@@ -1,8 +1,8 @@
-import { parseDelimited } from '@etendosoftware/app-shell-core/lib/import/parseDelimited.js';
-import { parseXlsx } from '@etendosoftware/app-shell-core/lib/import/parseXlsx.js';
-import { mapColumns } from '@etendosoftware/app-shell-core/lib/import/mapColumns.js';
-import { validateRow } from '@etendosoftware/app-shell-core/lib/import/validateRows.js';
-import { runImportRowValidator } from '@etendosoftware/app-shell-core/lib/import/rowValidators.js';
+import { parseDelimited } from '@etendo-ai/app-shell-core/lib/import/parseDelimited.js';
+import { parseXlsx } from '@etendo-ai/app-shell-core/lib/import/parseXlsx.js';
+import { mapColumns } from '@etendo-ai/app-shell-core/lib/import/mapColumns.js';
+import { validateRow } from '@etendo-ai/app-shell-core/lib/import/validateRows.js';
+import { runImportRowValidator } from '@etendo-ai/app-shell-core/lib/import/rowValidators.js';
 import { parseStatementAmount } from './statementAmount.js';
 import { normalizeStatementDate } from './statementDate.js';
 import {
@@ -20,7 +20,7 @@ import {
  * parsed here so its columns can be MAPPED and its rows REVIEWED before anything is sent —
  * which is the whole point of the feature QA asked for, and impossible while the parse lives
  * behind one opaque round trip. Every step below is a generic module from
- * `@etendosoftware/app-shell-core`, the same ones the Contacts and Product imports run on; this
+ * `@etendo-ai/app-shell-core`, the same ones the Contacts and Product imports run on; this
  * file only wires them to statements and normalizes the three value shapes statements care
  * about (date, amount, blank reference).
  *

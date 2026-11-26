@@ -20,8 +20,8 @@ vi.mock('@/components/ui/select', () => ({
   SelectItem: ({ children, value }) => <div data-value={value}>{children}</div>,
 }));
 
-import { AuthProvider, createMemoryAuthStorage } from '@etendosoftware/app-shell-core/auth';
-import { DataProvider, createQueryCache } from '@etendosoftware/app-shell-core/data';
+import { AuthProvider, createMemoryAuthStorage } from '@etendo-ai/app-shell-core/auth';
+import { DataProvider, createQueryCache } from '@etendo-ai/app-shell-core/data';
 import { SelectorInput } from '../SelectorInput.jsx';
 
 const URL = '/api/header/selectors/C_BPartner_ID';

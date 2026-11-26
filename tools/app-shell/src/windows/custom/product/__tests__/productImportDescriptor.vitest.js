@@ -2,11 +2,11 @@
 // @covers tools/app-shell/src/windows/custom/product/productFkResolvers.js
 import { describe, it, vi, afterEach } from 'vitest';
 import assert from 'node:assert/strict';
-import { buildOperations } from '@etendosoftware/app-shell-core/lib/import/buildOperations.js';
-import { resetImportRun } from '@etendosoftware/app-shell-core/lib/import/importRunState.js';
-import { runImport } from '@etendosoftware/app-shell-core/lib/import/importEngine.js';
-import { runImportRowValidator } from '@etendosoftware/app-shell-core/lib/import/rowValidators.js';
-import { getFkResolver } from '@etendosoftware/app-shell-core/lib/import/fkResolvers.js';
+import { buildOperations } from '@etendo-ai/app-shell-core/lib/import/buildOperations.js';
+import { resetImportRun } from '@etendo-ai/app-shell-core/lib/import/importRunState.js';
+import { runImport } from '@etendo-ai/app-shell-core/lib/import/importEngine.js';
+import { runImportRowValidator } from '@etendo-ai/app-shell-core/lib/import/rowValidators.js';
+import { getFkResolver } from '@etendo-ai/app-shell-core/lib/import/fkResolvers.js';
 import { getExportHints } from '@/lib/importExportColumns.js';
 import '../productFkResolvers.js'; // registers the 'product-uom' resolver the send path looks up
 import '../productImportDescriptor.js'; // side-effecting import: registers the 'product' descriptor on load

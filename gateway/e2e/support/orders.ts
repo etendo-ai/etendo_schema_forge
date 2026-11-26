@@ -340,9 +340,12 @@ async function findForeignCurrency(
 
   const rates = await api('GET', 'conversion-rates?page[size]=100');
   expectStatus(rates, 200);
+  // Validity is a date-time since ETP-6365; compare calendar days, as the order date has no time.
+  const day = (value: string) => value.slice(0, 10);
   const match = (rates.json.data as Array<{ attributes: Record<string, any> }>).find(({ attributes: a }) =>
     a.currency === orgCurrency && a.to_currency && a.to_currency !== orgCurrency && Number(a.multiple_rate_by) > 0
-    && (!a.valid_from_date || a.valid_from_date <= orderDate) && (!a.valid_to_date || a.valid_to_date >= orderDate));
+    && (!a.valid_from_date || day(a.valid_from_date) <= orderDate)
+    && (!a.valid_to_date || day(a.valid_to_date) >= orderDate));
   if (!match) {
     return `the tenant has no conversion rate from the organization currency (${orgCurrency}) valid on ${orderDate}: `
       + 'add one (Currency > Conversion Rates) to run the foreign-currency order checks';

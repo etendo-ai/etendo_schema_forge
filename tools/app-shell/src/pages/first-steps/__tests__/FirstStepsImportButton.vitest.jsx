@@ -31,11 +31,11 @@ vi.mock('@/pages/first-steps/firstStepsImport.js', () => ({
   loadImportConfig: H.loadImportConfig,
 }));
 
-vi.mock('@etendosoftware/app-shell-core/auth', () => ({
+vi.mock('@etendo-ai/app-shell-core/auth', () => ({
   useAuthOptional: () => ({ token: 'tok' }),
 }));
 
-vi.mock('@etendosoftware/app-shell-core/components/import/ImportDialog.jsx', () => ({
+vi.mock('@etendo-ai/app-shell-core/components/import/ImportDialog.jsx', () => ({
   ImportDialog: (props) => {
     H.dialogProps = props;
     return <div data-testid="import-dialog" />;

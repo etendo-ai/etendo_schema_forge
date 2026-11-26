@@ -8,6 +8,9 @@ import { normalizeDateInputValue } from '@/windows/custom/fiscal-config/fiscalCo
 import { getInvoiceFiscalTargets, isSifEligibleByDate } from '@/windows/custom/shared/fiscalTargets.js';
 import { resolveInvoiceOrgId } from '@/windows/custom/shared/resolveInvoiceOrgId.js';
 import { isDraftStatus } from '../../../lib/docStatus.js';
+import { useCapabilitiesSafe } from '@/hooks/useCapabilitiesSafe.js';
+import { SII_IMPORT_DUA_CAPABILITY, isCapabilityVisible } from '@/lib/capabilityVisibility.js';
+import { importDuaInvoiceTypeToSet } from '@/windows/custom/shared/importDua.js';
 
 export const CLAVE_TIPO_OPTIONS = [
   { value: 'F1', labelKey: 'sifDataTabs.option.invoice' },
@@ -123,7 +126,9 @@ export function useSifFieldPatcher({ data, recordId, apiBaseUrl, onChange, locke
   const orgId = resolveInvoiceOrgId(data, selectedOrg?.id);
   const specName = apiBaseUrl?.split('/').filter(Boolean).pop() || 'sales-invoice';
 
-  const { profile, tbaiRecord, earliestSiiCutoverDate } = useFiscalConfig(orgId, apiBaseUrl);
+  const { profile, tbaiRecord, siiRecord, earliestSiiCutoverDate } = useFiscalConfig(orgId, apiBaseUrl);
+  // ETP-6284: 'IVA' | 'IGIC' (AEATSII_CONFIG.TAXTYPE), null while unknown — drives the LC prefix hint.
+  const siiTaxType = siiRecord?.taxtype ? String(siiRecord.taxtype).toUpperCase() : null;
   const territory = tbaiRecord?.etsgSifTerritory ?? null;
   const { showSii, showTbai, showVerifactu } = getInvoiceFiscalTargets(specName, profile, territory);
   // ETP-5432: `showSii` only says the SII SYSTEM applies to this org/territory —
@@ -244,6 +249,24 @@ export function useSifFieldPatcher({ data, recordId, apiBaseUrl, onChange, locke
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPurchaseInvoice, showSii, isDraft, recordId, data?.isRectificative, siiTypeField, data?.[siiTypeField], onChange]);
 
+  // ETP-6284: an import with DUA (Lines tab check `etgoImportDua`) of an organization in SII is
+  // reported as F5 "Importación (DUA)": when the SII panel finds the check on and a type other than
+  // F5 / LC, it writes F5 as a pending edit — saved by the next header save like a user change; the
+  // user can still pick LC. Same loop-free shape as the rectificative 'R' effect above (no-op once
+  // F5 / LC). The DUA fields it implies live in the Lines tab.
+  // Unchecking in the Lines tab writes the check off AND Tipo factura F1 in one batch
+  // (`importDuaUncheckPatch`, check first), so the effective check (`isImportDuaChecked`) reads off
+  // and this effect stays idle; the saved record then carries both values, so no re-read sets F5 back.
+  const importDuaEnabled = isCapabilityVisible(useCapabilitiesSafe(), SII_IMPORT_DUA_CAPABILITY);
+  const importDuaType = importDuaInvoiceTypeToSet({
+    enabled: importDuaEnabled, isPurchaseInvoice, showSii, isDraft, locked: siiFieldReadOnly,
+    recordId, record: data, typeField: siiTypeField,
+  });
+  useEffect(() => {
+    if (importDuaType) onChange?.(siiTypeField, importDuaType);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [importDuaType, siiTypeField, onChange]);
+
   // ETP-5745 CP-14/CP-16/CP-23: non-blocking heads-up when the invoice becomes rectificative AND
   // at least one active fiscal system still needs its own rectification code/motive — none of
   // SII's Motivo, TicketBAI's Código or VERI*FACTU's rectificative code are auto-picked (that
@@ -339,5 +362,6 @@ export function useSifFieldPatcher({ data, recordId, apiBaseUrl, onChange, locke
     getVal,
     getDateVal,
     setSiiType,
+    siiTaxType,
   };
 }

@@ -26,7 +26,7 @@ The list also lets users scan existing definitions quickly by showing the rate a
 
 ## Interaction model
 - **Route:** `/tax` and `/tax/:recordId`.
-- **Visibility:** visible from the `System` section in `tools/app-shell/src/menu.json`.
+- **Visibility:** visible from the `Taxes` (Impuestos) group, Finance section, in `tools/app-shell/src/menu.json` (ETP-6380). Breadcrumb `Impuestos / Impuesto` (`window.breadcrumb: "Taxes / Tax"`).
 - **Implementation type:** generated window loaded through `tools/app-shell/src/windows/registry.js`.
 - **Window shape:** `tax` is the header entity; `accounting` (`C_Tax_Acct`) is the detail (child) entity, rendered with the standard `linesLayout: "classic"` add-line grid — one row per accounting schema, with Tax Due and Tax Credit as editable selector columns.
 - No declared process endpoints in the generated index.
@@ -54,7 +54,7 @@ No dependent selector behavior, automatic defaulting between these fields, statu
 - No current evidence shows validation rules that constrain incompatible combinations between applicability, document-tax amount mode, and base-amount mode.
 
 ## Manual verification
-1. Open `/tax` from the `System` menu and confirm the list view loads.
+1. Open `/tax` from the `Impuestos` menu and confirm the list view loads.
 2. Confirm the list renders the rate as a colored percentage tag (`+N %` green for positive rates, `0 %` neutral/gray for zero, `-N %` red for negative/withholding rates) and `Applicable To` as `Sales` / `Purchase` tags.
 3. For a tax whose applicability is `Both`, confirm the list shows both tags together instead of a raw code.
 4. Open `/tax/<recordId>` and confirm the form exposes `Name`, `Tax Category` (read-only), `Rate`, `Applicable To`, `Valid From`, `Doc Tax Amount`, and `Base Amount`. Confirm `Active` is NOT shown, and confirm `Tax Category` cannot be edited (same as the other standard tax fields).
@@ -134,7 +134,7 @@ The `accounting` entity (`C_Tax_Acct`, tab `333`) was un-excluded and classified
 
 The known gap documented above ("List-view delete disabled at the API level") is now closed by a new generic decisions.json slot: `window.hideDeleteButton`. Unlike `window.hideDelete` (which only disables the CRUD delete capability in `contract.json`/the API), `hideDeleteButton` unconditionally hides the Delete button/icon in **both** the detail toolbar (`DetailView.jsx`) and the list-row hover actions (`RowQuickActions.jsx`, via `DataTable`'s `rowQuickActions.hideDeleteButton`), for every record regardless of status.
 
-- Generator support for `hideDeleteButton` shipped in `@etendosoftware/schema-forge-cli@0.3.6` (already installed — no core bump needed for this change).
+- Generator support for `hideDeleteButton` shipped in `@etendo-ai/schema-forge-cli@0.3.6` (already installed — no core bump needed for this change).
 - Added `"hideDeleteButton": true` to `artifacts/tax/decisions.json → window` (alongside the pre-existing `hideDelete: true`).
 - Wired the receiving side in this repo (`tools/app-shell/src/components/contract-ui/`):
   - `RowQuickActions.jsx` — new `hideDeleteButton` prop (default `false`); `showDelete` is now `!hideDeleteButton && isDeleteVisibleForRecord(...)`, short-circuiting before the status-based gate.

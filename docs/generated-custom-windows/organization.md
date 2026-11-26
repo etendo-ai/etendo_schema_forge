@@ -88,7 +88,7 @@ Ticket ETP-4749 needed a 3-way "Empresa / Autónomo / Asesoría" classification 
   `orgBusinessTypeAdvisory`, also removed.
 - AD default value is `CO` — `BusinessTypeCards.jsx` does not force a client-side default; a record with no value shows no card selected.
 - Rendered as selection cards (`BusinessTypeCards.jsx`), not a `<select>`, per the ticket design. Selected-state colors reference real CSS custom properties — `--eg-yellow`, `--eg-yellow-soft`, `--eg-yellow-line`, `--eg-yellow-dot-border`, `--eg-ink` — via `bg-[var(--eg-yellow)]` etc., not inline hex (`semanticThemeUsage.test.js` forbids raw palette literals in application UI).
-  **Token location (QA review round 4):** these tokens are defined in `schema_forge_core/packages/app-shell-core/src/styles.css`, next to the existing `--status-*` tokens — the canonical cross-app design-token registry, not a per-window file. They are **not yet available from the published `@etendosoftware/app-shell-core` package** — only from the local core source. Running this repo with plain `make dev` (published package) will NOT show the yellow palette until a new app-shell-core version ships and this repo's dependency is bumped; use `make dev-local-core` (`LOCAL_CORE=1`) to see it today. Re-verify with a normal `make dev` once that release lands.
+  **Token location (QA review round 4):** these tokens are defined in `schema_forge_core/packages/app-shell-core/src/styles.css`, next to the existing `--status-*` tokens — the canonical cross-app design-token registry, not a per-window file. They are **not yet available from the published `@etendo-ai/app-shell-core` package** — only from the local core source. Running this repo with plain `make dev` (published package) will NOT show the yellow palette until a new app-shell-core version ships and this repo's dependency is bumped; use `make dev-local-core` (`LOCAL_CORE=1`) to see it today. Re-verify with a normal `make dev` once that release lands.
 
 ## Fiscal address workaround (intentional, not a placeholder)
 
@@ -158,7 +158,7 @@ fiscal-incident deep link. A hidden section is not rendered at all (no collapsed
   no flag logic of its own. Full rule: fiscal-models guide, "Modelo 390 behind the backend-only
   flag `fiscal-model-390`".
 - **SII / TicketBAI / VERI\*FACTU:** the active `siiRecord` / `tbaiRecord` / `verifactuRecord` of
-  `fiscal-config/useFiscalConfig.js`, reused as is. Toggled in Configuración fiscal.
+  `fiscal-config/useFiscalConfig.js`, reused as is. Toggled in Configuración Fiscal.
 
 **Loading and errors:** every flag starts `false` and only turns `true` once its source settles, so a
 section never appears and then disappears. A source that fails to load contributes nothing (fail

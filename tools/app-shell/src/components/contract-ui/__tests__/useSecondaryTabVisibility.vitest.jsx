@@ -190,7 +190,7 @@ describe('useActiveTabResolver', () => {
 describe('useCurrencyId re-export (hooks/useCurrencyId.jsx)', () => {
   it('is the core hook, exposed from its own module', async () => {
     const actual = await vi.importActual('@/hooks/useCurrencyId.jsx');
-    const core = await vi.importActual('@etendosoftware/app-shell-core/hooks/useCurrency.jsx');
+    const core = await vi.importActual('@etendo-ai/app-shell-core/hooks/useCurrency.jsx');
     expect(typeof actual.useCurrencyId).toBe('function');
     expect(actual.useCurrencyId).toBe(core.useCurrencyId);
   });

@@ -547,7 +547,8 @@
           "dataType": {
             "type": "string"
           },
-          "reference": null
+          "reference": null,
+          "queryable": false
         },
         "address_line2": {
           "sourceVisibility": "editable",
@@ -556,7 +557,8 @@
           "dataType": {
             "type": "string"
           },
-          "reference": null
+          "reference": null,
+          "queryable": false
         },
         "city_name": {
           "sourceVisibility": "editable",
@@ -565,7 +567,8 @@
           "dataType": {
             "type": "string"
           },
-          "reference": null
+          "reference": null,
+          "queryable": false
         },
         "postal_code": {
           "sourceVisibility": "editable",
@@ -574,7 +577,8 @@
           "dataType": {
             "type": "string"
           },
-          "reference": null
+          "reference": null,
+          "queryable": false
         },
         "country": {
           "sourceVisibility": "editable",
@@ -583,7 +587,8 @@
           "dataType": {
             "type": "string"
           },
-          "reference": null
+          "reference": null,
+          "queryable": false
         },
         "region_name": {
           "sourceVisibility": "editable",
@@ -592,7 +597,8 @@
           "dataType": {
             "type": "string"
           },
-          "reference": null
+          "reference": null,
+          "queryable": false
         },
         "country_code": {
           "sourceVisibility": "readOnly",
@@ -601,7 +607,8 @@
           "dataType": {
             "type": "string"
           },
-          "reference": null
+          "reference": null,
+          "queryable": false
         },
         "id": {
           "sourceVisibility": "system",
@@ -787,7 +794,7 @@
       ],
       "fields": {
         "currency": {
-          "sourceVisibility": "editable",
+          "sourceVisibility": "readOnly",
           "direction": "out",
           "internalPath": "currency",
           "dataType": {
@@ -810,17 +817,17 @@
           "internalPath": "validFromDate",
           "dataType": {
             "type": "string",
-            "format": "date"
+            "format": "date-time"
           },
           "reference": null
         },
         "valid_to_date": {
-          "sourceVisibility": "editable",
+          "sourceVisibility": "readOnly",
           "direction": "out",
           "internalPath": "validToDate",
           "dataType": {
             "type": "string",
-            "format": "date"
+            "format": "date-time"
           },
           "reference": null
         },
@@ -835,7 +842,7 @@
           "reference": null
         },
         "divide_rate_by": {
-          "sourceVisibility": "editable",
+          "sourceVisibility": "readOnly",
           "direction": "out",
           "internalPath": "divideRateBy",
           "dataType": {
@@ -866,17 +873,17 @@
       },
       "processes": [],
       "functional": {
-        "functionalName": "Conversion Rates",
-        "functionalSummary": "Maintain the general currency conversion rates the system uses when a document currency differs from the organization's base currency. Each record defines, for a `Currency → To Currency` pair over a validity window, the multiply rate and its inverse divide rate.",
+        "functionalName": "Currency Conversion",
+        "functionalSummary": "Maintain the currency conversion rates the system uses when a document currency differs from the organization's base currency. Each rate defines, for an `organization currency → currency` pair over a validity range (date **and time**), the multiply rate; the server stores the inverse pair of the same range alongside it.",
         "functionalCapabilities": [
-          "list the conversion rates of each currency pair (Currency, To Currency) with their validity dates",
-          "review the multiply rate and the divide rate of a pair for a validity window"
+          "list the conversion rates of each currency pair with their validity range (date and time)",
+          "review the multiply rate and the divide rate of a pair for a validity range"
         ],
         "functionalDoc": "docs/generated-custom-windows/conversion-rates.md"
       },
       "source": {
         "artifact": "conversion-rates",
-        "contractVersion": "0.7.0",
+        "contractVersion": "0.12.0",
         "backendEntity": true
       }
     },

@@ -24,7 +24,7 @@ vi.mock('@/lib/flags', async (importOriginal) => ({
   ...(await importOriginal()),
   useFeatureFlag: (key) => mocks.flags[key] ?? false,
 }));
-vi.mock('@etendosoftware/app-shell-core/components/ui/distinct-values-filter.jsx', () => ({
+vi.mock('@etendo-ai/app-shell-core/components/ui/distinct-values-filter.jsx', () => ({
   DistinctValuesFilter: (props) => {
     mocks.filterProps = props;
     return <div data-testid="contact-type-filter-stub">{String(props.value)}</div>;

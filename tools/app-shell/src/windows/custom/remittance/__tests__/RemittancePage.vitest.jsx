@@ -56,7 +56,7 @@ import { evalDisplayLogicRaw, dispatchProcessAction, canShowAddLineArea, resolve
 import enUS from '@/locales/en_US.json';
 import esES from '@/locales/es_ES.json';
 import esAR from '@/locales/es_AR.json';
-import { resolveLabel } from '@etendosoftware/app-shell-core/i18n/resolveLabel';
+import { resolveLabel } from '@etendo-ai/app-shell-core/i18n/resolveLabel';
 import { resolveColumnLabel } from '@/lib/resolveColumnLabel.js';
 import { statusLabel } from '@/lib/statusBadge.js';
 import { resolveStatusTone } from '@/lib/statusToneOverride.js';

@@ -236,7 +236,7 @@ Display the full detail of a financial account: a summary strip with KPIs, and t
 ## What this view does
 
 - Navigate to `/financial-account/:id` from the Cuentas list (row click).
-- Topbar shows `{accountName}` as title and `Finanzas / Cuentas / {accountName}` as breadcrumb via `useSetPageMeta` (inlined in `index.jsx` — no per-window header bar).
+- Topbar shows `{accountName}` as title and `Tesorería / Cuentas / {accountName}` as breadcrumb (Treasury section since ETP-6389; the list view's generated breadcrumb is `Treasury / Accounts`, declared in `decisions.json → window.breadcrumb`) via `useSetPageMeta` (inlined in `index.jsx` — no per-window header bar).
 - Account Summary Strip (single horizontal bar inside the Movements tab body): avatar + IBAN (chunked in groups of 4, with copy-to-clipboard) — or card number, or the bank logo alone for an offline card; see the `AccountSummaryStrip` rules under `AccountLogoAvatar` | Saldo total | Entradas (30D) | Salidas (30D). The three KPI sections use `flex-1` so they spread evenly.
 - Three tabs with counts: Movements (live data), Reconciliation (live data — manual reconciliation split panel, T6 + automatch engine, T7), Imported Statements (live data).
 - **Editar** button (ETP-4530) sits to the left of the contextual tab-strip action, always visible regardless of the active tab — opens `EditAccountModal` (see below) so editing no longer requires going back to the Cuentas list.
@@ -1697,7 +1697,7 @@ The Movimientos row kebab (`MovementRowKebab.jsx`) mirrors the existing Post act
 ## Routing
 
 - URL: `/financial-account/:id` — catch-all route `/:windowName/:recordId` in `App.jsx` → `WindowLoader` → `customLoaders['financial-account']`.
-- Entry in `menu.json` under the Finance group (`hidden: true`) so `buildWindowMap()` registers it.
+- Entry in `menu.json` under the Treasury group (Finance until ETP-6389): a visible item (`windowId` `94EAA455D2644E04AB25D93BE5157B6D`, label "Cuentas"), so `buildWindowMap()` registers it.
 - Entry in `registry.js` `customLoaders`: `'financial-account': () => import('./custom/financial-account/index.jsx')`.
 
 ## Component tree
@@ -2696,7 +2696,7 @@ names, the **column mapping** that the Contacts bulk import has, and **Excel** s
 are now in the same wizard, and none of the machinery behind them is new code.
 
 **The whole import engine is reused, not reimplemented.** The Contacts bulk import is not Contacts
-code — it lives in `@etendosoftware/app-shell-core`, is entity-agnostic, and was already driving two
+code — it lives in `@etendo-ai/app-shell-core`, is entity-agnostic, and was already driving two
 windows. Statements now drive it too:
 
 | Reused from the core | What it does here |
@@ -3068,7 +3068,7 @@ exactly the rows that visibly show "—". Deliberately **not** set on `lineCount
 Estado filter column is the derived `statusFamily`, which no raw row carries, so the builder's enum
 picker had no in-memory values to seed its option list from.
 
-Companion fixes live in the shared builder (`@etendosoftware/app-shell-core`): the enum value picker
+Companion fixes live in the shared builder (`@etendo-ai/app-shell-core`): the enum value picker
 is now multi-select and always offers the column's full declared `enumLabels` catalogue (it used to
 show only the already-selected option when re-editing), the `inSet` ("Es cualquiera de") operator is
 retired for enum columns in favour of that multi-select, and numeric inputs accept a locale decimal

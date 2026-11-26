@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { useOptionalDataCache } from '@etendosoftware/app-shell-core/data';
+import { useOptionalDataCache } from '@etendo-ai/app-shell-core/data';
 
 /**
  * ETP-4564: Contacts-specific cache invalidation for the raw-fetch mutation paths

@@ -429,11 +429,11 @@ Two traps to know about before touching this:
 3. **The canonical helper module does not import the way this tree can
    resolve.** `templates/reports/helpers/report-html-helpers.js` lives in this
    repo (its copy wins the precedence above) and imports `report-i18n` from the
-   published `@etendosoftware/schema-forge-cli` package — which this image does
+   published `@etendo-ai/schema-forge-cli` package — which this image does
    not install (`tools/report-server/package.json` has three deps). Since
    ETP-5013 (2026-08-28) every image built from this context therefore died on
    startup with `ERR_MODULE_NOT_FOUND: Cannot find package
-   '@etendosoftware/schema-forge-cli'`, answering no request at all, and nothing
+   '@etendo-ai/schema-forge-cli'`, answering no request at all, and nothing
    caught it because the deploy job's steps are skipped while its AWS variables
    are unset (ETP-4910). The assembly now rewrites that single import to
    `../../../cli/src/report-i18n.js` — the mirror variant the cross-repo parity

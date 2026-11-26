@@ -16,14 +16,14 @@ vi.mock('@/components/CopilotContext.jsx', () => ({
 
 const calls = [];
 let walkthrough = null;
-vi.mock('@etendosoftware/app-shell-core/walkthrough', () => ({
+vi.mock('@etendo-ai/app-shell-core/walkthrough', () => ({
   useWalkthrough: () => walkthrough,
   getFlowStatus: vi.fn(() => 'not_started'),
   markFlowStarted: vi.fn((id) => calls.push(['markFlowStarted', id])),
 }));
 
 const trackWalkthroughStarted = vi.fn((payload) => calls.push(['track', payload]));
-vi.mock('@etendosoftware/app-shell-core/observability', () => ({
+vi.mock('@etendo-ai/app-shell-core/observability', () => ({
   useObservability: () => ({ trackWalkthroughStarted }),
 }));
 

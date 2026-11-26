@@ -28,7 +28,7 @@ Schema Forge is now **two sibling repos + one runtime module**:
 | **com.etendoerp.go** (runtime) | `{etendo_root}/modules/com.etendoerp.go` | NEO Headless engine (Java), ETGO_SF_* tables | runtime API |
 | shared bucket | duplicated in **both** SF repos | `cli/src/data-fixes/**`, `cli/src/db.js`, `cli/src/lib/**` | DB access from either side |
 
-**The functional repo consumes the tooling as published npm packages** (`@etendosoftware/schema-forge-cli`, `-core`, `app-shell-core`) from `node_modules`; here the pipeline is driven via `make` targets (`make test`, `make regen`, `make validate-pipeline`). App-shell React tests (`tools/app-shell/src/**`) run here; tests for the pipeline/generators live in `schema_forge_core`. **Golden rule:** *changing the tool → `schema_forge_core`; using the tool → `etendo_schema_forge`.*
+**The functional repo consumes the tooling as published npm packages** (`@etendo-ai/schema-forge-cli`, `-core`, `app-shell-core`) from `node_modules`; here the pipeline is driven via `make` targets (`make test`, `make regen`, `make validate-pipeline`). App-shell React tests (`tools/app-shell/src/**`) run here; tests for the pipeline/generators live in `schema_forge_core`. **Golden rule:** *changing the tool → `schema_forge_core`; using the tool → `etendo_schema_forge`.*
 
 **When approving/rejecting, target the correct repo.** Functional PRs → `etendosoftware/etendo_schema_forge`; tooling PRs → `etendosoftware/schema_forge_core`. Use the matching `--repo` on every `gh pr …` command.
 
