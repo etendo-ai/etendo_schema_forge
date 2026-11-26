@@ -60,6 +60,10 @@ const TERMINAL_ACCEPT_CODES = new Set(['INVALID_TOKEN', 'EXPIRED_TOKEN']);
 
 // ETP-5385: non-terminal accept failures are translated by code. The backend text is English, so
 // it is never shown; unknown codes fall back to `invitePageAcceptFailed`.
+const GO_TO_APP_KEY = 'invitePageGoToApp';
+const SIGN_OUT_CONTINUE_KEY = 'inviteSessionConflictLogoutUnknown';
+const ERROR_SIGN_IN_TESTID = 'action-error-sign-in';
+const ERROR_GO_TO_APP_TESTID = 'action-error-go-to-app';
 const ACCEPT_ERROR_UI_KEYS = {
   INVITATION_ACCOUNT_MISMATCH: 'invitePageAccountMismatch',
 };
@@ -67,12 +71,12 @@ const ACCEPT_ERROR_UI_KEYS = {
 // ETP-5385: the /company-invitations endpoints answer failures as
 // `{ "error": { "code", "message", "userMessage", "status" } }` (EtendoGoJwtServlet.writeError),
 // not as flat `{ code, message }`. Reading `data.code` never matched, so every failed accept fell
-// through to the generic branch. Both shapes are read so a flat body still works.
+// through to the generic branch. Both shapes are read so a flat body still works. Only the code
+// is returned: the backend text is English and is deliberately never shown (see ACCEPT_ERROR_UI_KEYS).
 function readApiError(data) {
   const nested = data?.error && typeof data.error === 'object' ? data.error : null;
   return {
     code: nested?.code ?? data?.code ?? null,
-    message: nested?.userMessage ?? nested?.message ?? data?.message ?? null,
   };
 }
 
@@ -688,7 +692,7 @@ export default function InviteAcceptancePage({ apiBase = import.meta.env.VITE_AP
           emphasis="secondary"
           secondaryLabel={activeAccountEmail
             ? ui('inviteSessionConflictLogout').replace('{currentUser}', activeAccountEmail)
-            : ui('inviteSessionConflictLogoutUnknown')}
+            : ui(SIGN_OUT_CONTINUE_KEY)}
           onSecondary={handleCloseSessionAndContinue}
           secondaryTestId="action-close-session"
           // Signing out is not reversible from here and it reaches every tab, so it is spelled
@@ -792,9 +796,9 @@ export default function InviteAcceptancePage({ apiBase = import.meta.env.VITE_AP
             variant="outline"
             className="mt-6 h-12 w-full rounded-lg text-base font-medium"
             onClick={() => navigate(errorButtonSignedIn ? '/' : '/login')}
-            data-testid={errorButtonSignedIn ? 'action-error-go-to-app' : 'action-error-sign-in'}
+            data-testid={errorButtonSignedIn ? ERROR_GO_TO_APP_TESTID : ERROR_SIGN_IN_TESTID}
           >
-            {ui(errorButtonSignedIn ? 'invitePageGoToApp' : 'invitePageSignIn')}
+            {ui(errorButtonSignedIn ? GO_TO_APP_KEY : 'invitePageSignIn')}
           </Button>
         </div>
       </AuthShell>
@@ -848,7 +852,7 @@ export default function InviteAcceptancePage({ apiBase = import.meta.env.VITE_AP
                   <span>
                     {companyName
                       ? ui('invitePageEnterCompany').replace('{companyName}', companyName)
-                      : ui('invitePageGoToApp')}
+                      : ui(GO_TO_APP_KEY)}
                   </span>
                   <ArrowRightIcon className="h-4 w-4" data-testid="ArrowRight__fa3cd9" />
                 </>
@@ -877,7 +881,7 @@ export default function InviteAcceptancePage({ apiBase = import.meta.env.VITE_AP
               onClick={() => navigate('/')}
               data-testid="action-go-to-app-fallback"
             >
-              {ui('invitePageGoToApp')}
+              {ui(GO_TO_APP_KEY)}
             </Button>
           )}
         </div>
@@ -915,7 +919,7 @@ export default function InviteAcceptancePage({ apiBase = import.meta.env.VITE_AP
               onClick={handleCloseSessionAndContinue}
               data-testid="action-mismatch-sign-out"
             >
-              {ui('inviteSessionConflictLogoutUnknown')}
+              {ui(SIGN_OUT_CONTINUE_KEY)}
             </Button>
           ) : (
             <Button
@@ -982,9 +986,9 @@ export default function InviteAcceptancePage({ apiBase = import.meta.env.VITE_AP
                 variant="outline"
                 className="w-full"
                 onClick={() => navigate(errorButtonSignedIn ? '/' : '/login')}
-                data-testid={errorButtonSignedIn ? 'action-error-go-to-app' : 'action-error-sign-in'}
+                data-testid={errorButtonSignedIn ? ERROR_GO_TO_APP_TESTID : ERROR_SIGN_IN_TESTID}
               >
-                {ui(errorButtonSignedIn ? 'invitePageGoToApp' : 'invitePageSignIn')}
+                {ui(errorButtonSignedIn ? GO_TO_APP_KEY : 'invitePageSignIn')}
               </Button>
             </div>
           </div>
@@ -1021,7 +1025,7 @@ export default function InviteAcceptancePage({ apiBase = import.meta.env.VITE_AP
                 onClick={() => navigate('/')}
                 data-testid="action-go-to-app"
               >
-                <span>{ui('invitePageGoToApp')}</span>
+                <span>{ui(GO_TO_APP_KEY)}</span>
                 <ArrowRightIcon className="h-4 w-4" data-testid="ArrowRight__fa3cd9" />
               </Button>
             </div>
@@ -1071,7 +1075,7 @@ export default function InviteAcceptancePage({ apiBase = import.meta.env.VITE_AP
                 {showJoinNotice && <p className="text-sm text-muted-foreground">{ui('invitePageAuthenticatedNotice')}</p>}
                 {accountMismatch ? (
                   <Button variant="outline" className="w-full" onClick={handleCloseSessionAndContinue} data-testid="action-mismatch-sign-out">
-                    {ui('inviteSessionConflictLogoutUnknown')}
+                    {ui(SIGN_OUT_CONTINUE_KEY)}
                   </Button>
                 ) : (
                   <Button className="w-full gap-2" onClick={handleAcceptExisting} disabled={submitting} data-testid="action-accept-invitation">
