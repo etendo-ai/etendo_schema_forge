@@ -89,6 +89,7 @@ function missingOf(doc) {
     missing.push('vendor');
   }
   if (!doc.header.invoiceDate) missing.push('invoiceDate');
+  if (doc.header.noRate) missing.push('exchangeRate');
   if (!doc.lines.length) missing.push('lines');
   doc.lines.forEach((l) => {
     const product = l.product ?? {};
@@ -193,7 +194,10 @@ async function handleWrite(state, id, kind, body) {
   if (['CONFIRMED', 'DISCARDED'].includes(doc.status) || doc.editable === false) return refusal(409, 'not_editable', { documentStatus: doc.status });
   if (kind === 'apply') {
     const working = structuredClone(doc);
-    for (const op of body.operations) applyOp(working.document, op, state.catalog);
+    for (const op of body.operations) {
+      if (op.op === 'setCurrency') applySetCurrency(working, op, state);
+      else applyOp(working.document, op, state.catalog);
+    }
     settle(working, { adjusted: true });
     working.updated = `T${++state.tokens}`;
     state.docs[id] = working;
@@ -212,6 +216,25 @@ async function handleWrite(state, id, kind, body) {
   const next = { ...structuredClone(doc), status: 'READY', reviewed: true, updated: `T${++state.tokens}` };
   state.docs[id] = next;
   return { status: 200, body: next };
+}
+
+/** ETP-6051: the registered currencies of the tenant (the `currencyOptions` answer). GBP has no conversion, so it is not listed. */
+const CURRENCY_OPTIONS = [
+  { id: 'EUR1', isoCode: 'EUR', rate: 1, isOrgCurrency: true },
+  { id: 'USD1', isoCode: 'USD', rate: 1.47, isOrgCurrency: false },
+];
+
+/** `setCurrency`: the server takes the system conversion of the chosen currency, drops the unavailable flag and the ambiguity notice. */
+function applySetCurrency(working, op, state) {
+  const chosen = (state.currencyOptions ?? CURRENCY_OPTIONS).find((c) => c.id === op.currencyId);
+  if (!chosen) throw new Error(`fake server: currency ${op.currencyId} is not registered`);
+  const { header } = working.document;
+  delete header.currencyUnavailable;
+  header.noRate = chosen.rate == null;
+  header.currencyId = chosen.id;
+  header.currencySource = 'manual';
+  working.document.notices = (working.document.notices ?? []).filter((n) => (n?.code ?? n) !== 'currency_symbol_ambiguous');
+  working.currency = { id: chosen.id, isoCode: chosen.isoCode, symbol: chosen.isoCode === 'USD' ? '$' : '€', scale: 2, rate: chosen.rate, source: 'manual' };
 }
 
 const CATALOG = {
@@ -284,6 +307,11 @@ async function installInboxMock(page, state) {
       const custom = state.reviews?.[id];
       if (custom?.httpStatus) { await json(custom.httpStatus, custom.body); return; }
       await json(200, live(id));
+      return;
+    }
+    if (req.method() === 'GET' && /\/header\/[^/]+\/action\/currencyOptions$/.test(url.pathname)) {
+      state.currencyOptionReads = (state.currencyOptionReads ?? 0) + 1;
+      await json(200, { response: { data: state.currencyOptions ?? CURRENCY_OPTIONS } });
       return;
     }
     const write = url.pathname.match(/\/header\/([^/]+)\/action\/(apply|mark-reviewed)$/);
@@ -902,7 +930,7 @@ test.describe('Invoice Inbox — review panel: tax, currency scale and validator
     await expect(tid(page, 'invoice-inbox-review-line-1-tax')).toHaveValue('21%');
   });
 
-  test('a USD document (2 decimals) and a JPY one (0 decimals) format lines and totals with their scale; the badge is read-only', async ({ page }) => {
+  test('a USD document (2 decimals) and a JPY one (0 decimals) format lines and totals with their scale; the currency selector shows the document currency', async ({ page }) => {
     state.rows = [row('usd1', 'PENDING_REVIEW'), row('jpy1', 'PENDING_REVIEW')];
     state.reviews = {
       usd1: review('usd1', 'PENDING_REVIEW', { currency: { id: 'USD1', isoCode: 'USD', symbol: '$', scale: 2 } }, {
@@ -913,14 +941,14 @@ test.describe('Invoice Inbox — review panel: tax, currency scale and validator
       }),
     };
     await openDoc(page, state, 'usd1');
-    await expect(tid(page, 'currency-rate-readonly')).toContainText('USD');
+    await expect(tid(page, 'currency-rate-trigger')).toContainText('USD');
     await expect(tid(page, 'invoice-inbox-review-line-0-amount')).toContainText('3.703,50');
     await expect(tid(page, 'invoice-inbox-review-total')).toContainText('4.481,24');
     await page.keyboard.press('Escape');
     await expect(drawer(page)).toHaveCount(0);
     await rowOf(page, 'jpy1').getByTestId('invoice-inbox-document-jpy1').click();
     await expect(tid(page, 'invoice-inbox-review-title')).toHaveText('jpy1.pdf');
-    await expect(tid(page, 'currency-rate-readonly')).toContainText('JPY');
+    await expect(tid(page, 'currency-rate-trigger')).toContainText('JPY');
     // 3 x 1.234 = 3.702; VAT 21 % = 777,42 -> 777; total 4.479: whole units only.
     await expect(tid(page, 'invoice-inbox-review-line-0-amount')).toContainText('3.702');
     await expect(tid(page, 'invoice-inbox-review-line-0-amount')).not.toContainText(',');
@@ -1031,6 +1059,44 @@ test.describe('Invoice Inbox — review panel: tax, currency scale and validator
     await tid(page, 'inline-add-option-inbox-line-0-tax-T4').click();
     await expect(tid(page, 'invoice-inbox-review-save-error')).toContainText('El impuesto elegido no está disponible para esta línea');
     await expect(tid(page, 'invoice-inbox-review-line-0-tax')).toHaveValue('21%');
+  });
+});
+
+test.describe('Invoice Inbox — review panel: printed currency without a conversion (ETP-6051)', () => {
+  let state;
+  test.beforeEach(() => { state = { rows: seedRows() }; });
+
+  test('the missing-rate banner blocks Confirm; choosing a registered currency sends setCurrency and the banner goes away', async ({ page }) => {
+    state.reviews = {
+      rev1: review('rev1', 'PENDING_REVIEW', { currency: { id: 'EUR1', isoCode: 'EUR', symbol: '€', scale: 2, rate: 1, source: 'default' } }, {
+        header: { currencyRaw: 'GBP', currencySource: 'default', currencyUnavailable: 'GBP', noRate: true },
+        validation: { missing: ['exchangeRate'] },
+      }),
+    };
+    await openDoc(page, state, 'rev1');
+    const banner = tid(page, 'invoice-inbox-review-banner-blocker-exchangeRate');
+    await expect(banner).toBeVisible();
+    await expect(banner).toContainText('La moneda GBP no está en Etendo');
+    await expect(banner).toContainText('GBP');
+    await expect(tid(page, 'invoice-inbox-review-confirm')).toBeDisabled();
+    await expect(tid(page, 'invoice-inbox-review-currency-use-shown')).toBeVisible();
+    // The Moneda field itself is invalid and names the missing currency, not only the banner.
+    await expect(tid(page, 'invoice-inbox-review-currency-wrap')).toHaveAttribute('aria-invalid', 'true');
+    await expect(tid(page, 'invoice-inbox-review-currency-error')).toContainText('La moneda GBP no está en Etendo');
+    expect(ops(state)).toEqual([]);
+
+    await tid(page, 'currency-rate-trigger').click();
+    await tid(page, 'currency-rate-option-USD1').click();
+
+    await expect(banner).toHaveCount(0);
+    await expect(tid(page, 'invoice-inbox-review-save-state')).toHaveAttribute('data-state', 'saved');
+    await expect(tid(page, 'invoice-inbox-review-currency-error')).toHaveCount(0);
+    await expect(tid(page, 'invoice-inbox-review-currency-wrap')).not.toHaveAttribute('aria-invalid', /.*/);
+    expect(ops(state)).toEqual([{ op: 'setCurrency', currencyId: 'USD1' }]);
+    await expect(tid(page, 'currency-rate-trigger')).toContainText(/USD\s*—\s*1,47/);
+    await expect(tid(page, 'invoice-inbox-review-currency-source')).toHaveText('elegido por ti');
+    await expect(tid(page, 'invoice-inbox-review-currency-use-shown')).toHaveCount(0);
+    await expect(tid(page, 'invoice-inbox-review-confirm')).toBeEnabled();
   });
 });
 

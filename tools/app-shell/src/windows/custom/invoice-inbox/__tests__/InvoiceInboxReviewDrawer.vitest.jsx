@@ -528,8 +528,8 @@ describe('review drawer — header section, currency and totals', () => {
     expect(maybe('invoice-inbox-review-invoice-date-tag')).toBeNull();
   });
 
-  it('the currency shows through the read-only CurrencyRatePicker as "EUR — 1,00" and fetches nothing itself', async () => {
-    await renderLoaded(makeReview());
+  it('a settled document shows the currency through the read-only CurrencyRatePicker as "EUR — 1,00" and fetches nothing itself', async () => {
+    await renderLoaded(makeReview({ status: 'CONFIRMED', editable: false, invoice: { documentNo: 'F-1' } }));
     const picker = tid('currency-rate-readonly');
     expect(picker).toHaveTextContent(/^EUR\s*—\s*1,00$/);
     expect(picker).toHaveAttribute('aria-disabled', 'true');

@@ -1,38 +1,119 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import { useLocaleSwitch, useUI } from '@/i18n';
 import { CurrencyRatePicker } from '@/components/contract-ui/CurrencyRatePicker.jsx';
 import { DateField } from '@/components/ui/date-field';
 import { formatCalendarDate } from '@/lib/dateOnly.js';
-import { buildOp, currencyScale, MAX_DOCUMENT_NO, missingSet } from './invoiceInboxReviewModel.js';
-import { DATE_FIELD_ICON, ReviewField, ReviewTag, SectionTitle } from './InvoiceInboxReviewParts.jsx';
+import { buildOp, confirmBlockers, currencyScale, manualPricingOf, MAX_DOCUMENT_NO, missingSet } from './invoiceInboxReviewModel.js';
+import { currencyRateForPicker, currencySourceOf, unavailableCurrencyCode } from './invoiceInboxCurrency.js';
+import { Button } from '@/components/ui/button';
+import { DATE_FIELD_ICON, FieldError, ReviewField, ReviewTag, SectionTitle } from './InvoiceInboxReviewParts.jsx';
 import { CommitInput } from './InvoiceInboxReviewInputs.jsx';
 import { ReviewEditorContext, useReviewEditor } from './useInvoiceInboxReviewEditor.js';
-import InvoiceInboxReviewBanners, { InvoiceInboxReviewMismatchBanner, InvoiceInboxReviewNotice, InvoiceInboxReviewRefusal } from './InvoiceInboxReviewBanners.jsx';
+import InvoiceInboxReviewBanners, { InvoiceInboxReviewCurrencyNotices, InvoiceInboxReviewMismatchBanner, InvoiceInboxReviewNotice, InvoiceInboxReviewRefusal } from './InvoiceInboxReviewBanners.jsx';
 import InvoiceInboxReviewVendor from './InvoiceInboxReviewVendor.jsx';
 import InvoiceInboxReviewLines from './InvoiceInboxReviewLines.jsx';
 import InvoiceInboxReviewTotals from './InvoiceInboxReviewTotals.jsx';
 
+// Invalid-state classes for the shared picker: it targets the trigger by testid `currency-rate-trigger` (rename it there too).
+const CURRENCY_TRIGGER_INVALID = '[&_[data-testid=currency-rate-trigger]]:border-destructive [&_[data-testid=currency-rate-trigger]]:bg-[var(--status-destructive-bg)] [&_[data-testid=currency-rate-trigger]]:hover:bg-[var(--status-destructive-bg)]';
+
+let currencyOpSequence = 0;
+const currencyKey = () => `currency:${++currencyOpSequence}`;
+
+const CURRENCY_SOURCE_LABEL = Object.freeze({
+  printed: 'invoiceInboxReviewSourceOcr',
+  default: 'invoiceInboxReviewSourceDefault',
+  manual: 'invoiceInboxReviewSourceManual',
+});
+
 /**
- * The currency of the invoice, read only, through the same `CurrencyRatePicker` the purchase and
- * sales documents use, so it shows "EUR — 1,00" exactly like them. The invoice is created in the
- * organization's currency (decision 1), so the rate is 1 (no conversion) and there is no
- * `apiBaseUrl`: the picker fetches no currency options (the spec has no `currencyOptions` action).
+ * The currency of the invoice, through the same `CurrencyRatePicker` the purchase and sales documents
+ * use, so it shows "USD — 1,47". Editable while the document is: the list is the inbox spec's
+ * `currencyOptions` action (only currencies the system has a conversion for on the invoice date),
+ * and a pick is a `setCurrency` edit. No custom rate (`allowRateEdit` off). Read only otherwise.
+ * A small tag says whether the currency was printed on the document, is the default or was chosen.
  */
-function CurrencyField({ review, currency }) {
+function CurrencyField({ review, currency, editable, invoiceDate, id, apiBaseUrl }) {
   const ui = useUI();
+  const editor = useReviewEditor();
+  const picked = useRef({});
+  const source = currencySourceOf(review);
+  const unavailable = editable ? unavailableCurrencyCode(review.document) : '';
+  // The currency cannot be converted (no rate on the invoice date, or not registered in Etendo): the field
+  // itself must say so, not only the counter at the bottom. It clears with the blocker.
+  const noRate = editable && confirmBlockers(review.document).includes('exchangeRate');
+  const invalid = noRate || Boolean(unavailable);
+  const errorText = unavailable
+    ? ui('invoiceInboxReviewCurrencyUnavailableError', { code: unavailable })
+    : ui('invoiceInboxReviewCurrencyNoRateError');
+  // The printed currency does not exist in the tenant and the default is already shown: the picker ignores
+  // re-picking the current value, so accepting it is an explicit action (setCurrency with the same id).
+  const useShown = () => {
+    const shown = review.currency;
+    if (!shown?.id) return;
+    editor?.commit(currencyKey(), buildOp.setCurrency(shown.id), {
+      isoCode: shown.isoCode, rate: currencyRateForPicker(shown),
+    });
+  };
+  const handleChange = useCallback((key, value) => {
+    // COUPLING: the shared `CurrencyRatePicker.handleSelect` calls `onChange` three times in a fixed order
+    // (id, ISO label, rate) and this commits on the third. A change of that order breaks the inbox
+    // silently: a test must drive the REAL picker (not a mock) to catch it.
+    if (key === 'currency') picked.current = { id: value };
+    else if (key === 'currency$_identifier') picked.current.isoCode = value;
+    else if (key === 'eTGOCurrencyRate' && picked.current.id) {
+      const { id: currencyId, isoCode } = picked.current;
+      picked.current = {};
+      editor?.commit(currencyKey(), buildOp.setCurrency(currencyId), { isoCode, rate: value ?? null });
+    }
+  }, [editor]);
   return (
-    <CurrencyRatePicker
-      field={{ key: 'currency', id: 'invoice-inbox-currency' }}
-      value={review.currency?.id}
-      displayValue={review.currency?.isoCode ?? currency}
-      formData={{ eTGOCurrencyRate: 1 }}
-      resolvedLabel={ui('invoiceInboxReviewFieldCurrency')}
-      isReadOnly
-      data-testid="CurrencyRatePicker__review" />
+    <div
+      className={`relative${invalid ? ` ${CURRENCY_TRIGGER_INVALID}` : ''}`}
+      aria-invalid={invalid || undefined}
+      data-testid="invoice-inbox-review-currency-wrap">
+      <CurrencyRatePicker
+        field={{ key: 'currency', id: 'invoice-inbox-currency' }}
+        value={review.currency?.id}
+        displayValue={review.currency?.isoCode ?? currency}
+        formData={{ id, eTGOCurrencyRate: currencyRateForPicker(review.currency), invoiceDate }}
+        rateDateField="invoiceDate"
+        resolvedLabel={ui('invoiceInboxReviewFieldCurrency')}
+        isReadOnly={!editable}
+        onChange={handleChange}
+        apiBaseUrl={editable ? apiBaseUrl : undefined}
+        allowRateEdit={false}
+        data-testid="CurrencyRatePicker__review" />
+      {invalid && (
+        <FieldError testId="invoice-inbox-review-currency-error" data-testid="FieldError__currency">
+          {errorText}
+        </FieldError>
+      )}
+      {unavailable && review.currency?.id && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="mt-1.5"
+          onClick={useShown}
+          data-testid="invoice-inbox-review-currency-use-shown">
+          {ui('invoiceInboxReviewCurrencyUseShown', { iso: review.currency.isoCode ?? currency })}
+        </Button>
+      )}
+      {source && (
+        <span className="absolute right-0 top-0" data-testid="invoice-inbox-review-currency-source-wrap">
+          <ReviewTag
+            tone="neutral"
+            label={ui(CURRENCY_SOURCE_LABEL[source])}
+            testId="invoice-inbox-review-currency-source"
+            data-testid="ReviewTag__currency-source" />
+        </span>
+      )}
+    </div>
   );
 }
 
-/** "Cabecera": invoice number and date (2 columns), then the currency (read only, decision 1). */
+/** "Cabecera": invoice number and date (2 columns), then the currency (a registered-currency selector, editable while the document is editable, with no rate editing). */
 function HeaderSection({ review, currency, missing, readOnly, locked, locale }) {
   const ui = useUI();
   const editor = useReviewEditor();
@@ -106,7 +187,14 @@ function HeaderSection({ review, currency, missing, readOnly, locked, locale }) 
             </div>
           ) : null}
           data-testid="ReviewField__fd4b42" />
-        <CurrencyField review={review} currency={currency} data-testid="CurrencyField__review" />
+        <CurrencyField
+          review={review}
+          currency={currency}
+          editable={editable && !locked}
+          invoiceDate={header?.invoiceDate}
+          id={review.id}
+          apiBaseUrl={editor?.apiBaseUrl}
+          data-testid="CurrencyField__review" />
       </div>
     </section>
   );
@@ -132,6 +220,7 @@ export default function InvoiceInboxReviewForm({
   const document = review.document ?? {};
   const missing = missingSet(document);
   const scale = currencyScale(review.currency);
+  const pricing = useMemo(() => manualPricingOf(review, document.header), [review, document.header]);
   const context = useMemo(() => (editor ? { ...editor, apiBaseUrl } : null), [editor, apiBaseUrl]);
   return (
     <ReviewEditorContext.Provider value={readOnly ? null : context}>
@@ -149,6 +238,12 @@ export default function InvoiceInboxReviewForm({
             data-testid="InvoiceInboxReviewRefusal__form" />
         )}
         <InvoiceInboxReviewBanners review={review} data-testid="InvoiceInboxReviewBanners__form" />
+        {!settled && (
+          <InvoiceInboxReviewCurrencyNotices
+            document={document}
+            currency={review.currency?.isoCode ?? currency}
+            data-testid="InvoiceInboxReviewCurrencyNotices__form" />
+        )}
         <InvoiceInboxReviewVendor
           document={document}
           missing={missing}
@@ -172,6 +267,7 @@ export default function InvoiceInboxReviewForm({
           showActions={!locked}
           locked={settled}
           apiBaseUrl={apiBaseUrl}
+          pricing={pricing}
           data-testid="InvoiceInboxReviewLines__form" />
         <InvoiceInboxReviewTotals
           lines={document.lines}

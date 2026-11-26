@@ -3449,6 +3449,11 @@ threads `documentDateField` into the header `<Form>` calls; no generator change 
   selected option is not the org currency (`isOrgCurrency` from `currencyOptions`; the former
   `rate === 1` sentinel is gone). A manual rate is kept until the reference date or the
   currency changes.
+- **`allowRateEdit` prop (default `true`).** `false` hides the pencil, so the user can only choose
+  among the options and the system rate always applies. A window that has no custom rate passes it:
+  the invoice inbox review (`InvoiceInboxReviewForm.jsx`, `CurrencyField`) lists the currencies with a
+  conversion on the invoice date through its own `currencyOptions` action and commits a pick as a
+  `setCurrency` edit. Every other window keeps the default and is unchanged.
 - **Recalculation.** The header callout on `currency`, the declared `documentDateField` and
   `accountingDate` returns the recalculated `eTGOCurrencyRate` (or `null`).
   `applyCalloutFieldUpdates` applies it through `isCurrencyRateRecalcTarget`

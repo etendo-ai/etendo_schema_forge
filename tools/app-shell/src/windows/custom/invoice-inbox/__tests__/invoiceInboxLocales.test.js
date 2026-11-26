@@ -318,15 +318,23 @@ describe('confirm keys', () => {
     }
   });
 
+  it('the candidate similarity key exists in the three locales with its placeholder', () => {
+    for (const json of Object.values(locales)) assert.match(json.genericLabels.invoiceInboxReviewCandidateSimilarity ?? '', /\{similarity\}/);
+  });
+
   it('price_list_tax_included says what to do (use a price list without taxes included)', () => {
     assert.match(locales.es_ES.genericLabels.invoiceInboxConfirmErrorPriceListTax, /sin impuestos incluidos/);
     assert.match(locales.es_AR.genericLabels.invoiceInboxConfirmErrorPriceListTax, /sin impuestos incluidos/);
     assert.match(locales.en_US.genericLabels.invoiceInboxConfirmErrorPriceListTax, /without tax included/i);
+    // The text names both sources of the list: the vendor's and the default one.
+    assert.match(locales.es_ES.genericLabels.invoiceInboxConfirmErrorPriceListTax, /la del proveedor, o la predeterminada/);
+    assert.match(locales.es_AR.genericLabels.invoiceInboxConfirmErrorPriceListTax, /la del proveedor, o la predeterminada/);
+    assert.match(locales.en_US.genericLabels.invoiceInboxConfirmErrorPriceListTax, /vendor's, or the default one/);
   });
 
   it('the failure-identifier texts exist in the three locales; es_AR uses voseo and es_ES does not where they address the user', () => {
     const keys = Object.keys(locales.en_US.genericLabels).filter((k) => /^invoiceInboxConfirm(Detail|Step)/.test(k));
-    assert.equal(keys.length, 17);
+    assert.equal(keys.length, 18);
     for (const locale of Object.keys(locales)) {
       for (const key of keys) assert.ok(String(locales[locale].genericLabels[key] ?? '').trim(), `${locale}.${key}`);
     }
@@ -339,7 +347,12 @@ describe('confirm keys', () => {
     for (const key of confirmKeys) {
       assert.doesNotMatch(locales.es_ES.genericLabels[key], /\b(Podés|Tenés|Querés|Cambiá|Revisá|usá|intentá)\b/, key);
     }
-    assert.match(locales.es_AR.genericLabels.invoiceInboxConfirmErrorPriceListTax, /Cambiá/);
+    const es = locales.es_ES.genericLabels.invoiceInboxConfirmErrorPriceListTax;
+    const ar = locales.es_AR.genericLabels.invoiceInboxConfirmErrorPriceListTax;
+    assert.match(ar, /Usá una lista sin impuestos incluidos e intentá de nuevo/);
+    assert.match(es, /Usa una tarifa sin impuestos incluidos e inténtalo de nuevo/);
+    assert.doesNotMatch(es, /\b(Usá|intentá)\b/);
+    assert.doesNotMatch(ar, /\b(Usa|inténtalo)\b/);
   });
 
   it('the new-product name label key exists in the three locales and is not the generic product label', () => {

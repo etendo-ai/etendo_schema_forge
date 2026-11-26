@@ -60,8 +60,24 @@ function useVendorActions() {
 function CandidateRadios({ view, readOnly, checkedId = null, noneChecked = false, onSelect }) {
   const ui = useUI();
   const { candidates } = view;
+  // Flagged lists: only the `probable` candidate is tagged. Legacy lists (no candidate carries the key,
+  // stored before the flag existed) keep the tag on the first one. None probable: "none" goes first.
+  const flagged = candidates.some((candidate) => candidate && 'probable' in candidate);
+  const noneFirst = flagged && candidates.length > 0 && !candidates.some((candidate) => candidate?.probable === true);
+  const noneOption = (
+    <OptionRow
+      value={NONE_VALUE}
+      checked={noneChecked}
+      onSelect={onSelect}
+      readOnly={readOnly}
+      testId="invoice-inbox-review-vendor-none-option"
+      data-testid="OptionRow__3b4318">
+      <span className="block text-sm font-medium text-primary">{ui('invoiceInboxReviewVendorCreateNew')}</span>
+    </OptionRow>
+  );
   return (
     <div className="flex flex-col gap-2" role="radiogroup" aria-label={ui('invoiceInboxReviewSectionVendor')}>
+      {noneFirst && noneOption}
       {candidates.map((candidate, position) => (
         <OptionRow
           key={candidate.id}
@@ -70,7 +86,7 @@ function CandidateRadios({ view, readOnly, checkedId = null, noneChecked = false
           onSelect={onSelect}
           readOnly={readOnly}
           testId={`invoice-inbox-review-vendor-candidate-${candidate.id}`}
-          badge={position === 0
+          badge={(flagged ? candidate.probable === true : position === 0)
             ? <ReviewTag
             tone="info"
             label={ui('invoiceInboxReviewMostLikely')}
@@ -84,15 +100,7 @@ function CandidateRadios({ view, readOnly, checkedId = null, noneChecked = false
           </span>
         </OptionRow>
       ))}
-      <OptionRow
-        value={NONE_VALUE}
-        checked={noneChecked}
-        onSelect={onSelect}
-        readOnly={readOnly}
-        testId="invoice-inbox-review-vendor-none-option"
-        data-testid="OptionRow__3b4318">
-        <span className="block text-sm font-medium text-primary">{ui('invoiceInboxReviewVendorCreateNew')}</span>
-      </OptionRow>
+      {!noneFirst && noneOption}
     </div>
   );
 }

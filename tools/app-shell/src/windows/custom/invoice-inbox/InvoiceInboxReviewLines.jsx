@@ -14,12 +14,12 @@ import { Input } from '@/components/ui/input';
 import { formatGroupedNumber } from '@/lib/formatCurrency.js';
 import { formatMoney } from './invoiceInboxMoney.js';
 import {
-  buildOp, hasMissingLineField, hasMissingTax, joinMeta, lineAmount, lineFieldMissing, lineKey, lineRate, linkedProductSimilarity, MAX_LINES, MAX_TEXT, missingSet,
+  buildOp, hasMissingLineField, isManualLine, hasMissingTax, joinMeta, lineAmount, lineFieldMissing, lineKey, lineRate, linkedProductSimilarity, candidateSimilarity, MAX_LINES, MAX_TEXT, missingSet,
   newProductName, productView, unresolvedProductCount,
 } from './invoiceInboxReviewModel.js';
 import { AiChip, FieldError, OptionRow, ReviewTag, SectionTitle } from './InvoiceInboxReviewParts.jsx';
 import { CommitInput, NumberCommitInput } from './InvoiceInboxReviewInputs.jsx';
-import { EntityPicker } from './InvoiceInboxReviewPickers.jsx';
+import { EntityPicker, ManualProductPicker } from './InvoiceInboxReviewPickers.jsx';
 import { buildLineSelectorContext } from '@/lib/selectorContext.js';
 import { useReviewEditor } from './useInvoiceInboxReviewEditor.js';
 
@@ -198,8 +198,30 @@ function NewProductForm({ line, lineIndex, position, readOnly, missing, apiBaseU
   );
 }
 
+/**
+ * The product search of the panel. A MANUAL line (ETP-6051) uses the shared product drawer with the
+ * purchase-invoice price context, so it lists and prices like the purchase invoice; an OCR line keeps the
+ * plain selector search it always had.
+ */
+function renderProductPicker({ manual, pricing, apiBaseUrl, product, state, lineIndex, ui, editor }) {
+  const common = {
+    apiBaseUrl,
+    value: state === 'ok' ? product.id : null,
+    label: state === 'ok' ? (product.details?.name ?? product.name ?? '') : '',
+    placeholder: ui('invoiceInboxReviewProductSearchPlaceholder'),
+    fieldKey: `inbox-line-${lineIndex}-product`,
+    onPick: ({ id, name, option }) => {
+      if (state === 'ok' && product.id === id) return;
+      editor.commit(uniqueKey(`product:${lineIndex}`), buildOp.selectProduct(lineIndex, id), { name, searchKey: option?.searchKey });
+    },
+  };
+  return manual
+    ? <ManualProductPicker {...common} pricing={pricing} data-testid="ManualProductPicker__product" />
+    : <EntityPicker kind="product" {...common} data-testid="EntityPicker__product" />;
+}
+
 /** The expandable panel under a product chip: candidates, "none · create new", search, the new-product form. */
-function ProductPanel({ line, position, lineIndex, readOnly, state, missing, apiBaseUrl, onKeepOpen }) {
+function ProductPanel({ line, position, lineIndex, readOnly, state, missing, apiBaseUrl, pricing, onKeepOpen }) {
   const ui = useUI();
   const editor = useReviewEditor();
   const product = line.product ?? {};
@@ -256,6 +278,7 @@ function ProductPanel({ line, position, lineIndex, readOnly, state, missing, api
                 <span className="block truncate font-mono text-[11px] text-muted-foreground">
                   {joinMeta([candidate.searchKey, candidate.category, candidate.uom])}
                 </span>
+                <CandidateSimilarity candidate={candidate} position={position} />
               </OptionRow>
             ))}
             <OptionRow
@@ -298,18 +321,7 @@ function ProductPanel({ line, position, lineIndex, readOnly, state, missing, api
         </p>
         {editable ? (
           <div data-testid={`invoice-inbox-review-line-${position}-search`}>
-            <EntityPicker
-              kind="product"
-              apiBaseUrl={apiBaseUrl}
-              value={state === 'ok' ? product.id : null}
-              label={state === 'ok' ? (product.details?.name ?? product.name ?? '') : ''}
-              placeholder={ui('invoiceInboxReviewProductSearchPlaceholder')}
-              fieldKey={`inbox-line-${lineIndex}-product`}
-              onPick={({ id, name, option }) => {
-                if (state === 'ok' && product.id === id) return;
-                editor.commit(uniqueKey(`product:${lineIndex}`), buildOp.selectProduct(lineIndex, id), { name, searchKey: option?.searchKey });
-              }}
-              data-testid="EntityPicker__product" />
+            {renderProductPicker({ manual: isManualLine(line) && Boolean(pricing), pricing, apiBaseUrl, product, state, lineIndex, ui, editor })}
           </div>
         ) : (
           <div className="relative">
@@ -327,6 +339,18 @@ function ProductPanel({ line, position, lineIndex, readOnly, state, missing, api
         )}
       </div>
     </div>
+  );
+}
+
+/** ETP-6051: the search similarity of a candidate of the opened list ("63 %"), nothing when it has none. */
+function CandidateSimilarity({ candidate, position }) {
+  const ui = useUI();
+  const similarity = candidateSimilarity(candidate);
+  if (similarity == null) return null;
+  return (
+    <span className="block text-[11px] text-muted-foreground" data-testid={`invoice-inbox-review-line-${position}-candidate-${candidate.id}-similarity`}>
+      {ui('invoiceInboxReviewCandidateSimilarity', { similarity: formatGroupedNumber(similarity, { maximumFractionDigits: 0 }) })}
+    </span>
   );
 }
 
@@ -586,7 +610,7 @@ function TaxPicker({ line, position, lineIndex, document, readOnly, invalid, api
   );
 }
 
-function LineRow({ line, position, currency, scale, missing, readOnly, showActions, open, onToggle, onKeepOpen, stacked, apiBaseUrl, focusRequest, onFocused, document }) {
+function LineRow({ line, position, currency, scale, missing, readOnly, showActions, open, onToggle, onKeepOpen, stacked, apiBaseUrl, focusRequest, onFocused, document, pricing }) {
   const ui = useUI();
   const editor = useReviewEditor();
   const lineIndex = lineKey(line, position);
@@ -668,6 +692,7 @@ function LineRow({ line, position, currency, scale, missing, readOnly, showActio
             state={state}
             missing={missing}
             apiBaseUrl={apiBaseUrl}
+            pricing={pricing}
             onKeepOpen={onKeepOpen}
             data-testid="ProductPanel__review" />
         )}
@@ -763,10 +788,10 @@ function useStacked(ref) {
  * `locked` (confirmed / discarded) swaps the table for the compact read-only list.
  *
  * @param {{document: object, currency: string, scale?: number, readOnly?: boolean, showActions?: boolean,
- *   locked?: boolean, apiBaseUrl?: string}} props `showActions` false hides the add / delete affordances
+ *   locked?: boolean, apiBaseUrl?: string, pricing?: object|null}} props `pricing` (`manualPricingOf`) is what a manual line's product drawer prices with; `showActions` false hides the add / delete affordances
  */
 export default function InvoiceInboxReviewLines({
-  document, currency, scale = 2, readOnly = true, showActions = true, locked = false, apiBaseUrl = '',
+  document, currency, scale = 2, readOnly = true, showActions = true, locked = false, apiBaseUrl = '', pricing = null,
 }) {
   const ui = useUI();
   const editor = useReviewEditor();
@@ -836,6 +861,7 @@ export default function InvoiceInboxReviewLines({
                     stacked={stacked}
                     apiBaseUrl={apiBaseUrl}
                     document={document}
+                    pricing={pricing}
                     focusRequest={focusRequest}
                     onFocused={clearFocus}
                     onToggle={() => setToggled((prev) => ({ ...prev, [key]: !open }))}
