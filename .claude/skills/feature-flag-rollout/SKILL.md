@@ -57,6 +57,42 @@ stateDiagram-v2
   `com.etendoerp.go`. Add an "Antes de empezar" block when the feature writes real records or
   is not atomic. Worked example: the `mcp-routines` alpha email (Cómo usarlas: exec, save, run,
   list/describe/update/delete as four asks to the agent).
+- **An invitation to a new MCP tool starts with "Primero, refresca tu agente"** (block below).
+  The Etendo MCP declares `tools.listChanged: false` (`McpModernResults`), and Claude clients
+  cache the tool list per connection anyway, so a tester who just entered the ring does not see
+  the tool until they refresh. Also close the email asking for feedback through the agent itself
+  (`etendo_feedback`): it reaches the team with the session attached and is triaged
+  automatically (skill `mcp-audit`); at most 10 reports per session per hour.
+
+### MCP blocks for invitations
+
+Paste these into the template when the feature is an MCP tool. Sources: Claude Code docs
+(`/mcp` reconnect, code.claude.com/docs/en/mcp-quickstart), and the stale-tool-list reports
+anthropics/claude-ai-mcp#1182 (Desktop and web refresh only after reconnecting, and only in a
+new conversation) and anthropics/claude-code#108596 (claude.ai connectors inside Claude Code).
+
+```markdown
+**Primero, refresca tu agente (una sola vez)**
+
+{{Nombre}} es una herramienta nueva del MCP de Etendo y tu agente no se entera solo de que existe: guarda la lista de herramientas de la última vez que se conectó.
+
+- **Claude (web, escritorio o móvil):** en Ajustes › Conectores, abre el conector de Etendo y actualiza sus herramientas, o desconéctalo y vuelve a conectarlo. Después **abre una conversación nueva**: las que ya tenías abiertas siguen con las herramientas de antes.
+- **Claude Code:** dentro de la sesión escribe `/mcp`, elige el servidor de Etendo y pulsa «Reconnect», o empieza una sesión nueva. Si en Claude Code usas Etendo a través de tu cuenta de claude.ai, actualiza primero el conector en claude.ai y abre una sesión nueva.
+- **Otro cliente (Cursor u otros):** reconecta el servidor MCP de Etendo o reinicia el cliente.
+
+Para comprobarlo, pregúntale: «¿Tienes la herramienta {{nombre de la tool, p. ej. etendo_routine}}?».
+```
+
+```markdown
+**Cómo darnos feedback**
+
+Lo más fácil es pedírselo al propio agente, sin salir de la conversación:
+> Envía feedback a Etendo sobre {{la funcionalidad}}: esperaba que…, pero pasó…
+
+El agente lo manda por el MCP junto con lo que intentó, y nos llega directamente al equipo. Mejor un informe por tarea que uno por cada paso.
+
+También puedes pulsar «Dar mi opinión» en este email o responderlo directamente.
+```
 
 ## Transitions
 
