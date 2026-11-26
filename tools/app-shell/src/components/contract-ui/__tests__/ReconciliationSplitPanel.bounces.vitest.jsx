@@ -99,7 +99,7 @@ vi.mock('@/hooks/useBouncePairActions.js', () => ({
   usePendingLineCounts: () => pendingLineCountsMock,
 }));
 
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { render, renderHook, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 import { toast } from 'sonner';
@@ -107,6 +107,7 @@ import { ReconciliationSplitPanel } from '@/components/contract-ui/Reconciliatio
 import { formatDate, formatSigned } from '@/lib/formatSigned';
 import { AiPercentText, BounceNotice, BounceFooter } from '@/components/contract-ui/BouncePairPanel.jsx';
 import { bouncePanelModel } from '@/components/contract-ui/bouncePairs.js';
+import { useBouncePairRows } from '@/components/contract-ui/useBouncePairReview.jsx';
 
 // ── Fixtures ───────────────────────────────────────────────────────────────────
 
@@ -1846,5 +1847,127 @@ describe('ReconciliationSplitPanel — the 60-day window of a pairable outflow (
     fireEvent.click(screen.getByTestId('recon-outflow-row-W1'));
     expect(screen.getByTestId('recon-line-radio-RV1')).toBeChecked();
     expect(screen.queryByTestId('recon-line-radio-RW1')).toBeNull();
+  });
+});
+
+// ── useBouncePairRows, driven directly ─────────────────────────────────────────
+
+describe('useBouncePairRows — the one-row-per-pair view of "Posibles rechazos"', () => {
+  const baseArgs = {
+    lines: BOUNCE_LINES,
+    search: '',
+    status: 'bounce',
+    loading: false,
+    statusCounts: BOUNCE_COUNTS,
+    selectedLine: null,
+  };
+  const renderRows = (args = {}) => {
+    const selectLine = vi.fn();
+    const utils = renderHook((props) => useBouncePairRows(props), {
+      initialProps: { ...baseArgs, selectLine, ...args },
+    });
+    return { ...utils, selectLine };
+  };
+
+  it('is a pass-through outside the bounce filter: no pair mode, no rows, no outflows', () => {
+    for (const status of [null, 'pending', 'discarded']) {
+      const { result } = renderRows({ status });
+      expect(result.current.pairMode).toBe(false);
+      expect(result.current.bouncePairRows).toBeNull();
+      expect(result.current.bounceOutflows).toEqual([]);
+    }
+  });
+
+  it('builds one row per pair, anchored on its bounce line, and the deduplicated outflows', () => {
+    const { result } = renderRows();
+    expect(result.current.pairMode).toBe(true);
+    expect(result.current.bouncePairRows.map((r) => [r.groupKey, r.anchor.id])).toEqual([
+      ['g-high', 'B1'], ['g-amb', 'B3'],
+    ]);
+    expect(result.current.bounceOutflows.map((o) => [o.line.id, o.pairKeys])).toEqual([
+      ['C1', ['g-amb']], ['O1', ['g-high']], ['C2', ['g-amb']],
+    ]);
+    // The full pendingLines row of an outflow wins over the annotation's short object.
+    expect(result.current.bounceOutflows.find((o) => o.line.id === 'O1').line).toBe(O1);
+  });
+
+  it('filters the rows and the outflows by the search text', () => {
+    const { result, rerender, selectLine } = renderRows({ search: 'devolucion' });
+    expect(result.current.bouncePairRows.map((r) => r.groupKey)).toEqual(['g-high']);
+    expect(result.current.bounceOutflows.map((o) => o.line.id)).toEqual(['O1']);
+
+    rerender({ ...baseArgs, selectLine, search: 'ACME' });
+    expect(result.current.bouncePairRows.map((r) => r.groupKey)).toEqual(['g-amb']);
+    expect(result.current.bounceOutflows.map((o) => o.line.id)).toEqual(['C1', 'C2']);
+
+    rerender({ ...baseArgs, selectLine, search: 'no such text' });
+    expect(result.current.bouncePairRows).toEqual([]);
+    expect(result.current.bounceOutflows).toEqual([]);
+  });
+
+  it('reports no pair count while the backend sends no bounce count', () => {
+    for (const statusCounts of [null, undefined, {}, { ...BOUNCE_COUNTS, bounce: null }]) {
+      const { result } = renderRows({ statusCounts });
+      expect(result.current.bouncePairCount).toBeNull();
+    }
+  });
+
+  it('counts pairs, not lines, once the default answer has settled', () => {
+    const { result } = renderRows({ status: null });
+    // counts.bounce is 5 lines; they make 2 pairs.
+    expect(result.current.bouncePairCount).toBe(2);
+  });
+
+  it('keeps the last settled count under "Descartadas" and while loading (no flash to 0)', () => {
+    const { result, rerender, selectLine } = renderRows({ status: null });
+    expect(result.current.bouncePairCount).toBe(2);
+
+    // "Descartadas": the lines are the discarded answer, which holds no pair.
+    rerender({ ...baseArgs, selectLine, status: 'discarded', lines: [D1, D2, D3] });
+    expect(result.current.bouncePairCount).toBe(2);
+
+    // Leaving it reloads: while loading, the lines on screen are not the default answer yet.
+    rerender({ ...baseArgs, selectLine, status: null, loading: true, lines: [] });
+    expect(result.current.bouncePairCount).toBe(2);
+
+    // The new default answer settles with one pair left: the count follows it.
+    rerender({ ...baseArgs, selectLine, status: null, loading: false, lines: [PLAIN, O1, B1] });
+    expect(result.current.bouncePairCount).toBe(1);
+
+    // A later load keeps that new figure, not the first one.
+    rerender({ ...baseArgs, selectLine, status: null, loading: true, lines: BOUNCE_LINES });
+    expect(result.current.bouncePairCount).toBe(1);
+  });
+
+  it('moves the selection of an original or candidate line to its pair\'s bounce row', () => {
+    const { selectLine: fromOriginal } = renderRows({ selectedLine: O1 });
+    expect(fromOriginal).toHaveBeenCalledTimes(1);
+    expect(fromOriginal).toHaveBeenCalledWith(B1);
+
+    const { selectLine: fromCandidate } = renderRows({ selectedLine: C2 });
+    expect(fromCandidate).toHaveBeenCalledTimes(1);
+    expect(fromCandidate).toHaveBeenCalledWith(B3);
+  });
+
+  it('leaves the selection alone when it is already the bounce row', () => {
+    const { selectLine } = renderRows({ selectedLine: B1 });
+    expect(selectLine).not.toHaveBeenCalled();
+  });
+
+  it('leaves the selection alone outside the bounce filter', () => {
+    const { selectLine } = renderRows({ status: null, selectedLine: O1 });
+    expect(selectLine).not.toHaveBeenCalled();
+  });
+
+  it('leaves the selection alone when no listed pair matches it', () => {
+    // A pair that is not among the lines.
+    const stray = { ...O1, id: 'X1', bouncePair: { ...O1.bouncePair, groupKey: 'g-missing' } };
+    expect(renderRows({ selectedLine: stray }).selectLine).not.toHaveBeenCalled();
+    // A pair filtered out by the search.
+    expect(renderRows({ selectedLine: O1, search: 'ACME' }).selectLine).not.toHaveBeenCalled();
+    // A pair whose bounce row is not on screen: its anchor is the original itself.
+    expect(renderRows({ selectedLine: O1, lines: [PLAIN, O1] }).selectLine).not.toHaveBeenCalled();
+    // A line that is not part of any pair.
+    expect(renderRows({ selectedLine: PLAIN }).selectLine).not.toHaveBeenCalled();
   });
 });
