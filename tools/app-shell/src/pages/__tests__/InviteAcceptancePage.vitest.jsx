@@ -234,22 +234,34 @@ describe('InviteAcceptancePage', () => {
     });
   });
 
-  // ETP-5385 — a signed-in invitee whose accept fails must see ONE outcome: the dead-link error
-  // screen for a terminal failure, or the error alone (never next to the "continue to join this
-  // company" prompt) for anything else.
+  // ETP-5385 — a signed-in invitee must see ONE outcome: the dead-link error screen for a
+  // terminal failure, or the error alone (never next to the "continue to join this company"
+  // prompt) for anything else.
+  //
+  // The error bodies below are the real wire shape, recorded from the running environment
+  // (GET /sws/go/company-invitations/resolve?token=bogus -> 404):
+  //   {"error":{"code":"INVALID_TOKEN","message":"Invalid or unknown invitation link",
+  //             "userMessage":"Invalid or unknown invitation link","status":404}}
+  // i.e. the code is NESTED under `error`. A flat `{ error: true, code }` body is what the page
+  // used to read and what the first version of these tests mocked, so the terminal branch passed
+  // here and never matched against the server.
+  const wireError = (status, code, message) => ({
+    ok: false,
+    status,
+    json: async () => ({ error: { code, message, userMessage: message, status } }),
+  });
+  const SECOND_INVITATION = {
+    status: 'SENT',
+    clientName: 'Second Co',
+    email: 'existing.user@example.com',
+    branch: 'existing_account',
+    accountExists: true,
+  };
+
   async function signInAndAccept(acceptOutcome) {
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          status: 'SENT',
-          clientName: 'Acme Corp',
-          email: 'existing.user@example.com',
-          branch: 'existing_account',
-          accountExists: true,
-        }),
-      })
+      .mockResolvedValueOnce({ ok: true, json: async () => SECOND_INVITATION })
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({ token: 'existing-session-token', account: { email: 'existing.user@example.com' } }),
@@ -264,41 +276,116 @@ describe('InviteAcceptancePage', () => {
     fireEvent.click(screen.getByTestId('action-login-submit'));
     await waitFor(() => expect(screen.getByTestId('invite-authenticated-step')).toBeInTheDocument());
     fireEvent.click(screen.getByTestId('action-accept-invitation'));
+    return fetchMock;
   }
 
-  it.each(['EXPIRED_TOKEN', 'INVALID_TOKEN'])(
-    'shows only the error screen when accept fails with %s (ETP-5385)',
-    async (code) => {
-      await signInAndAccept({ ok: false, status: 400, json: async () => ({ error: true, code, message: 'nope' }) });
+  // The page opened with a session already in place (accepted invitation A as X, then opens B):
+  // no AuthProvider, so the session guard asks /sws/neo/session and lands on the signed-in step
+  // by itself, with no click.
+  function renderSignedIn(resolveOutcome, { acceptOutcome } = {}) {
+    const fetchMock = vi.fn((url) => {
+      if (String(url).includes('/company-invitations/resolve')) return Promise.resolve(resolveOutcome);
+      if (String(url).includes('/sws/neo/session')) {
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({ accountEmail: 'Existing.User@example.com' }) });
+      }
+      if (String(url).includes('/company-invitations/accept')) return Promise.resolve(acceptOutcome);
+      return Promise.reject(new Error(`unexpected request ${url}`));
+    });
+    globalThis.fetch = fetchMock;
+    render(
+      <MemoryRouter initialEntries={['/invite?token=second-company-token']}>
+        <Routes>
+          <Route path="/invite" element={<InviteAcceptancePage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+    return fetchMock;
+  }
+
+  const acceptCalls = (fetchMock) =>
+    fetchMock.mock.calls.filter(([url]) => String(url).includes('/company-invitations/accept'));
+
+  it('shows only the join prompt on load for a valid second invitation, with no click (ETP-5385)', async () => {
+    const fetchMock = renderSignedIn({ ok: true, json: async () => SECOND_INVITATION });
+
+    await waitFor(() => expect(screen.getByTestId('invite-authenticated-step')).toBeInTheDocument());
+    expect(screen.getByText('invitePageAuthenticatedNotice')).toBeInTheDocument();
+    expect(screen.queryByTestId('invite-action-error')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('invite-error-state')).not.toBeInTheDocument();
+    expect(screen.queryByText('invitePageInvalidDescription')).not.toBeInTheDocument();
+    expect(acceptCalls(fetchMock)).toHaveLength(0);
+  });
+
+  it('shows only the error screen on load when resolve rejects the second invitation (ETP-5385)', async () => {
+    const fetchMock = renderSignedIn(wireError(404, 'INVALID_TOKEN', 'Invalid or unknown invitation link'));
+
+    await waitFor(() => expect(screen.getByTestId('invite-error-state')).toBeInTheDocument());
+    expect(screen.queryByTestId('invite-authenticated-step')).not.toBeInTheDocument();
+    expect(screen.queryByText('invitePageAuthenticatedNotice')).not.toBeInTheDocument();
+    expect(acceptCalls(fetchMock)).toHaveLength(0);
+  });
+
+  it('accepts a valid second invitation and shows the success screen only (ETP-5385)', async () => {
+    renderSignedIn(
+      { ok: true, json: async () => SECOND_INVITATION },
+      { acceptOutcome: { ok: true, status: 200, json: async () => ({ clientName: 'Second Co' }) } }
+    );
+    await waitFor(() => expect(screen.getByTestId('action-accept-invitation')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('action-accept-invitation'));
+
+    await waitFor(() => expect(screen.getByTestId('invite-success-state')).toBeInTheDocument());
+    expect(screen.queryByTestId('invite-action-error')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('invite-error-state')).not.toBeInTheDocument();
+    expect(screen.queryByText('invitePageAuthenticatedNotice')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    [404, 'INVALID_TOKEN', 'Invalid or unknown invitation link'],
+    [400, 'EXPIRED_TOKEN', 'This invitation link has expired or has been revoked'],
+  ])(
+    'shows only the error screen when accept fails with %s %s (ETP-5385)',
+    async (status, code, message) => {
+      await signInAndAccept(wireError(status, code, message));
 
       await waitFor(() => expect(screen.getByTestId('invite-error-state')).toBeInTheDocument());
       expect(screen.queryByTestId('invite-authenticated-step')).not.toBeInTheDocument();
       expect(screen.queryByTestId('action-accept-invitation')).not.toBeInTheDocument();
+      expect(screen.queryByText('invitePageAuthenticatedNotice')).not.toBeInTheDocument();
       // Already signed in: offering "sign in" would be wrong, so the page offers the app.
-      expect(screen.getByTestId('action-error-sign-in')).toHaveTextContent('invitePageGoToApp');
+      expect(screen.getByTestId('action-error-go-to-app')).toHaveTextContent('invitePageGoToApp');
+      expect(screen.queryByTestId('action-error-sign-in')).not.toBeInTheDocument();
     }
   );
 
-  it('shows the mismatch error without the join prompt (ETP-5385)', async () => {
-    await signInAndAccept({
-      ok: false,
-      status: 403,
-      json: async () => ({ error: true, code: 'INVITATION_ACCOUNT_MISMATCH', message: 'Wrong account for this invitation' }),
-    });
+  it('offers sign in, not the app, on the error screen for an anonymous visitor (ETP-5385)', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValueOnce(wireError(404, 'INVALID_TOKEN', 'Invalid or unknown invitation link'));
+    renderPage('/invite?token=dead-token');
+
+    await waitFor(() => expect(screen.getByTestId('invite-error-state')).toBeInTheDocument());
+    expect(screen.getByTestId('action-error-sign-in')).toHaveTextContent('invitePageSignIn');
+    expect(screen.queryByTestId('action-error-go-to-app')).not.toBeInTheDocument();
+  });
+
+  it('shows the mismatch error with a sign-out instead of a retry, and no join prompt (ETP-5385)', async () => {
+    await signInAndAccept(wireError(403, 'INVITATION_ACCOUNT_MISMATCH', 'Wrong account for this invitation'));
 
     await waitFor(() => expect(screen.getByTestId('invite-action-error')).toHaveTextContent('Wrong account for this invitation'));
     expect(screen.queryByText('invitePageAuthenticatedNotice')).not.toBeInTheDocument();
     expect(screen.queryByTestId('invite-error-state')).not.toBeInTheDocument();
-    // The accept button stays as the retry.
-    expect(screen.getByTestId('action-accept-invitation')).toBeInTheDocument();
+    // The same account would fail again, so there is no retry.
+    expect(screen.queryByTestId('action-accept-invitation')).not.toBeInTheDocument();
+    expect(screen.getByTestId('action-mismatch-sign-out')).toHaveTextContent('inviteSessionConflictLogoutUnknown');
   });
 
   it('does not call the link invalid when the accept request fails on the network (ETP-5385)', async () => {
     await signInAndAccept(new Error('network down'));
 
     await waitFor(() => expect(screen.getByTestId('invite-action-error')).toBeInTheDocument());
+    expect(screen.getByTestId('invite-action-error')).toHaveTextContent('invitePageAcceptFailed');
     expect(screen.getByTestId('invite-action-error')).not.toHaveTextContent('invitePageInvalidDescription');
     expect(screen.queryByText('invitePageAuthenticatedNotice')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('invite-error-state')).not.toBeInTheDocument();
+    // Retryable: the accept button stays.
     expect(screen.getByTestId('action-accept-invitation')).toBeInTheDocument();
   });
 

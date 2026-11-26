@@ -58,6 +58,18 @@ const ACTIONABLE_BRANCHES = new Set(['existing_account', 'registration_required'
 // showing an inline alert next to the "continue to join" prompt.
 const TERMINAL_ACCEPT_CODES = new Set(['INVALID_TOKEN', 'EXPIRED_TOKEN']);
 
+// ETP-5385: the /company-invitations endpoints answer failures as
+// `{ "error": { "code", "message", "userMessage", "status" } }` (EtendoGoJwtServlet.writeError),
+// not as flat `{ code, message }`. Reading `data.code` never matched, so every failed accept fell
+// through to the generic branch. Both shapes are read so a flat body still works.
+function readApiError(data) {
+  const nested = data?.error && typeof data.error === 'object' ? data.error : null;
+  return {
+    code: nested?.code ?? data?.code ?? null,
+    message: nested?.userMessage ?? nested?.message ?? data?.message ?? null,
+  };
+}
+
 function readStoredValue(key) {
   try {
     return globalThis.localStorage?.getItem(key) || '';
@@ -77,6 +89,8 @@ export default function InviteAcceptancePage({ apiBase = import.meta.env.VITE_AP
   const [submitting, setSubmitting] = useState(false);
   const [errorState, setErrorState] = useState(null);
   const [actionError, setActionError] = useState(null);
+  // ETP-5385: the code behind `actionError`, so a mismatch (retry cannot help) is told apart.
+  const [actionErrorCode, setActionErrorCode] = useState(null);
   const [invitationData, setInvitationData] = useState(null);
   const [successData, setSuccessData] = useState(null);
 
@@ -163,7 +177,7 @@ export default function InviteAcceptancePage({ apiBase = import.meta.env.VITE_AP
         if (!isMounted) return;
 
         if (!res.ok || data.error) {
-          setErrorState(data.code || 'invalid_token');
+          setErrorState(readApiError(data).code || 'invalid_token');
           setLoading(false);
           return;
         }
@@ -403,11 +417,13 @@ export default function InviteAcceptancePage({ apiBase = import.meta.env.VITE_AP
     setSessionCredential(credential || null);
     setCredentialScheme(meta?.scheme ?? null);
     setActionError(null);
+    setActionErrorCode(null);
     setExistingAuthenticated(true);
   };
 
   const handleAcceptExisting = async () => {
     setActionError(null);
+    setActionErrorCode(null);
     setSubmitting(true);
     try {
       // ETP-5022's explicit override, now fed by the credential LoginStep handed back
@@ -426,11 +442,12 @@ export default function InviteAcceptancePage({ apiBase = import.meta.env.VITE_AP
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.error) {
+        const { code, message } = readApiError(data);
         // The accept was attempted with a platform token this page never verified (it is read
         // straight from storage). When that token is the problem, dropping back to the login
         // step is recoverable; showing the error alone would dead-end a user who skipped the
         // login precisely because they were already signed in.
-        if (res.status === 401 || data.code === 'AUTHENTICATION_REQUIRED') {
+        if (res.status === 401 || code === 'AUTHENTICATION_REQUIRED') {
           setExistingAuthenticated(false);
           setActionError(null);
           setSubmitting(false);
@@ -439,12 +456,13 @@ export default function InviteAcceptancePage({ apiBase = import.meta.env.VITE_AP
         // ETP-5385: an invitation the server now calls invalid or expired is a terminal outcome.
         // Showing it as an inline alert left it next to the "continue to join this company"
         // prompt, two contradictory messages on one screen; it takes over the page instead.
-        if (TERMINAL_ACCEPT_CODES.has(data.code)) {
-          setErrorState(data.code);
+        if (TERMINAL_ACCEPT_CODES.has(code)) {
+          setErrorState(code);
           setSubmitting(false);
           return;
         }
-        setActionError(data.message || ui('invitePageAcceptFailed'));
+        setActionErrorCode(code);
+        setActionError(message || ui('invitePageAcceptFailed'));
         setSubmitting(false);
         return;
       }
@@ -453,6 +471,7 @@ export default function InviteAcceptancePage({ apiBase = import.meta.env.VITE_AP
       setSuccessData({ clientName: data.clientName || invitationData?.clientName });
       setSubmitting(false);
     } catch {
+      setActionErrorCode(null);
       setActionError(ui('invitePageAcceptFailed'));
       setSubmitting(false);
     }
@@ -593,6 +612,12 @@ export default function InviteAcceptancePage({ apiBase = import.meta.env.VITE_AP
       ui('onboardingAuthFeatureInstantAccess'),
     ],
   };
+  // ETP-5385: one precedence for both signed-in layouts: errorState (full page) > actionError >
+  // join notice. The notice is only shown while no error is, and a mismatch swaps the retry
+  // button for a sign-out, since the same account fails the same way again.
+  const showJoinNotice = !actionError;
+  const accountMismatch = actionErrorCode === 'INVITATION_ACCOUNT_MISMATCH';
+  const errorButtonSignedIn = existingAuthenticated;
   const guardApplies = !loading && !errorState && !successData
     && ACTIONABLE_BRANCHES.has(invitationData?.branch);
 
@@ -751,10 +776,10 @@ export default function InviteAcceptancePage({ apiBase = import.meta.env.VITE_AP
           <Button
             variant="outline"
             className="mt-6 h-12 w-full rounded-lg text-base font-medium"
-            onClick={() => navigate(existingAuthenticated ? '/' : '/login')}
-            data-testid="action-error-sign-in"
+            onClick={() => navigate(errorButtonSignedIn ? '/' : '/login')}
+            data-testid={errorButtonSignedIn ? 'action-error-go-to-app' : 'action-error-sign-in'}
           >
-            {ui(existingAuthenticated ? 'invitePageGoToApp' : 'invitePageSignIn')}
+            {ui(errorButtonSignedIn ? 'invitePageGoToApp' : 'invitePageSignIn')}
           </Button>
         </div>
       </AuthShell>
@@ -863,21 +888,32 @@ export default function InviteAcceptancePage({ apiBase = import.meta.env.VITE_AP
               {actionError}
             </div>
           )}
-          {!actionError && (
+          {showJoinNotice && (
             <p className="mb-3 text-base text-muted-foreground sm:text-xl">
               {ui('invitePageAuthenticatedNotice')}
             </p>
           )}
-          <Button
-            className="h-12 w-full gap-2 rounded-lg bg-primary text-base font-medium text-primary-foreground hover:bg-accent-highlight hover:text-accent-highlight-foreground"
-            onClick={handleAcceptExisting}
-            disabled={submitting}
-            data-testid="action-accept-invitation"
-          >
-            {submitting
-              ? <CircleNotchIcon className="h-5 w-5 animate-spin" data-testid="Loader2__fa3cd9" />
-              : <><span>{ui('invitePageAcceptButton')}</span><ArrowRightIcon className="h-4 w-4" data-testid="ArrowRight__fa3cd9" /></>}
-          </Button>
+          {accountMismatch ? (
+            <Button
+              variant="outline"
+              className="h-12 w-full rounded-lg text-base font-medium"
+              onClick={handleCloseSessionAndContinue}
+              data-testid="action-mismatch-sign-out"
+            >
+              {ui('inviteSessionConflictLogoutUnknown')}
+            </Button>
+          ) : (
+            <Button
+              className="h-12 w-full gap-2 rounded-lg bg-primary text-base font-medium text-primary-foreground hover:bg-accent-highlight hover:text-accent-highlight-foreground"
+              onClick={handleAcceptExisting}
+              disabled={submitting}
+              data-testid="action-accept-invitation"
+            >
+              {submitting
+                ? <CircleNotchIcon className="h-5 w-5 animate-spin" data-testid="Loader2__fa3cd9" />
+                : <><span>{ui('invitePageAcceptButton')}</span><ArrowRightIcon className="h-4 w-4" data-testid="ArrowRight__fa3cd9" /></>}
+            </Button>
+          )}
         </div>
       </AuthShell>
     );
@@ -930,10 +966,10 @@ export default function InviteAcceptancePage({ apiBase = import.meta.env.VITE_AP
               <Button
                 variant="outline"
                 className="w-full"
-                onClick={() => navigate('/login')}
-                data-testid="action-error-sign-in"
+                onClick={() => navigate(errorButtonSignedIn ? '/' : '/login')}
+                data-testid={errorButtonSignedIn ? 'action-error-go-to-app' : 'action-error-sign-in'}
               >
-                {ui('invitePageSignIn')}
+                {ui(errorButtonSignedIn ? 'invitePageGoToApp' : 'invitePageSignIn')}
               </Button>
             </div>
           </div>
@@ -1017,10 +1053,16 @@ export default function InviteAcceptancePage({ apiBase = import.meta.env.VITE_AP
 
             {existingAuthenticated ? (
               <div className="space-y-3" data-testid="invite-authenticated-step">
-                {!actionError && <p className="text-sm text-muted-foreground">{ui('invitePageAuthenticatedNotice')}</p>}
-                <Button className="w-full gap-2" onClick={handleAcceptExisting} disabled={submitting} data-testid="action-accept-invitation">
-                  {submitting ? <CircleNotchIcon className="h-4 w-4 animate-spin" data-testid="Loader2__fa3cd9" /> : <><span>{ui('invitePageAcceptButton')}</span><ArrowRightIcon className="h-4 w-4" data-testid="ArrowRight__fa3cd9" /></>}
-                </Button>
+                {showJoinNotice && <p className="text-sm text-muted-foreground">{ui('invitePageAuthenticatedNotice')}</p>}
+                {accountMismatch ? (
+                  <Button variant="outline" className="w-full" onClick={handleCloseSessionAndContinue} data-testid="action-mismatch-sign-out">
+                    {ui('inviteSessionConflictLogoutUnknown')}
+                  </Button>
+                ) : (
+                  <Button className="w-full gap-2" onClick={handleAcceptExisting} disabled={submitting} data-testid="action-accept-invitation">
+                    {submitting ? <CircleNotchIcon className="h-4 w-4 animate-spin" data-testid="Loader2__fa3cd9" /> : <><span>{ui('invitePageAcceptButton')}</span><ArrowRightIcon className="h-4 w-4" data-testid="ArrowRight__fa3cd9" /></>}
+                  </Button>
+                )}
               </div>
             ) : null}
           </div>
