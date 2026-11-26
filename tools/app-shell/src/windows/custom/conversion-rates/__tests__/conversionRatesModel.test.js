@@ -1,7 +1,9 @@
 // @covers tools/app-shell/src/windows/custom/conversion-rates/conversionRatesModel.js
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { isOpenEnded, displayValidTo, formatWallClock } from '../conversionRatesModel.js';
+import {
+  isOpenEnded, displayValidTo, formatWallClock, convertWallClock, createZoneView,
+} from '../conversionRatesModel.js';
 
 describe('isOpenEnded', () => {
   for (const [validTo, expected] of [
@@ -44,5 +46,45 @@ describe('formatWallClock', () => {
 
   it('is empty for an unparseable value', () => {
     assert.equal(formatWallClock('not a date'), '');
+  });
+});
+
+describe('convertWallClock (server zone ↔ viewer zone)', () => {
+  for (const [label, raw, from, to, expected] of [
+    ['UTC → Buenos Aires is 3 h earlier', '2026-11-20T10:00:00', 'UTC', 'America/Argentina/Buenos_Aires', '2026-11-20T07:00:00'],
+    ['Buenos Aires → UTC crosses midnight', '2026-11-20T22:30:00', 'America/Argentina/Buenos_Aires', 'UTC', '2026-11-21T01:30:00'],
+    ['UTC → Madrid in summer (CEST, +2)', '2026-07-15T12:00:00', 'UTC', 'Europe/Madrid', '2026-07-15T14:00:00'],
+    ['UTC → Madrid in winter (CET, +1)', '2026-01-15T12:00:00', 'UTC', 'Europe/Madrid', '2026-01-15T13:00:00'],
+    ['Madrid → UTC on the day DST ends', '2026-10-25T12:00:00', 'Europe/Madrid', 'UTC', '2026-10-25T11:00:00'],
+    ['same zone: unchanged', '2026-11-20T10:00:59', 'UTC', 'UTC', '2026-11-20T10:00:59'],
+    ['missing zone: unchanged', '2026-11-20T10:00:00', null, 'UTC', '2026-11-20T10:00:00'],
+    ['open end: unchanged', '9999-12-31T00:00:00', 'UTC', 'America/Argentina/Buenos_Aires', '9999-12-31T00:00:00'],
+    ['unparseable: unchanged', 'not a date', 'UTC', 'America/Argentina/Buenos_Aires', 'not a date'],
+  ]) {
+    it(label, () => {
+      assert.equal(convertWallClock(raw, from, to), expected);
+    });
+  }
+});
+
+describe('createZoneView', () => {
+  const view = createZoneView('UTC', 'America/Argentina/Buenos_Aires', new Date('2026-11-25T12:00:00Z'));
+
+  it('shows server wall clock in the viewer zone and sends it back, labelled GMT-3', () => {
+    assert.equal(view.show('2026-11-20T10:00:00'), '2026-11-20T07:00:00');
+    assert.equal(view.send('2026-11-20T07:00:00'), '2026-11-20T10:00:00');
+    assert.equal(view.label, 'GMT-3');
+  });
+
+  it('an unknown server zone converts nothing and labels nothing', () => {
+    const off = createZoneView('Not/AZone', 'America/Argentina/Buenos_Aires');
+    assert.equal(off.active, false);
+    assert.equal(off.show('2026-11-20T10:00:00'), '2026-11-20T10:00:00');
+    assert.equal(off.label, null);
+  });
+
+  it('displayValidTo stretches a synced 00:00 end to 23:59 of the server day, then converts it', () => {
+    const row = { validFromDate: '2026-11-17T00:00:00', validToDate: '2026-11-17T00:00:00', sMFCRSynced: true };
+    assert.equal(displayValidTo(row, view), '17/11/2026 20:59');
   });
 });
