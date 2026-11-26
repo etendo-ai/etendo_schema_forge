@@ -1,6 +1,7 @@
 // @covers tools/app-shell/src/components/contract-ui/DistinctValuesList.jsx
 import { test, expect } from '../../helpers/test.js';
 import { login } from '../../helpers/auth.js';
+import { dismissAutoMatchModalIfOpen } from '../../helpers/financial-account-helpers.js';
 
 /**
  * ETP-5121 — reactivating a bank statement must not hide its already reconciled line.
@@ -510,11 +511,6 @@ async function installMocks(page, { processed = true } = {}) {
  * the `autoMatch` mock became state-aware, the processed-statement cases DO produce a group. The
  * effect disarms itself on the same pass, so a dismissed modal stays dismissed.
  *
- * The modal has no Cancel button: it is closed from its header link "Ir a conciliación manual"
- * (`automatch-modal-open-reconciliation`). With rows checked (a high-confidence group is checked by
- * default) that link asks first through `automatch-close-confirm`, which "Cerrar"
- * (`automatch-close-confirm-action`) confirms; with nothing checked it closes straight away.
- *
  * @param {import('@playwright/test').Page} page
  * @param {string} tab
  */
@@ -523,19 +519,7 @@ async function openTab(page, tab) {
   await page.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => {});
   await expect(page.getByTestId(`detail-tab-${tab}`)).toBeVisible();
 
-  const automatch = page.getByTestId('automatch-suggestion-modal');
-  if (await automatch.isVisible().catch(() => false)) {
-    await page.getByTestId('automatch-modal-open-reconciliation').click();
-    // Confirm only if the close asked first (rows were checked): either the confirmation shows up
-    // or the modal is already gone.
-    const closeConfirm = page.getByTestId('automatch-close-confirm');
-    await expect.poll(async () => (await closeConfirm.isVisible()) || !(await automatch.isVisible()))
-      .toBe(true);
-    if (await closeConfirm.isVisible()) {
-      await page.getByTestId('automatch-close-confirm-action').click();
-    }
-    await expect(automatch).toHaveCount(0);
-  }
+  await dismissAutoMatchModalIfOpen(page);
 }
 
 /**
