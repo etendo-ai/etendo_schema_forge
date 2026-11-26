@@ -2882,3 +2882,100 @@ date (ETP-5840) and the default price list stays valid. Without it, the agent of
 `f-foreign-currency-invoice` read currencies, price lists and conversion rates first (22 calls against
 Holded's 11). The text lives in this window's `decisions.json` and in `com.etendoerp.go`'s
 `ETGO_SF_ENTITY` sourcedata; keep both equal.
+
+## Invoices in a confirmed remittance — ETP-6247
+
+**What "remitted" means.** Confirming a remittance makes Classic REM create one payment per due in
+status `REM_SENT` and link the invoice installment to it (a partial remittance links only the
+remitted part). Nothing has moved yet: the invoice's `outstandingAmount` stays full until the bank
+collects the remittance, so **dashboard, KPIs, aging and the "pending" filters do not change** — the
+remitted part is still owed. A **draft** remittance creates no payment and changes nothing here.
+After the remittance is collected the payment moves on (`RPR`/`PPM`, then `RDNC`/`PWNC`), the
+outstanding drops to 0 and the invoice reads «Cobrada» as usual.
+
+**Data (backend, `com.etendoerp.go` `InvoiceRemittance`).**
+- Header record: `etgoRemittedAmt` (`C_Invoice.EM_ETGO_Remitted_Amt`, stored computed column, 0 when
+  nothing is remitted). Returned by the list and the detail reads through this window's `decisions.json`
+  (`readOnly`, `grid: false`, `form: false`, MCP `agentPrompt`), never a form field;
+  the SPA treats an absent field as 0.
+- `paymentPlan` rows: `remittedAmount` and `payableAmount` (decoration of `InvoicePaymentPlanHandler`).
+- `invoicePayments` action rows: `remittanceId` / `remittanceDocumentNo` on every payment a
+  remittance created, and status `REM_SENT` while remitted.
+
+**What the user sees.**
+
+| Case | Grid «Saldo pendiente» | Due-date dot | Topbar badge |
+|---|---|---|---|
+| Fully remitted (`etgoRemittedAmt >= outstandingAmount > 0`) | amber chip «En remesa» (`invoice-remitted`), opens the payments modal; no amount to register | neutral, never the red overdue dot | «En remesa · X» |
+| Partially remitted (`0 < remitted < outstanding`) | the usual amber pending button with only the FREE part («40,00 €»), like any pending invoice; the remitted part is in the payments modal | unchanged (the free part is still owed) | «Pendiente · 40,00 €» (the free part, no remitted suffix) — the topbar works per installment (`classifyInstallment` returns `remitted` when nothing of an installment is free; it is never `overdue`), with the header `etgoRemittedAmt` as the fallback when the plan does not load |
+
+- The payment is shown as **«Remesado»** (amber) — never «Cobro depositado» — in the payments modal, the
+  preview card and the payment sidebar («Cobro confirmado · en remesa»). `paymentDisplayState` returns `remitted` for `REM_SENT`
+  ahead of the processed check; `REM_CANCEL` keeps reading as deposited.
+- **Returned payment (`RPVOID`).** A remittance return voids the collected payment and the invoice
+  gets its outstanding back. Core keeps that payment's (cancelled) schedule details, so it stays in
+  the invoice's payment list. `paymentDisplayState` returns `voided` for `RPVOID`, ahead of the
+  processed check (like `remitted`), so it reads **«Anulado»** (`statusVoid`, destructive tone, the
+  same label and tone as the payment window's own badge) — never «Cobro depositado» — in the payments
+  modal (`PaymentStateTag__voided`), the preview card (`payments-card-state-voided`) and the payment
+  sidebar («Cobro confirmado · anulado», red dot). Its amount is grey, unsigned and struck through.
+  `isPaymentProcessed` counts it (never an editable draft, never reserved against the outstanding),
+  and the modal footer's «N cobros registrados» leaves it out (`countRegisteredPayments`).
+- **This invoice's share — every payment, not only remittances.** The amount a row shows in the
+  invoice payments modal and in the preview card is this invoice's share of the payment, not the
+  payment total: `paymentAmountOnInvoice(p)`, the row's `appliedToInvoice` (the payment's schedule
+  details on THIS invoice, sent by `paymentListItem`; it survives a void), unsigned, falling back to
+  `amount` only when the backend does not send it. That covers three cases alike: a remittance
+  payment grouped by customer (a payment of 55,66 € for two invoices reads 27,83 € on each), a manual
+  payment that covers several invoices, and an overpayment (a collection of 100 € on an 80 € invoice reads
+  80 €; the rest is credit, not this invoice's). Drafts still use `amount`: the draft reservation
+  (`freeToAllocate`, *Drafts reserve what they are going to pay* above) and the draft delete
+  confirmation read the payment's own `amount`.
+- **Payments modal** («Cobros/Pagos de la factura», `InvoicePaymentHistoryModal`) when something is
+  remitted:
+  - an info banner on top (`RemittanceInfoBanner.jsx`, `InvoicePaymentHistoryModal__remittance-banner`):
+    one line per remittance, «En la remesa N · <estado>», then «Se marcará como cobrada cuando se
+    cobre la remesa.». The status is the backend's `remittanceStatusLabel` on the remitted
+    `invoicePayments` row; without it the line reads «En la remesa N». «Ver remesa →» opens
+    `/remittance/{id}`, and only appears with the `sepaRemittances` capability (that route is
+    guarded by the flag);
+  - the summary reads Cliente/Proveedor | Importe total | **En remesa** | **Pendiente de cobro** (the free
+    part; 0 when everything is remitted) instead of «Saldo pendiente»;
+  - the remitted row shows «Remesa N» in the Método column (no link under the number), the
+    «Remesado» chip, and the amount in neutral grey with no sign. No money has moved yet;
+  - fully remitted: no «Añadir cobro» button at all, only «Cerrar». Partially remitted: «Añadir
+    cobro» works for the free part.
+- **Preview card** (`PaymentsCard`): the same compact banner above the list, the same row
+  («Remesa N» as the method, grey amount), «Pendiente de pago» (free part) and «En remesa» rows,
+  and no add action when everything is remitted.
+- **Register payment.** What is offered is the free part: `outstanding − remitted` per installment,
+  minus the drafts as before (`freeToAllocate`). Not the backend's `payableAmount`, which already
+  leaves the drafts out and would subtract them twice. The preview's toolbar action (always rendered)
+  stays disabled with the `cpAddPaymentBlockedByRemittance` tooltip when everything is remitted.
+- **One installment per payment.** The register action applies a payment to ONE installment
+  (`scheduleId`) and, when that installment is partly or fully remitted, refuses anything over its
+  payable part (`InvoiceRemittance.installmentRefusal`). So when the invoice has anything remitted, a
+  new payment targets the first installment with `payableAmount > 0` (`pickPaymentInstallment`) and the
+  amount offered is capped at that installment's `payableAmount` (`resolvePaymentTarget`). Example:
+  free parts 30 + 50 → the modal offers 30 on the first installment, not 80. The installment is handed
+  to `NewPaymentEntryModal` as `scheduleId`. With nothing remitted, nothing changes. Editing a draft
+  keeps the old rule. The payment-window edit launcher (`PaymentEditModalLauncher`) uses
+  `outstanding − etgoRemittedAmt` as its target. A `REM_SENT` payment counts as processed: it is never offered for edit or delete, and is
+  never reserved as a draft.
+- **Errors.** `ETGO_InvoiceInRemittance` (a registration over the free part) and
+  `ETGO_PaymentInRemittance` (reactivating or removing a remitted payment) are mapped in
+  `lib/backendErrors.js`. Their values come as top-level error keys (`remittanceDocumentNo`,
+  `payableAmount`, `currency`), not `messageParams`. `extractBackendMessageParams` turns them into the
+  sentence params, with the amount formatted by `formatCurrency` (the backend text prints «1234.50»).
+  If the remittance number is missing, the backend's own text is shown.
+  When the whole invoice is remitted the backend adds `ETGO_InvoiceFullyInRemittance` to the keys
+  (and `error.fullyRemitted: true`). `translateInvoiceFullyInRemittance` then renders
+  `backendError.invoiceFullyInRemittance` («Esta factura está en la remesa N; quedará saldada cuando se
+  liquide la remesa.») instead of the partial sentence, which would say «solo puedes registrar 0,00 €».
+
+**Not gated by `sepa-remittances`**, on purpose: a `REM_SENT` payment only exists where a remittance was
+confirmed. See the flag entry in `flags-registry.json`.
+
+**Code.** `shared/invoiceRemittance.js` (amount rules), `shared/invoicePaymentBadge.js` (`remitted` /
+`partially-remitted` kinds), `shared/paymentStatuses.js` (`STATUS_REMITTED`, `STATUS_VOIDED`, `paymentAmountOnInvoice`), `shared/RemittanceInfoBanner.jsx`,
+`artifacts/sales-invoice/custom/InvoiceHeaderTable.jsx` (grid), `artifacts/sales-invoice/custom/InvoiceTopbarExtra.jsx` (topbar), `shared/InvoicePaymentHistoryModal.jsx`, `shared/useInvoicePreview.js`, `shared/InvoicePreview.jsx`, `shared/preview-cards/PaymentsCard.jsx`, `shared/PaymentDetailSidebarBase.jsx`, `shared/NewPaymentEntryModal.jsx`.

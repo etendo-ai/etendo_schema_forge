@@ -1,8 +1,8 @@
 {
   "version": "0.18.0",
   "generatedAt": "2026-04-29T18:11:46.137Z",
-  "updatedAt": "2026-11-20T16:35:33.054Z",
-  "checksum": "0f14933885aacd95",
+  "updatedAt": "2026-11-25T17:33:23.110Z",
+  "checksum": "57c832d89a4642a1",
   "frontendContract": {
     "window": {
       "id": "6F8F913FA60F4CBD93DC1D3AA696E76E",
@@ -58,7 +58,7 @@
           "columnName": "etprReactivatePayment",
           "label": "processReactivate",
           "style": "ghost-danger",
-          "displayLogicRaw": "@status@ != 'RPAP' & @pisLocked@ = 'N'"
+          "displayLogicRaw": "@status@ != 'RPAP' & @pisLocked@ = 'N' & @status@ != 'REM_SENT' & @status@ != 'REM_CANCEL' & @status@ != 'RPVOID'"
         }
       },
       "detailEntity": null,
@@ -2033,7 +2033,7 @@
           "columnName": "etprReactivatePayment",
           "label": "processReactivate",
           "style": "ghost-danger",
-          "displayLogicRaw": "@status@ != 'RPAP' & @pisLocked@ = 'N'"
+          "displayLogicRaw": "@status@ != 'RPAP' & @pisLocked@ = 'N' & @status@ != 'REM_SENT' & @status@ != 'REM_CANCEL' & @status@ != 'RPVOID'"
         }
       },
       "detailEntity": null,

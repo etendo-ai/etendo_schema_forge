@@ -2,14 +2,19 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useUI } from '@/i18n';
-import { translateBackendError } from '@/lib/backendErrors.js';
+import { extractBackendMessageKeys, extractBackendMessageParams, translateBackendError } from '@/lib/backendErrors.js';
 import { useApiFetch } from '@/auth/useApiFetch.js';
 import { MoneyAmount } from '@/components/ui/money-amount';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatCurrency } from '@/lib/formatCurrency.js';
 import { openCenteredPopup } from '@/lib/popupWindow.js';
-import { isPaymentProcessed, paymentDisplayState } from './paymentStatuses';
+import { isPaymentProcessed, isPaymentVoided, paymentAmountOnInvoice, paymentDisplayState } from './paymentStatuses';
 import NewPaymentEntryModal from './NewPaymentEntryModal.jsx';
+import RemittanceInfoBanner, { remittancesOf } from './RemittanceInfoBanner.jsx';
+import { ArrowsLeftRightIcon } from '@phosphor-icons/react';
+import {
+  REMITTANCE_EPSILON, isBlockedByRemittance, resolvePaymentTarget, resolveRemittanceSummary,
+} from './invoiceRemittance.js';
 import { isCompletedStatus } from '../../../lib/docStatus.js';
 
 function fmtDate(raw) {
@@ -68,6 +73,36 @@ function PaymentStateTag({ status, processed, isSales, ui, payment }) {
         dot="var(--status-destructive-fg)"
         data-testid="StatePill__b82d4f">
         {ui('cpPaymentStateError')}
+      </StatePill>
+    );
+  }
+  // Voided — a remittance return undid it (ETP-6247). Processed, so without this it read "Cobro
+  // depositado" in green while the invoice was pending again. Same "Anulado" and destructive tone as
+  // the payment window's own RPVOID badge (lib/statusBadge.js `rpvoid`).
+  if (state === 'voided') {
+    return (
+      <StatePill
+        testid="PaymentStateTag__voided"
+        bg="var(--status-destructive-bg)"
+        fg="var(--status-destructive-fg)"
+        dot="var(--status-destructive-fg)"
+        data-testid="StatePill__b82d4f">
+        {ui('statusVoid')}
+      </StatePill>
+    );
+  }
+  // In a confirmed remittance the bank has not collected yet (ETP-6247): processed, but the money
+  // has not moved, so it must not read "depositado". Same amber as the remittance window's own
+  // REM_SENT badge (lib/statusBadge.js `rem_sent` → warning).
+  if (state === 'remitted') {
+    return (
+      <StatePill
+        testid="PaymentStateTag__remitted"
+        bg="var(--status-warning-bg)"
+        fg="var(--status-warning-fg)"
+        dot="var(--status-warning-fg)"
+        data-testid="StatePill__b82d4f">
+        {ui('statusRemSent')}
       </StatePill>
     );
   }
@@ -217,11 +252,30 @@ function DeleteDraftConfirm({ payment, isSales, currency, deleting, error, onCan
   );
 }
 
+/**
+ * How many payments the footer reports as registered. A voided payment stays in the list so the
+ * user can see what happened, but it no longer settles anything (ETP-6247).
+ */
+function countRegisteredPayments(payments) {
+  return (payments || []).filter((p) => !isPaymentVoided(p)).length;
+}
+
 function getCountLabel(isSales, count, ui) {
   if (isSales) {
     return count === 1 ? ui('cobroRegistrado') : ui('cobrosRegistrados');
   }
   return count === 1 ? ui('pagoRegistrado') : ui('pagosRegistrados');
+}
+
+/**
+ * The remittance view of what the modal shows (ETP-6247): the part of the outstanding a confirmed
+ * remittance will collect, and the part that is free to register. From the installments once
+ * loaded (`remittedAmount`), else from the invoice's `etgoRemittedAmt`. A credit instrument is never
+ * remitted, so it reads as nothing remitted.
+ */
+function getRemittanceSummary({ isCreditInstrument, installments, outstandingAmt, invoiceData }) {
+  if (isCreditInstrument) return { outstanding: outstandingAmt, remitted: 0, free: outstandingAmt };
+  return resolveRemittanceSummary(installments, outstandingAmt, invoiceData);
 }
 
 function getOutstandingAmount({ isCreditInstrument, installments, fallbackOutstanding }) {
@@ -237,11 +291,98 @@ function getOutstandingAmount({ isCreditInstrument, installments, fallbackOutsta
   return isCreditInstrument ? Math.abs(installmentTotal) : installmentTotal;
 }
 
+/**
+ * The invoice-header facts the modal shows — currency, grand total, business partner and document
+ * number — each with the fallback the list row may need when a value is missing.
+ */
+function readInvoiceHeaderFacts(invoiceData) {
+  return {
+    currency: invoiceData?.['currency$_identifier'] || 'EUR',
+    grandTotal: parseFloat(invoiceData?.grandTotalAmount ?? 0),
+    bpName: invoiceData?.['businessPartner$_identifier'] || invoiceData?.businessPartner || '',
+    docNo: invoiceData?.documentNo || '',
+  };
+}
+
+/**
+ * Whether "Añadir cobro/pago" is offered, offered disabled, or hidden, and whether the invoice has a
+ * remitted part to show.
+ *
+ * A credit note's remaining balance is consumed FROM other payments, never paid into, so it never
+ * takes one. The button is shown but disabled, rather than hidden, when a draft already covers the
+ * invoice: the user needs to know the button exists and what unblocks it. An invoice that genuinely
+ * takes no payment (settled, a credit note, still in draft) keeps hiding it — and so does one whose
+ * whole outstanding is in a confirmed remittance (ETP-6247): nothing the user does here unblocks it,
+ * the banner says what happens next, and a dead button only reads as broken.
+ */
+function resolveAddPaymentAvailability({ isCreditInstrument, isCompleted, outstandingAmt, newPaymentAmount, remittance }) {
+  const invoiceTakesPayments = !isCreditInstrument && isCompleted && outstandingAmt > 0;
+  const canAddPayment = invoiceTakesPayments && newPaymentAmount > 0;
+  const fullyRemitted = invoiceTakesPayments && !canAddPayment && isBlockedByRemittance(remittance);
+  const addPaymentBlockedByDraft = invoiceTakesPayments && !canAddPayment && !fullyRemitted;
+  const hasRemitted = !isCreditInstrument && remittance.remitted > REMITTANCE_EPSILON;
+  return { canAddPayment, addPaymentBlockedByDraft, hasRemitted };
+}
+
+/**
+ * How "Añadir cobro/pago" looks: muted, explained by a tooltip and not clickable while a draft
+ * already covers the invoice; the regular call to action otherwise.
+ */
+function getAddPaymentButtonLook(blockedByDraft, ui) {
+  if (blockedByDraft) {
+    return {
+      title: ui('cpAddPaymentBlockedByDraft'),
+      className: 'bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]',
+      cursor: 'not-allowed',
+    };
+  }
+  return {
+    title: undefined,
+    className: 'bg-[hsl(var(--foreground))] text-primary-foreground hover:bg-[hsl(var(--accent-highlight))] hover:text-[hsl(var(--accent-highlight-foreground))] transition-colors',
+    cursor: 'pointer',
+  };
+}
+
+/**
+ * The amount and installment handed to the payment entry modal. Editing a draft offers what is free
+ * once the OTHER drafts are reserved, with no installment; a new payment goes to the installment
+ * resolvePaymentTarget picked, capped at its payable part.
+ */
+function resolveEntryModalAllocation(editingPayment, freeToAllocate, newPaymentTarget) {
+  if (editingPayment) {
+    return { outstanding: freeToAllocate(editingPayment.id), scheduleId: undefined };
+  }
+  return { outstanding: newPaymentTarget.amount, scheduleId: newPaymentTarget.scheduleId || undefined };
+}
+
 function getRowAmountMeta({ isCreditInstrument, payment, isSales }) {
+  // ETP-6247 — this invoice's share of the payment, not the payment's total: a remittance grouped
+  // by customer pays several invoices with ONE payment.
+  const rowValue = paymentAmountOnInvoice(payment);
+  const state = paymentDisplayState(payment);
+  // ETP-6247 — a voided payment no longer settles anything: neutral and struck through, no sign.
+  if (state === 'voided') {
+    return {
+      rowValue,
+      amountSign: '',
+      amountColor: 'hsl(var(--muted-foreground))',
+      amountClassName: 'text-muted-foreground line-through',
+    };
+  }
+  // ETP-6247 — a remitted payment has not moved any money yet (the bank collects or pays the
+  // remittance later), so it reads neutral: no green "+", no red "−".
+  if (state === 'remitted') {
+    return {
+      rowValue,
+      amountSign: '',
+      amountColor: 'hsl(var(--muted-foreground))',
+      amountClassName: 'text-muted-foreground',
+    };
+  }
   const isConsumption = isCreditInstrument && payment.appliedToInvoice != null;
   if (isConsumption) {
     return {
-      rowValue: Math.abs(Number(payment.appliedToInvoice)),
+      rowValue,
       amountSign: '− ',
       amountColor: 'hsl(var(--destructive))',
       amountClassName: 'text-[hsl(var(--destructive))]',
@@ -250,7 +391,7 @@ function getRowAmountMeta({ isCreditInstrument, payment, isSales }) {
 
   if (isSales) {
     return {
-      rowValue: payment.amount,
+      rowValue,
       amountSign: '+ ',
       amountColor: 'var(--status-success-fg)',
       amountClassName: 'text-[var(--status-success-fg)]',
@@ -258,7 +399,7 @@ function getRowAmountMeta({ isCreditInstrument, payment, isSales }) {
   }
 
   return {
-    rowValue: payment.amount,
+    rowValue,
     amountSign: '− ',
     amountColor: 'hsl(var(--destructive))',
     amountClassName: 'text-[hsl(var(--destructive))]',
@@ -372,9 +513,25 @@ function PaymentHistoryBody({
                 {fmtDate(payment.paymentDate)}
               </div>
               <div style={{ minWidth: 0, display: 'flex', alignItems: 'center' }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, maxWidth: '100%', padding: '2px 8px', borderRadius: 360, background: 'hsl(var(--muted))', color: 'hsl(var(--muted-foreground))', fontSize: 12, lineHeight: '16px' }}>
-                  <MethodIcon method={methodKey} data-testid="MethodIcon__b82d4f" />
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{methodRaw || '—'}</span>
+                <span
+                  data-testid={payment.remittanceDocumentNo ? 'InvoicePaymentHistoryModal__remittance-method' : undefined}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 5, maxWidth: '100%', padding: '2px 8px', borderRadius: 360, background: 'hsl(var(--muted))', color: 'hsl(var(--muted-foreground))', fontSize: 12, lineHeight: '16px' }}
+                >
+                  {/* ETP-6247 — a payment a remittance created reads as that remittance: it is
+                      how the money moves, and the banner above says where to manage it. */}
+                  {payment.remittanceDocumentNo ? (
+                    <>
+                      <ArrowsLeftRightIcon size={14} style={{ color: 'hsl(var(--text-disabled))', flexShrink: 0 }} data-testid="ArrowsLeftRight__b82d4f" />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {ui('remittancePaymentLink', { documentNo: payment.remittanceDocumentNo })}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <MethodIcon method={methodKey} data-testid="MethodIcon__b82d4f" />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{methodRaw || '—'}</span>
+                    </>
+                  )}
                 </span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center' }}>
@@ -451,10 +608,13 @@ export default function InvoicePaymentHistoryModal({
     navigate(`/${paymentWindow}/${p.id}`);
   }, [navigate, onClose, paymentWindow]);
 
-  const currency = invoiceData?.['currency$_identifier'] || 'EUR';
-  const grandTotal = parseFloat(invoiceData?.grandTotalAmount ?? 0);
-  const bpName = invoiceData?.['businessPartner$_identifier'] || invoiceData?.businessPartner || '';
-  const docNo = invoiceData?.documentNo || '';
+  // ETP-6247 — a payment created by a remittance links to it: that is where it is managed.
+  const handleRemittanceClick = useCallback((remittanceId) => {
+    onClose();
+    navigate(`/remittance/${remittanceId}`);
+  }, [navigate, onClose]);
+
+  const { currency, grandTotal, bpName, docNo } = readInvoiceHeaderFacts(invoiceData);
   const isCompleted = isCompletedStatus(invoiceData?.documentStatus);
 
   // Credit instruments (credit notes / returns) carry negative totals end to end. Their
@@ -570,7 +730,13 @@ export default function InvoicePaymentHistoryModal({
         // Etendo's `response.error` shape both missed the failure and replaced a specific backend
         // reason with the generic copy (same defect fixed in NewPaymentEntryModal, ETP-5084).
         const raw = json?.error?.message || json?.response?.error?.message;
-        throw new Error((raw && translateBackendError(raw, ui)) || ui('cpDeleteDraftFailed'));
+        // ETP-6247 — with the identity, so ETGO_PaymentInRemittance names the remittance in the UI
+        // language.
+        const translated = raw && translateBackendError(raw, ui, {
+          messageKeys: extractBackendMessageKeys(json),
+          messageParams: extractBackendMessageParams(json),
+        });
+        throw new Error(translated || ui('cpDeleteDraftFailed'));
       }
       setDeletingPayment(null);
       setPaymentWasAdded(true);
@@ -589,6 +755,7 @@ export default function InvoicePaymentHistoryModal({
   }, [onClose, onPaymentAdded, paymentWasAdded]);
 
   const title = isSales ? ui('invoiceReceipts') : ui('invoicePaymentsTitle');
+  const registeredCount = countRegisteredPayments(payments);
   const partyLabel = isSales ? ui('customer') : ui('vendor');
   /**
    * What is left to allocate once the drafts already sitting on this invoice are taken into account.
@@ -600,20 +767,29 @@ export default function InvoicePaymentHistoryModal({
    *
    * `excludeId` is the draft being edited, whose own amount must not count against itself.
    */
+  //
+  // ETP-6247 — the base is the FREE part of the outstanding, not all of it: the part in a confirmed
+  // remittance is collected by the remittance, and registering it here would collect it twice (the
+  // backend refuses it with ETGO_InvoiceInRemittance). A remitted payment is processed, so it is
+  // never counted as a draft reservation on top of that.
+  // A credit instrument is never remitted: its summary's `free` is the outstanding itself.
+  const remittance = getRemittanceSummary({ isCreditInstrument, installments, outstandingAmt, invoiceData });
   const freeToAllocate = useCallback((excludeId) => {
     const reserved = payments
       .filter((p) => !isPaymentProcessed(p) && p.id !== excludeId)
       .reduce((sum, p) => sum + Math.abs(Number(p.amount) || 0), 0);
-    return outstandingAmt - reserved;
-  }, [payments, outstandingAmt]);
+    return remittance.free - reserved;
+  }, [payments, remittance.free]);
+  // A NEW payment goes to ONE installment, and with anything remitted the backend refuses more than
+  // that installment's payable part — so the amount offered is capped there and the installment is
+  // handed to the entry modal (see resolvePaymentTarget). Editing a draft keeps freeToAllocate.
+  const newPaymentTarget = resolvePaymentTarget(installments, freeToAllocate(null));
 
-  // A credit note's remaining balance is consumed FROM other payments, never paid into.
-  const invoiceTakesPayments = !isCreditInstrument && isCompleted && outstandingAmt > 0;
-  const canAddPayment = invoiceTakesPayments && freeToAllocate(null) > 0;
-  // Shown but disabled, rather than hidden, when the only thing in the way is a draft already
-  // covering the invoice: the user needs to know the button exists and what unblocks it. An invoice
-  // that genuinely takes no payment (settled, a credit note, still in draft) keeps hiding it.
-  const addPaymentBlockedByDraft = invoiceTakesPayments && !canAddPayment;
+  const { canAddPayment, addPaymentBlockedByDraft, hasRemitted } = resolveAddPaymentAvailability({
+    isCreditInstrument, isCompleted, outstandingAmt, newPaymentAmount: newPaymentTarget.amount, remittance,
+  });
+  const addPaymentButtonLook = getAddPaymentButtonLook(addPaymentBlockedByDraft, ui);
+  const entryModalAllocation = resolveEntryModalAllocation(editingPayment, freeToAllocate, newPaymentTarget);
 
   // Table layout: Nº documento · Fecha · Método · Estado · Importe (right) · trash (draft-only).
   // 760px modal − 48px side padding − 60px column gaps (5 gaps) = 652px to distribute.
@@ -671,7 +847,21 @@ export default function InvoicePaymentHistoryModal({
           )}
         </div>
 
-        {/* Summary widget — Cliente/Proveedor · Importe total · Saldo pendiente */}
+        {/* ETP-6247 — where the remitted part sits and what happens next. */}
+        {hasRemitted && remittancesOf(payments).length > 0 && (
+          <div style={{ padding: '0 20px 12px', flexShrink: 0 }}>
+            <RemittanceInfoBanner
+              payments={payments}
+              isSales={isSales}
+              ui={ui}
+              onOpen={handleRemittanceClick}
+              testid="InvoicePaymentHistoryModal__remittance-banner"
+              data-testid="RemittanceInfoBanner__b82d4f" />
+          </div>
+        )}
+
+        {/* Summary widget — Cliente/Proveedor · Importe total · Saldo pendiente, or, with a
+            confirmed remittance, · En remesa · Pendiente de cobro/pago (the free part). */}
         <div style={{ padding: '0 20px 12px', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, padding: '8px 12px' }}>
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -684,20 +874,45 @@ export default function InvoicePaymentHistoryModal({
                 <MoneyAmount value={grandTotal} currency={currency} tone="neutral" currencyDisplay="narrowSymbol" data-testid="MoneyAmount__cp-history-total" />
               </div>
             </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 12, lineHeight: '16px', color: 'hsl(var(--muted-foreground))' }}>
-                {isCreditInstrument ? ui('cpFavorBadge') : ui('saldoPendiente')}
+            {hasRemitted ? (
+              <>
+                <div style={{ flex: 1, minWidth: 0 }} data-testid="InvoicePaymentHistoryModal__remitted">
+                  <div style={{ fontSize: 12, lineHeight: '16px', color: 'hsl(var(--muted-foreground))' }}>{ui('remittanceInvoiceChip')}</div>
+                  <div className="tabular-nums" style={{ fontSize: 16, lineHeight: '24px', fontWeight: 500 }}>
+                    <MoneyAmount value={remittance.remitted} currency={currency} tone="neutral" className="text-[var(--status-warning-fg)]" currencyDisplay="narrowSymbol" data-testid="MoneyAmount__cp-history-remitted" />
+                  </div>
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12, lineHeight: '16px', color: 'hsl(var(--muted-foreground))' }}>
+                    {ui(isSales ? 'invoicePendingCollection' : 'invoicePendingPayment')}
+                  </div>
+                  <div className="tabular-nums" style={{ fontSize: 16, lineHeight: '24px', fontWeight: 500 }}>
+                    <MoneyAmount
+                      value={remittance.free}
+                      currency={currency}
+                      tone="neutral"
+                      className={getOutstandingClassName(false, remittance.free)}
+                      currencyDisplay="narrowSymbol"
+                      data-testid="MoneyAmount__cp-history-pending" />
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12, lineHeight: '16px', color: 'hsl(var(--muted-foreground))' }}>
+                  {isCreditInstrument ? ui('cpFavorBadge') : ui('saldoPendiente')}
+                </div>
+                <div className="tabular-nums" style={{ fontSize: 16, lineHeight: '24px', fontWeight: 500 }}>
+                  <MoneyAmount
+                    value={outstandingAmt}
+                    currency={currency}
+                    tone="neutral"
+                    className={getOutstandingClassName(isCreditInstrument, outstandingAmt)}
+                    currencyDisplay="narrowSymbol"
+                    data-testid="MoneyAmount__cp-history-pending" />
+                </div>
               </div>
-              <div className="tabular-nums" style={{ fontSize: 16, lineHeight: '24px', fontWeight: 500 }}>
-                <MoneyAmount
-                  value={outstandingAmt}
-                  currency={currency}
-                  tone="neutral"
-                  className={getOutstandingClassName(isCreditInstrument, outstandingAmt)}
-                  currencyDisplay="narrowSymbol"
-                  data-testid="MoneyAmount__cp-history-pending" />
-              </div>
-            </div>
+            )}
           </div>
         </div>
 
@@ -731,7 +946,7 @@ export default function InvoicePaymentHistoryModal({
         <div style={{ padding: '12px 20px', borderTop: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 14, lineHeight: '20px', fontWeight: 600, color: 'hsl(var(--muted-foreground))' }}>
             <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="hsl(var(--text-disabled))" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M18 9v6"/></svg>
-            {payments.length} {getCountLabel(isSales, payments.length, ui)}
+            {registeredCount} {getCountLabel(isSales, registeredCount, ui)}
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <button
@@ -740,19 +955,18 @@ export default function InvoicePaymentHistoryModal({
               data-testid="InvoicePaymentHistoryModal__cerrar-btn"
               style={{ fontSize: 14, lineHeight: '24px', fontWeight: 500, padding: '8px 12px', borderRadius: 360, border: 'none', outline: 'none', background: 'none', color: 'hsl(var(--foreground))', cursor: 'pointer' }}
             >
-              {ui('cancel')}
+              {/* Nothing to cancel when there is no action to take: plain "Cerrar" then. */}
+              {(canAddPayment || addPaymentBlockedByDraft) ? ui('cancel') : ui('close')}
             </button>
             {(canAddPayment || addPaymentBlockedByDraft) && (
               <button
                 type="button"
                 disabled={addPaymentBlockedByDraft}
-                title={addPaymentBlockedByDraft ? ui('cpAddPaymentBlockedByDraft') : undefined}
+                title={addPaymentButtonLook.title}
                 onClick={() => { setEditingPayment(null); setShowPaymentModal(true); }}
                 data-testid="InvoicePaymentHistoryModal__add-btn"
-                className={addPaymentBlockedByDraft
-                  ? 'bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]'
-                  : 'bg-[hsl(var(--foreground))] text-primary-foreground hover:bg-[hsl(var(--accent-highlight))] hover:text-[hsl(var(--accent-highlight-foreground))] transition-colors'}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 14, lineHeight: '24px', fontWeight: 500, padding: '8px 14px', borderRadius: 360, border: 'none', outline: 'none', cursor: addPaymentBlockedByDraft ? 'not-allowed' : 'pointer' }}
+                className={addPaymentButtonLook.className}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 14, lineHeight: '24px', fontWeight: 500, padding: '8px 14px', borderRadius: 360, border: 'none', outline: 'none', cursor: addPaymentButtonLook.cursor }}
               >
                 <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
                 {isSales ? ui('addCobro') : ui('addPago')}
@@ -768,7 +982,8 @@ export default function InvoicePaymentHistoryModal({
           specName={specName}
           invoiceId={invoiceId}
           invoiceData={invoiceData}
-          outstanding={freeToAllocate(editingPayment?.id || null)}
+          outstanding={entryModalAllocation.outstanding}
+          scheduleId={entryModalAllocation.scheduleId}
           apiBaseUrl={apiBaseUrl}
           payment={editingPayment}
           onClose={() => { setShowPaymentModal(false); setEditingPayment(null); }}
