@@ -107,6 +107,15 @@ describe('getLayout303 — BASE layout (no patch)', () => {
     assertSectionContains(lastLayout, 'iva_deducible', 'regularizacion', 'prorrata_definitiva');
   });
 
+  it('[43] regularización de bienes de inversión is a manual box in every period (part of [45])', () => {
+    ['T1', 'T4', '12'].forEach((period) => {
+      const row = getLayout303(2026, period).sections
+        .find(s => s.id === 'iva_deducible').rows.find(r => r.id === 'reg_bienes_inv');
+      expect(row.cells, period).toEqual([null, 43]);
+      expect(row.editable, period).toBe(true);
+    });
+  });
+
   it('resultado contains diferencia row', () => {
     assertSectionContains(layout, 'resultado', 'diferencia');
   });

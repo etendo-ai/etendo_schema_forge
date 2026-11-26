@@ -4060,7 +4060,7 @@ notices stay inside it, under the data.
 | 3 | Datos estadísticos | IAE activities with the form's columns: **A · Actividad** (epigraph description), **B · Código de actividad** (e.g. `A03`, its description as secondary text/tooltip), **C · Epígrafe IAE** (AEAT format: the file's `6732` shown as `673.2` — `formatIaeEpigraph390`), **Tipo** ("Principal" first, then the others by line as `2ª…6ª` — the 1st…5th other activity, as classic `AEAT390Utility.getEpigraphOrgInfo` writes them; one past the 5th is listed as "No se declara"). The IAE type ("Actividades empresariales sujetas al IAE") is not a 2025 form column — only the epígrafe cell tooltip. Values are the raw epigraph / code fields, requested with `_extraProperties=epgrafeIAE.epigraph,epgrafeIAE.description,epiaeCode.code,epiaeCode.description` (`IAE_EXTRA_PROPERTIES`; NEO allowlists them, `neo-headless.md` §4.3.5) — no backend or decisions change; the selector identifiers are only split as a fallback when a field is missing (`toActivities` in `useOrg390Identity.js`). Mark "operaciones con terceras personas" (`YEARLY_BP_DECLARATION`) | `organization/actividadesDelIae`, read-only + "Editar en Organización" |
 | 4 | Representante | Natural person: `information.aeat390RepNif/RepName`; otherwise the first 3 active `representanteLegal` rows by line, as classic reads them (OBCriteria filters on active) (NIF, name, power date, notary) | Organization, read-only + "Editar en Organización" |
 | 5 | IVA devengado | Régimen ordinario and intra-EU goods/services by rate (0, 2, 4, 5, 7.5, 10, 21 %), [27]/[28], [29]/[30], [31]/[32], totals [33]/[34] and [47] | calculated |
-| 6 | IVA deducible | Interior corrientes / bienes de inversión, importaciones, intra-EU (per rate + group totals [48]…[59], [597]/[598]), [639]/[62], [63]; manual [660]/[661]; total [64] (deductible cuotas + [661], as the classic file writes it) | calculated; [660]/[661] manual |
+| 6 | IVA deducible | Interior corrientes / bienes de inversión, importaciones, intra-EU (per rate + group totals [48]…[59], [597]/[598]), [639]/[62]; manual [63] (preloaded with Σ 303 [43]) and [660]/[661]; total [64] (deductible cuotas + [63] + [661], as the classic file writes it) | calculated; [63]/[660]/[661] manual |
 | 7 | Resultado liquidación anual | [65] total (= [47] − [64]), [658] manual, [84] total (= [65] + [658]), [659] manual, [85] manual (disabled AND cleared in territory mode; refused while [93] has a value), [86] total | |
 | 8 | Tributación por territorio | Toggle "Tributo a varias Administraciones"; % [87]–[91] (each 0–99), [92] total, [93] manual (refused while [85] has a value), [94] total; inline error when the percentages do not add up to 100 % | turning the toggle off clears the territory inputs |
 | 9 | Resultado de las liquidaciones | Per month "A ingresar" / "A devolver" (`INGRESAR_xx` / `DEVOLVER_xx`; the "A devolver" column is disabled unless `ISMONTHLYRETURN = 'Y'`), totals [95] / [96], [97], [98], [662] manual; inline error when DEVOLVER_12 and [97] are both filled, amber warning when [98] is filled with [96] or [97] | preloaded from the 303s (see "Preload from the 303s and cuadre"); the year's 303s are listed under the block |
@@ -4106,12 +4106,20 @@ prorrata. A layout for another design year plugs in through `getLayout390(layout
   every save (`buildManualData390`), so stored data never carries the rejected combinations. The
   backend checks every one of them again as a blocking incident (see "Incidents"), so a value that
   reached the stored inputs another way still blocks the file.
-- **Known gap — [63] (regularización de inversiones):** read-only and always 0, exactly like
-  Classic, which has no parameter for it (nor for [522]) and always writes 0. A declarant with an
-  investment-goods regularization cannot declare it in either system; adding it needs a GO-side input
-  that post-patches the classic file (page 3, position 149).
+- **[63] (regularización de bienes de inversión) is a manual input** (`390INVESTMENT_REGULARIZATION`,
+  ETP-5716 QA CAL-F2). It is never calculated — it depends on the prorrata of the acquisition years
+  (arts. 107–110 LIVA), which Etendo does not keep — and may be negative. It is **preloaded with
+  Σ [43] of the year's 303s** (the same manual box of the self-assessments, already inside their
+  [45]), so it gets the usual "Modificado" + Restaurar when the user changes it, and the 390 result
+  keeps matching the 303s. It is a deduction: [64] = deductible cuotas + [63] + [661], and since the
+  classic engine puts it on the bean (`AEAT390Report2014.generateOperacionesRegimenGeneral`:
+  `RegularizInversiones` + `SumDeducciones`) it also reaches [65], [84]–[86] and, unlike [661], the
+  territory [84] with no quirk. The file prints it on page 4 ([63]; position 625 of the 2025/2026
+  design), the same code for the 2025 and 2026 reports. The classic launcher still has no parameter
+  for it (no `TaxReportParameter` in the reference data), so Classic keeps writing 0; [522]
+  (prorrata) stays out of scope.
 - **Rates without operations** are folded behind "Sin operaciones (N tipos) · Mostrar".
-- **Live derivation:** the input-dependent boxes ([64]/[65] through [661], [84]–[86], [92]–[94],
+- **Live derivation:** the input-dependent boxes ([64]/[65] through [63] and [661], [84]–[86], [92]–[94],
   [95]/[96], echoed inputs, [108]) are recomputed on screen by `deriveInputBoxes`, a mirror of the
   backend's `Fiscal390DerivedBoxes` (same formulas, cents arithmetic). The backend stays
   authoritative: Calcular and the generated file recompute server-side.
@@ -4187,6 +4195,11 @@ filtered and paged):
   box of the Casillas tab, or an incident's `sources` action). While it is set, the toolbar shows a
   removable tag "Casilla [nn] ×" (`fm.m390.sources.box_tag`, `FmSources390__boxTag`) that clears
   only the box (Tipo / Impuesto / search stay); "Limpiar filtros" clears everything.
+- **Foreign-currency invoices:** each line's base and cuota are converted to euros separately by
+  the classic engine (the invoice's own rate, else the general one) and **rounded to the nearest
+  cent** (`AEAT390Utility.roundLineAmount`, HALF_UP). Until ETP-5716 QA (CAL-F1) they were rounded
+  UP, which put a converted cuota one cent above base × rate and above the 303 for the same
+  invoice — a false 0,02 € "Diferencia con los 303" and a blocking `BLOCK9_MISMATCH`.
 - **Totals:** a sticky footer with base/cuota/total of every filtered line (not just the page) and,
   with a box filter, the box total plus a "Cuadra con la casilla [nn]" check against the box value
   (amber "No cuadra" otherwise — should never happen).
@@ -4212,7 +4225,7 @@ AEAT justification** — is in `com.etendoerp.go/docs/aeat-390-endpoints.md`, "G
 `DEVOLVER_xx` ([96], monthly register only) or, last period, [98]; last-period credit → [97];
 prior-year credits applied (Σ[78], oldest first against the first 303's [110]) → [85] (or [93] in
 territory mode); in-year credits never applied → [662]; last 303 [65]/[89]–[92] → [87]–[91] when it
-files to several administrations.
+files to several administrations; Σ [43] → [63] (regularización de bienes de inversión).
 
 - **When it applies:** on opening a draft whose `manualData.aeatPreloaded` is absent or empty
   (never preloaded — `hasPreloadedValues`; an empty `{}` is what a save records while the year had

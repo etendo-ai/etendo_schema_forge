@@ -131,6 +131,30 @@ describe('deriveInputBoxes — mirror of Fiscal390DerivedBoxes', () => {
     expect(cleared[661]).toBeUndefined();
   });
 
+  it('[63] is a deduction inside ResRegGeneral: it moves [64], [65] and the territory [84] too', () => {
+    const fromServer = { 47: '500.00', 64: '210.00', 65: '290.00', 84: '290.00', 86: '290.00' };
+    const liq = deriveInputBoxes(fromServer, { [INPUT.INVESTMENT_REGULARIZATION]: '10.00' }, {
+      [INPUT.INVESTMENT_REGULARIZATION]: '-4.00',
+    }).boxes;
+    expect(liq[63]).toBe(-4);
+    expect(liq[64]).toBe(196);
+    expect(liq[65]).toBe(304);
+    expect(liq[84]).toBe(304);
+    expect(liq[86]).toBe(304);
+
+    const terr = deriveInputBoxes(fromServer, { [INPUT.INVESTMENT_REGULARIZATION]: '10.00' }, {
+      [INPUT.INVESTMENT_REGULARIZATION]: '12.00', [INPUT.COMMON_TERRITORY]: '99', [INPUT.NAVARRA]: '1',
+    }).boxes;
+    expect(terr[64]).toBe(212);
+    expect(terr[84]).toBe(288); // unlike [661], [63] is taken off the territory [84]
+  });
+
+  it('[63] is a manual input of the IVA deducible block', () => {
+    const row = getLayout390(2026).find(b => b.id === 'iva_deducible').items.find(r => r.id === 'regul_inversion');
+    expect(row.cells[1]).toMatchObject({ input: INPUT.INVESTMENT_REGULARIZATION, box: 63 });
+    expect(row.cells[1].nonNegative).toBeUndefined();
+  });
+
   it('[112] is gone: not in the 2025 model, never written by classic', () => {
     const rows = getLayout390(2025).find(b => b.id === 'volumen_operaciones').items.map(r => r.id);
     expect(rows).not.toContain('box112');

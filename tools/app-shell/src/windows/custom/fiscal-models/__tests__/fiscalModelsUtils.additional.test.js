@@ -1127,6 +1127,12 @@ describe('applyBoxParams — rectification-only boxes 70/109 (ETP-5597)', () => 
     assert.equal(params.get('ReturnsPendingSettlement'), '3');
   });
 
+  it('forwards box 43 (regularización bienes de inversión) as classic Investment_Adjustment', () => {
+    const params = new URLSearchParams();
+    applyBoxParams(params, { 43: -12.5 }, { tipo_declaracion: 'I' });
+    assert.equal(params.get('Investment_Adjustment'), '-12.5');
+  });
+
   it('without identChecks (legacy 2-arg call) forwards 70/109 unchanged — backward compatible', () => {
     const params = new URLSearchParams();
     applyBoxParams(params, OVERRIDES);

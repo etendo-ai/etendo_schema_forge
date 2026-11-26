@@ -6,7 +6,8 @@
 // The backend answers the 390 inputs the 303s determine (`preload.inputs`, classic search keys:
 // INGRESAR_xx, DEVOLVER_xx, TOTAL_LASTPERIOD [97], TOTAL_LASTPERIOD_DEVOLVER [98],
 // LIQANUAL_ENDCOMPENSATION [662], LIQANUAL_COMPENSATION [85] or COMMON_TERRITORY_COMPENSATION
-// [93], the territory percentages [87]-[91]) and `expectedResult` = [95] − [96] − [97] − [98] −
+// [93], the territory percentages [87]-[91], 390INVESTMENT_REGULARIZATION [63] = Σ 303 [43]) and
+// `expectedResult` = [95] − [96] − [97] − [98] −
 // [662] of the 303s. This module applies them to the on-screen inputs WITHOUT overwriting what the
 // user changed, and compares the 390 result with the expected one.
 import { parseAmount, sanitizeAeatInputs390 } from './fm390Layouts.js';
