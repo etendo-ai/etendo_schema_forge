@@ -68,7 +68,13 @@ export function enterFeature(feature, { emit = defaultEmit } = {}) {
   lastClient = client ?? lastClient;
 
   if (!feature) {
-    if (lastKey !== null) Promise.resolve(leaveFeature()).catch(() => {});
+    // Only the feature goes: the remembered identity stays, so a later account change is still seen.
+    if (lastKey !== null) {
+      lastKey = null;
+      pendingOpen = null;
+      clearActiveFeature();
+      Promise.resolve(setContext({ featureKey: undefined })).catch(() => {});
+    }
     return;
   }
   const key = feature.key;

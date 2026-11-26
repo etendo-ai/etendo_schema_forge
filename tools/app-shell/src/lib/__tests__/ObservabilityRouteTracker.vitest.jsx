@@ -3,7 +3,13 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Link, MemoryRouter, Route, Routes } from 'react-router-dom';
 
+import { useAuthOptional } from '@etendo-ai/app-shell-core/auth';
 import { ObservabilityRouteTracker } from '../observability/RouteTracker.jsx';
+
+vi.mock('@etendo-ai/app-shell-core/auth', async (importOriginal) => ({
+  ...(await importOriginal()),
+  useAuthOptional: vi.fn(() => null),
+}));
 
 function TestPage({ target }) {
   return <Link to={target}>go</Link>;
@@ -66,5 +72,22 @@ describe('ObservabilityRouteTracker feature wiring (ETP-5646)', () => {
     expect(seen).toEqual(['f:/dashboard']);
     await userEvent.click(screen.getByText('go'));
     expect(seen).toEqual(['f:/dashboard', 'f:/dashboard?report=x']);
+  });
+});
+
+describe('ObservabilityRouteTracker identity re-evaluation (ETP-5646)', () => {
+  it('evaluates the same location again when the session identity resolves', () => {
+    const seen = [];
+    const ui = () => (
+      <MemoryRouter initialEntries={['/dashboard']}>
+        <ObservabilityRouteTracker trackPage={() => {}} resolveFeature={() => ({ key: 'f' })} onFeature={(f) => seen.push(f?.key)} />
+      </MemoryRouter>
+    );
+    useAuthOptional.mockReturnValue(null);
+    const { rerender } = render(ui());
+    expect(seen).toHaveLength(1);
+    useAuthOptional.mockReturnValue({ username: 'u', clientId: 'C' });
+    rerender(ui());
+    expect(seen).toHaveLength(2);
   });
 });

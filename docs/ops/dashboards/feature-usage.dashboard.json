@@ -10,7 +10,7 @@
   ],
   "widgets": [
     { "definition": { "type": "toplist", "title": "Feature interactions (RUM actions in a feature context; opens are in Mixpanel feature_opened)",
-      "requests": [{ "q": "", "response_format": "scalar", "queries": [{ "data_source": "rum", "name": "q1", "search": { "query": "@type:action @context.featureKey:* env:$env.value" }, "indexes": ["*"], "compute": { "aggregation": "count" }, "group_by": [{ "facet": "@context.featureKey", "limit": 25, "sort": { "aggregation": "count", "order": "desc" } }] }], "formulas": [{ "formula": "q1" }] }] } },
+      "requests": [{ "response_format": "scalar", "queries": [{ "data_source": "rum", "name": "q1", "search": { "query": "@type:action @context.featureKey:* env:$env.value" }, "indexes": ["*"], "compute": { "aggregation": "count" }, "group_by": [{ "facet": "@context.featureKey", "limit": 25, "sort": { "aggregation": "count", "order": "desc" } }] }], "formulas": [{ "formula": "q1" }] }] } },
     { "definition": { "type": "timeseries", "title": "Requests by outcome per feature (logs, logger NeoRequest)",
       "requests": [{ "response_format": "timeseries", "queries": [{ "data_source": "logs", "name": "q1", "search": { "query": "@event:neo_request @feature_key:$feature.value @ad_client_id:$tenant.value env:$env.value" }, "indexes": ["*"], "compute": { "aggregation": "count" }, "group_by": [{ "facet": "@outcome", "limit": 5, "sort": { "aggregation": "count", "order": "desc" } }] }], "formulas": [{ "formula": "q1" }], "display_type": "bars" }] } },
     { "definition": { "type": "timeseries", "title": "p95 latency per feature (ms)",

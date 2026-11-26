@@ -31,31 +31,43 @@ function keyOf(item) {
   return buildFeatureKey(kind, kind === 'report' ? item.reportId : item.name);
 }
 
-export function buildFeatureCatalog(config = menuConfig) {
+function indexItems(config) {
   const items = new Map();
   for (const group of config?.menu ?? []) {
     for (const item of group.items ?? []) {
       if (item?.name && !items.has(item.name)) items.set(item.name, item);
     }
   }
+  return items;
+}
 
-  const resolve = (name, depth = 0) => {
-    const item = items.get(name);
-    if (!item) return null;
-    if (item.redirect && depth < 3) {
-      const target = String(item.redirect).replace(/^\//, '').split(/[/?#]/)[0];
-      return target && target !== name ? resolve(target, depth + 1) : null;
-    }
-    return item;
-  };
+/** Follows `redirect` (bounded) to the entry that owns the feature; `null` for a loop or a miss. */
+function resolveItem(items, name, depth = 0) {
+  const item = items.get(name);
+  if (item?.redirect && depth < 3) {
+    const target = String(item.redirect).replace(/^\//, '').split(/[/?#]/)[0];
+    return target && target !== name ? resolveItem(items, target, depth + 1) : null;
+  }
+  return item ?? null;
+}
 
+function resolveReportViewer(search, items, features, byReportId) {
+  const params = new URLSearchParams(search);
+  const reportId = params.get('report');
+  if (reportId && byReportId.has(reportId)) return features.get(keyOf(byReportId.get(reportId))) ?? null;
+  const category = params.get('category');
+  const listing = category ? resolveItem(items, `report-viewer-${category}`) : null;
+  return listing ? features.get(keyOf(listing)) ?? null : null;
+}
+
+export function buildFeatureCatalog(config = menuConfig) {
+  const items = indexItems(config);
+  // Only the key is read by callers (`enterFeature`, the tracker).
   const features = new Map();
   for (const name of items.keys()) {
-    const item = resolve(name);
-    const key = item ? keyOf(item) : null;
-    if (key) features.set(key, { key, kind: kindOf(item), name: item.name });
+    const item = resolveItem(items, name);
+    if (item) features.set(keyOf(item), { key: keyOf(item) });
   }
-
   const byReportId = new Map(
     [...items.values()].filter(item => item.reportId).map(item => [item.reportId, item]),
   );
@@ -64,15 +76,8 @@ export function buildFeatureCatalog(config = menuConfig) {
   function resolveFeature(pathname = '/', search = '') {
     const segment = String(pathname).replace(/^\/+/, '').split('/')[0];
     if (!segment) return null;
-    if (segment === 'report-viewer') {
-      const params = new URLSearchParams(search);
-      const reportId = params.get('report');
-      if (reportId && byReportId.has(reportId)) return features.get(keyOf(byReportId.get(reportId))) ?? null;
-      const category = params.get('category');
-      const listing = category ? resolve(`report-viewer-${category}`) : null;
-      return listing ? features.get(keyOf(listing)) ?? null : null;
-    }
-    const item = resolve(segment);
+    if (segment === 'report-viewer') return resolveReportViewer(search, items, features, byReportId);
+    const item = resolveItem(items, segment);
     return item ? features.get(keyOf(item)) ?? null : null;
   }
 
