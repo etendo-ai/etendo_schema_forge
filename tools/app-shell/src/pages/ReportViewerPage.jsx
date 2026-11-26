@@ -2153,7 +2153,7 @@ export default function ReportViewerPage() {
   // permission anchor; a category absent from this map (e.g. "purchases",
   // deliberately still menu-hidden only, per this ticket's own decision) is
   // never gated here — useWindowAccess(null) already fails closed to 'none',
-  // so categoryWindowId must be checked as well, not just the tier.
+  // so categoryAccessKey must be checked as well, not just the tier.
   // useWindowAccess fails closed to 'none' while windowAccess is still loading,
   // so an authorized user briefly sees the guard too until it resolves, then
   // the effect below re-fires once categoryAccessDenied flips to false.
@@ -2164,12 +2164,12 @@ export default function ReportViewerPage() {
   // against the fetched `reportAccess` map. Both checks fail closed while their own data is
   // still loading, so `categoryAccessDenied` briefly stays true (same transient guard flash the
   // window-only version already had) until whichever resolves last flips it.
-  const categoryWindowId = REPORT_CATEGORY_ACCESS_KEYS[categoryFilter] ?? null;
-  const categoryWindowAccessTier = useWindowAccess(categoryWindowId);
+  const categoryAccessKey = REPORT_CATEGORY_ACCESS_KEYS[categoryFilter] ?? null;
+  const categoryWindowAccessTier = useWindowAccess(categoryAccessKey);
   const categoryReportIds = REPORT_CATEGORY_REPORT_IDS[categoryFilter] ?? null;
   const hasAccessibleReportInCategory = Boolean(categoryReportIds) && Boolean(reportAccess)
     && categoryReportIds.some((id) => reportAccess[id] !== undefined);
-  const categoryAccessDenied = Boolean(categoryWindowId) && categoryWindowAccessTier === 'none'
+  const categoryAccessDenied = Boolean(categoryAccessKey) && categoryWindowAccessTier === 'none'
     && !hasAccessibleReportInCategory;
 
   useEffect(() => {
@@ -2239,7 +2239,7 @@ export default function ReportViewerPage() {
   if (categoryAccessDenied) {
     return (
       <WindowAccessGuard
-        windowId={categoryWindowId}
+        windowId={categoryAccessKey}
         data-testid={`WindowAccessGuard__report-viewer-${categoryFilter}`}
       />
     );
