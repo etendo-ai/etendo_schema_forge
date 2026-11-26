@@ -1984,3 +1984,31 @@ is the customer portal link (contacts action `portalLink`, com.etendoerp.go
 first pilots of MCP test `w-portal-link` the agent handed over the record URL instead. The text lives
 in this window's `decisions.json` and in `com.etendoerp.go`'s `ETGO_SF_ENTITY` sourcedata; keep both
 equal.
+
+## ETP-6225 — Import: phones with spaces, and the phone error on its column
+
+**The `isPhone` flag.** `window.import.fields[etgoPhone]` declares `"isPhone": true`. The core import
+dialog (`@etendo-ai/app-shell-core`, `lib/import/normalizePhone.js`) only normalizes the columns that
+declare it, never by guessing from the field name. On those columns it removes whitespace before the
+review-time check and before sending: `+34 910 565 400` is sent as `+34910565400`, and a numeric Excel
+cell comes back as plain digits (no `.0`, no exponent). A leading apostrophe is kept, so
+`'+34 910 565 400` is still refused. Without the flag none of this runs, and every spaced phone reached
+the backend as typed. QA pass 2 caught exactly that: the core change had shipped, but this window never
+declared the flag. `importTemplateRoundTrip.vitest.js` now fails if the flag is dropped. The contact
+person's `phone` (`AD_User.Phone`, `headerScope: contact`) deliberately has no flag: the backend applies
+no 15-character rule to it.
+
+The review-time message is the `importErrorInvalidPhone` key, in `en_US`, `es_ES` and `es_AR`. The core
+PR used the key without adding it, so the cell showed the English fallback until the manual QA of this fix.
+
+**Server side.** `BusinessPartnerHandler` (com.etendoerp.go) also strips whitespace from an incoming
+`etgoPhone` (`stripPhoneWhitespace`) before the format check and before the value is stored. That covers
+every channel (form, import, `/batch`, MCP): `+34 (910) 565-400` is accepted and stored as
+`+34(910)565-400` (15 characters). A persisted phone is compared without its spaces too, so a legacy
+`+34 910 565 400` sent back unchanged by an edit form is still treated as unchanged. A rejected phone,
+NIF, email or website comes back as a 400 keyed by field (`response.errors.<field>`), and the import
+review marks that column in red with the message instead of showing a generic row error.
+
+**Export.** The CSV export writes the phone without spaces and without a leading `'`. Formula
+neutralization still applies to real formula payloads (`docs/security/csv-neutralization-fixtures.md`
+in com.etendoerp.go), so an exported file re-imports unchanged.
