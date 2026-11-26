@@ -24,12 +24,6 @@ export const PAGE_HELP_SUGGESTIONS = 'page-help-suggestions';
 export const PUBLIC_API_KEYS = 'public-api-keys';
 
 /**
- * Reveals the Unified Calendar proof of concept (static mock data, no backend) in the
- * Proof of Concept menu group. Short-lived: see its flags-registry.json entry.
- */
-export const UNIFIED_CALENDAR_POC = 'unified-calendar-poc';
-
-/**
  * NUMERIC flag (ETP-5676): rows per `/batch` request in the generic import, overriding every
  * window's `window.import.limit.batchSize`. `0` (the default), unset, negative or non-numeric means
  * "no override" — the window's decisions value applies, else 1; the engine clamps to 1..50. One
@@ -122,7 +116,6 @@ export const FLAG_DEFAULTS = Object.freeze({
   [PROOF_OF_CONCEPT_MENU]: false,
   [PAGE_HELP_SUGGESTIONS]: false,
   [PUBLIC_API_KEYS]: false,
-  [UNIFIED_CALENDAR_POC]: false,
   [IMPORT_BATCH_SIZE]: 0,
   [MY_COMPANIES_PAGE]: false,
   [GRID_COLUMN_VIEWS]: false,
