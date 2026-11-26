@@ -44,7 +44,7 @@ vi.mock('../DocumentPrintDrawer.jsx', () => ({ default: () => null, printDocumen
 vi.mock('../ListFilterBar.jsx', () => ({ ListFilterBar: () => <div data-testid="list-filter-bar" /> }));
 import { noOpExtractQueryParamConditions } from './testUtils/gridQueryMock.js';
 
-vi.mock('@/lib/gridQuery', () => ({
+vi.mock('@etendo-ai/app-shell-core/lib/gridQuery.js', () => ({
   buildAdvancedFilterCriteria: () => null,
   extractQueryParamConditions: noOpExtractQueryParamConditions,
 }));

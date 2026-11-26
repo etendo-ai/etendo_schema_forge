@@ -94,7 +94,7 @@ Menu group "Tesorería" (ETP-6389): Cobro, Pago, Remesas (moved from Finanzas in
 
 ## Taxes
 
-Menu group "Impuestos" (ETP-6380), in the Finance section right after Finanzas: Impuesto, Categoría de impuesto, Monitor fiscal, Informes (Tax Report only, `report-viewer?category=taxes`), Configuración Fiscal and Modelos fiscales, in that order. None of them is listed under Finanzas or Configuración any more.
+Menu group "Impuestos" (ETP-6380), in the Finance section right after Finanzas: Impuesto, Categoría de impuesto, Monitor fiscal, Configuración Fiscal, Modelos fiscales and Informes (Tax Report only, `report-viewer?category=taxes`), in that order — Informes is the last entry, as in the other groups. None of them is listed under Finanzas or Configuración any more.
 
 | File | Description |
 |------|-------------|

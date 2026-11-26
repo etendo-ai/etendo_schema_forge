@@ -274,7 +274,7 @@ import { render, screen, fireEvent, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { getInvoiceFiscalTargets } from '@/windows/custom/shared/fiscalTargets.js';
 import { useFiscalConfig } from '@/windows/custom/fiscal-config/useFiscalConfig.js';
-import { resolveFilterMode } from '@/lib/gridQuery';
+import { resolveFilterMode } from '@etendo-ai/app-shell-core/lib/gridQuery.js';
 import PurchaseInvoiceHeaderTable from '../PurchaseInvoiceHeaderTable.jsx';
 
 // ETP-5087: the fiscal-column tests at the bottom of this file assert the REAL

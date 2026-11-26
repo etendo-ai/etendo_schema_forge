@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 // @covers tools/app-shell/src/windows/custom/return-material-receipt/ConfirmWithCreditButton.jsx
+// @covers tools/app-shell/src/windows/custom/shared/ConfirmWithCreditButtonBase.jsx
 import { render, screen, act, fireEvent } from '@testing-library/react';
 
 vi.mock('@/i18n', () => ({
@@ -79,6 +80,14 @@ describe('ConfirmWithCreditButton', () => {
     expect(modal).toHaveAttribute('data-spec-name', 'return-material-receipt');
     expect(modal).toHaveAttribute('data-entity-name', 'returnMaterialReceipt');
     expect(modal).toHaveAttribute('data-confirm-label', 'processReceipt');
+  });
+
+  // ETP-6179 — a return receipt confirmed with its rectificative invoice dry-runs the invoice
+  // first, so a refused invoice leaves the receipt in Borrador instead of completing it alone.
+  it('asks ConfirmInOutModal to dry-run the rectificative invoice before confirming', () => {
+    render(<ConfirmWithCreditButton {...BASE_PROPS} data={{ documentStatus: 'DR', linesCount: 2 }} />);
+    fireConfirm();
+    expect(screen.getByTestId('confirm-inout-modal')).toHaveAttribute('data-validate-invoice-first', 'true');
   });
 
   // ETP-5408: empty documents are blocked by the generic Confirm button itself

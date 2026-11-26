@@ -10,7 +10,7 @@ vi.mock('@/i18n', () => ({
 }));
 
 import { render, screen, within } from '@testing-library/react';
-import { ROW_LIFT_SHADOW, ROW_LIFT_HOVER_NO_BORDERS } from '@/components/contract-ui/rowVisuals.js';
+import { ROW_LIFT_SHADOW, ROW_LIFT_HOVER_BORDERS } from '@/components/contract-ui/rowVisuals.js';
 import { CurrencyRatesList } from '../CurrencyRatesList.jsx';
 
 const MANUAL_ROW = {
@@ -58,10 +58,10 @@ function renderList() {
 }
 
 describe('CurrencyRatesList — rate rows', () => {
-  it.each([MANUAL_ROW.id, SYNCED_ROW.id])('row %s carries the shared row-hover lift without borders', (id) => {
+  it.each([MANUAL_ROW.id, SYNCED_ROW.id])('row %s carries the shared row-hover lift and its border rule', (id) => {
     renderList();
     const row = screen.getByTestId(`convrate-row-${id}`);
-    for (const cls of `${ROW_LIFT_SHADOW} ${ROW_LIFT_HOVER_NO_BORDERS}`.split(' ')) {
+    for (const cls of `${ROW_LIFT_SHADOW} ${ROW_LIFT_HOVER_BORDERS}`.split(' ')) {
       expect(row.classList.contains(cls)).toBe(true);
     }
   });

@@ -98,6 +98,34 @@ Flags (ETP-5751)*.
 backend rolls back independently, by removing `DD_FEATURE_FLAGS_ENABLED` from its task definition
 (com.etendoerp.go `docs/feature-flags-and-tenant-upgrade.md` §1).
 
+### Flags panel CLI
+
+The rollout panel (`https://flags.jc.proxy.vpn.etendo.cloud`, VPN + Google login) manages each
+flag's stage (`off`/`alpha`/`beta`/`ga`), its alpha/beta rings (emails and `@groups`) and pushes
+them to Datadog. `cli/src/flags-panel.js` calls the same JSON API from the terminal:
+
+```bash
+make flags ARGS=login                        # once: browser sign-in, cookie in ~/.config/etendo-flags/
+make flags ARGS="list --mine"                # flags I own (GitHub login) or whose audience includes me
+make flags ARGS="show grid-column-views"
+make flags ARGS="ring grid-column-views alpha add someone@etendo.ai"
+make flags ARGS="stage grid-column-views beta"
+make flags ARGS="apply grid-column-views"    # dry run: prints the plan
+make flags ARGS="apply grid-column-views --yes"
+```
+
+`stage`, `ring` and `env` only change the panel's desired state; nothing reaches Datadog until
+`apply --yes`. `apply` refuses, unless `--force` is passed, when the plan removes someone's access
+or deletes a targeting rule the panel does not manage. `make flags ARGS=help` lists every command.
+
+`apply --yes` then verifies the result outside the panel: `check <key>` asks Datadog's flag CDN
+(`precompute-assignments`, the call the SPA makes, with the SPA's public client token read from
+the GitHub Actions variables) what each ring member gets, and exits 2 when someone the panel puts
+in the current stage does not get the flag. `extra rule` rows are people who get it through a rule
+the panel does not manage; `not applied` rows belong to a flag still pending in the panel. Flags the
+panel marks backend only (Datadog channel `SERVER`) are never served by that CDN, so `check` skips
+them instead of reporting a false mismatch.
+
 ### ConfigCat (fallback)
 
 The ConfigCat provider fetches assignments at initialization and polls for

@@ -372,7 +372,7 @@ export async function noteFinancialAccountPrecondition(page, testInfo) {
  *
  * `useCriteria: true` sends the same exact-match AdvancedCriteria filter the
  * ListView's own filter bar sends (`buildBackendFilter()` in
- * tools/app-shell/src/lib/gridQuery.js). `useCriteria: false` fetches an
+ * @etendo-ai/app-shell-core/lib/gridQuery.js). `useCriteria: false` fetches an
  * unfiltered bounded page and matches client-side — the same "never trust a
  * zero-row filtered result enough to justify a create" insurance
  * `findVendorFixture()` (purchase-helpers.js) carries, which matters more here

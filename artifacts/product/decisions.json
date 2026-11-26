@@ -137,6 +137,7 @@
           "section": "principal",
           "seq": 10,
           "span": 3,
+          "rows": 2,
           "publicApi": { "exposed": true, "name": "description" }
         },
         "productType": {

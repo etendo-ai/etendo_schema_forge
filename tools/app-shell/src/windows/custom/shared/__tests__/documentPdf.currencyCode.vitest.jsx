@@ -126,9 +126,13 @@ describe.each(DOCUMENTS)('$name printable — document currency (ETP-5125)', (do
 
   async function renderAndGetData(header) {
     const { result } = renderPdfFor(header);
-    await waitFor(() => expect(result.current.loading).toBe(false));
+    // `loading` is also false before generation starts (the template config is read first), so
+    // wait for the jsreport call itself.
+    await waitFor(() => {
+      expect(jsreportCalls).toHaveLength(1);
+      expect(result.current.loading).toBe(false);
+    });
     expect(result.current.error).toBeNull();
-    expect(jsreportCalls).toHaveLength(1);
     return jsreportCalls[0].data;
   }
 
@@ -144,9 +148,8 @@ describe.each(DOCUMENTS)('$name printable — document currency (ETP-5125)', (do
   });
 
   it('carries a "currency" label so the header row is translated', async () => {
-    const { result } = renderPdfFor({ ...doc.header, 'currency$_identifier': DOC_CURRENCY });
-    await waitFor(() => expect(result.current.loading).toBe(false));
+    const data = await renderAndGetData({ ...doc.header, 'currency$_identifier': DOC_CURRENCY });
     // The mocked ui() echoes the key, proving which locale key is consumed.
-    expect(jsreportCalls[0].data.labels.currency).toBe('invoicePdfCurrency');
+    expect(data.labels.currency).toBe('invoicePdfCurrency');
   });
 });

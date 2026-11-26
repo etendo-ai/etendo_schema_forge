@@ -273,28 +273,39 @@ describe('registry', () => {
       expect(reports.items.map(i => i.name)).toContain('report-viewer-finance');
     });
 
-    describe('item gated by BOTH accessWindowId and a capability (invoice-inbox)', () => {
-      const inbox = () => [{ group: 'Purchases', items: [{ name: 'invoice-inbox', accessWindowId: 'AW1', capability: 'invoiceInbox' }] }];
-      const names = result => result.flatMap(g => g.items.map(i => i.name));
+    // Real menu.json entry: Invoice Inbox now has a real AD_Menu node (Procurement Management >
+    // Transactions), so it is identified by `windowId` (role-menu membership) and gated by the
+    // `invoiceInbox` capability. It must NOT declare `accessWindowId` (anchor without a node).
+    describe('invoice-inbox menu entry (windowId + invoiceInbox capability)', () => {
+      const INBOX_WINDOW = '81AC659E93504927B459E0CAE80CE923';
+      const visible = (allowedIds, capabilities, windowAccess = {}) => filterMenuGroupsByAccess(
+        buildMenuGroups(), allowedIds, capabilities, windowAccess,
+      ).flatMap(g => g.items.map(i => i.name)).includes('invoice-inbox');
 
-      it('is visible only when the capability is true and the window access is granted', () => {
-        expect(names(filterMenuGroupsByAccess(inbox(), null, { invoiceInbox: true }, { AW1: 'full' }))).toEqual(['invoice-inbox']);
+      it('declares windowId and capability, and no accessWindowId (anchor-without-node trap)', () => {
+        const purchases = menuConfig.menu.find(g => g.items.some(i => i.name === 'invoice-inbox'));
+        const item = purchases.items.find(i => i.name === 'invoice-inbox');
+        expect(purchases.group).toBe('Purchases');
+        expect(item).toMatchObject({ windowId: INBOX_WINDOW, capability: 'invoiceInbox' });
+        expect(item.accessWindowId).toBeUndefined();
       });
 
-      it('is hidden when the capability is true but the window access is not granted', () => {
-        expect(names(filterMenuGroupsByAccess(inbox(), null, { invoiceInbox: true }, {}))).toEqual([]);
+      it('is visible when its windowId is allowed and the capability is true', () => {
+        expect(visible(new Set([INBOX_WINDOW]), { invoiceInbox: true })).toBe(true);
       });
 
-      it('is hidden when the window access is granted but the capability is false', () => {
-        expect(names(filterMenuGroupsByAccess(inbox(), null, { invoiceInbox: false }, { AW1: 'full' }))).toEqual([]);
+      it('is hidden when its windowId is missing from allowedIds', () => {
+        expect(visible(new Set(), { invoiceInbox: true })).toBe(false);
       });
 
-      it('stays hidden for an admin without the capability (the admin bypass only waives window access)', () => {
-        expect(names(filterMenuGroupsByAccess(inbox(), null, { isAdminOrClientAdmin: true }, {}))).toEqual([]);
+      it('is hidden when the windowId is allowed but the capability is false or absent', () => {
+        expect(visible(new Set([INBOX_WINDOW]), { invoiceInbox: false })).toBe(false);
+        expect(visible(new Set([INBOX_WINDOW]), {})).toBe(false);
       });
 
-      it('is visible for an admin who has the capability, without a window grant', () => {
-        expect(names(filterMenuGroupsByAccess(inbox(), null, { isAdminOrClientAdmin: true, invoiceInbox: true }, {}))).toEqual(['invoice-inbox']);
+      it('stays hidden for an admin without the capability', () => {
+        expect(visible(new Set(), { isAdminOrClientAdmin: true })).toBe(false);
+        expect(visible(new Set([INBOX_WINDOW]), { isAdminOrClientAdmin: true })).toBe(false);
       });
     });
 
@@ -606,7 +617,7 @@ describe('registry', () => {
 
     it('lists its entries in order for an admin', () => {
       const result = run({ capabilities: { isAdminOrClientAdmin: true }, allowedIds: null, reportAccess: {} });
-      expect(taxesNames(result)).toEqual(['tax', 'tax-category', 'fiscal-monitor', 'report-viewer-taxes', 'fiscal-config', 'fiscal-models']);
+      expect(taxesNames(result)).toEqual(['tax', 'tax-category', 'fiscal-monitor', 'fiscal-config', 'fiscal-models', 'report-viewer-taxes']);
     });
 
     it('hides the Taxes Reports link with the anchor window but no Tax Report grant', () => {
@@ -626,7 +637,7 @@ describe('registry', () => {
         .map(g => ({ ...g, items: g.items.filter(i => isSearchableMenuItem(i)) }));
       const result = filterMenuGroups(groups, 'impuestos', translate);
       const taxes = result.find(g => g.group === 'Taxes');
-      expect(taxes.items.map(i => i.name)).toEqual(['tax', 'tax-category', 'fiscal-monitor', 'report-viewer-taxes', 'fiscal-config', 'fiscal-models']);
+      expect(taxes.items.map(i => i.name)).toEqual(['tax', 'tax-category', 'fiscal-monitor', 'fiscal-config', 'fiscal-models', 'report-viewer-taxes']);
       // A moved window is found under Taxes, not under its old group.
       const byName = filterMenuGroups(groups, 'Fiscal Configuration', translate);
       expect(byName.map(g => g.group)).toEqual(['Taxes']);

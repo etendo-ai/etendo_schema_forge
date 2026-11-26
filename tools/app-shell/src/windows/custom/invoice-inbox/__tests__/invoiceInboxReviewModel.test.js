@@ -5,13 +5,13 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   computeTotals, documentTotal, totalMismatch, missingSet, lineKey, unresolvedProductCount, hasMissingTax,
-  pendingCount, vendorView, productView, linkedProductSimilarity, joinMeta, extractedCountry, isReviewReadOnly, isOpenableRow,
+  pendingCount, vendorView, productView, linkedProductSimilarity, candidateSimilarity, joinMeta, extractedCountry, isReviewReadOnly, isOpenableRow,
   isSettledStatus, reviewBanners, reviewNeighbors, reviewErrorKey, lineAmount, lineRate,
   initialZoom, stepZoom, PAPER_WIDTH, ZOOM_MIN, ZOOM_MAX, ZOOM_STEP,
   lineUnit6, toScaled, divRoundHalfAway, normalizeNumber, sameNumber, buildOp, applyOperationLocally,
   applyPendingToReview, newProductComplete, newProductName, saveErrorKey, isReloadCode, canMarkReviewed,
   SAVE_ERROR_LABEL_KEYS, NUMBER_FIELDS, currencyScale, lineFieldMissing, hasMissingLineField,
-  canConfirm, isConfirmRetry, confirmBlockers,
+  canConfirm, isConfirmRetry, confirmBlockers, isManualLine, manualPricingOf,
 } from '../invoiceInboxReviewModel.js';
 import { readFileSync } from 'node:fs';
 
@@ -157,6 +157,25 @@ describe('vendorView / productView / text helpers', () => {
     assert.equal(linkedProductSimilarity(product('P1', [{ id: 'P1', similarity: '72' }, { id: 'P2', similarity: '90' }])), 72);
     assert.equal(linkedProductSimilarity(product('P2', [{ id: 'P1', similarity: '72' }, { id: 'P2', similarity: '96.7%' }])), 96.7);
     assert.equal(linkedProductSimilarity(product('P1', [{ id: 'P1', similarity: '88,5' }])), 88.5);
+  });
+  it('candidateSimilarity parses text, comma decimals, percent signs and numbers', () => {
+    assert.equal(candidateSimilarity({ similarity: '72' }), 72);
+    assert.equal(candidateSimilarity({ similarity: '63,5' }), 63.5);
+    assert.equal(candidateSimilarity({ similarity: '96.7%' }), 96.7);
+    assert.equal(candidateSimilarity({ similarity: ' 40 % ' }), 40);
+    assert.equal(candidateSimilarity({ similarity: 63.4 }), 63.4);
+    assert.equal(candidateSimilarity({ similarity: 0 }), 0);
+  });
+  it('candidateSimilarity returns null when there is nothing usable', () => {
+    assert.equal(candidateSimilarity({ similarity: '' }), null);
+    assert.equal(candidateSimilarity({ similarity: '  ' }), null);
+    assert.equal(candidateSimilarity({ similarity: null }), null);
+    assert.equal(candidateSimilarity({ similarity: undefined }), null);
+    assert.equal(candidateSimilarity({ similarity: NaN }), null);
+    assert.equal(candidateSimilarity({ similarity: 'n/a' }), null);
+    assert.equal(candidateSimilarity({}), null);
+    assert.equal(candidateSimilarity(null), null);
+    assert.equal(candidateSimilarity(undefined), null);
   });
   it('linkedProductSimilarity is null when there is no usable number (ETP-6051)', () => {
     assert.equal(linkedProductSimilarity({ id: 'P1', candidates: [{ id: 'P1' }] }), null);
@@ -512,6 +531,66 @@ describe('applyOperationLocally', () => {
     assert.deepEqual(next.document.lines.map((l) => [l.index, l.quantity]), [[0, 3]]);
     assert.equal(next.document.header.vendor.name, 'N');
     assert.equal(review.document.lines.length, 2);
+  });
+});
+
+describe('currency edit (setCurrency)', () => {
+  it('buildOp.setCurrency builds the operation', () => {
+    assert.deepEqual(buildOp.setCurrency('USD1'), { op: 'setCurrency', currencyId: 'USD1' });
+  });
+  it('localSetCurrency sets the id and the manual source, drops currencyUnavailable and keeps the other header keys', () => {
+    const before = { header: { currencyId: 'EUR1', currencyUnavailable: 'CHF', currencyRaw: 'CHF', documentNo: 'F1' }, lines: [] };
+    const next = applyOperationLocally(before, buildOp.setCurrency('USD1'));
+    assert.equal(next.header.currencyId, 'USD1');
+    assert.equal(next.header.currencySource, 'manual');
+    assert.equal('currencyUnavailable' in next.header, false);
+    assert.equal(next.header.currencyRaw, 'CHF');
+    assert.equal(next.header.documentNo, 'F1');
+    assert.equal(before.header.currencyUnavailable, 'CHF');
+  });
+  it('removes the ambiguous-symbol notice in the string and the {code} forms and keeps the others', () => {
+    const before = {
+      header: {},
+      notices: ['currency_symbol_ambiguous', { code: 'currency_symbol_ambiguous', symbol: '$' }, 'other', { code: 'keep_me' }],
+    };
+    const next = applyOperationLocally(before, buildOp.setCurrency('USD1'));
+    assert.deepEqual(next.notices, ['other', { code: 'keep_me' }]);
+  });
+  it('does not add a notices key when the document had none', () => {
+    const next = applyOperationLocally({ header: {} }, buildOp.setCurrency('USD1'));
+    assert.equal('notices' in next, false);
+  });
+  it('applyPendingToReview: the top-level currency follows the last setCurrency, with its rate hint', () => {
+    const review = { currency: { id: 'EUR1', isoCode: 'EUR', symbol: '€', rate: 1 }, document: { header: {} } };
+    const next = applyPendingToReview(review, [
+      { op: buildOp.setCurrency('GBP1'), hint: { isoCode: 'GBP', rate: 0.85 } },
+      { op: buildOp.setCurrency('USD1'), hint: { isoCode: 'USD', rate: 1.47 } },
+    ]);
+    assert.deepEqual(next.currency, { id: 'USD1', isoCode: 'USD', symbol: '€', source: 'manual', rate: 1.47 });
+    assert.equal(next.document.header.currencyId, 'USD1');
+    assert.equal(review.currency.id, 'EUR1');
+  });
+  it('applyPendingToReview: a null rate hint is kept as null, a missing hint also gives null (no stale rate)', () => {
+    const review = { currency: { id: 'EUR1', isoCode: 'EUR', rate: 1 }, document: { header: {} } };
+    const withNull = applyPendingToReview(review, [{ op: buildOp.setCurrency('CHF1'), hint: { isoCode: 'CHF', rate: null } }]);
+    assert.equal(withNull.currency.rate, null);
+    assert.equal(withNull.currency.isoCode, 'CHF');
+    const noHint = applyPendingToReview(review, [{ op: buildOp.setCurrency('CHF1') }]);
+    assert.equal(noHint.currency.rate, null);
+    assert.equal(noHint.currency.id, 'CHF1');
+    assert.equal(noHint.currency.isoCode, 'EUR');
+  });
+  it('applyPendingToReview leaves currency alone when no setCurrency is pending', () => {
+    const review = { currency: { id: 'EUR1' }, document: { header: {} } };
+    const next = applyPendingToReview(review, [{ op: buildOp.addLine() }]);
+    assert.equal(next.currency, review.currency);
+  });
+  it('invalid_currency maps to its label key, defined in the three locales', () => {
+    assert.equal(saveErrorKey('invalid_currency'), 'invoiceInboxSaveErrorInvalidCurrency');
+    for (const locale of ['en_US', 'es_ES', 'es_AR']) {
+      const labels = JSON.parse(readFileSync(new URL(`../../../../locales/${locale}.json`, import.meta.url), 'utf8')).genericLabels;
+      assert.ok(String(labels.invoiceInboxSaveErrorInvalidCurrency ?? '').trim(), locale);
+    }
   });
 });
 
@@ -945,5 +1024,62 @@ describe('confirm save errors', () => {
     }
     assert.equal(isReloadCode('not_confirmable'), true);
     for (const code of ['duplicate_invoice', 'missing_exchange_rate', 'QUOTA_EXCEEDED', 'confirm_failed']) assert.equal(isReloadCode(code), false, code);
+  });
+});
+
+describe('manual lines (ETP-6051)', () => {
+  it('addLine marks the optimistic line manual: true, and an OCR line is not manual', () => {
+    const next = applyOperationLocally({ header: {}, lines: [{ index: 0, description: 'OCR' }] }, buildOp.addLine());
+    assert.equal(next.lines[1].manual, true);
+    assert.equal(isManualLine(next.lines[1]), true);
+    assert.equal(isManualLine(next.lines[0]), false);
+  });
+
+  it('isManualLine is true only for the boolean true marker', () => {
+    assert.equal(isManualLine({ manual: true }), true);
+    for (const value of [undefined, null, false, 'true', 1, 0]) assert.equal(isManualLine({ manual: value }), false, String(value));
+    assert.equal(isManualLine(null), false);
+    assert.equal(isManualLine(undefined), false);
+  });
+
+  describe('manualPricingOf', () => {
+    const review = (rate, over = {}) => ({
+      pricing: { priceListId: 'PL1', orgCurrencyId: 'EUR1', orgCurrencyIsoCode: 'EUR', rate: null },
+      currency: { id: 'USD1', isoCode: 'USD', rate },
+      ...over,
+    });
+
+    it('reads the price list, the org and document ISO, the rate and the invoice date', () => {
+      assert.deepEqual(manualPricingOf(review(1.47), { invoiceDate: '2026-08-01' }), {
+        priceListId: 'PL1', orgIso: 'EUR', docIso: 'USD', rate: 1.47, invoiceDate: '2026-08-01',
+      });
+    });
+
+    it('a string rate is parsed to a number', () => {
+      assert.equal(manualPricingOf(review('1.25'), {}).rate, 1.25);
+    });
+
+    it('a rate of exactly 1 (same-currency document) is a real rate', () => {
+      assert.equal(manualPricingOf(review(1), {}).rate, 1);
+    });
+
+    it('a null, undefined, empty or non-numeric rate is null', () => {
+      for (const rate of [null, undefined, '', 'abc', NaN]) assert.equal(manualPricingOf(review(rate), {}).rate, null, String(rate));
+    });
+
+    it('a missing pricing block leaves the price list and org ISO null without throwing', () => {
+      const out = manualPricingOf({ currency: { isoCode: 'EUR', rate: 1 } }, { invoiceDate: '2026-08-01' });
+      assert.deepEqual(out, { priceListId: null, orgIso: null, docIso: 'EUR', rate: 1, invoiceDate: '2026-08-01' });
+    });
+
+    it('a null review and a missing header are all null', () => {
+      assert.deepEqual(manualPricingOf(null, undefined), { priceListId: null, orgIso: null, docIso: null, rate: null, invoiceDate: null });
+    });
+
+    it('a pricing with null price list and org ISO keeps them null', () => {
+      const out = manualPricingOf({ pricing: { priceListId: null, orgCurrencyIsoCode: null }, currency: { isoCode: 'EUR', rate: 1 } }, {});
+      assert.equal(out.priceListId, null);
+      assert.equal(out.orgIso, null);
+    });
   });
 });

@@ -97,7 +97,7 @@
     },
     {
       "group": "Sales",
-      "icon": "TrendingUp",
+      "icon": "ShoppingCart",
       "section": "Commercial",
       "items": [
         {
@@ -171,7 +171,7 @@
           "name": "invoice-inbox",
           "label": "Invoice Inbox",
           "favname": "Invoice Inbox",
-          "accessWindowId": "81AC659E93504927B459E0CAE80CE923",
+          "windowId": "81AC659E93504927B459E0CAE80CE923",
           "capability": "invoiceInbox"
         },
         {
@@ -448,12 +448,6 @@
           "routeOnly": true
         },
         {
-          "name": "conversion-rates",
-          "label": "Currency Conversion",
-          "favname": "Currency Conversion",
-          "windowId": "116"
-        },
-        {
           "name": "report-viewer-finance",
           "label": "Reports",
           "favname": "Finance Reports",
@@ -526,14 +520,6 @@
           "windowId": "FEF76C3E0F104F06A89AAD15A4A4A35C"
         },
         {
-          "name": "report-viewer-taxes",
-          "label": "Reports",
-          "favname": "Taxes Reports",
-          "path": "report-viewer?category=taxes",
-          "accessWindowId": "D647D118F5014D00AF47A636B2CD0DD3",
-          "requiresGroupReport": true
-        },
-        {
           "name": "fiscal-config",
           "label": "Fiscal Configuration",
           "favname": "Fiscal Configuration",
@@ -544,6 +530,14 @@
           "label": "Fiscal Models",
           "favname": "Fiscal Models",
           "windowId": "3E8FEA1EA7404D979306C9EE7FD2E7E8"
+        },
+        {
+          "name": "report-viewer-taxes",
+          "label": "Reports",
+          "favname": "Taxes Reports",
+          "path": "report-viewer?category=taxes",
+          "accessWindowId": "D647D118F5014D00AF47A636B2CD0DD3",
+          "requiresGroupReport": true
         },
         {
           "name": "tax-report",
@@ -638,6 +632,12 @@
           "icon": "FileText",
           "featureFlag": "doc-template-selection",
           "capability": "isAdminOrClientAdmin"
+        },
+        {
+          "name": "conversion-rates",
+          "label": "Currency Conversion",
+          "favname": "Currency Conversion",
+          "windowId": "116"
         }
       ]
     },
@@ -657,12 +657,6 @@
           "label": "Quick Purchase Order",
           "favname": "Quick Purchase Order",
           "featureFlag": "proof-of-concept-menu"
-        },
-        {
-          "name": "unified-calendar",
-          "label": "Unified Calendar",
-          "favname": "Unified Calendar",
-          "featureFlag": "unified-calendar-poc"
         }
       ]
     },
