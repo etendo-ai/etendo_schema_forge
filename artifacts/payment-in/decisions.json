@@ -3,6 +3,7 @@
   "window": {
     "category": "finance",
     "name": "Payment In",
+    "breadcrumb": "Treasury / Payment In",
     "salesTheme": false,
     "relatedDocuments": true,
     "notesField": "description",
@@ -41,7 +42,7 @@
         "columnName": "etprReactivatePayment",
         "label": "processReactivate",
         "style": "primary-danger",
-        "displayLogicRaw": "@status@ != 'RPAP'"
+        "displayLogicRaw": "@status@ != 'RPAP' & @status@ != 'REM_SENT' & @status@ != 'REM_CANCEL' & @status@ != 'RPVOID'"
       }
     },
     "dateFilterKey": "paymentDate",

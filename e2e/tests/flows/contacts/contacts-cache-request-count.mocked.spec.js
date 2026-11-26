@@ -77,7 +77,7 @@ import { openFormViewTab } from '../../helpers/secondaryTabsInteractions.js';
  *   routes LIFO) that both counts and fulfils the Contacts fixtures.
  * - The shared cache only engages when a DataProvider is mounted. On this
  *   branch app-shell-core/data resolves from the published preview package
- *   (node_modules/@etendosoftware/app-shell-core, 0.3.13-preview.*) that ships
+ *   (node_modules/@etendo-ai/app-shell-core, 0.3.13-preview.*) that ships
  *   the `data` module, so plain `make dev` is enough — LOCAL_CORE is NOT
  *   required here. (LOCAL_CORE is only needed when the preview package predates
  *   the `data` export; run `make dev-local-core` in that case.)

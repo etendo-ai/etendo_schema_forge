@@ -28,7 +28,7 @@ import { login } from '../../helpers/auth.js';
  *
  * ── Why ──────────────────────────────────────────────────────────────────────────────────
  * `updated` is a per-record optimistic-locking token. `apiFetch`
- * (`@etendosoftware/app-shell-core/auth/api.js`) injects it into every PATCH from a
+ * (`@etendo-ai/app-shell-core/auth/api.js`) injects it into every PATCH from a
  * client-side cache keyed by `(entity, id)`, refreshed only from a CRUD read/write response.
  *
  * A process action moves the row on the server — `docAction: 'CO'` flips documentStatus and

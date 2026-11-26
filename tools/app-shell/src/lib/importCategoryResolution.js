@@ -1,4 +1,4 @@
-import { classifyImportError } from '@etendosoftware/app-shell-core/lib/import/importEngine.js';
+import { classifyImportError } from '@etendo-ai/app-shell-core/lib/import/importEngine.js';
 
 /**
  * Shared pieces of the "resolve or auto-create a category" path, used by both import

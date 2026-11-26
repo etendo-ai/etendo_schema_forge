@@ -13,7 +13,7 @@ import { login, MOCK_ORG_ID } from '../../helpers/auth.js';
  *   ETP-5073 made the backend require the `updated` optimistic-locking token of the
  *   record as it was read. The token was only remembered by `useEntity`, so every
  *   panel that reads with `apiFetch` directly (this one) patched without it and the
- *   server refused the write. Fixed centrally in `@etendosoftware/app-shell-core`
+ *   server refused the write. Fixed centrally in `@etendo-ai/app-shell-core`
  *   (`auth/api.js` now harvests the token on every GET). Covered by
  *   "PATCH carries the updated token …".
  *

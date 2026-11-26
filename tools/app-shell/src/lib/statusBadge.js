@@ -11,7 +11,7 @@
  * tail — the "??, NA, RE, TEMP, WP" clump the user saw as an illogical order.
  *
  * Kept byte-identical to the core copy
- * (@etendosoftware/app-shell-core/lib/statusBadge.js), which the advanced
+ * (@etendo-ai/app-shell-core/lib/statusBadge.js), which the advanced
  * filter's value picker uses; statusBadge.coreParity.test.js fails the build if
  * the two drift apart, so the "All statuses" pill and that picker can never
  * disagree for the same column.

@@ -77,7 +77,7 @@ describe('PWA configuration', () => {
     // path) because npm workspace hoisting is not guaranteed: it can install this
     // package under tools/app-shell/node_modules instead of the repo root depending
     // on the resolved version tree, and a hardcoded root path breaks silently then.
-    const entryUrl = import.meta.resolve('@etendosoftware/etendo-go-core');
+    const entryUrl = import.meta.resolve('@etendo-ai/etendo-go-core');
     const flowPath = resolve(fileURLToPath(entryUrl), '..', 'onboarding', 'OnboardingFlow.jsx');
     const content = readFileSync(flowPath, 'utf8');
     assert.ok(content.includes('caches.keys()'), 'should enumerate caches');

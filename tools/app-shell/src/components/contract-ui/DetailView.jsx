@@ -78,7 +78,7 @@ import { requestTransition } from '@/lib/unsavedChanges.js';
 import { useLineSaveConflict } from './useLineSaveConflict.js';
 import { buildLineRowUpdateHandler, resolveCompletedLineFieldGate } from './inlineLineUpdateHandlers.js';
 import {
-  CollapsibleSection, SecondaryPanelTab, hasRecordForRoute, isLoadingRecordForRoute, isRecordUnavailableForRoute, WINDOW_DELETE_ACTIONS, WINDOW_DELETE_CONFIRM_MODALS, WINDOW_HIDE_STATUS_PILL_FOR, applyCalloutFieldUpdates, applyOneComboEntry, applyProductCalloutPriceAdjustments, applyProductCurrencyConversion, buildHeaderFormData, buildBalanceFooterGridTotals, buildInitialTabs, buildLineRowClickHandler, buildCustomAddModalOnSaved, buildCustomAddModalOnParentRefresh, buildCustomAddModalSeed, buildPostCreateState, calculateLineNetAmount, calculateNetUnitPrice, canDeleteSelectedLine, computeBalanceGate, customTabKey, getCustomTabSaveFirstHint, deriveTaxRateFromGross, dispatchProcessAction, evalDisplayLogicRaw, getAddLineMenuActions, getAddLineWrapperClassName, getChildSaveButtonLabel, getCustomLinesTabClassName, getDetailContentClassName, getDocsRowClassName, getButtonClass, getDocumentIds, getBreadcrumbItems, getDocumentReadOnly, getInlineEditableShrinkClassName, getLineMenuActionsRef, getLinesContainerClassName, getLinesToolbarClassName, getNotesRowClassName, getOnAddToFavorites, getOthersTabClassName, getRecordTitle, getSaveBtnCls, getSaveButtonLabel, gateDetailTab, getSecondaryTabContentClassName, getSecondaryTabEntityKey, getSidebarSlideClassName, getSqBtnSize, getTabsBarClassName, getTabsBarStyle, getWindowTitle, hasUnsavedEdits, isCustomPrimaryTabActive, isDetailBulkBarVisible, isInitialChildrenLoading, makeCloseDialogHandler, maybeSaveBeforeProcess, mergeLineEdits, normalizePatchFieldValues, pushOthers, renderDetailBulkActionBar, renderEmbeddedStatusPill, renderExtraActionButtons, renderNotesField, renderPrimaryTabButtons, renderProcessConfirmModal, refreshRecordAfterMutation, renderTotalsBlock, resolveAddLineLabel, resolveCanAddLines, resolveDetailRows, resolveHeaderContent, resolveInitialCalloutTriggers, resolveProcessLabel, resolveSidebarContent, resolveStatusPrefix, resolveTaxIdentifier, runAddLineAction, runPrimaryAddLineFlow, runSecondaryAddLineFlow, shouldShowDetailFormSidebar, shouldShowInlineDeleteSelectionBar, sidePanelWrapperCls, useNewRouteEditingReset, panelEditing, withHeaderRefreshOnChildWrite, EXCHANGE_RATES_TAB_KEY, withExchangeRateHeaderSync, isSecondaryTabVisible, getDangerIconClass, getProcessButtonVariant, isDangerProcess,
+  CollapsibleSection, SecondaryPanelTab, hasRecordForRoute, isLoadingRecordForRoute, isRecordUnavailableForRoute, WINDOW_DELETE_ACTIONS, DELETE_ACTION_HIDDEN_STATUSES, WINDOW_DELETE_CONFIRM_MODALS, WINDOW_HIDE_STATUS_PILL_FOR, applyCalloutFieldUpdates, applyOneComboEntry, applyProductCalloutPriceAdjustments, applyProductCurrencyConversion, buildHeaderFormData, buildBalanceFooterGridTotals, buildInitialTabs, buildLineRowClickHandler, buildCustomAddModalOnSaved, buildCustomAddModalOnParentRefresh, buildCustomAddModalSeed, buildPostCreateState, calculateLineNetAmount, calculateNetUnitPrice, canDeleteSelectedLine, computeBalanceGate, customTabKey, getCustomTabSaveFirstHint, deriveTaxRateFromGross, dispatchProcessAction, evalDisplayLogicRaw, getAddLineMenuActions, getAddLineWrapperClassName, getChildSaveButtonLabel, getCustomLinesTabClassName, getDetailContentClassName, getDocsRowClassName, getButtonClass, getDocumentIds, getBreadcrumbItems, getDocumentReadOnly, getInlineEditableShrinkClassName, getLineMenuActionsRef, getLinesContainerClassName, getLinesToolbarClassName, getNotesRowClassName, getOnAddToFavorites, getOthersTabClassName, getRecordTitle, getSaveBtnCls, getSaveButtonLabel, gateDetailTab, getSecondaryTabContentClassName, getSecondaryTabEntityKey, getSidebarSlideClassName, getSqBtnSize, getTabsBarClassName, getTabsBarStyle, getWindowTitle, hasUnsavedEdits, isCustomPrimaryTabActive, isDetailBulkBarVisible, isInitialChildrenLoading, makeCloseDialogHandler, maybeSaveBeforeProcess, mergeLineEdits, normalizePatchFieldValues, pushOthers, renderDetailBulkActionBar, renderEmbeddedStatusPill, renderExtraActionButtons, renderNotesField, renderPrimaryTabButtons, renderProcessConfirmModal, refreshRecordAfterMutation, renderTotalsBlock, resolveAddLineLabel, resolveCanAddLines, resolveDetailRows, resolveHeaderContent, resolveInitialCalloutTriggers, resolveProcessLabel, resolveSidebarContent, resolveStatusPrefix, resolveTaxIdentifier, runAddLineAction, runPrimaryAddLineFlow, runSecondaryAddLineFlow, shouldShowDetailFormSidebar, shouldShowInlineDeleteSelectionBar, sidePanelWrapperCls, useNewRouteEditingReset, panelEditing, withHeaderRefreshOnChildWrite, EXCHANGE_RATES_TAB_KEY, withExchangeRateHeaderSync, isSecondaryTabVisible, getDangerIconClass, getProcessButtonVariant, isDangerProcess,
   // ETP-4731 (slice 2 of 3): the secondary-tab helpers and the remaining free module scope moved
   // to detailViewHelpers.jsx; imported here only for the symbols this component body still uses.
   formatAmount, NO_GATE_EXCLUSIONS, detailContentPadding, getTabStripBleedClassName,
@@ -138,9 +138,9 @@ export function isDeleteButtonVisible({
   if (data?.pisLocked === true) return false;
   // ETP-4479 — a deleteAction-backed delete is safe at any lifecycle stage
   // (the action reactivates server-side before removing), so it ignores
-  // hideDeleteWhenComplete/isProcessed and only hides for the voided status.
+  // hideDeleteWhenComplete/isProcessed and only hides for DELETE_ACTION_HIDDEN_STATUSES.
   if (deleteAction) {
-    return !isNew && recordId && data?.[statusField] !== 'RPVOID';
+    return !isNew && recordId && !DELETE_ACTION_HIDDEN_STATUSES.has(data?.[statusField]);
   }
   return !isNew && recordId && isDeleteVisibleForRecord({
     record: data,
@@ -255,7 +255,7 @@ export function DetailView({
   hideDeleteButton = false,
   // ETP-4479 — when set, the delete (Trash2) button invokes this NEO action
   // name via `neoAction.execute(recordId, deleteAction)` instead of a raw
-  // DELETE, and is visible for any status except 'RPVOID'. Used by windows
+  // DELETE, and is hidden for DELETE_ACTION_HIDDEN_STATUSES. Used by windows
   // (e.g. payment-in/out) where a plain header DELETE fails once the record
   // has ever been referenced (FK constraints) — the action safely reactivates
   // and removes it server-side. Overrides hideDeleteWhenComplete entirely
@@ -1884,7 +1884,7 @@ export function DetailView({
           token={token}
           apiBaseUrl={apiBaseUrl}
           api={api} isDocumentReadOnly={isDocumentReadOnly} accessReadOnly={menuActionsReadOnly}
-          isActive={isActive}
+          isActive={isActive} onHeaderRefresh={() => hook.refreshHeaderTotals?.(data?.id || recordId)}
           isNew={isNew}
           onSaveHeader={isNew ? saveHeaderForCustomTab : undefined}
           onGoToSavedRecord={isNew ? goToSavedRecord : undefined}
@@ -2041,7 +2041,7 @@ export function DetailView({
                   <PrinterIcon className="h-5 w-5" data-testid="Printer__fa3275" />
                 </button>
               )}
-              {/* Delete record — hidden unconditionally when hideDeleteButton is set; otherwise shown for a deleteAction-backed delete at any lifecycle stage (except RPVOID), or when hideDeleteWhenComplete/isProcessed rules allow it */}
+              {/* Delete record — hidden unconditionally when hideDeleteButton is set; otherwise shown for a deleteAction-backed delete at any lifecycle stage (except DELETE_ACTION_HIDDEN_STATUSES), or when hideDeleteWhenComplete/isProcessed rules allow it */}
               {isDeleteButtonVisible({
                 isNew,
                 recordId,
@@ -3086,7 +3086,7 @@ export function DetailView({
                           token={token}
                           apiBaseUrl={apiBaseUrl}
                           api={api} isDocumentReadOnly={isDocumentReadOnly} windowReadOnly={windowReadOnly}
-                          summary={summary}
+                          summary={summary} onHeaderRefresh={() => hook.refreshHeaderTotals?.(data?.id || recordId)}
                           notesField={notesField}
                           onFieldChange={handleChangeWithCallout}
                           notesFocused={notesFocused}

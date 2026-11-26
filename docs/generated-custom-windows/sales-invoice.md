@@ -71,7 +71,7 @@ The guard also changes what "Reactivar" does mechanically when it already knows 
   - **Verifactu panel** — `etvfac_c_invoice_verifactu` row (the AEAT-response leg only).
   - **TBAI** — ETP-4401 removed the TBAI field panel entirely; ETP-4888 reintroduces a new, deliberately minimal TBAI rail/panel whose only content is this Adjuntos section, for the `tbai_syncinvoice` row — no date/type/checkbox fields were brought back.
 
-  Each sub-record id (`aeatsiiFacturaId`, `invoiceVerifactuId`, `tbaiSyncInvoiceId`) is resolved server-side (most recent active row, `ORDER BY created DESC`) and stamped onto the invoice header GET response by `SalesInvoiceHeaderHandler#afterHandle` via the new `SifSubRecordAttachments` helper (`com.etendoerp.go` — mirrors `InvoiceExemptTaxes`/`TbaiSyncStatusInjector`'s fail-safe pattern: a fiscal module that isn't installed simply omits that key). The frontend section (`tools/app-shell/src/windows/custom/shared/SifAttachmentsSection.jsx`) reuses the classic Attachments tab's own `useAttachments`/`AttachmentsTable` (`tools/app-shell/src/components/attachments/`) — no new fetching logic — and renders nothing until the sub-record id resolves (e.g. never sent to that target). `aeatsii_payment` and `aeatsii_cash_receipt_data` were investigated and confirmed to key on `fin_payment_id`/`aeatsii_cash_receipt_id` rather than `c_invoice_id` — they back the Payment/Cash Receipt SII windows, not this one, and are out of scope here.
+  Each sub-record id (`aeatsiiFacturaId`, `invoiceVerifactuId`, `tbaiSyncInvoiceId`) is resolved server-side (most recent active row, `ORDER BY created DESC`; since ETP-6284 SII also gets `aeatsiiFacturaIds`, every active `aeatsii_facturas` id oldest first, and the SII section merges the files of all of them into one table sorted by upload date then name, hiding "Download all (ZIP)" when the files come from more than one record because the ZIP endpoint is per record — an invoice sent as several SII records, such as a purchase invoice with DUA, has one row per record; this multi-record listing is **not** behind any feature flag — in particular not behind `sii-import-dua` — and applies to every SII invoice, sales and purchase, as Classic already does) and stamped onto the invoice header GET response by `SalesInvoiceHeaderHandler#afterHandle` via the new `SifSubRecordAttachments` helper (`com.etendoerp.go` — mirrors `InvoiceExemptTaxes`/`TbaiSyncStatusInjector`'s fail-safe pattern: a fiscal module that isn't installed simply omits that key). The frontend section (`tools/app-shell/src/windows/custom/shared/SifAttachmentsSection.jsx`) reuses the classic Attachments tab's own `useAttachments`/`AttachmentsTable` (`tools/app-shell/src/components/attachments/`) — no new fetching logic — and renders nothing until the sub-record id resolves (e.g. never sent to that target). `aeatsii_payment` and `aeatsii_cash_receipt_data` were investigated and confirmed to key on `fin_payment_id`/`aeatsii_cash_receipt_id` rather than `c_invoice_id` — they back the Payment/Cash Receipt SII windows, not this one, and are out of scope here.
 - **Line-level "tax needs SIF configuration" shortcut (ETP-4888 point 5):** on the lines grid's `tax` cell, an amber warning-color badge (`text-status-warning-foreground`) renders inline right next to the tax value itself (`InlineLinesPanel`'s `cellBadges` slot, `docs/ui-customization.md` §14e) ONLY when the selected tax is missing its TBAI/Verifactu key — never for SII, which has nothing to configure at tax level (its equivalent, `aeatsiiCauseExemption`, lives on the invoice header and is handled by the SIF tab above, unaffected by this feature). Clicking it opens `TaxSifModal.jsx` — a standalone dialog shared with purchase-invoice (own vertical layout: tax-name pill, single-line label, `EnumSearchSelect` code+description picker, caption, footer — see `docs/ui-design-guidelines.md`), that reuses `TaxSifField.jsx`'s pure `selectSifFields()` to show the same 0–2 applicable fields the Tax window's own header form would, and saves the fix directly without leaving the invoice. Gated by `decisions.json → window.lineTaxSifTrigger` (see `docs/decisions-reference.md`); the "missing" check is driven by a backend selector enrichment (`InvoiceLineTaxSifSelectorPolicy`, `com.etendoerp.go`) that projects the relevant `C_Tax` columns onto the tax selector's response, scoped to this window and purchase-invoice only — see `docs/ui-customization.md` §14e for the full mechanism. **ETP-5027 — document-direction gate:** the badge (and therefore the modal) is additionally gated by `getInvoiceFiscalTargets(specName, profile, tbaiRecord.etsgSifTerritory)`, threaded into `selectSifFields({ targets })` via `useTaxSifLineRowActions`. On a SALES document both TicketBAI and VERI*FACTU apply, so behavior here is unchanged.
 - **SIF error banner removed from the header (ETP-5057):** the invoice header no longer renders a red `SifErrorBanner` card for SII/VeriFactu submission errors — the `headerExtra.customForm: "SifErrorBanner"` wiring was removed from `decisions.json` and the (now-orphaned) `SifErrorBanner.jsx` component (both the shared implementation and the per-window re-export) was deleted. It used to print raw technical error text (`etvfacIssueDescription`) verbatim, which for VeriFactu's `AE`/`ER` states was frequently empty or stale (see the SIF tab paragraph above and ETP-4390: the header field is written only by the submission-exception path, not by the structured AEAT-rejection path the banner actually rendered for). VeriFactu and SII incident detail — rejection reasons, error codes, structured AEAT responses — now lives exclusively in the Fiscal Monitor (`/fiscal-monitor`; see `docs/generated-custom-windows/fiscal-monitor.md`, section "Verifactu section (`VerifactuMonitorSection`)"). The invoice itself still shows its existing minimal sending-status indicator unchanged by this removal: the `FiscalStatusBadge` SII/TBAI/Verifactu status pill columns in `InvoiceHeaderTable` (list) and the status badges in the SIF tab panels (detail) — no new indicator was added.
 
@@ -141,6 +141,7 @@ import-lines path left it empty.
   - **Currency filter — ETP-4029:** `ImportFromOrderModal.jsx` fetches the invoice's own header (`GET sales-invoice/header/{id}`) alongside the candidate orders and keeps only orders whose `currency` matches the invoice's current currency (orders carry `currency` directly, no order lookup needed). Empty-state message when candidates exist but none match: `noSalesOrdersMatchCurrency`.
 - Send Email recipient resolution: the Send Email modal (`SendDocumentModal`) pre-fills the `Para` field by fetching `GET /sws/neo/contacts/businessPartner/{businessPartner}` when the modal opens, reading `etgoEmail` (`C_BPartner.EM_Etgo_Email`) from the contacts spec. The field is left empty if no email is registered for the business partner. The modal title uses `useMenuLabel()` so it renders in the active UI language (e.g. "Factura de Venta" in Spanish instead of "Invoice").
 - Send Email editable subject/message (ETP-4717): the `Asunto` (subject, auto-derived as `${documentType} #${documentNo} — ${bpName}`) and `Mensaje` fields in the Send Email modal are editable text inputs, not read-only display fields. If the user leaves both untouched, the outgoing command is byte-identical to the legacy payload (no `messageEdits` key is sent). If either is changed, `SendDocumentModal` sends `messageEdits: { subject, message }` alongside the existing `recipientEdits`.
+- **Credit notes are sent as «Factura rectificativa» (ETP-6209, QA pass 2):** the send modal names the document itself in the subject (`${documentType} #${documentNo} — …`) and in the message line, so every sales-invoice send path — the form topbar (`InvoiceTopbarExtra.jsx`), the list row's email action (`windows/custom/sales-invoice/index.jsx`) and the preview panel (`shared/InvoicePreview.jsx`, sales only) — gets its document type from one helper, `salesInvoiceSendDocumentType` (`custom/invoiceSubtype.js`). It returns «Factura rectificativa» / "Credit Note" (`sendDocumentTypeCreditNote`) for a rectificative invoice (`getArSubtype`, the same rule as the list's type badge) and the window label «Factura de Venta» / "Sales Invoice" otherwise. These match the module catalog's `sales-invoice-send.documentType(.creditNote)`, so an app send names the document as an MCP send does; `defaultCopyInSync.vitest.js` checks it.
 - Email history card (ETP-5069): the `EmailsCard` in the preview panel's General tab is no longer a static placeholder. It reads the document's real send history from `GET /sws/neo/documentemailhistory?recordId=<documentId>` (payload `{ result: "<JSON string>" }` — `result` is a STRING the client parses — or `{ error: "<message>" }`), through `useApiFetch` like every other request. Rows are listed newest first with the send timestamp (locale-aware `toLocaleString`), the To recipients, the subject and a `StatusTag`; clicking a row expands CC, sender, message body, the error message and a Download attachment link. Only `SENT` and `DUPLICATE` count as successful (there is no `DELIVERY_FAILED`); every other status renders in the destructive tone and is never presented as sent. `previewCardNoEmailHistory` is kept for the genuinely-empty case and a separate `previewCardEmailHistoryError` copy covers a transport/backend failure, so "nothing was ever sent" and "we could not find out" no longer look alike. A successful send in the panel's own `SendDocumentModal` fires the new optional `onSent` callback (success only, unlike `onClose`, which a plain cancel also triggers) and the panel bumps `refreshSignal`, so the card refetches instead of showing its pre-send state. The `onSend` link keeps its fail-closed contract: with no `onSend` the card exposes no clickable send trigger at all.
 - Send status gating (ETP-4717): `InvoiceTopbarExtra.jsx` renders nothing for the Send action while `documentStatus === 'DR'` (the earlier `isDraft` branch used to render an unconditional `SendDocumentButton` there, which was the bug); once the invoice is `CO`, the button is further gated by `isCompleted` before it renders. This matches the grid row quick-action's `rowQuickActions.actions.email.visibleWhen: "@DocumentStatus@='CO'"` in `decisions.json`, so "Enviar" shows or hides consistently between the list and the detail topbar.
 - **Button order (ETP-5260, also a defect fix):** Copy link → Clone → Send render to the LEFT of Save/Confirm via `SalesInvoiceSecondaryActions.jsx` (wired as `topbarSecondary`, a thin adapter around the shared `DocumentSecondaryActions`); `SalesInvoiceTopbar.jsx` (`topbarRight`) now only nests `InvoiceTopbarExtra` (payment-status badge — a primary/status indicator that stays at the extreme right, after Save/Confirm, per the DF). The Send button used to render inline inside `InvoiceTopbarExtra.jsx` itself (`topbarRight`), gated to `isCompleted` — correct gating, wrong side of Save. It is a **defect fix**, not a straight port: the button moved to `SalesInvoiceSecondaryActions` (same `isCompleted` gate), and dispatches a `sales-invoice:open-send-modal` window event that `InvoiceTopbarExtra.jsx` now listens for, so its existing `SendDocumentModal`/PDF context opens without duplicating it. Clone reuses the `cloneInvoiceError`/`invoiceProcessing` i18n keys the inline call used before ETP-5260. See `docs/ui-customization.md` §3b for the general slot-classification rule.
@@ -394,7 +395,7 @@ already recorded ("Rechazado") is not duplicated. Runtime details:
 `TbaiXmlgeneratorHandler`".
 
 **Manual verification (Europe/Madrid browser timezone).**
-1. Configure SII for an org today (Configuración fiscal), create and confirm an invoice dated today:
+1. Configure SII for an org today (Configuración Fiscal), create and confirm an invoice dated today:
    the preview, the form kebab and the grid row kebab all offer "Enviar a SII" (the form topbar offers no
    send button), and the
    SII status column shows "Pendiente", not "—".
@@ -881,7 +882,7 @@ When a sales invoice is issued in a currency other than the organization's base 
 - `foreignAmount`'s label is overridden per-window via `window.labelOverrides.{es_ES,en_US}.Foreign_Amount` (ETP-4836: the shared `Foreign_Amount` AD_Element label is also used by Payment Out's Exchange Rates tab, so the fix is scoped here rather than edited in the global dictionary) and the field is declared `noTrailing: true` (ETP-4836: it's the only `amount`-type column in this grid, so the generic "last amount column hides under row-hover action icons" heuristic in `InlineLinesPanel.jsx` was swallowing its editable input entirely — `noTrailing` opts it out).
 - **Visibility — ETP-5986:** the tab is not always shown. `window.secondaryTabs.exchangeRates.visibleWhenLogic` is `"@C_Currency_ID@!'' & @C_Currency_ID@!@#OrgCurrencyId@"` (generic mechanism: `docs/decisions-reference.md` → `secondaryTabs` → `visibleWhenLogic`). The tab appears only when the invoice's currency is set and differs from the **logged-in organization's** currency (`OrgCurrencyId`, from `/sws/neo/session` — the same value as the Organization window's "Moneda"; NOT the invoice's own Organization field). It is evaluated against the live header record, so choosing a foreign currency on a new, unsaved invoice shows the tab immediately and setting the org currency back hides it again. It is fail-closed: while the org currency is still loading (or `/session` fails, or the org has no currency) the tab stays hidden. A hidden tab is not rendered, not fetched, and an `openSecondaryTab` deep link to it is a no-op. It composes with the tab's `readOnlyLogic` and `requireSavedRecord` below, which are unchanged (a visible tab on an unsaved invoice is still disabled until the header is saved).
 - **Visible columns:** Currency (derived from the document, `form: false`), To Currency, Rate, and Foreign Amount. The inline add-row exposes `addLineFields: ["toCurrency", "rate", "foreignAmount"]`.
-- **`rate` is declared `"type": "number"` in decisions.json — ETP-5657:** `C_Conversion_Rate_Document.Rate` uses AD reference `800019` ("General Quantity"), which the core extractor's reference map does not cover yet, so it is extracted as `type: "string"` with `validation.maxLength: 10`. Before this override the inline editor treated the rate as free text (raw `0.68027210884`, no locale decimal comma). With the explicit type the generated grid column and form field are `type: 'number'`, so `InlineLinesPanel` edits it through `MaskedAmountInput` (no 2-decimal grouping, precision kept) and renders it with `formatPlainDecimal`. `number` is used rather than `decimal` because `decimal` is not in `InlineLinesPanel`'s `EDITABLE_TYPES` and would make the cell non-editable inline. The DB-derived `validation.maxLength: 10` still sits in the contract but is harmless: the generator emits `maxLength` only for string/text fields. Remove the override once ref `800019` is mapped in `schema_forge_core`.
+- **`rate` is numeric — ETP-5657, override dropped by ETP-6385:** `C_Conversion_Rate_Document.Rate` uses AD reference `800019` ("General Quantity"). Before schema_forge_core 0.3.110 it was extracted as `type: "string"`, so the inline editor treated the rate as free text (raw `0.68027210884`, no locale decimal comma) and ETP-5657 declared `"type": "number"` in decisions.json. Core 0.3.110 (ETP-6342) extracts the reference as `decimal`, so ETP-6385 removed the override: the contract type is `decimal` and the generated grid column and form field are still `type: 'number'` (core `generate-frontend.js` `mapFieldType` maps `decimal` to `number`), so `InlineLinesPanel` keeps editing it through `MaskedAmountInput` (no 2-decimal grouping, precision kept) and rendering it with `formatPlainDecimal`. The DB-derived `validation.maxLength: 10` still sits in the contract but is harmless: the generator emits `maxLength` only for string/text fields.
 - **`requireSavedRecord: true`** — usable only after the invoice header is saved.
 - **Tab-level `readOnlyLogic: "@Posted@='Y' | @HASREVERSEDINVOICESO@='Y' | @HASREVERSEDINVOICEPO@='Y'"` — ETP-4837, relaxed by ETP-5657:** this is the ONLY place that actually locks the tab at runtime. It is compiled by `resolveSecondaryTabDefs()`/`convertLogicToJs()` against the **header entity's own column map** and evaluated by `evalTabReadOnly(tab, props.hook.selected)` in `DetailView.jsx` — i.e. against the **invoice header record**, not the exchange-rate row. This is what suppresses the row's edit/delete affordances entirely (`InlineLinesPanel`/`DataTable` receive `isDocumentReadOnly={tabReadOnly}`) once the invoice is Posted (`Posted='Y'`) or has been reversed (`HASREVERSEDINVOICESO`/`HASREVERSEDINVOICEPO`). Unposting the invoice makes the tab editable again.
   - **ETP-5657 — completed-but-unposted invoices are editable:** the original ETP-4837 rule also locked on `@Processed@='Y'`, mirroring the ETP-4030 completion lock enforced server-side by `ConversionRateDocLockObserver` (module `com.smf.currency.conversionrate`, `SMFCR_CannotModifyRateNonDraft` for any non-Draft status). ETP-5657 drops `@Processed@='Y'` from the tab rule so the document rate can still be corrected after completion and before posting, and that observer was **removed** from `com.smf.currency.conversionrate` (its `backendError.conversionRateNotDraft` mapping went with it). Final behavior on a completed-but-unposted invoice:
@@ -2002,7 +2003,7 @@ purchase-invoice — see `purchase-invoice.md` for this window's mirror of the s
 AEAT 349 messages this window can raise on save, Confirmar or a SIF send whose Classic text names
 Classic-only UI (e.g. "solapa Facturas Rectificativas", the "Añadir Certificado Digital" process,
 "Verifique en la cabecera del tercero") reach the user reworded with GO's own labels ("pestaña
-Rectificaciones", "pestaña SIF", Configuración fiscal → Certificado digital, Contactos → NIF/CIF,
+Rectificaciones", "pestaña SIF", Configuración Fiscal → Certificado digital, Contactos → NIF,
 pestaña Dirección), in the UI language, and keep their AD_MESSAGE key in `messageKeys` (REST: the
 `error` object; MCP: the root of the error result). Only messages a GO user can trigger are
 reworded. Done server-side at NEO's exit (`ClassicMessageRemap`, `com.etendoerp.go`
@@ -2013,7 +2014,7 @@ this window:
 | System | Keys |
 |---|---|
 | VERI\*FACTU | `ETVFAC_invoice_type_rectifying`, `ETVFAC_reversed_invoice` (Tipo de Factura in the SIF tab vs the Rectificaciones tab), `ETVFAC_Missing_DocType_Config`, `ETVFAC_error_code_idtype` (Clave NIF País Residencia of the contact) |
-| TicketBAI | `TBAI_ConfigNotFound`, `TBAI_CertificateNotValid`, `TBAI_NullCertificate`, `TBAI_SetKey`; on Confirmar or Anular (`ProcessInvoiceTbaiHook`, sales only), the recipient checks `TBAI_EmptyNifCode`, `TBAI_EmptyPostalCode`, `TBAI_EmptyDir` (a contact not marked as Factura Simplificada needs NIF/CIF, and its invoice Dirección needs a postal code and a Primera línea — fixed in Contactos, pestaña Dirección) |
+| TicketBAI | `TBAI_ConfigNotFound`, `TBAI_CertificateNotValid`, `TBAI_NullCertificate`, `TBAI_SetKey`; on Confirmar or Anular (`ProcessInvoiceTbaiHook`, sales only), the recipient checks `TBAI_EmptyNifCode`, `TBAI_EmptyPostalCode`, `TBAI_EmptyDir` (a contact not marked as Factura Simplificada needs a NIF, and its invoice Dirección needs a postal code and a Primera línea — fixed in Contactos, pestaña Dirección) |
 | SII | `AEATSII_EmptyCertificatePath`, `AEATSII_InvoiceManualSending`, `AEATSII_SII_ACCRUAL_DATE_EMPTY` (Fecha incorporación al SII), and the literal `siiMissingInvoiceType` (below) |
 | AEAT 349 | `AEAT349_CINVREV_CHECK` (the Rectificaciones tab mixes Year/Period) |
 
@@ -2881,3 +2882,100 @@ date (ETP-5840) and the default price list stays valid. Without it, the agent of
 `f-foreign-currency-invoice` read currencies, price lists and conversion rates first (22 calls against
 Holded's 11). The text lives in this window's `decisions.json` and in `com.etendoerp.go`'s
 `ETGO_SF_ENTITY` sourcedata; keep both equal.
+
+## Invoices in a confirmed remittance — ETP-6247
+
+**What "remitted" means.** Confirming a remittance makes Classic REM create one payment per due in
+status `REM_SENT` and link the invoice installment to it (a partial remittance links only the
+remitted part). Nothing has moved yet: the invoice's `outstandingAmount` stays full until the bank
+collects the remittance, so **dashboard, KPIs, aging and the "pending" filters do not change** — the
+remitted part is still owed. A **draft** remittance creates no payment and changes nothing here.
+After the remittance is collected the payment moves on (`RPR`/`PPM`, then `RDNC`/`PWNC`), the
+outstanding drops to 0 and the invoice reads «Cobrada» as usual.
+
+**Data (backend, `com.etendoerp.go` `InvoiceRemittance`).**
+- Header record: `etgoRemittedAmt` (`C_Invoice.EM_ETGO_Remitted_Amt`, stored computed column, 0 when
+  nothing is remitted). Returned by the list and the detail reads through this window's `decisions.json`
+  (`readOnly`, `grid: false`, `form: false`, MCP `agentPrompt`), never a form field;
+  the SPA treats an absent field as 0.
+- `paymentPlan` rows: `remittedAmount` and `payableAmount` (decoration of `InvoicePaymentPlanHandler`).
+- `invoicePayments` action rows: `remittanceId` / `remittanceDocumentNo` on every payment a
+  remittance created, and status `REM_SENT` while remitted.
+
+**What the user sees.**
+
+| Case | Grid «Saldo pendiente» | Due-date dot | Topbar badge |
+|---|---|---|---|
+| Fully remitted (`etgoRemittedAmt >= outstandingAmount > 0`) | amber chip «En remesa» (`invoice-remitted`), opens the payments modal; no amount to register | neutral, never the red overdue dot | «En remesa · X» |
+| Partially remitted (`0 < remitted < outstanding`) | the usual amber pending button with only the FREE part («40,00 €»), like any pending invoice; the remitted part is in the payments modal | unchanged (the free part is still owed) | «Pendiente · 40,00 €» (the free part, no remitted suffix) — the topbar works per installment (`classifyInstallment` returns `remitted` when nothing of an installment is free; it is never `overdue`), with the header `etgoRemittedAmt` as the fallback when the plan does not load |
+
+- The payment is shown as **«Remesado»** (amber) — never «Cobro depositado» — in the payments modal, the
+  preview card and the payment sidebar («Cobro confirmado · en remesa»). `paymentDisplayState` returns `remitted` for `REM_SENT`
+  ahead of the processed check; `REM_CANCEL` keeps reading as deposited.
+- **Returned payment (`RPVOID`).** A remittance return voids the collected payment and the invoice
+  gets its outstanding back. Core keeps that payment's (cancelled) schedule details, so it stays in
+  the invoice's payment list. `paymentDisplayState` returns `voided` for `RPVOID`, ahead of the
+  processed check (like `remitted`), so it reads **«Anulado»** (`statusVoid`, destructive tone, the
+  same label and tone as the payment window's own badge) — never «Cobro depositado» — in the payments
+  modal (`PaymentStateTag__voided`), the preview card (`payments-card-state-voided`) and the payment
+  sidebar («Cobro confirmado · anulado», red dot). Its amount is grey, unsigned and struck through.
+  `isPaymentProcessed` counts it (never an editable draft, never reserved against the outstanding),
+  and the modal footer's «N cobros registrados» leaves it out (`countRegisteredPayments`).
+- **This invoice's share — every payment, not only remittances.** The amount a row shows in the
+  invoice payments modal and in the preview card is this invoice's share of the payment, not the
+  payment total: `paymentAmountOnInvoice(p)`, the row's `appliedToInvoice` (the payment's schedule
+  details on THIS invoice, sent by `paymentListItem`; it survives a void), unsigned, falling back to
+  `amount` only when the backend does not send it. That covers three cases alike: a remittance
+  payment grouped by customer (a payment of 55,66 € for two invoices reads 27,83 € on each), a manual
+  payment that covers several invoices, and an overpayment (a collection of 100 € on an 80 € invoice reads
+  80 €; the rest is credit, not this invoice's). Drafts still use `amount`: the draft reservation
+  (`freeToAllocate`, *Drafts reserve what they are going to pay* above) and the draft delete
+  confirmation read the payment's own `amount`.
+- **Payments modal** («Cobros/Pagos de la factura», `InvoicePaymentHistoryModal`) when something is
+  remitted:
+  - an info banner on top (`RemittanceInfoBanner.jsx`, `InvoicePaymentHistoryModal__remittance-banner`):
+    one line per remittance, «En la remesa N · <estado>», then «Se marcará como cobrada cuando se
+    cobre la remesa.». The status is the backend's `remittanceStatusLabel` on the remitted
+    `invoicePayments` row; without it the line reads «En la remesa N». «Ver remesa →» opens
+    `/remittance/{id}`, and only appears with the `sepaRemittances` capability (that route is
+    guarded by the flag);
+  - the summary reads Cliente/Proveedor | Importe total | **En remesa** | **Pendiente de cobro** (the free
+    part; 0 when everything is remitted) instead of «Saldo pendiente»;
+  - the remitted row shows «Remesa N» in the Método column (no link under the number), the
+    «Remesado» chip, and the amount in neutral grey with no sign. No money has moved yet;
+  - fully remitted: no «Añadir cobro» button at all, only «Cerrar». Partially remitted: «Añadir
+    cobro» works for the free part.
+- **Preview card** (`PaymentsCard`): the same compact banner above the list, the same row
+  («Remesa N» as the method, grey amount), «Pendiente de pago» (free part) and «En remesa» rows,
+  and no add action when everything is remitted.
+- **Register payment.** What is offered is the free part: `outstanding − remitted` per installment,
+  minus the drafts as before (`freeToAllocate`). Not the backend's `payableAmount`, which already
+  leaves the drafts out and would subtract them twice. The preview's toolbar action (always rendered)
+  stays disabled with the `cpAddPaymentBlockedByRemittance` tooltip when everything is remitted.
+- **One installment per payment.** The register action applies a payment to ONE installment
+  (`scheduleId`) and, when that installment is partly or fully remitted, refuses anything over its
+  payable part (`InvoiceRemittance.installmentRefusal`). So when the invoice has anything remitted, a
+  new payment targets the first installment with `payableAmount > 0` (`pickPaymentInstallment`) and the
+  amount offered is capped at that installment's `payableAmount` (`resolvePaymentTarget`). Example:
+  free parts 30 + 50 → the modal offers 30 on the first installment, not 80. The installment is handed
+  to `NewPaymentEntryModal` as `scheduleId`. With nothing remitted, nothing changes. Editing a draft
+  keeps the old rule. The payment-window edit launcher (`PaymentEditModalLauncher`) uses
+  `outstanding − etgoRemittedAmt` as its target. A `REM_SENT` payment counts as processed: it is never offered for edit or delete, and is
+  never reserved as a draft.
+- **Errors.** `ETGO_InvoiceInRemittance` (a registration over the free part) and
+  `ETGO_PaymentInRemittance` (reactivating or removing a remitted payment) are mapped in
+  `lib/backendErrors.js`. Their values come as top-level error keys (`remittanceDocumentNo`,
+  `payableAmount`, `currency`), not `messageParams`. `extractBackendMessageParams` turns them into the
+  sentence params, with the amount formatted by `formatCurrency` (the backend text prints «1234.50»).
+  If the remittance number is missing, the backend's own text is shown.
+  When the whole invoice is remitted the backend adds `ETGO_InvoiceFullyInRemittance` to the keys
+  (and `error.fullyRemitted: true`). `translateInvoiceFullyInRemittance` then renders
+  `backendError.invoiceFullyInRemittance` («Esta factura está en la remesa N; quedará saldada cuando se
+  liquide la remesa.») instead of the partial sentence, which would say «solo puedes registrar 0,00 €».
+
+**Not gated by `sepa-remittances`**, on purpose: a `REM_SENT` payment only exists where a remittance was
+confirmed. See the flag entry in `flags-registry.json`.
+
+**Code.** `shared/invoiceRemittance.js` (amount rules), `shared/invoicePaymentBadge.js` (`remitted` /
+`partially-remitted` kinds), `shared/paymentStatuses.js` (`STATUS_REMITTED`, `STATUS_VOIDED`, `paymentAmountOnInvoice`), `shared/RemittanceInfoBanner.jsx`,
+`artifacts/sales-invoice/custom/InvoiceHeaderTable.jsx` (grid), `artifacts/sales-invoice/custom/InvoiceTopbarExtra.jsx` (topbar), `shared/InvoicePaymentHistoryModal.jsx`, `shared/useInvoicePreview.js`, `shared/InvoicePreview.jsx`, `shared/preview-cards/PaymentsCard.jsx`, `shared/PaymentDetailSidebarBase.jsx`, `shared/NewPaymentEntryModal.jsx`.

@@ -7,8 +7,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { AuthProvider } from '@etendosoftware/app-shell-core/auth';
-import { ObservabilityProvider } from '@etendosoftware/app-shell-core/observability';
+import { AuthProvider } from '@etendo-ai/app-shell-core/auth';
+import { ObservabilityProvider } from '@etendo-ai/app-shell-core/observability';
 import AuthorizePage from '../AuthorizePage.jsx';
 
 describe('AuthorizePage shim', () => {

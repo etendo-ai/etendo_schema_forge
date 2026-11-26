@@ -8,6 +8,7 @@ import { getPendingSifTargets, getSifBodyKey, getSifButtonLabelKey } from './sif
 import { resolveInvoiceOrgId } from './resolveInvoiceOrgId.js';
 import { getStatusBadgeProps, statusLabel } from '@/lib/statusBadge.js';
 import { isPaymentProcessed } from './paymentStatuses.js';
+import { isBlockedByRemittance, resolvePaymentTarget, resolveRemittanceSummary } from './invoiceRemittance.js';
 import { isCompletedStatus, isDraftStatus } from '../../../lib/docStatus.js';
 
 /**
@@ -164,12 +165,26 @@ export function useInvoicePreview({ invoice, apiBaseUrl, specName = 'purchase-in
   const reservedByDrafts = payments
     .filter((payment) => !isPaymentProcessed(payment))
     .reduce((sum, payment) => sum + Math.abs(Number(payment.amount) || 0), 0);
-  const freeToAllocate = totalOutstanding - reservedByDrafts;
+  // ETP-6247 — the part of the outstanding in a CONFIRMED remittance is collected by the remittance,
+  // so it is not offered again: the base is the free part. From the installments' `remittedAmount`
+  // once loaded, else from the invoice's `etgoRemittedAmt`. The outstanding itself (and every total
+  // that reads it) is unchanged.
+  const remittance = resolveRemittanceSummary(installments, totalOutstanding, displayInvoice);
+  const totalRemitted = remittance.remitted;
+  // A new payment goes to ONE installment; with anything remitted the backend refuses more than its
+  // payable part, so the amount is capped there and the installment travels with it
+  // (resolvePaymentTarget). With nothing remitted both are as before.
+  const paymentTarget = resolvePaymentTarget(installments, remittance.free - reservedByDrafts);
+  const freeToAllocate = paymentTarget.amount;
+  const paymentScheduleId = paymentTarget.scheduleId;
   const invoiceTakesPayments = isCompleted && !isFullyPaid;
   const canAddPayment = invoiceTakesPayments && freeToAllocate > 0;
   // Kept apart from `canAddPayment` so the button can be shown disabled — with a reason — instead
-  // of vanishing, which reads as "this invoice takes no payments at all".
-  const addPaymentBlockedByDraft = invoiceTakesPayments && !canAddPayment;
+  // of vanishing, which reads as "this invoice takes no payments at all". The remittance reason wins
+  // over the draft one: deleting a draft would not unblock anything there.
+  const addPaymentBlockedByRemittance = invoiceTakesPayments && !canAddPayment
+    && isBlockedByRemittance(remittance);
+  const addPaymentBlockedByDraft = invoiceTakesPayments && !canAddPayment && !addPaymentBlockedByRemittance;
 
   return {
     displayInvoice,
@@ -180,7 +195,8 @@ export function useInvoicePreview({ invoice, apiBaseUrl, specName = 'purchase-in
     pdfUrl, pdfBlob, pdfLoading, pdfError, handleDownloadPdf,
     // payments
     installments, payments, loadingPayments,
-    totalOutstanding, canAddPayment, addPaymentBlockedByDraft, freeToAllocate,
+    totalOutstanding, totalRemitted, canAddPayment, addPaymentBlockedByDraft,
+    addPaymentBlockedByRemittance, freeToAllocate, paymentScheduleId,
     isFullyPaid, fetchPayments,
     // display
     status, badgeProps, statusLabel: label, partnerName, grandTotal,

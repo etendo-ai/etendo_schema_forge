@@ -1,9 +1,9 @@
 import { useMemo } from 'react';
 import {
   createApiFetch, getAmbientToken, useAuthOptional,
-} from '@etendosoftware/app-shell-core/auth';
+} from '@etendo-ai/app-shell-core/auth';
 import { useLogout } from '@/auth/useLogout.js';
-import { useOptionalDataCache } from '@etendosoftware/app-shell-core/data';
+import { useOptionalDataCache } from '@etendo-ai/app-shell-core/data';
 import { invalidateAfterWrite } from '@/lib/crossSpecCacheInvalidation.js';
 import { announceRecordWrite } from '@/lib/planQuotas.js';
 

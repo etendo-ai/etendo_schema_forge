@@ -1,6 +1,6 @@
 // @covers tools/app-shell/src/components/reports/dynamic/useReportPanelCollapsed.js
 let authValue = { username: 'ana' };
-vi.mock('@etendosoftware/app-shell-core/auth', () => ({ useAuthOptional: () => authValue }));
+vi.mock('@etendo-ai/app-shell-core/auth', () => ({ useAuthOptional: () => authValue }));
 
 import { act, renderHook } from '@testing-library/react';
 import { useReportPanelCollapsed } from '../useReportPanelCollapsed.js';

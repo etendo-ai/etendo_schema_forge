@@ -5,8 +5,8 @@
  * Run under LOCAL_CORE.
  */
 import { renderHook, act } from '@testing-library/react';
-import { AuthProvider, createMemoryAuthStorage } from '@etendosoftware/app-shell-core/auth';
-import { DataProvider, createQueryCache, createQueryKey } from '@etendosoftware/app-shell-core/data';
+import { AuthProvider, createMemoryAuthStorage } from '@etendo-ai/app-shell-core/auth';
+import { DataProvider, createQueryCache, createQueryKey } from '@etendo-ai/app-shell-core/data';
 import { useContactsCacheInvalidation } from '../contactsCacheInvalidation';
 
 const SCOPE = { auth: 'tok', org: 'o1', role: 'r1' };

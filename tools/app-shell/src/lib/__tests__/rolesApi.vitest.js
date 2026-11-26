@@ -1,7 +1,7 @@
 import {
   resetSessionCredentials,
   setSessionCredentials,
-} from '@etendosoftware/app-shell-core/auth/sessionCredentials.js';
+} from '@etendo-ai/app-shell-core/auth/sessionCredentials.js';
 import { fetchRolesOverview } from '../rolesApi.js';
 
 // ETP-4513 — fetchRolesOverview() mirrors menuTree.js's fetchMenuTree()

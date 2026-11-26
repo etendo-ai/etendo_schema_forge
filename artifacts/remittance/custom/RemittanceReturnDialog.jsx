@@ -39,9 +39,13 @@ export function returnLineSummary(line) {
   };
 }
 
-/** Ticking a line ticks every line that shares its payment (a return takes them all); ticking it again clears the group. */
-export function toggleReturnSelection(selected, state, lineId) {
-  const group = state.lines[lineId]?.paymentLineIds ?? [lineId];
+/**
+ * Ticking a line ticks every line that shares its payment (a return takes them all); ticking it again clears the group.
+ * Takes one line id or several (a bank-instruction row hands all of its lines).
+ */
+export function toggleReturnSelection(selected, state, lineIdOrIds) {
+  const ids = Array.isArray(lineIdOrIds) ? lineIdOrIds : [lineIdOrIds];
+  const group = [...new Set(ids.flatMap((id) => state.lines[id]?.paymentLineIds ?? [id]))];
   const next = new Set(selected);
   const removing = group.every((id) => next.has(id));
   for (const id of group) {
@@ -60,13 +64,58 @@ export function selectAllReturnable(state, lineIds) {
   return next;
 }
 
+/**
+ * ETP-6247 — the dialog's rows are BANK INSTRUCTIONS, not lines: with a grouping (GGP / GGPD) several lines (invoices)
+ * share one payment, which is one instruction to the bank, and a return always takes the whole payment. Groups the
+ * lines by `state.lines[id].paymentId`, in the order their first line arrives; a line without a payment (or unknown to
+ * the state) is its own group.
+ *
+ * Each group: `key`, `lineIds`, `lines`, `infos` (their returnState entries), `returnable` (every line is) and `info`,
+ * the entry that speaks for the row — the first line that cannot be returned, else the first one — so the note reads
+ * as it did per line (returned on, not collected yet, reconciled…).
+ */
+export function groupReturnLines(lines, state) {
+  const groups = new Map();
+  for (const line of lines) {
+    const info = state?.lines?.[line.id];
+    const key = info?.paymentId ? `payment:${info.paymentId}` : `line:${line.id}`;
+    if (!groups.has(key)) groups.set(key, { key, lineIds: [], lines: [], infos: [] });
+    const group = groups.get(key);
+    group.lineIds.push(line.id);
+    group.lines.push(line);
+    group.infos.push(info);
+  }
+  return [...groups.values()].map((group) => {
+    const returnable = group.infos.every((info) => info?.returnable === true);
+    const info = group.infos.find((i) => i?.returnable !== true) ?? group.infos[0];
+    return { ...group, returnable, info };
+  });
+}
+
+/**
+ * What a bank-instruction row shows, from `returnLineSummary` of each line: the invoices, the partner (null when they
+ * differ — the row then says «Varios clientes»), the total and the currency.
+ */
+export function returnGroupSummary(group) {
+  const items = group.lines.map(returnLineSummary);
+  const partners = [...new Set(items.map((i) => i.partner).filter(Boolean))];
+  return {
+    documentNos: items.map((i) => i.documentNo),
+    partner: partners.length <= 1 ? (partners[0] ?? '') : null,
+    amount: items.reduce((sum, i) => sum + i.amount, 0),
+    currency: items.find((i) => i.currency)?.currency ?? null,
+    single: items.length === 1,
+  };
+}
+
 // The sibling pickers' (DocumentPickerModal) search box, icon and row look.
 const CONTROL = 'border-[hsl(var(--sf-border-input))] shadow-[var(--sf-shadow-xs)]';
 const ICON = 'text-[hsl(var(--sf-icon-outline-secondary))]';
 
-function LineRow({ line, info, checked, onToggle, ui, locale }) {
-  const item = returnLineSummary(line);
-  const returnable = info?.returnable === true;
+function InstructionRow({ group, checked, onToggle, ui, locale }) {
+  const item = returnGroupSummary(group);
+  const { info } = group;
+  const returnable = group.returnable;
   const returned = info?.state === 'RETURNED';
   let note = null;
   if (returned) {
@@ -87,6 +136,7 @@ function LineRow({ line, info, checked, onToggle, ui, locale }) {
         checked && 'bg-muted/40',
       )}
       data-testid="remittance-return-line"
+      data-lines={group.lineIds.length}
       data-state={info?.state}
       data-code={info?.reasonCode ?? undefined}>
       <Checkbox
@@ -96,7 +146,20 @@ function LineRow({ line, info, checked, onToggle, ui, locale }) {
         onClick={(e) => e.stopPropagation()}
         aria-label={ui('selectRow')}
         data-testid="remittance-return-check" />
-      <span className="min-w-0 flex-1 truncate">{item.documentNo}{item.partner ? ` · ${item.partner}` : ''}</span>
+      {item.single ? (
+        <span className="min-w-0 flex-1 truncate">{item.documentNos[0]}{item.partner ? ` · ${item.partner}` : ''}</span>
+      ) : (
+        <span className="flex min-w-0 flex-1 flex-col" data-testid="remittance-return-group">
+          <span className="truncate">
+            {item.partner ?? ui('remittanceReturnSeveralPartners')}
+            {' · '}
+            {ui('remittanceReturnInvoiceCount', { count: item.documentNos.length })}
+          </span>
+          <span className="truncate text-xs text-muted-foreground" title={item.documentNos.join(', ')} data-testid="remittance-return-group-invoices">
+            {item.documentNos.join(', ')}
+          </span>
+        </span>
+      )}
       {note && <span className="shrink-0 text-xs text-muted-foreground" data-testid="remittance-return-note">{note}</span>}
       <span className="w-28 shrink-0 text-right tabular-nums">{formatCurrency(item.currency, item.amount)}</span>
     </li>
@@ -106,9 +169,11 @@ function LineRow({ line, info, checked, onToggle, ui, locale }) {
 /**
  * ETP-6247 returns — «Devolver» (the `returnLines` header process, `confirmModal`, routed by
  * RemittanceProcessConfirmModal): the bank did not collect some receipts of a processed remittance.
- * Built on ActionChoiceModal like «Confirmar remesa». It reads `returnState` and the lines, lists
- * every line (a line that cannot be returned stays visible, disabled, with its reason), and picks
- * them with a search box, select all and a scrollable list; a shared payment is selected whole.
+ * Built on ActionChoiceModal like «Confirmar remesa». It reads `returnState` and the lines and lists
+ * one row per BANK INSTRUCTION (payment, `groupReturnLines`): with a grouping several invoices share
+ * one payment and a return takes it whole. A row that cannot be returned stays visible, disabled,
+ * with its reason. Search box (any invoice or partner of the row), select all and a scrollable list;
+ * the POST still sends the ids of every line of the selected payments.
  * The return date is the shared DateField (locale order), defaults to today and cannot be in the future. Only a collection remittance can
  * be returned. Success toasts, refreshes the record and closes; a refusal keeps it open and lists
  * the lines the backend blocked.
@@ -145,16 +210,21 @@ export default function RemittanceReturnDialog({ record, apiBaseUrl, onRefresh, 
   useEffect(() => { load(); }, [load]);
 
   const needle = query.trim().toLowerCase();
-  const visible = useMemo(() => lines.filter((l) => {
+  // One row per bank instruction (payment); the search matches the invoice or partner of ANY of its lines.
+  const groups = useMemo(() => (state ? groupReturnLines(lines, state) : []), [lines, state]);
+  const visible = useMemo(() => groups.filter((g) => {
     if (!needle) return true;
-    const item = returnLineSummary(l);
-    return `${item.documentNo} ${item.partner}`.toLowerCase().includes(needle);
-  }), [lines, needle]);
+    return g.lines.some((l) => {
+      const item = returnLineSummary(l);
+      return `${item.documentNo} ${item.partner}`.toLowerCase().includes(needle);
+    });
+  }), [groups, needle]);
   const selectedLines = useMemo(() => lines.filter((l) => selected.has(l.id)), [lines, selected]);
+  const selectedInstructions = groups.filter((g) => g.lineIds.some((id) => selected.has(id))).length;
   const currency = selectedLines.find((l) => l.currency)?.currency ?? lines.find((l) => l.currency)?.currency ?? null;
   const total = selectedLines.reduce((sum, l) => sum + returnLineSummary(l).amount, 0);
-  const returnableVisible = state ? visible.filter((l) => state.lines[l.id]?.returnable) : [];
-  const allSelected = returnableVisible.length > 0 && returnableVisible.every((l) => selected.has(l.id));
+  const returnableVisible = visible.filter((g) => g.returnable);
+  const allSelected = returnableVisible.length > 0 && returnableVisible.every((g) => g.lineIds.every((id) => selected.has(id)));
   const dateValid = /^\d{4}-\d{2}-\d{2}$/.test(returnDate) && returnDate <= today; // DateField has no max, so a later day is refused here
   const notCollection = state && !state.collection;
   const canReturn = !loading && !busy && !loadFailed && !notCollection && selectedLines.length > 0 && dateValid;
@@ -164,7 +234,7 @@ export default function RemittanceReturnDialog({ record, apiBaseUrl, onRefresh, 
     setBusy(true);
     try {
       await returnRemittanceLines(apiFetch, remittanceId, selectedLines.map((l) => l.id), returnDate);
-      toast.success(ui('remittanceReturnSuccess', { count: selectedLines.length }));
+      toast.success(ui(selectedInstructions === 1 ? 'remittanceReturnSuccessOne' : 'remittanceReturnSuccess', { count: selectedInstructions }));
       onRefresh?.();
       onClose?.();
     } catch (err) {
@@ -178,11 +248,11 @@ export default function RemittanceReturnDialog({ record, apiBaseUrl, onRefresh, 
     <ActionChoiceModal
       title={ui('remittanceReturnTitle')}
       summaryColumns={[
-        { key: 'count', label: ui('remittanceReturnLines'), testId: 'remittance-return-count' },
+        { key: 'count', label: ui('remittanceReturnInstructions'), testId: 'remittance-return-count' },
         { key: 'total', label: ui('remittanceConfirmTotal'), testId: 'remittance-return-total' },
         { key: 'date', label: ui('remittanceReturnDate'), testId: 'remittance-return-date-label' },
       ]}
-      summaryData={{ count: selectedLines.length, total: formatCurrency(currency, total), date: formatCalendarDate(returnDate, locale) }}
+      summaryData={{ count: selectedInstructions, total: formatCurrency(currency, total), date: formatCalendarDate(returnDate, locale) }}
       options={[]}
       onCancel={() => { if (!busy) onClose?.(); }}
       onContinue={handleReturn}
@@ -213,7 +283,7 @@ export default function RemittanceReturnDialog({ record, apiBaseUrl, onRefresh, 
               </label>
               <button
                 type="button"
-                onClick={() => setSelected(allSelected ? new Set() : selectAllReturnable(state, returnableVisible.map((l) => l.id)))}
+                onClick={() => setSelected(allSelected ? new Set() : selectAllReturnable(state, returnableVisible.flatMap((g) => g.lineIds)))}
                 disabled={busy || returnableVisible.length === 0}
                 aria-pressed={allSelected}
                 className="inline-flex h-10 shrink-0 items-center gap-1 rounded-lg px-3 py-2 text-sm font-medium leading-6 transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
@@ -223,16 +293,15 @@ export default function RemittanceReturnDialog({ record, apiBaseUrl, onRefresh, 
               </button>
             </div>
             <ul role="listbox" aria-multiselectable="true" aria-label={ui('remittanceReturnTitle')} className="m-0 max-h-56 list-none overflow-y-auto rounded-lg border border-[hsl(var(--border-subtle))] p-0" data-testid="remittance-return-lines">
-              {visible.map((line) => (
-                <LineRow
-                  key={line.id}
-                  line={line}
-                  info={state.lines[line.id]}
-                  checked={selected.has(line.id)}
-                  onToggle={() => setSelected((prev) => toggleReturnSelection(prev, state, line.id))}
+              {visible.map((group) => (
+                <InstructionRow
+                  key={group.key}
+                  group={group}
+                  checked={group.lineIds.every((id) => selected.has(id))}
+                  onToggle={() => setSelected((prev) => toggleReturnSelection(prev, state, group.lineIds))}
                   ui={ui}
                   locale={locale}
-                  data-testid="LineRow__return" />
+                  data-testid="InstructionRow__return" />
               ))}
             </ul>
           </div>

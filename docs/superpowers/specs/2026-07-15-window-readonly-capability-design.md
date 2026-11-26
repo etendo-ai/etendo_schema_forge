@@ -80,7 +80,7 @@ path. `windowMeta.readOnly` remains only as a semantic marker (e.g. a future
 
 ## Changes by repo
 
-### A) `schema_forge_core` — generator (requires publishing `@etendosoftware/schema-forge-cli`)
+### A) `schema_forge_core` — generator (requires publishing `@etendo-ai/schema-forge-cli`)
 
 1. **`cli/src/resolve-curated.js`** — add `'readOnly'` to `WINDOW_BOOLEAN_TRUE_PROPS` and
    `WINDOW_KEY_ORDER` (so it flows from decisions into the curated/contract window). In
@@ -220,7 +220,7 @@ combined flag — the kebab needed only the role-tier half.
 
 ## Rollout
 
-1. PR in `schema_forge_core` → publish `@etendosoftware/schema-forge-cli` → bump the version in
+1. PR in `schema_forge_core` → publish `@etendo-ai/schema-forge-cli` → bump the version in
    this repo's `package.json`.
 2. Regenerate `conversion-rates` and `conversion-rate-downloader-log` with the new CLI.
 3. PR in `schema_forge` (UI gating + regenerated config).

@@ -13,7 +13,7 @@ import ReactivarConfirmModal from '../../../custom/ReactivarConfirmModal';
 import catalogs from './mockCatalogs';
 
 
-const breadcrumb = 'Finance / Payment In';
+const breadcrumb = 'Treasury / Payment In';
 
 
 // @sf-generated-start summary:finPayment
@@ -35,7 +35,7 @@ const processes = [
   { name: 'Payment Process', label: 'processConfirm', style: 'positive', columnName: 'aPRMProcessPayment',
     displayLogicRaw: "@status@ = 'RPAP'", confirmModal: true },
   { name: 'etprReactivatePayment', label: 'processReactivate', style: 'primary-danger', columnName: 'etprReactivatePayment',
-    displayLogicRaw: "@status@ != 'RPAP'" },
+    displayLogicRaw: "@status@ != 'RPAP' & @status@ != 'REM_SENT' & @status@ != 'REM_CANCEL' & @status@ != 'RPVOID'" },
 ];
 // @sf-generated-end processes:finPayment
 

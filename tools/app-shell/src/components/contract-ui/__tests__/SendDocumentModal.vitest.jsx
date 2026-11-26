@@ -1,10 +1,23 @@
 // @covers tools/app-shell/src/components/contract-ui/SendDocumentModal.jsx
+// @covers tools/app-shell/src/components/contract-ui/documentEmailSend.js
+
+// `es: true` makes `useUI` resolve the REAL es_ES copy, for the tests that pin the wording the
+// customer reads; otherwise it echoes `key:{params}`, so a test pins the composition only.
+const i18nMode = vi.hoisted(() => ({ es: false }));
 
 // Mock dependencies BEFORE any import
-vi.mock('@/i18n', () => ({
-  useUI: () => (key, params) => (params ? `${key}:${JSON.stringify(params)}` : key),
-  useLocaleSwitch: () => ({ locale: 'es_ES' }),
-}));
+vi.mock('@/i18n', async () => {
+  const { default: esES } = await import('@/locales/es_ES.json');
+  const fill = (template, params) => String(template)
+    .replace(/\{(\w+)\}/g, (match, name) => (params && name in params ? String(params[name]) : match));
+  return {
+    useUI: () => (key, params) => {
+      if (i18nMode.es && esES.genericLabels[key] != null) return fill(esES.genericLabels[key], params);
+      return params ? `${key}:${JSON.stringify(params)}` : key;
+    },
+    useLocaleSwitch: () => ({ locale: 'es_ES' }),
+  };
+});
 
 // The modal GETs the contract's default subject/message before anything else (ETP-5003). Queue an
 // answer for it first, so the responses a test lines up still meet the requests it cares about.
@@ -966,6 +979,36 @@ describe('SendDocumentModal — subject and message editing (ETP-4717)', () => {
     expect(body.messageEdits.message).toBe(
       'sendModalDefaultGreeting:{"bpName":"ACME"}\n\n'
       + 'sendModalDefaultMessage:{"documentType":"Invoice","documentNo":"INV-001"}');
+  });
+
+  // ETP-6209 — supplier documents keep «usted»; every customer document says «tú». The sentence the
+  // operator reads (and sends) must be the one the module's catalog declares for that contract.
+  describe('default message register (es_ES)', () => {
+    afterEach(() => { i18nMode.es = false; });
+
+    it.each([
+      ['purchase-order', 'Le enviamos su Pedido **DOC-1**.'],
+      ['return-to-vendor', 'Le enviamos su Pedido **DOC-1**.'],
+      ['return-to-vendor-shipment', 'Le enviamos su Pedido **DOC-1**.'],
+      ['sales-invoice', 'Te enviamos tu Pedido **DOC-1**.'],
+      ['sales-order', 'Te enviamos tu Pedido **DOC-1**.'],
+      ['sales-quotation', 'Te enviamos tu Pedido **DOC-1**.'],
+    ])('%s opens with "%s" after the greeting', (windowName, sentence) => {
+      i18nMode.es = true;
+      render(
+        <SendDocumentModal
+          {...BASE}
+          documentType="Pedido"
+          documentNo="DOC-1"
+          windowName={windowName}
+          bpEmail="user@domain.com"
+          apiBaseUrl={`http://localhost:8080/etendo/neo/${windowName}`}
+        />,
+      );
+
+      const message = screen.getAllByRole('textbox').find((box) => box.tagName === 'TEXTAREA');
+      expect(message.value).toBe(`Hola, **ACME**:\n\n${sentence}`);
+    });
   });
 });
 

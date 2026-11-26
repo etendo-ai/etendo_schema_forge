@@ -22,7 +22,7 @@ vi.mock('@/i18n', () => ({
   useUI: () => (key) => key,
 }));
 
-// Checkbox re-exports from @etendosoftware/app-shell-core which is not
+// Checkbox re-exports from @etendo-ai/app-shell-core which is not
 // available in this test environment — same mock convention already used by
 // AmortizationLinesTable.vitest.jsx for the sibling amortization window.
 vi.mock('@/components/ui/checkbox', () => ({

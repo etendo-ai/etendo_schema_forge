@@ -3,6 +3,7 @@
   "window": {
     "category": "finance",
     "name": "Payment Out",
+    "breadcrumb": "Treasury / Payment Out",
     "relatedDocuments": false,
     "notesField": "description",
     "dateFilterKey": "paymentDate",
@@ -53,7 +54,7 @@
         "columnName": "etprReactivatePayment",
         "label": "processReactivate",
         "style": "ghost-danger",
-        "displayLogicRaw": "@status@ != 'RPAP' & @pisLocked@ = 'N'"
+        "displayLogicRaw": "@status@ != 'RPAP' & @pisLocked@ = 'N' & @status@ != 'REM_SENT' & @status@ != 'REM_CANCEL' & @status@ != 'RPVOID'"
       }
     },
     "statusEnumLabels": {

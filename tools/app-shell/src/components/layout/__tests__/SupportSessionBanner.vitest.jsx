@@ -9,7 +9,7 @@ const whenSessionRevokeSettles = vi.fn(() => new Promise((resolve) => { resolveR
 
 vi.mock('react-router-dom', () => ({ useNavigate: () => navigateMock }));
 vi.mock('@/auth/useLogout.js', () => ({ useLogout: () => logoutMock }));
-vi.mock('@etendosoftware/app-shell-core/auth', async (importOriginal) => ({
+vi.mock('@etendo-ai/app-shell-core/auth', async (importOriginal) => ({
   ...(await importOriginal()),
   whenSessionRevokeSettles: () => whenSessionRevokeSettles(),
 }));
