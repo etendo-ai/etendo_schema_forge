@@ -5,7 +5,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { buildWriteHeaders } from '@/auth/api.js';
 import { useMenuLabel, useUI } from '@/i18n';
 import { createAgentConversation, appendAgentMessages, getAgentConversationMessages } from './agentChatApi.js';
-import { ATTACHED_NOTE, conversationTitle, hasPendingTool, toUiMessages, unsavedMessages } from './agentHistory.js';
+import { ATTACHED_NOTE, attachedNote, conversationTitle, hasPendingTool, toUiMessages, unsavedMessages } from './agentHistory.js';
 import { useAgentConversations } from './useAgentConversations.js';
 import { AmbiguousWindowError, UnknownWindowError, assertInternalPath, buildWindowRouteIndex, knownWindowSlugs, normalizeWindowKey } from './windowRoutes.js';
 import { FIELD_TESTID_PREFIX, accessibleElementName, fieldAccessibleName, isOrContainsPassword, isVisibleElement } from './domVisibility.js';
@@ -250,7 +250,7 @@ function traceHistory(stage, payload) {
   console.warn(`[copilot:history] ${stage}`, payload);
 }
 
-const fileNameOf = part => part.filename || 'archivo';
+const fileNameOf = part => part.filename || '';
 const AGENT_FILE_EXTENSIONS = /\.(csv|tsv|txt|xlsx)$/i;
 const AGENT_FILE_MEDIA_TYPES = new Set([
   'text/csv', 'text/tab-separated-values', 'text/plain',
@@ -276,7 +276,7 @@ function filePartsToNotes(messages) {
   return messages.map(message => (
     message.role === 'user' && (message.parts || []).some(part => part.type === 'file')
       ? { ...message, parts: message.parts.map(part => (
-        part.type === 'file' ? { type: 'text', text: `[Archivo adjunto "${fileNameOf(part)}"]` } : part
+        part.type === 'file' ? { type: 'text', text: attachedNote(fileNameOf(part)) } : part
       )) }
       : message
   ));
@@ -317,7 +317,6 @@ export function useAiCopilotChat({ onOpenCopilot, menuGroups }) {
     [menuSignature, menuLabel]
   );
   const location = useLocation();
-  const setMessagesRef = useRef(null);
   const addToolOutputRef = useRef(null);
   const pendingToolOutputsRef = useRef([]);
   const pageHelpAddToolOutputRef = useRef(null);
@@ -450,20 +449,17 @@ export function useAiCopilotChat({ onOpenCopilot, menuGroups }) {
     pendingRef: pageHelpPendingToolOutputsRef,
   }), [executeToolCall]);
 
-  const sendAutomaticallyWhenFor = useCallback(async ({ messages }, pendingRef, beforeResend) => {
+  const sendAutomaticallyWhenFor = useCallback(async ({ messages }, pendingRef) => {
     const pendingToolOutputs = pendingRef.current.splice(0);
     if (pendingToolOutputs.length > 0) {
       await Promise.all(pendingToolOutputs);
-      beforeResend?.();
       return true;
     }
-    const resend = lastAssistantMessageIsCompleteWithToolCalls({ messages });
-    if (resend) beforeResend?.();
-    return resend;
+    return lastAssistantMessageIsCompleteWithToolCalls({ messages });
   }, []);
-  // The first request carried the attachment: from the first client-tool round-trip on, only the note travels.
+  // File parts stay until the whole turn ends (see sendMessage), so every client-tool round-trip carries the CSV.
   const sendAutomaticallyWhen = useCallback(
-    options => sendAutomaticallyWhenFor(options, pendingToolOutputsRef, () => setMessagesRef.current?.(filePartsToNotes)),
+    options => sendAutomaticallyWhenFor(options, pendingToolOutputsRef),
     [sendAutomaticallyWhenFor]
   );
   const sendAutomaticallyWhenForPageHelp = useCallback(
@@ -526,7 +522,6 @@ export function useAiCopilotChat({ onOpenCopilot, menuGroups }) {
     onFinish: handleFinish,
   });
   addToolOutputRef.current = chat.addToolOutput;
-  setMessagesRef.current = chat.setMessages;
   messagesRef.current = chat.messages;
 
   statusRef.current = chat.status;
@@ -721,7 +716,7 @@ export function useAiCopilotChat({ onOpenCopilot, menuGroups }) {
     try {
       await chat.sendMessage({ text: value, files: parts });
     } finally {
-      // Fallback: the automatic resends already did this; a failed or plain send did not.
+      // sendMessage settles after the automatic client-tool resends: only now drop the data URLs.
       chat.setMessages(filePartsToNotes);
     }
   }, [chat, files, ui]);

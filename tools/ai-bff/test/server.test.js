@@ -300,6 +300,18 @@ test('buildModelMessages reads an XLSX attachment as CSV text', async () => {
   assert.equal(dump.includes('"type":"file"'), false);
 });
 
+test('buildModelMessages keeps the CSV when a client-tool round-trip follows the attachment turn', async () => {
+  const assistant = { id: 'a1', role: 'assistant', parts: [{ type: 'step-start' }, { type: 'tool-navigate_to', toolCallId: 't1', state: 'output-available', input: { path: '/contacts' }, output: { ok: true } }] };
+  const entry = {
+    fingerprints: [...fingerprintUiMessages([{ ...fileTurn('importa'), parts: [{ type: 'text', text: '[Archivo adjunto "c.csv"]' }, { type: 'text', text: 'importa' }] }])],
+    messages: [{ role: 'user', content: 'CACHED-CSV' }],
+  };
+  // The tool output changes the last assistant message, so the cache steps aside and the file part is converted again.
+  const { modelMessages, plan } = await buildModelMessages([fileTurn('importa'), assistant], { entry, tools: {} });
+  assert.equal(plan.hit, false);
+  assert.match(JSON.stringify(modelMessages), /ana@example\.com/);
+});
+
 test('buildModelMessages keeps the cached history on the turn after an attachment and converts a new one', async () => {
   const first = fileTurn('importa');
   const reply = { id: 'a1', role: 'assistant', parts: [{ type: 'text', text: 'Son 1 fila, ¿confirmas?' }] };

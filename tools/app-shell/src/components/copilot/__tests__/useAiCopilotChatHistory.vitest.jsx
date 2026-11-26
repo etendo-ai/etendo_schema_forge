@@ -394,7 +394,7 @@ describe('agent chat file attachments', () => {
     expect(result.current.messages[0]).toEqual({ id: 'u1', role: 'user', text: 'importa', files: [{ name: 'c.csv' }] });
   });
 
-  it('drops the data URL before the first automatic resend of the same turn', async () => {
+  it('keeps the file part through the automatic resends of the same turn', async () => {
     const { result } = setup();
     const assistant = { id: 'a1', role: 'assistant', parts: [{ type: 'step-start' }, { type: 'tool-navigate_to', toolCallId: 't1', state: 'output-available', input: {}, output: {} }] };
     await act(async () => {
@@ -406,9 +406,7 @@ describe('agent chat file attachments', () => {
     let resend;
     await act(async () => { resend = await globalThis.__chatOptions.sendAutomaticallyWhen({ messages: globalThis.__chat.messages }); });
     expect(resend).toBe(true);
-    // What the second request would carry.
-    expect(JSON.stringify(globalThis.__chat.messages)).not.toContain('data:');
-    expect(globalThis.__chat.messages[0].parts[0]).toEqual({ type: 'text', text: '[Archivo adjunto "c.csv"]' });
-    expect(result.current.messages[0].files).toEqual([{ name: 'c.csv' }]);
+    // The second request of the turn must still carry the CSV for the BFF to convert.
+    expect(globalThis.__chat.messages[0].parts[0]).toMatchObject({ type: 'file', url: 'data:text/csv;base64,YSxi' });
   });
 });
