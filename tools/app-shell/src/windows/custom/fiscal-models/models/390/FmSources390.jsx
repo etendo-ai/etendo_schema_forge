@@ -154,6 +154,9 @@ export default function FmSources390({
   const boxValue = boxSelected ? data?.boxes?.[String(current.box)] : null;
   const boxTotal = data?.totals?.box;
   const colSpan = boxSelected ? 11 : 10;
+  // GEN-02: columns the table drops when the tab is narrow (fiscal-models.css, container query).
+  const SECONDARY = 'fm-390-sources__col--secondary';
+  const boxesCol = boxSelected ? 'fm-390-sources__col--boxes-filtered' : undefined;
 
   return (
     <div className="fm-390-sources" data-testid="FmSources390">
@@ -241,7 +244,7 @@ export default function FmSources390({
             <thead>
               <tr>
                 <th>{t('fm.sources.col.date')}</th>
-                <th>{t('fm.sources.col.accountingDate')}</th>
+                <th className={SECONDARY}>{t('fm.sources.col.accountingDate')}</th>
                 <th>{t('fm.sources.col.ref')}</th>
                 <th>{t('fm.sources.col.type')}</th>
                 <th>{t('fm.sources.col.party')}</th>
@@ -249,7 +252,7 @@ export default function FmSources390({
                 <th className="num">{t('fm.sources.col.base')}</th>
                 <th className="num">{t('fm.sources.col.vat')}</th>
                 <th className="num">{t('fm.sources.col.total')}</th>
-                <th>{t('fm.sources.col.boxes')}</th>
+                <th className={boxesCol}>{t('fm.sources.col.boxes')}</th>
                 {boxSelected && <th className="num">{t('fm.m390.sources.col.box_amount', { box: boxLabel(current.box) })}</th>}
               </tr>
             </thead>
@@ -265,7 +268,7 @@ export default function FmSources390({
               {rows.map(r => (
                 <tr key={r.id} data-testid={`FmSources390__row_${r.id}`}>
                   <td className="strong">{fmtDate(r.date)}</td>
-                  <td>{fmtDate(r.accountingDate)}</td>
+                  <td className={SECONDARY}>{fmtDate(r.accountingDate)}</td>
                   <td>{r.ref}</td>
                   <td data-testid={`FmSources390__type_${r.id}`}>{rowTypeLabel(r, t) || '—'}</td>
                   <td>{r.party}</td>
@@ -273,7 +276,7 @@ export default function FmSources390({
                   <td className="num">{formatAmount(parseAmount(r.base))}</td>
                   <td className="num">{formatAmount(parseAmount(r.vat))}</td>
                   <td className="num strong">{formatAmount(parseAmount(r.total))}</td>
-                  <td>{String(r.boxes ?? '').split(',').filter(Boolean).map(boxLabel).join(', ') || '—'}</td>
+                  <td className={boxesCol}>{String(r.boxes ?? '').split(',').filter(Boolean).map(boxLabel).join(', ') || '—'}</td>
                   {boxSelected && <td className="num strong">{formatAmount(parseAmount(rowBoxAmount(r, current.box)))}</td>}
                 </tr>
               ))}
@@ -281,11 +284,14 @@ export default function FmSources390({
             {data && count > 0 && (
               <tfoot>
                 <tr className="fm-390-sources__totals" data-testid="FmSources390__totals">
-                  <td colSpan={6}>{t('fm.m390.sources.totals', { count })}</td>
+                  {/* The accounting-date slot stays its own cell, so the label keeps spanning the right
+                      columns when that column is hidden. */}
+                  <td colSpan={5}>{t('fm.m390.sources.totals', { count })}</td>
+                  <td className={SECONDARY} />
                   <td className="num" data-testid="FmSources390__totalBase">{formatAmount(parseAmount(data.totals?.base))}</td>
                   <td className="num" data-testid="FmSources390__totalVat">{formatAmount(parseAmount(data.totals?.vat))}</td>
                   <td className="num" data-testid="FmSources390__totalTotal">{formatAmount(parseAmount(data.totals?.total))}</td>
-                  <td />
+                  <td className={boxesCol} />
                   {boxSelected && <td className="num" data-testid="FmSources390__totalBox">{formatAmount(parseAmount(boxTotal))}</td>}
                 </tr>
               </tfoot>

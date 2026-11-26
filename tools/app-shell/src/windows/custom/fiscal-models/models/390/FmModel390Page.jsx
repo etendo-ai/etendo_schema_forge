@@ -952,48 +952,50 @@ export default function FmModel390Page({
           t={t}
           data-testid="SubstitutiveBanner__74d2aa" />
 
-        <div className="fm-390-kpis">
-          {/* Incidencias — the 303 card: total + severity badge; a click opens the tab. */}
-          <KpiWidget
-            icon={<IncidentsKpiIcon blocking={blocking} data-testid="IncidentsKpiIcon__74d2aa" />}
-            iconColor={incidentVariants.iconColor}
-            label={t('fm.tab.incidents')}
-            onClick={() => setActiveTab('incidents')}
-            value={<span data-testid="FmModel390Page__incidentsCount">{String(blocking + warning)}</span>}
-            badge={incidentVariants.badge}
-            badgeBg={incidentVariants.badgeBg}
-            badgeColor={incidentVariants.badgeColor}
-            data-testid="KpiWidget__74d2aa" />
-          <KpiWidget
-            icon={<TrendUpIcon size={20} data-testid="TrendingUp__fm390kpi" />}
-            iconColor="hsl(var(--foreground))"
-            label={t('fm.m390.kpi.accrued')}
-            value={formatAmount(summary.accrued)}
-            badge={t('fm.m303.summary.accrued_sub')}
-            badgeBg="hsl(var(--muted))"
-            badgeColor="hsl(var(--muted-foreground))"
-            data-testid="KpiWidget__74d2aa" />
-          <KpiWidget
-            icon={<TrendDownIcon size={20} data-testid="TrendingDown__fm390kpi" />}
-            iconColor="hsl(var(--foreground))"
-            label={t('fm.m390.kpi.deductible')}
-            value={formatAmount(summary.deductible)}
-            badge={t('fm.m303.summary.deductible_sub')}
-            badgeBg="hsl(var(--muted))"
-            badgeColor="hsl(var(--muted-foreground))"
-            data-testid="KpiWidget__74d2aa" />
-          {/* Resultado — [86], or [94] when filing to several administrations. The "cuadre con
-              los 303" banner (Reconciliation390) goes right under the cards. */}
-          <KpiWidget
-            icon={<CalculatorIcon size={20} data-testid="Calculator__fm390kpi" />}
-            iconColor="hsl(var(--foreground))"
-            label={t(display.mode === 'territory' ? 'fm.m390.kpi.result_territory' : 'fm.m390.kpi.result')}
-            value={formatAmount(summary.result)}
-            valueColor={resultColors.valueColor}
-            badge={resultLabel}
-            badgeBg={resultColors.badgeBg}
-            badgeColor={resultColors.badgeColor}
-            data-testid="KpiWidget__74d2aa" />
+        <div className="fm-390-kpis-wrap">
+          <div className="fm-390-kpis">
+            {/* Incidencias — the 303 card: total + severity badge; a click opens the tab. */}
+            <KpiWidget
+              icon={<IncidentsKpiIcon blocking={blocking} data-testid="IncidentsKpiIcon__74d2aa" />}
+              iconColor={incidentVariants.iconColor}
+              label={t('fm.tab.incidents')}
+              onClick={() => setActiveTab('incidents')}
+              value={<span data-testid="FmModel390Page__incidentsCount">{String(blocking + warning)}</span>}
+              badge={incidentVariants.badge}
+              badgeBg={incidentVariants.badgeBg}
+              badgeColor={incidentVariants.badgeColor}
+              data-testid="KpiWidget__74d2aa" />
+            <KpiWidget
+              icon={<TrendUpIcon size={20} data-testid="TrendingUp__fm390kpi" />}
+              iconColor="hsl(var(--foreground))"
+              label={t('fm.m390.kpi.accrued')}
+              value={formatAmount(summary.accrued)}
+              badge={t('fm.m303.summary.accrued_sub')}
+              badgeBg="hsl(var(--muted))"
+              badgeColor="hsl(var(--muted-foreground))"
+              data-testid="KpiWidget__74d2aa" />
+            <KpiWidget
+              icon={<TrendDownIcon size={20} data-testid="TrendingDown__fm390kpi" />}
+              iconColor="hsl(var(--foreground))"
+              label={t('fm.m390.kpi.deductible')}
+              value={formatAmount(summary.deductible)}
+              badge={t('fm.m303.summary.deductible_sub')}
+              badgeBg="hsl(var(--muted))"
+              badgeColor="hsl(var(--muted-foreground))"
+              data-testid="KpiWidget__74d2aa" />
+            {/* Resultado — [86], or [94] when filing to several administrations. The "cuadre con
+                los 303" banner (Reconciliation390) goes right under the cards. */}
+            <KpiWidget
+              icon={<CalculatorIcon size={20} data-testid="Calculator__fm390kpi" />}
+              iconColor="hsl(var(--foreground))"
+              label={t(display.mode === 'territory' ? 'fm.m390.kpi.result_territory' : 'fm.m390.kpi.result')}
+              value={formatAmount(summary.result)}
+              valueColor={resultColors.valueColor}
+              badge={resultLabel}
+              badgeBg={resultColors.badgeBg}
+              badgeColor={resultColors.badgeColor}
+              data-testid="KpiWidget__74d2aa" />
+          </div>
         </div>
         {/* The cuadre with the year's 303s: a full-width banner between the cards and the tabs. */}
         {hasBoxes && (

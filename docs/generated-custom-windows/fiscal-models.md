@@ -3959,7 +3959,12 @@ The invoices (Facturas) tab, the preload from the 303s with the cuadre, the pres
   signs them; the payment, offset or refund was settled by the last 303, repeated in [97]/[98].
   Between the cards and the tabs, a full-width banner with the "cuadre con los 303"
   (`Reconciliation390`, see "Preload from the 303s and cuadre"); its subtitle carries that
-  "informative" note. Cards go 2×2 below 1100 px (`.fm-390-kpis`).
+  "informative" note. The cards size on the width they really get, not on the viewport (GEN-02:
+  a container query on `.fm-390-kpis-wrap`, so the app sidebar counts): four cards with icon from
+  1240 px of width, four cards without the icon tile (`.fm-kpi__icon`, a class of the shared
+  `KpiWidget`) from 1040 px, and 2 × 2 cards with icon below that. Each card's label and badge stay
+  on one line and are never cut ("Resultado [86]" + "Resultado negativo" needs ~213 px); at
+  1280×720 with the sidebar open the cards are 2 × 2.
 - **Tabs:** Casillas, Facturas (`FmSources390.jsx`, see below; its badge is the unfiltered line
   count, known once the tab has loaded it — `onCountChange`; no badge on a presented declaration),
   Incidencias (`Incidents390Tab.jsx`,
@@ -3998,9 +4003,17 @@ used on the 390 screen.
 ### "Casillas" tab (`FmBoxes390.jsx` + `fm390Layouts.js`)
 
 Declarative layout, one block at a time with a sticky index of the 11 blocks (folded into the
-app `Select` below 1200 px — no native select, the ETP-5584 rule) and Anterior / Siguiente at the
-bottom. The index items use the 303 section-nav metrics (8px 12px, 14/20, radius 8); it is 280 px
-wide so every block name stays on one line at 1280×720. The block content has the 303 24px gutter;
+app `Select` at 1280 px and below — no native select, the ETP-5584 rule; GEN-02: at 1280×720 the
+index left the cells too narrow for their amounts) and Anterior / Siguiente at the bottom. The
+index items use the 303 section-nav metrics (8px 12px, 14/20, radius 8); it is 280 px wide so
+every block name stays on one line.
+
+**Cell width (GEN-02 / OBS-12).** `.fm-390-boxes__content` is a size container and the 390 cells
+take `clamp(150px, (100cqw − 296px) / 2, 220px)` — the room the row really has, for the two
+columns a 390 block has at most, keeping ~270 px for the concept — instead of the shared compact
+150 px under 1440 px. Inside a 390 cell the box number column is 40 px (56 px in the 303) and the
+pencil / Restore buttons are slimmer, so a 220 px cell shows "1.234.567,89 €" whole even on a
+modified box with both icons. At 1280×720 (sidebar open) and at 1440 px the cells are 220 px. The block content has the 303 24px gutter;
 the in-block tables (IAE activities, representatives, the year's 303s) are `.fm-dtable--plain`
 like the 303 Facturas / Incidencias tables (header not sticky), and the block warnings have the 303
 warning-banner metrics.
@@ -4149,6 +4162,12 @@ filtered and paged):
   the same values (`accrued` / `deductible`, matched server-side against `sides`). With a
   box filter a last column "Importe casilla [nn]" shows each line's contribution to that box (the
   base for a base box, the cuota for a cuota box).
+- **Narrow tab (GEN-02).** The table fits its width, with no horizontal scroll hiding Total.
+  `.fm-390-sources` is a size container: under 1200 px of tab width the cell gutters drop to 8 px
+  and, with a box filter, "Casillas" gives way to "Importe casilla [nn]"
+  (`.fm-390-sources__col--boxes-filtered`); under 1100 px "Fecha contable" is hidden too
+  (`.fm-390-sources__col--secondary`; the CSV keeps every column). The totals row keeps the
+  accounting-date slot as its own cell so its label spans the right columns either way.
 - **Filters:** Tipo and Impuesto selects (Impuesto options from the payload's unfiltered
   `taxes`), search (document number, contact or tax; debounced 300 ms, Enter sends at once), "Limpiar filtros". All filtering
   and paging is done by the backend (25 rows per page).
