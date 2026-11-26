@@ -7,6 +7,9 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+// Created at module level so a describe block can run on its own.
+globalThis.__chatApi ??= { sendMessage: vi.fn() };
+
 vi.mock('@ai-sdk/react', async () => {
   const React = await import('react');
   const idle = () => ({
@@ -19,8 +22,8 @@ vi.mock('@ai-sdk/react', async () => {
       const [messages, setMessages] = React.useState([]);
       const [status, setStatus] = React.useState('ready');
       const [error, setError] = React.useState(undefined);
-      globalThis.__chat = { setMessages, setStatus, setError };
-      const api = globalThis.__chatApi ??= { sendMessage: vi.fn() };
+      globalThis.__chat = { setMessages, setStatus, setError, messages };
+      const api = globalThis.__chatApi;
       return {
         messages, status, error, setMessages,
         stop: vi.fn(() => setStatus('ready')),
@@ -366,7 +369,6 @@ describe('agent chat file attachments', () => {
   });
 
   it('keeps the queue and the text when a file cannot be read', async () => {
-    globalThis.__chatApi?.sendMessage.mockClear();
     const { result } = setup();
     await act(async () => { result.current.actions.uploadFile({ name: 'c.csv', size: 1, type: 'text/csv' }); });
     await act(async () => { await result.current.actions.sendMessage('importa'); });
@@ -382,8 +384,11 @@ describe('agent chat file attachments', () => {
       globalThis.__chat.setMessages([{ id: 'u1', role: 'user', parts: [{ type: 'file', mediaType: 'text/csv', filename: 'c.csv', url: 'data:text/csv;base64,YSxi' }, text('importa')] }]);
     });
     await act(async () => { await result.current.actions.sendMessage('importa'); });
-    const payload = JSON.stringify(result.current.messages);
-    expect(payload).not.toContain('data:');
+    // Raw useChat state: this is what the next request would resend.
+    const [sent] = globalThis.__chat.messages;
+    expect(sent.parts.some(part => part.type === 'file')).toBe(false);
+    expect(sent.parts[0]).toEqual({ type: 'text', text: '[Archivo adjunto "c.csv"]' });
+    expect(JSON.stringify(globalThis.__chat.messages)).not.toContain('data:');
     expect(result.current.messages[0]).toEqual({ id: 'u1', role: 'user', text: 'importa', files: [{ name: 'c.csv' }] });
   });
 });

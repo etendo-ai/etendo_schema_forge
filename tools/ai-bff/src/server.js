@@ -258,6 +258,11 @@ export const historyStore = createHistoryStore(historyConfig);
  * Attachments become text first (so the model never gets a file part), on both
  * the cached and uncached history paths. History is matched on the notes form
  * of the messages, which is what the client sends on later turns.
+ *
+ * @param {Array} clientMessages UI messages as the client sent them.
+ * @param {{entry?: object, tools: object}} context Cached history entry (if any) and the tool set.
+ * @returns {Promise<{plan: object, keyMessages: Array, modelMessages: Array}>} The history plan,
+ *   the notes-form messages used as history key, and the messages for the model.
  */
 export async function buildModelMessages(clientMessages, { entry, tools }) {
   const converted = await tabularAttachmentsToText(clientMessages);

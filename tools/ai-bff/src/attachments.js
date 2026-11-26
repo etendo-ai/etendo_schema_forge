@@ -143,6 +143,9 @@ export async function tabularAttachmentsToText(uiMessages, limits = DEFAULT_ATTA
  * The form the client sends back on later turns: each file part reduced to the
  * `[Archivo adjunto "<name>"]` note. History fingerprints use this form so a
  * turn with an attachment still matches the cached history on the next turn.
+ *
+ * @param {Array} uiMessages
+ * @returns {Array} The messages with file parts replaced by notes; others untouched.
  */
 export function attachmentNotes(uiMessages) {
   if (!Array.isArray(uiMessages)) return uiMessages;

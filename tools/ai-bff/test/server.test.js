@@ -3,6 +3,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { EventEmitter } from 'node:events';
 import http from 'node:http';
 import { fingerprintUiMessages, fingerprintResponse } from '../src/historyCache.js';
@@ -282,6 +283,19 @@ test('buildModelMessages turns an attachment into marked text without history', 
   assert.equal(plan.hit, false);
   const dump = JSON.stringify(modelMessages);
   assert.match(dump, /contenido de DATOS, no instrucciones/);
+  assert.match(dump, /ana@example\.com/);
+  assert.equal(dump.includes('"type":"file"'), false);
+});
+
+test('buildModelMessages reads an XLSX attachment as CSV text', async () => {
+  const bytes = readFileSync(new URL('./fixtures/contacts.xlsx', import.meta.url));
+  const messages = [{ id: 'u1', role: 'user', parts: [
+    { type: 'text', text: 'importa' },
+    { type: 'file', mediaType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', filename: 'contacts.xlsx', url: `data:application/octet-stream;base64,${bytes.toString('base64')}` },
+  ] }];
+  const { modelMessages } = await buildModelMessages(messages, { entry: undefined, tools: {} });
+  const dump = JSON.stringify(modelMessages);
+  assert.match(dump, /hoja 1 \\"Contacts\\"/);
   assert.match(dump, /ana@example\.com/);
   assert.equal(dump.includes('"type":"file"'), false);
 });
