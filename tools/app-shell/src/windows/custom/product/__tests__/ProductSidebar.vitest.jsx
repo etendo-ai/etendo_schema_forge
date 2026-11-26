@@ -1,3 +1,6 @@
+// @covers tools/app-shell/src/windows/custom/product/ProductSidebar.jsx
+// @covers tools/app-shell/src/windows/custom/product/stockChartAxis.js
+// @covers tools/app-shell/src/windows/custom/product/stockSeries.js
 // --- Mocks (before imports) ---
 
 vi.mock('@/i18n', () => ({

@@ -76,6 +76,9 @@ const TWO_WAREHOUSE_HISTORY = [
 ];
 
 // Design tokens (index.css), as the browser computes them.
+// Mirror of MOVEMENTS_TABLE_SCROLL_TOLERANCE_PX (productMovements.js): a short list may sit up to this many px below
+// the room left, so the sticky Total can overlap the last row's bottom border/padding by that much (never its text).
+const SCROLL_TOLERANCE_PX = 4;
 const NEGATIVE_FG = 'rgb(184, 46, 0)';
 const POSITIVE_FG = 'rgb(23, 102, 58)';
 const SURFACE_SUBTLE = 'rgb(245, 247, 249)';
@@ -442,7 +445,8 @@ test.describe('Product movements tab — period total row', () => {
     // there, by design); scrolled to the end of the page it rests below every movement row.
     await (await contentColumn(total)).scrollTo('end');
     const lastRowBox = await page.getByTestId('product-movements-row').last().boundingBox();
-    await expect.poll(async () => (await total.boundingBox()).y - (lastRowBox.y + lastRowBox.height)).toBeGreaterThanOrEqual(-1);
+    // The Total may overlap the last row by at most the scroll tolerance (its border/padding, no text): it must not cover the row's text.
+    await expect.poll(async () => (await total.boundingBox()).y - (lastRowBox.y + lastRowBox.height)).toBeGreaterThanOrEqual(-SCROLL_TOLERANCE_PX);
 
     // Only the first page asked for the totals.
     expect(tabCalls(calls)).toHaveLength(1);
