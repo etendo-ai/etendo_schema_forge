@@ -1181,6 +1181,13 @@ mcp-ui: ## Launch the optional Streamlit panel for the MCP harness (§9)
 flag-debt: ## Score per-flag technical debt from flags-registry.json (FLAG=<key>, JSON=1, HTML=1)
 	@$(SF) sf-flag-debt $(if $(FLAG),--flag $(FLAG)) $(if $(JSON),--json) $(if $(HTML),--html)
 
+# Pre-retirement gate (docs/flag-retirement.md). Exits 1 while any debt item is neither resolved
+# with evidence nor accepted by a named human. Plain node, no npm install: bots run it first.
+.PHONY: flag-retire-check
+flag-retire-check: ## Gate a flag retirement on its open debt, both registries (FLAG=<key>, VERIFY=1, JSON=1, GO_MODULE=<path>)
+	@test -n "$(FLAG)" || { echo "usage: make flag-retire-check FLAG=<key> [VERIFY=1] [JSON=1] [GO_MODULE=<path>]"; exit 2; }
+	@node scripts/flag-retire-check.js --flag $(FLAG) $(if $(VERIFY),--verify) $(if $(JSON),--json) $(if $(GO_MODULE),--go-module $(GO_MODULE))
+
 # --- XML Regeneration Check ---
 
 ORIGINAL_DB_DIR ?=
