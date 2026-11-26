@@ -1307,29 +1307,16 @@ describe('PortalPage — document list', () => {
     await waitFor(() => expect(listQueries().at(-1).has('subtype')).toBe(false));
   });
 
-  it('picks the status group from the toolbar selector, like the tabs', async () => {
-    const user = userEvent.setup();
-    renderPortal(listPath('INVOICE'));
-    await listReady();
-
-    await user.click(screen.getByTestId('portal-filter-status'));
-    await user.click(await screen.findByTestId('portal-list-filter-paid'));
-
-    await waitFor(() => expect(screen.getByTestId('portal-status-tab-paid')).toHaveAttribute('aria-selected', 'true'));
-    expect(screen.getByTestId('portal-filter-status').className).toContain('border-primary/40');
-  });
-
-  it('offers no document-type filter on a kind with a single type', async () => {
-    const user = userEvent.setup();
+  it('offers no document-type filter on a kind with a single type, and no status selector', async () => {
     responses.documents = () => jsonResponse({ documents: [order(1)], totalCount: 1 });
     renderPortal(listPath('ORDER'));
     await listReady();
 
     expect(screen.queryByTestId('portal-filter-type')).not.toBeInTheDocument();
-    await user.click(screen.getByTestId('portal-filter-status'));
-
-    expect(await screen.findByTestId('portal-list-filter-completed')).toBeInTheDocument();
-    expect(screen.queryByTestId('portal-list-subtype-all')).not.toBeInTheDocument();
+    // The status is the tabs' alone (product: a selector beside them repeated them, as the app's
+    // hideStatusFilter windows avoid).
+    expect(screen.queryByTestId('portal-filter-status')).not.toBeInTheDocument();
+    expect(screen.getByTestId('portal-status-tab-completed')).toBeInTheDocument();
   });
 
   // QA CP-47 — a total over several currencies is ONE converted figure; otherwise the backend's
@@ -1959,7 +1946,7 @@ describe('PortalPage — mobile redesign', () => {
     const panel = within(await screen.findByTestId('portal-list-filters-mobile-panel'));
     // ETP-6209: the app toolbar's selector buttons, and the range picker in its compact layout.
     expect(panel.getByTestId('portal-filter-type-mobile')).toHaveTextContent('allTypes');
-    expect(panel.getByTestId('portal-filter-status-mobile')).toHaveTextContent('allStatuses');
+    expect(panel.queryByTestId('portal-filter-status-mobile')).not.toBeInTheDocument();
     expect(within(panel.getByTestId('portal-list-filters-mobile-range')).getByTestId('date-range-compact'))
       .toBeInTheDocument();
 
@@ -2194,23 +2181,20 @@ describe('PortalPage — mobile list card options and filters', () => {
     });
   });
 
-  it('sends the status picked in the mobile funnel as the list group, and marks it', async () => {
+  it('filters the status on mobile through the status tabs, not the funnel', async () => {
     const user = userEvent.setup();
     renderPortal(`/portal/${TOKEN}?view=list&kind=INVOICE`);
     await listReady();
 
     await user.click(screen.getByTestId('portal-list-filters-mobile'));
-    await user.click(await screen.findByTestId('portal-filter-status-mobile'));
-    await user.click(await screen.findByTestId('portal-list-filter-pending-mobile'));
+    const panel = within(await screen.findByTestId('portal-list-filters-mobile-panel'));
+    expect(panel.queryByTestId('portal-filter-status-mobile')).not.toBeInTheDocument();
+    await user.keyboard('{Escape}');
 
+    await user.click(screen.getByTestId('portal-status-tab-pending-mobile'));
     await waitFor(() => expect(listQueries().at(-1).get('group')).toBe('pending'));
     expect(urlView()).toEqual({ view: 'list', kind: 'INVOICE', group: 'pending' });
-    expect(screen.getByTestId('portal-filter-status-mobile')).toHaveTextContent('statusPending');
-    await user.click(screen.getByTestId('portal-filter-status-mobile'));
-    expect((await screen.findByTestId('portal-list-filter-pending-mobile')).closest('[role="option"]'))
-      .toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByTestId('portal-list-filter-all-mobile').closest('[role="option"]'))
-      .toHaveAttribute('aria-selected', 'false');
+    expect(screen.getByTestId('portal-status-tab-pending-mobile')).toHaveAttribute('aria-selected', 'true');
   });
 
   it.each([

@@ -10,7 +10,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { DateRangePopoverContent } from '@/components/ui/date-range-popover';
-import { PortalStatusSelect, PortalTypeSelect } from './PortalListFilters.jsx';
+import { PortalTypeSelect } from './PortalListFilters.jsx';
 import {
   PORTAL_ERROR, fetchPortalDocument, fetchPortalDocumentPdf,
 } from '@/lib/portal/portalApi.js';
@@ -21,7 +21,7 @@ import {
   PORTAL_ROW_FOCUS,
 } from './PortalBits.jsx';
 import {
-  PORTAL_ACCEPT_ENABLED, canOfferDecision, quotationValidity,
+  PORTAL_ACCEPT_ENABLED, PORTAL_KIND_SUBTYPES, canOfferDecision, quotationValidity,
 } from './portalPresentation.js';
 import PortalDecisionActions from './PortalDecisionActions.jsx';
 import { isCompletedStatus } from '../../lib/docStatus.js';
@@ -35,12 +35,12 @@ import { isCompletedStatus } from '../../lib/docStatus.js';
 /**
  * The mobile funnel (QA CP-37, redesign 2026-11-25; ETP-6209 product decision): the same quick
  * filters as desktop and as the app's list toolbar — the document type of a kind that mixes types
- * and the status (the list's tabs) as the toolbar's selector buttons, wrapping on a narrow phone,
- * and the date range as the shared picker in its compact layout (preset pills; "Personalizado"
- * stacks the two calendars), so nothing is wider than the panel from 320px up.
+ * as the toolbar's selector button, and the date range as the shared picker in its compact layout
+ * (preset pills; "Personalizado" stacks the two calendars), so nothing is wider than the panel from
+ * 320px up. The status is not here: the status tabs under the search already filter it.
  */
 export function PortalMobileFilters({
-  kind, tabs, group, onGroup, subtype = null, onSubtype, range, onRange,
+  kind, subtype = null, onSubtype, range, onRange,
 }) {
   const ui = useUI();
   const [open, setOpen] = useState(false);
@@ -64,11 +64,12 @@ export function PortalMobileFilters({
         className="max-h-[min(80vh,var(--radix-popover-content-available-height))] w-[calc(100vw-32px)] max-w-sm overflow-y-auto overflow-x-hidden p-2"
         data-testid="portal-list-filters-mobile-panel"
       >
-        <div className="flex flex-wrap items-center gap-2 px-1 pb-2" data-testid="portal-list-filters-mobile-selects">
-          <PortalTypeSelect kind={kind} subtype={subtype} onSubtype={onSubtype} suffix="-mobile" data-testid="PortalTypeSelect__f2a7c1" />
-          <PortalStatusSelect tabs={tabs} group={group} onGroup={onGroup} suffix="-mobile" data-testid="PortalStatusSelect__f2a7c1" />
-        </div>
-        <div role="group" aria-label={ui('portalDateRange')} className="border-t border-[#E3E7EC]" data-testid="portal-list-filters-mobile-range">
+        {PORTAL_KIND_SUBTYPES[kind] ? (
+          <div className="flex flex-wrap items-center gap-2 border-b border-[#E3E7EC] px-1 pb-2" data-testid="portal-list-filters-mobile-selects">
+            <PortalTypeSelect kind={kind} subtype={subtype} onSubtype={onSubtype} suffix="-mobile" data-testid="PortalTypeSelect__f2a7c1" />
+          </div>
+        ) : null}
+        <div role="group" aria-label={ui('portalDateRange')} data-testid="portal-list-filters-mobile-range">
           <p className={section}>{ui('portalDateRange')}</p>
           <DateRangePopoverContent
             value={range}

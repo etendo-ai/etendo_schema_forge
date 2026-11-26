@@ -1506,18 +1506,20 @@ Figma `6cMWBbmrAt65GwZCT5YIF1`, node `3377-13236`. Built in `sf/tools/app-shell/
 Four asks after the review call, built in the SPA (`etendo_schema_forge`); the backend part of the
 search is its own change in `com.etendoerp.go`.
 
-- **Quick filters = the app list toolbar's.** `pages/portal/PortalListFilters.jsx` builds the status
-  selector, the document-type selector (invoices only) and the date selector from the very pieces
-  `ListFilterBar` uses — outline `Button` in `TOOLBAR_SELECT_CLASS` (now in
-  `contract-ui/listToolbarStyles.js`, imported by both), the `border-primary/40` active border,
-  `Popover` + `DistinctValuesList` (search box, "all" row, check on the committed option), the
-  shared `DateRangePopoverContent`. The options are the portal's fixed groups and types, filtered
-  in memory (no NEO distinct endpoint). `ListFilterBar` itself is unchanged; there is no advanced
-  filter (the portal API takes no NEO criteria). Desktop: tabs + the three selectors + refresh (the
-  old funnel dropdown is gone). Mobile: the funnel opens a panel with the type and status selectors
-  and the range picker in its compact layout. The date button is "active" when the range is not the
-  tab's default. Testids: `portal-filter-status|type[-mobile]`, options `portal-list-filter-<group>`
-  / `portal-list-subtype-<type>` (+ `-mobile`), `portal-date-range` kept.
+- **Quick filters = the app list toolbar's.** `pages/portal/PortalListFilters.jsx` builds the
+  document-type selector (invoices only) and the date selector from the very pieces `ListFilterBar`
+  uses — outline `Button` in `TOOLBAR_SELECT_CLASS` (now in `contract-ui/listToolbarStyles.js`,
+  imported by both), the `border-primary/40` active border, `Popover` + `DistinctValuesList` (search
+  box, "all" row, check on the committed option), the shared `DateRangePopoverContent`. The type
+  options are the portal's fixed list, filtered in memory (no NEO distinct endpoint). `ListFilterBar`
+  is unchanged; there is no advanced filter (the portal API takes no NEO criteria). **No status
+  selector** (product, after a first build that had one): the segmented status tabs are the status
+  filter on desktop and mobile, as the app's windows with status tabs hide their dropdown
+  (`hideStatusFilter`). Desktop: tabs + type + date + refresh (the old funnel dropdown is gone).
+  Mobile: the funnel opens a panel with the type selector (invoices) and the range picker in its
+  compact layout; the status tabs stay under the search. The date button is "active" when the range
+  is not the tab's default. Testids: `portal-filter-type[-mobile]`, options
+  `portal-list-subtype-<type>` (+ `-mobile`), `portal-date-range` kept.
 - **Rows = the app list row.** The desktop table renders core `TableRow`s with
   `listRowClassName({ clickable: true })` from `contract-ui/rowVisuals.js`, the helper
   `DataTable.getRowClassName` now uses too: the same hover lift, borders and cursor as every list.

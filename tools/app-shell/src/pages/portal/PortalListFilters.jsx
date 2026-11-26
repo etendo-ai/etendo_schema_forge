@@ -8,7 +8,6 @@ import { DateRangePopoverContent, computeTriggerLabel } from '@/components/ui/da
 import { DistinctValuesList } from '@/components/contract-ui/DistinctValuesList.jsx';
 import { TOOLBAR_SELECT_CLASS } from '@/components/contract-ui/listToolbarStyles.js';
 import { normalizeSearchText as normalize } from '@/lib/searchText.js';
-import { usePortalTabLabel } from './PortalBits.jsx';
 import { PORTAL_KIND_SUBTYPES } from './portalPresentation.js';
 
 /*
@@ -16,10 +15,11 @@ import { PORTAL_KIND_SUBTYPES } from './portalPresentation.js';
  * controls as the app's list toolbar (`ListFilterBar`) — an outline `Button` in
  * `TOOLBAR_SELECT_CLASS` whose border tells an active filter apart, a `Popover` with the shared
  * `DistinctValuesList` (search box, "all" row, check on the committed value) or the shared
- * `DateRangePopoverContent`. The data is the portal's own: the status options are the kind's
- * customer-facing groups and the type options its document types, a fixed short list, so they are
- * filtered in memory instead of through NEO's distinct-values endpoint. No advanced filter: the
- * portal API takes no NEO criteria.
+ * `DateRangePopoverContent`. The data is the portal's own: the type options are the kind's
+ * document types, a fixed short list, so they are filtered in memory instead of through NEO's
+ * distinct-values endpoint. No advanced filter (the portal API takes no NEO criteria) and no status
+ * selector: the segmented status tabs already cover it, as the app hides its own status dropdown
+ * where tabs do (`hideStatusFilter`).
  */
 
 // A fake `useDistinctValues` result over a fixed list: only the search box state, never loading or paging.
@@ -95,32 +95,6 @@ function StaticSelect({
           data-testid="DistinctValuesList__9c41e2" />
       </PopoverContent>
     </Popover>
-  );
-}
-
-/**
- * The status selector: the kind's status groups (the same set as the tabs, so the status stays
- * reachable when the tabs scroll out of view), `null` for all.
- */
-export function PortalStatusSelect({ tabs, group, onGroup, suffix = '' }) {
-  const ui = useUI();
-  const tabLabel = usePortalTabLabel();
-  const groups = tabs.filter((tab) => tab.code);
-  const byCode = new Map(groups.map((tab) => [tab.code, tab]));
-  const labelFor = (code) => tabLabel(byCode.get(code));
-  return (
-    <StaticSelect
-      codes={groups.map((tab) => tab.code)}
-      labelFor={labelFor}
-      value={group}
-      onChange={onGroup}
-      allLabel={ui('allStatuses')}
-      triggerLabel={group && byCode.has(group) ? labelFor(group) : ui('allStatuses')}
-      searchPlaceholder={ui('searchStatuses')}
-      testId={`portal-filter-status${suffix}`}
-      optionTestId="portal-list-filter"
-      suffix={suffix}
-      data-testid="StaticSelect__9c41e2" />
   );
 }
 

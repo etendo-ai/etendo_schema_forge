@@ -39,9 +39,10 @@ function sameCalendarRange(a, b) {
  * payment state and outstanding; shipments carry no amounts. A totals row closes the table and
  * "Todos los registros cargados" the list. Checkboxes and "Descargar seleccionados" are out (PO
  * answer: bulk download is a performance risk; a document downloads from its detail), and so are
- * the advanced "Filtros". The quick filters — status, document type (CP-16) and date range — are
- * the app list toolbar's own controls (`PortalListFilters.jsx`, ETP-6209); on mobile they sit in
- * the funnel's panel. A `search` from the URL (`q`) opens the list on that search, all time.
+ * the advanced "Filtros". The status is filtered by the tabs alone; the other quick filters —
+ * document type (CP-16) and date range — are the app list toolbar's own controls
+ * (`PortalListFilters.jsx`, ETP-6209), in the funnel's panel on mobile. A `search` from the URL
+ * (`q`) opens the list on that search, all time.
  *
  * **Every figure refers to the set shown** (QA 24/11 f): the header's count chip, "Mostrando X de
  * Y" and the totals row all come from the current query (kind, tab, type, range, search). The
@@ -273,9 +274,6 @@ export default function PortalDocumentListView({
           {searchPill(true)}
           <PortalMobileFilters
             kind={kind}
-            tabs={tabs}
-            group={group}
-            onGroup={selectGroup}
             subtype={subtype}
             onSubtype={setSubtype}
             range={effectiveRange}

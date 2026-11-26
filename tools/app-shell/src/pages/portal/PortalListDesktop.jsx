@@ -8,7 +8,7 @@ import {
   PortalPaymentStatus, PORTAL_FIGMA_SHADOW, PORTAL_ROW_FOCUS, portalRowActivation,
   PortalConvertedAmount, portalShowsConverted, usePortalTabLabel,
 } from './PortalBits.jsx';
-import { PortalDateSelect, PortalStatusSelect, PortalTypeSelect } from './PortalListFilters.jsx';
+import { PortalDateSelect, PortalTypeSelect } from './PortalListFilters.jsx';
 import {
   PORTAL_KIND_META, documentLabelKey, quotationValidity,
 } from './portalPresentation.js';
@@ -49,13 +49,12 @@ function Tab({ selected, onClick, testId, children }) {
 
 /**
  * The view toolbar (padding 8px): the kind's status tabs, then the app list toolbar's quick
- * filters (ETP-6209, `PortalListFilters.jsx`: status, the document type of a kind that mixes
- * types, the date range — same buttons, popovers and active border as `ListFilterBar`); refresh on
- * the right. "Descargar seleccionados" and the row checkboxes are out (PO answer: bulk download is
- * a performance risk), and so is the advanced filter (the portal API takes no NEO criteria).
- *
- * The status selector repeats the tabs on purpose (QA 24/11 CP-16): the status stays reachable
- * when the tabs do not fit. `dateActive`: the range is not the tab's default.
+ * filters (ETP-6209, `PortalListFilters.jsx`: the document type of a kind that mixes types, the
+ * date range — same buttons, popovers and active border as `ListFilterBar`); refresh on the right.
+ * No status selector: the tabs are the status filter, as in the app's windows that hide their
+ * status dropdown behind tabs (`hideStatusFilter`). "Descargar seleccionados" and the row
+ * checkboxes are out (PO answer: bulk download is a performance risk), and so is the advanced
+ * filter (the portal API takes no NEO criteria). `dateActive`: the range is not the tab's default.
  */
 export function PortalListToolbar({
   kind, tabs, group, onGroup, range, onRange, onRefresh, subtype = null, onSubtype, dateActive = false,
@@ -82,7 +81,6 @@ export function PortalListToolbar({
             </Tab>
           ))}
         </div>
-        <PortalStatusSelect tabs={tabs} group={group} onGroup={onGroup} data-testid="PortalStatusSelect__b71e0c" />
         <PortalTypeSelect kind={kind} subtype={subtype} onSubtype={onSubtype} data-testid="PortalTypeSelect__b71e0c" />
         <PortalDateSelect value={range} onChange={onRange} active={dateActive} data-testid="PortalDateSelect__b71e0c" />
       </div>
