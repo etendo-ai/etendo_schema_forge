@@ -1,5 +1,6 @@
 // @covers tools/app-shell/src/windows/custom/fiscal-models/models/390/FileGenModal390.jsx
 // @covers tools/app-shell/src/windows/custom/fiscal-models/models/303/AeatResultBanner.jsx
+// @covers tools/app-shell/src/windows/custom/fiscal-models/useModalFocus.js
 //
 // Modelo 390 — the "Generar fichero 390" popup: while the page generates and the AEAT validates
 // the file it stays open on the loading ring and nothing in it can be clicked again; afterwards
@@ -267,5 +268,57 @@ describe('FileGenModal390 — result step', () => {
     await generate();
     expect(screen.getByTestId('FileGenModal390__errors')).toBeInTheDocument();
     expect(screen.queryByTestId('FileGenModal390__viewIncidents')).toBeNull();
+  });
+});
+
+// GEN-03 (ETP-5716 QA): the popup is a real modal for the keyboard — it used to leave focus on the
+// page, let Tab walk to "Guardar" behind it and ignore Escape although it says aria-modal="true".
+describe('FileGenModal390 — keyboard (modal dialog)', () => {
+  it('moves focus into the popup on open: the file name, not the header close', () => {
+    renderModal();
+    expect(document.activeElement).toBe(screen.getByTestId('FileGenModal390__fileName'));
+  });
+
+  it('keeps Tab inside: from the last control it wraps to the first, Shift+Tab the other way', () => {
+    renderModal();
+    const dialog = screen.getByRole('dialog');
+    const confirm = screen.getByTestId('FileGenModal390__confirm');
+    confirm.focus();
+    fireEvent.keyDown(confirm, { key: 'Tab' });
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    expect(document.activeElement).not.toBe(confirm);
+    const first = document.activeElement;
+    fireEvent.keyDown(first, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(confirm);
+  });
+
+  it('Escape closes it', () => {
+    const { onClose } = renderModal();
+    fireEvent.keyDown(screen.getByTestId('FileGenModal390__fileName'), { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('Escape does nothing while the file is being generated', async () => {
+    const pending = deferred();
+    const { onClose } = renderModal({ onConfirm: vi.fn(() => pending.promise) });
+    await act(async () => { fireEvent.click(screen.getByTestId('FileGenModal390__confirm')); });
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+    expect(onClose).not.toHaveBeenCalled();
+    await act(async () => { pending.resolve(null); });
+  });
+
+  it('gives focus back to the control that opened it when it closes', () => {
+    const trigger = document.createElement('button');
+    document.body.appendChild(trigger);
+    trigger.focus();
+    const props = {
+      decl: DECL, summary: { result: 0 }, typeLabel: 'x', resultLabel: 'y',
+      onConfirm: vi.fn(), onClose: vi.fn(), t,
+    };
+    const { unmount } = render(<FileGenModal390 {...props} />);
+    expect(document.activeElement).not.toBe(trigger);
+    unmount();
+    expect(document.activeElement).toBe(trigger);
+    trigger.remove();
   });
 });

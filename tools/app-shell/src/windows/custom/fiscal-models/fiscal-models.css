@@ -756,6 +756,8 @@
 
 /* ─── Modal ────────────────────────────────────────────────────────── */
 .fm-modal-overlay { position: fixed; inset: 0; background: hsl(var(--foreground) / .35); z-index: 100; display: flex; align-items: center; justify-content: center; }
+/* The overlay is the focusable `role="dialog"` (useModalFocus): no ring on it, its controls show theirs. */
+.fm-modal-overlay:focus { outline: none; }
 
 /* ─── "Nueva declaración" modal (NewDeclModal) ─────────────────────── */
 .fm-newdecl-modal { max-width: 560px; }

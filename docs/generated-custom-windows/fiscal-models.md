@@ -3043,6 +3043,18 @@ browser: `PresentModal` is 436px tall in every state and at 1680×1000, 1280×72
 (688px), and its body scrolls by a couple of pixels — more once the declarant's NIF and IBAN rows
 are filled. The footer stays fully visible in every case.
 
+**Keyboard (GEN-03, ETP-5716).** `PresentModal`, `FileGenModal`, `FileGenModal303`,
+`FileGenModal390` and `AeatSubmitFlow` follow the WAI-ARIA modal dialog pattern through
+`useModalFocus` (`useModalFocus.js`): on open, focus moves into the popup (a `[data-autofocus]`
+control, else the first control that is not the header ✕, else the overlay, which is the
+`role="dialog"` element with `tabIndex={-1}`); Tab / Shift+Tab cycle inside it (the shared
+`useDialogFocusTrap` of `ActionChoiceModal`); Escape calls the popup's own close — so
+`FileGenModal390` while it generates and `AeatSubmitFlow` while it submits ignore it, as they ignore
+the ✕; on close, focus returns to the control that opened it. An Escape already consumed by an inner
+layer (a select) or pressed in a dialog nested inside the popup is not the popup's. `NewDeclModal`
+is not wired yet: its model/year menus have no Escape of their own, so Escape would close the whole
+popup.
+
 **No native selects.** The `ConfigDrawer` pickers (Prorrata on the 303 tab; Periodicidad and
 "Preferencia VIES" on the 349 tab) use the app's `Select` through a local `CfgSelect` helper. Its
 `SelectContent` is lifted to `z-[110]`, above `.fm-modal-overlay`. They stay uncontrolled

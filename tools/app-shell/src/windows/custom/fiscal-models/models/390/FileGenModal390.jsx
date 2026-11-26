@@ -13,6 +13,7 @@ import { formatAmount } from '../../fiscalModelsUtils.js';
 import { AeatResultBanner } from '../303/AeatResultBanner.jsx';
 import { FILE_VALIDATION } from './fileValidation390.js';
 import { generatedFileName } from './fm390Api.js';
+import { useModalFocus } from '../../useModalFocus.js';
 
 // The AEAT validator's answer about the file that was just downloaded — the result step, with the
 // banner of the direct presentation's result (AeatResultBanner): the AEAT errors with their codes
@@ -97,6 +98,8 @@ export default function FileGenModal390({ decl, summary, typeLabel, resultLabel,
   const [result, setResult] = useState(null);
   const progress = useSimulatedProgress(working);
   const close = () => { if (!working) onClose(); };
+  // GEN-03: focus in, Tab trapped, Escape closes (not while generating), focus back on close.
+  const dialogRef = useModalFocus(close);
   // Stays open (loading, not re-clickable) until the page's generation settles. A file the AEAT
   // rejected, accepted with warnings or could not validate moves to the result step; a clean one
   // (or a failed generation) closes the popup.
@@ -117,7 +120,7 @@ export default function FileGenModal390({ decl, summary, typeLabel, resultLabel,
   // Whatever the AEAT said is also in Incidencias; "could not be validated" stored nothing.
   const hasIncidents = result?.outcome === FILE_VALIDATION.REJECTED || result?.outcome === FILE_VALIDATION.ACCEPTED;
   return (
-    <div className="fm-modal-overlay" role="dialog" aria-modal="true" aria-busy={working} onClick={close}>
+    <div className="fm-modal-overlay" role="dialog" aria-modal="true" aria-busy={working} onClick={close} ref={dialogRef} tabIndex={-1}>
       <div className="fm-config-modal" style={{ maxWidth: 480 }} onClick={e => e.stopPropagation()} data-testid="FileGenModal390">
         <div className="fm-config-modal__header">
           <div className="fm-config-modal__titles">

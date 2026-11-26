@@ -22,6 +22,7 @@ import { listModels, getModel, DEFAULT_MODEL_ID, modelTitleKey } from './modelRe
 import { ANNUAL_PERIOD, isAnnualPeriod, isAnnualOnlyModel } from './fiscalPeriods.js';
 import { getConfigSection } from './modelRegistryConfig.js';
 import { CfgField, INPUT_ST } from './FmConfigFields.jsx';
+import { useModalFocus } from './useModalFocus.js';
 import './fiscal-models.css';
 
 import { useApiFetch } from '@/auth/useApiFetch.js';
@@ -197,6 +198,7 @@ export function PresentModal({ decl, onConfirm, onClose, showAeatPath }) {
   const t = ui;
   const [path, setPath] = useState(null);
   const [acuseFile, setAcuseFile] = useState(null);
+  const dialogRef = useModalFocus(onClose);
   const fileRef = useRef(null);
 
   const isRegisterPath = REGISTER_PATHS.some(p => p.id === path);
@@ -242,7 +244,7 @@ export function PresentModal({ decl, onConfirm, onClose, showAeatPath }) {
   }
 
   return (
-    <div className="fm-modal-overlay" role="dialog" aria-modal="true" onClick={onClose}>
+    <div className="fm-modal-overlay" role="dialog" aria-modal="true" onClick={onClose} ref={dialogRef} tabIndex={-1}>
       <div
         className={`fm-config-modal fm-present-modal${showAeatPath ? ' fm-present-modal--two-col' : ''}`}
         onClick={e => e.stopPropagation()}
@@ -373,6 +375,7 @@ function nextAeatContact(prev, raw) {
 export function FileGenModal({ decl, substitutive, formerStatement: formerStatementProp, onConfirm, onClose }) {
   const ui = useUI();
   const t = ui;
+  const dialogRef = useModalFocus(onClose);
   const [fileName,            setFileName]            = React.useState('');
   const [phone,                setPhone]               = React.useState(decl?.phone   ?? '');
   const [contact,              setContact]             = React.useState(decl?.contact ?? '');
@@ -404,7 +407,7 @@ export function FileGenModal({ decl, substitutive, formerStatement: formerStatem
   };
   const checkboxRowSt = { display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: 'hsl(var(--foreground))', cursor: 'pointer' };
   return (
-    <div className="fm-modal-overlay" role="dialog" aria-modal="true" onClick={onClose}>
+    <div className="fm-modal-overlay" role="dialog" aria-modal="true" onClick={onClose} ref={dialogRef} tabIndex={-1}>
       <div className="fm-config-modal" style={{ maxWidth: 480 }} onClick={e => e.stopPropagation()}>
 
         {/* Header */}
@@ -529,13 +532,14 @@ export function FileGenModal303({ decl, defaultFilename, onConfirm, onClose }) {
   const ui = useUI();
   const t = ui;
   const [filename, setFilename] = React.useState(defaultFilename ?? `303_${decl?.period}_${decl?.year}.txt`);
+  const dialogRef = useModalFocus(onClose);
   const inputSt = {
     width: '100%', fontSize: 14, padding: '8px 12px',
     border: '1px solid hsl(var(--border-control))', borderRadius: 8, height: 40,
     boxSizing: 'border-box', color: 'hsl(var(--foreground))', outline: 'none', background: 'hsl(var(--card))',
   };
   return (
-    <div className="fm-modal-overlay" role="dialog" aria-modal="true" onClick={onClose}>
+    <div className="fm-modal-overlay" role="dialog" aria-modal="true" onClick={onClose} ref={dialogRef} tabIndex={-1}>
       <div className="fm-config-modal" style={{ maxWidth: 480 }} onClick={e => e.stopPropagation()}>
         <div className="fm-config-modal__header">
           <div className="fm-config-modal__titles">

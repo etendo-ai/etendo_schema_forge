@@ -10,6 +10,7 @@ import { formatAmount, formatPeriod, triggerBase64Download, applyIdentParams, ap
 import { isLastPeriodOfYear } from './fm303Layouts.js';
 import { CheckboxField } from '@/windows/custom/shared/CheckboxField.jsx';
 import { Input } from '@/components/ui/input';
+import { useModalFocus } from '../../useModalFocus.js';
 
 // ── Pure helpers (exported for unit testing — no DOM/React involved) ──────────
 
@@ -302,6 +303,8 @@ export default function AeatSubmitFlow({ decl, orgIdent, identChecks, liveBoxes,
 
   const [step, setStep] = useState('confirm'); // 'confirm' | 'result'
   const [submitting, setSubmitting] = useState(false);
+  // GEN-03: focus in, Tab trapped, Escape closes (not mid-request), focus back on close.
+  const dialogRef = useModalFocus(() => { if (!submitting) onClose?.(); });
   const [connError, setConnError] = useState(null);
   const [response, setResponse] = useState(null);
 
@@ -388,7 +391,7 @@ export default function AeatSubmitFlow({ decl, orgIdent, identChecks, liveBoxes,
   const submittingKey = testMode ? 'fm.aeat.action.submitting' : 'fm.aeat.action.validating_submitting';
 
   return (
-    <div className="fm-modal-overlay" role="dialog" aria-modal="true" onClick={onClose}>
+    <div className="fm-modal-overlay" role="dialog" aria-modal="true" onClick={onClose} ref={dialogRef} tabIndex={-1}>
       <div className="fm-config-modal fm-aeat-modal" onClick={e => e.stopPropagation()} data-testid="AeatSubmitFlow__dialog">
 
         {/* Header */}
