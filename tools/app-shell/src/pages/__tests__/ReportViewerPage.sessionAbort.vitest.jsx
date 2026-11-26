@@ -4,7 +4,6 @@
 // ETP-5645 — the render catch blocks (main viewer AND drill-down) must not surface the session
 // AbortError (apiFetch abandoning a request of a session that is gone) and must never print an
 // untranslated `err.message`: unexpected errors show the translated reportErrorGeneric text.
-// These go through the REAL apiFetch: only `fetch` is stubbed.
 
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -156,5 +155,27 @@ describe('ReportViewerPage — render catch blocks (ETP-5645)', () => {
     const dialog = await screen.findByTestId('dialog');
     await waitFor(() => expect(within(dialog).getByText(GENERIC)).toBeInTheDocument());
     expect(within(dialog).queryByText(/boom/)).not.toBeInTheDocument();
+  });
+
+  const noBody500 = () => Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({}) });
+
+  it('renderReport: a failed render with no code or error shows the generic text, not "Render failed"', async () => {
+    const user = userEvent.setup();
+    stubFetch(noBody500);
+    render(<ReportViewerPage />);
+    await waitFor(() => expect(screen.getByText('Free Text')).toBeInTheDocument());
+    await user.click(screen.getByText('runReport'));
+    await waitFor(() => expect(screen.getByText(GENERIC)).toBeInTheDocument());
+    expect(screen.queryByText(/Render failed/)).not.toBeInTheDocument();
+  });
+
+  it('drill-down: a failed render with no code or error shows the generic text, not "Render failed"', async () => {
+    stubFetch(noBody500);
+    render(<ReportViewerPage />);
+    await waitFor(() => expect(screen.getByText('runReport')).toBeInTheDocument());
+    openDrillDown();
+    const dialog = await screen.findByTestId('dialog');
+    await waitFor(() => expect(within(dialog).getByText(GENERIC)).toBeInTheDocument());
+    expect(within(dialog).queryByText(/Render failed/)).not.toBeInTheDocument();
   });
 });
