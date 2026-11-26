@@ -107,8 +107,9 @@ export function leftBehindReport(): { leftBehind: LeftBehind[]; deactivated: str
 
 /** Prints the short "left behind" report to stderr and clears it. Prints nothing when the run left nothing. */
 export function reportLeftBehind(): void {
-  if (!leftBehind.length && !deactivated.length) return;
+  if (!leftBehind.length && !deactivated.length) { kept.clear(); return; }
   const lines = [`[public-api e2e] left behind by run ${RUN_PREFIX} (all carry the prefix; a completed document cannot be deleted in Etendo):`];
+  kept.clear();
   for (const item of leftBehind.splice(0)) lines.push(`  - ${item.path}: ${item.reason}`);
   for (const path of deactivated.splice(0)) lines.push(`  - ${path}: deactivated (active=false), not deleted`);
   console.error(lines.join('\n'));

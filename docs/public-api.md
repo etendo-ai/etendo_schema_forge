@@ -714,7 +714,7 @@ the application sets both to the converted price. A `list_price` sent by the cal
 price in the document's currency and is never converted. When the document has no rate, or the
 price list is in a third currency, the line takes the document's currency but keeps the price
 list's prices unconverted (a foreign-currency document without a rate is normally refused, see
-above). **Changing the product of a line.** A `PATCH` that changes the `product` of a line brings what the form brings when the user picks another product: the callouts of the changed reference are fired (`NeoUpdateCalloutRefire`), so the new product's tax, unit of measure and price land in the line, and the line amounts are recomputed from them. A value the `PATCH` sends itself (for example `list_price`) always wins over the derived one.
+above). **Changing the product of a line.** A `PATCH` that changes the `product` of a line brings what the form brings when the user picks another product: the callouts of the changed reference are fired (`NeoUpdateCalloutRefire`), so the new product's tax, unit of measure and price land in the line, and the line amounts are recomputed from them. A value the `PATCH` sends itself (for example `list_price`) always wins over the derived one. The derivation is best effort: if the product's callouts fail, the failure is only logged and the line keeps its previous derived values.
 
 **Discount.** `discount` is a percentage: the unit price of a line is `list_price x (1 - discount / 100)` (`NeoCommercialLinePolicy`), so `discount: 10` on a line of `10 x 100` is worth 90 % of the same line with `discount: 0`.
 

@@ -64,15 +64,13 @@ export async function expectPatchWithEtag(spec: LifecycleSpec): Promise<void> {
  */
 export async function expectPutWithEtag(
   spec: LifecycleSpec,
-  changed: Record<string, unknown>,
-  staleChanged: Record<string, unknown>,
+  attributes: Record<string, unknown>,
+  staleAttributes: Record<string, unknown>,
   /** Attributes the OpenAPI lists as `required` on the PUT body of this resource: sent with their current value. */
   requiredFields: string[] = [],
 ): Promise<void> {
   const current = (await readWithEtag(itemPath(spec))).res.json.data.attributes;
   const carried = Object.fromEntries(requiredFields.map((field) => [field, current[field]]));
-  const attributes = changed;
-  const staleAttributes = staleChanged;
   const put = (attrs: Record<string, unknown>, ifMatch?: string) => api('PUT', itemPath(spec), {
     body: resource(spec.type, { ...carried, ...attrs }, undefined, spec.id),
     headers: ifMatch === undefined ? {} : { 'If-Match': ifMatch },

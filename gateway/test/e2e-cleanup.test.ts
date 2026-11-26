@@ -162,7 +162,7 @@ describe('reportLeftBehind', () => {
   test('prints nothing when the run left nothing, and clears the report once printed', async () => {
     assert.deepEqual(captureReport(), []);
     handler = () => ({ status: 422 });
-    created.push('sales-order/report-1');
+    created.push('sales-order/o1');
     await cleanup.cleanupFrom(0);
     assert.equal(captureReport().length, 1);
     assert.deepEqual(captureReport(), [], 'printing clears the report');

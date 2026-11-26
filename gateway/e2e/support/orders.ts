@@ -345,18 +345,22 @@ export async function findForeignCurrency(
   // Validity is a date-time since ETP-6365; compare calendar days, as the order date has no time.
   const day = (value: string) => value.slice(0, 10);
   if (num(rates.json.meta?.page?.total) > 100) return 'the tenant has more than 100 conversion rates: the first page cannot tell which one applies, so the foreign-currency checks are skipped';
-  const candidates = (rates.json.data as Array<{ attributes: Record<string, any> }>).filter(({ attributes: a }) =>
+  const valid = (rates.json.data as Array<{ attributes: Record<string, any> }>).filter(({ attributes: a }) =>
     a.currency === orgCurrency && a.to_currency && a.to_currency !== orgCurrency && a.multiple_rate_by != null && Number(a.multiple_rate_by) > 0
     && (!a.valid_from_date || day(a.valid_from_date) <= orderDate)
     && (!a.valid_to_date || day(a.valid_to_date) >= orderDate));
-  if (!candidates.length) {
+  if (!valid.length) {
     return `the tenant has no conversion rate from the organization currency (${orgCurrency}) valid on ${orderDate}: `
       + 'add one (Currency > Conversion Rates) to run the foreign-currency order checks';
   }
-  // Several rates valid on the same day (other currencies, or overlapping ranges): which one Etendo
-  // applies is not decidable from the list, so the test would be comparing against a guess.
-  if (candidates.length > 1) return `${candidates.length} conversion rates from ${orgCurrency} are valid on ${orderDate}: the applied one is ambiguous, foreign-currency checks skipped`;
-  const match = candidates[0];
+  // A target currency with several rates valid on the same day (overlapping ranges) is ambiguous: which
+  // one Etendo applies is not decidable from the list. Pick a currency that has exactly one; skip only
+  // when none does.
+  const perCurrency = new Map<string, typeof valid>();
+  for (const rate of valid) perCurrency.set(rate.attributes.to_currency, [...(perCurrency.get(rate.attributes.to_currency) ?? []), rate]);
+  const unambiguous = [...perCurrency.values()].find((group) => group.length === 1);
+  if (!unambiguous) return `every target currency from ${orgCurrency} has several conversion rates valid on ${orderDate}: the applied one is ambiguous, foreign-currency checks skipped`;
+  const match = unambiguous[0];
 
   const products = await api('GET', `product?page[size]=${MAX_PRODUCT_CANDIDATES}`);
   expectStatus(products, 200);
