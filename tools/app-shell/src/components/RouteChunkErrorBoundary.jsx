@@ -44,7 +44,7 @@ export default class RouteChunkErrorBoundary extends Component {
   render() {
     // Only chunk failures get this fallback; any other crash goes to the next boundary up.
     if (this.state.failed && !isChunkLoadError(this.state.error)) throw this.state.error;
-    if (this.state.failed) return <ChunkErrorFallback />;
+    if (this.state.failed) return <ChunkErrorFallback data-testid="ChunkErrorFallback__d77387" />;
     return this.props.children;
   }
 }
