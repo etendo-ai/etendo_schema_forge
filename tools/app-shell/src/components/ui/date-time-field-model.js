@@ -59,6 +59,21 @@ export function maskDateTimeInput(raw, pattern) {
 }
 
 /**
+ * Masks typed text of the popover's time box to 24h `HH:mm`: only digits are kept (at most 4) and
+ * the colon is inserted, so it never depends on the OS / browser 12h a.m./p.m. setting.
+ */
+export function maskTimeInput(raw) {
+  const digits = String(raw ?? '').replace(/\D/g, '').slice(0, 4);
+  return digits.length > 2 ? `${digits.slice(0, 2)}:${digits.slice(2)}` : digits;
+}
+
+/** The typed time as `HH:mm` when it is a complete, valid 24h time, else null. */
+export function parseTimeText(text) {
+  const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(String(text ?? '').trim());
+  return m ? `${m[1]}:${m[2]}` : null;
+}
+
+/**
  * Parses typed text. `{ ok: true, value: '' }` when empty, `{ ok: true, value:
  * 'yyyy-MM-ddTHH:mm:00' }` for a real day and a valid 24h time, `{ ok: false }` otherwise.
  */

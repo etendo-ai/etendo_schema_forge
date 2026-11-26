@@ -137,8 +137,9 @@ describe('SubscriptionSection', () => {
     getSubscription.mockResolvedValue({ hasSubscription: false });
     renderSection();
 
-    expect(await screen.findByTestId('SubscriptionSection__root')).toBeInTheDocument();
-    expect(screen.getByTestId('SubscriptionSection__none')).toBeInTheDocument();
+    // The root renders while loading, so wait for the resolved state itself.
+    expect(await screen.findByTestId('SubscriptionSection__none')).toBeInTheDocument();
+    expect(screen.getByTestId('SubscriptionSection__root')).toBeInTheDocument();
     expect(screen.queryByTestId('SubscriptionSection__manage')).not.toBeInTheDocument();
     expect(screen.queryByTestId('SubscriptionSection__plan')).not.toBeInTheDocument();
   });

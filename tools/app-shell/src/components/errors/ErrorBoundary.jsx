@@ -1,5 +1,6 @@
 import { Component } from 'react';
 import { useUI } from '@/i18n';
+import { reportRenderError } from '../../lib/observability/reportRenderError.js';
 
 /**
  * ETP-5792 — a render error used to unmount the whole tree and leave a blank page. The boundary
@@ -14,6 +15,7 @@ export class ErrorBoundary extends Component {
 
   componentDidCatch(error, info) {
     console.error('Unhandled render error', error, info?.componentStack);
+    reportRenderError(error, info, this.props.captureException);
   }
 
   render() {

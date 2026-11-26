@@ -62,8 +62,19 @@ vi.mock('@phosphor-icons/react', () => new Proxy({}, {
   get: (_t, prop) => (typeof prop === 'string' && prop !== 'then' ? (props) => <span {...props} /> : undefined),
 }));
 
+// Passthrough spy: the real hook still runs, the tests read the options the tab hands it.
+vi.mock('../useRemainingHeight', async (importOriginal) => {
+  const actual = await importOriginal();
+  return { ...actual, useRemainingHeight: vi.fn(actual.useRemainingHeight) };
+});
+
 import ProductMovementsTab from '../ProductMovementsTab';
-import { MOVEMENTS_TABLE_MIN_HEIGHT } from '../productMovements';
+import { useRemainingHeight } from '../useRemainingHeight';
+import {
+  MOVEMENTS_TABLE_MIN_HEIGHT,
+  MOVEMENTS_TABLE_COMPACT_MIN_HEIGHT,
+  MOVEMENTS_TABLE_SCROLL_TOLERANCE_PX,
+} from '../productMovements';
 import { computePeriodRange } from '../productSidebarPeriod.js';
 import enUS from '@/locales/en_US.json';
 import esES from '@/locales/es_ES.json';
@@ -233,14 +244,14 @@ describe('ProductMovementsTab (ETP-5889)', () => {
     await waitFor(() => expect(pageRequests()).toHaveLength(1));
     const params = query(pageRequests()[0]);
     expect(params.get('parentId')).toBe('p1');
-    expect(params.get('_sortBy')).toBe('-movementDate,-transactionProcessDate,-id');
+    expect(params.get('_sortBy')).toBe('-transactionProcessDate,-id');
     expect(params.get('_startRow')).toBe('0');
     expect(params.get('_endRow')).toBe('49');
     const criteria = JSON.parse(params.get('criteria'));
     // 7 calendar days, both ends included: from = today - 6 days
     const [from, to] = criteria.map((c) => new Date(`${c.value}T00:00:00`));
     expect(Math.round((to - from) / 86400000)).toBe(6);
-    expect(criteria.map((c) => `${c.fieldName}:${c.operator}`)).toEqual(['movementDate:greaterOrEqual', 'movementDate:lessOrEqual']);
+    expect(criteria.map((c) => `${c.fieldName}:${c.operator}`)).toEqual(['transactionProcessDate:greaterOrEqual', 'transactionProcessDate:lessOrEqual']);
   });
 
   it('tells the tracking hook it is active only while it is shown for a stocked product', async () => {
@@ -342,7 +353,16 @@ describe('ProductMovementsTab (ETP-5889)', () => {
     expect(timeEl.className).toContain('text-muted-foreground');
     // one line: date and time are siblings of the same inline row, not stacked in a column
     expect(timeEl.parentElement.className).not.toContain('flex-col');
-    expect(timeEl.parentElement).toHaveTextContent('20/10/2026');
+    // The day comes from the same timestamp as the time (TrxProcessDate), not from the row's movementDate (20/10/2026).
+    expect(timeEl.parentElement).toHaveTextContent('03/11/2026');
+    expect(timeEl.parentElement).not.toHaveTextContent('20/10/2026');
+  });
+
+  it('shows the movement date as the day when the row has no process timestamp', async () => {
+    route({ pages: [[row({ movementDate: '2026-10-20' })]], total: 1 });
+    render(<ProductMovementsTab data={storable} isActive />);
+    const [first] = await screen.findAllByTestId('product-movements-row');
+    expect(first.querySelector('[role="cell"]')).toHaveTextContent('20/10/2026');
   });
 
   it('renders only the date, with no time element, when etgoProcessTime is absent or malformed', async () => {
@@ -363,7 +383,7 @@ describe('ProductMovementsTab (ETP-5889)', () => {
 
     await waitFor(() => expect(pageRequests()).toHaveLength(2));
     const params = query(pageRequests()[1]);
-    expect(params.get('_sortBy')).toBe('etgoWarehouse$_identifier,-movementDate,-transactionProcessDate,-id');
+    expect(params.get('_sortBy')).toBe('etgoWarehouse$_identifier,-transactionProcessDate,-id');
     expect(params.get('_startRow')).toBe('0');
   });
 
@@ -374,7 +394,7 @@ describe('ProductMovementsTab (ETP-5889)', () => {
     await userEvent.click(screen.getByText('date'));
 
     await waitFor(() => expect(pageRequests()).toHaveLength(2));
-    expect(query(pageRequests()[1]).get('_sortBy')).toBe('movementDate,transactionProcessDate,id');
+    expect(query(pageRequests()[1]).get('_sortBy')).toBe('transactionProcessDate,id');
   });
 
   describe('Type column sorts by the visible label', () => {
@@ -389,14 +409,14 @@ describe('ProductMovementsTab (ETP-5889)', () => {
       await userEvent.click(screen.getByText(esES.genericLabels.typeColumn));
       await waitFor(() => expect(pageRequests()).toHaveLength(2));
       const asc = query(pageRequests()[1]);
-      expect(asc.get('_sortBy')).toBe('etgoDocKind,-movementDate,-transactionProcessDate,-id');
+      expect(asc.get('_sortBy')).toBe('etgoDocKind,-transactionProcessDate,-id');
       expect(asc.get('typeLabelOrder')).toBe(
         'vendor-receipt,customer-shipment,internal-consumption,vendor-return,customer-return,inventory-in,inventory-out,transfer');
 
       await userEvent.click(screen.getByText(esES.genericLabels.typeColumn));
       await waitFor(() => expect(pageRequests()).toHaveLength(3));
       const desc = query(pageRequests()[2]);
-      expect(desc.get('_sortBy')).toBe('-etgoDocKind,-movementDate,-transactionProcessDate,-id');
+      expect(desc.get('_sortBy')).toBe('-etgoDocKind,-transactionProcessDate,-id');
       expect(desc.get('typeLabelOrder')).toBe(asc.get('typeLabelOrder'));
 
       await userEvent.click(screen.getByText(esES.genericLabels.productMovementsQuantity));
@@ -480,8 +500,8 @@ describe('ProductMovementsTab (ETP-5889)', () => {
     const criteria = JSON.parse(query(pageRequests()[1]).get('criteria'));
     const { start, end } = computePeriodRange(6, new Date());
     const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    expect(criteria).toContainEqual({ fieldName: 'movementDate', operator: 'greaterOrEqual', value: iso(start) });
-    expect(criteria).toContainEqual({ fieldName: 'movementDate', operator: 'lessOrEqual', value: iso(end) });
+    expect(criteria).toContainEqual({ fieldName: 'transactionProcessDate', operator: 'greaterOrEqual', value: iso(start) });
+    expect(criteria).toContainEqual({ fieldName: 'transactionProcessDate', operator: 'lessOrEqual', value: iso(end) });
   });
 
   it('makes the scroll box a containing block so sr-only rows cannot grow the page scroll', async () => {
@@ -505,16 +525,76 @@ describe('ProductMovementsTab (ETP-5889)', () => {
     expect(boxTokens).not.toContain('-mr-4');
   });
 
-  it('keeps the table at least 340 px high (inline floor from the shared constant) and drops the card border', async () => {
-    route({ pages: [[row({ id: 'a-0' })]], total: 1 });
+  it('keeps a 340 px floor while loading and a compact floor (200 px) once rows are loaded; drops the card border', async () => {
+    let release;
+    mocks.apiFetch.mockImplementation(async (path) => {
+      if (path.startsWith('/stock')) return respond([]);
+      await new Promise((resolveFetch) => { release = resolveFetch; });
+      return respond([row({ id: 'a-0' })], 1);
+    });
     render(<ProductMovementsTab data={storable} isActive />);
-    await waitFor(() => expect(screen.getAllByTestId('product-movements-row')).toHaveLength(1));
     const box = screen.getByTestId('product-movements-scroll');
+    // Skeleton (loading): the box keeps the full floor so the placeholder does not collapse.
     expect(box.style.minHeight).toBe(`${MOVEMENTS_TABLE_MIN_HEIGHT}px`);
     expect(MOVEMENTS_TABLE_MIN_HEIGHT).toBe(340);
+    await act(async () => { release(); });
+    await waitFor(() => expect(screen.getAllByTestId('product-movements-row')).toHaveLength(1));
+    expect(MOVEMENTS_TABLE_COMPACT_MIN_HEIGHT).toBe(200);
+    await waitFor(() => expect(Number.parseFloat(box.style.minHeight)).toBeLessThanOrEqual(MOVEMENTS_TABLE_COMPACT_MIN_HEIGHT));
+    expect(box.style.minHeight).not.toBe(`${MOVEMENTS_TABLE_MIN_HEIGHT}px`);
+    // fill: the box takes the whole remaining room (height), not only a cap, so the total sits at the card bottom.
+    expect(readFileSync(resolve(__dirname, '../ProductMovementsTab.jsx'), 'utf8')).toMatch(/useRemainingHeight\(\{[^}]*fill: true/);
     expect(box.className).not.toMatch(/\bmin-h-\[/);
     expect(box.className).not.toContain('border');
     expect(box.className).not.toContain('rounded');
+  });
+
+  describe('options handed to useRemainingHeight (compact floor and scroll tolerance)', () => {
+    const lastOptions = () => useRemainingHeight.mock.calls.at(-1)[0];
+
+    it('keeps the full floor and no content fit while loading', async () => {
+      mocks.apiFetch.mockImplementation(async (path) => (path.startsWith('/stock') ? respond([]) : new Promise(() => {})));
+      render(<ProductMovementsTab data={storable} isActive />);
+      await waitFor(() => expect(pageRequests()).toHaveLength(1));
+      expect(lastOptions()).toMatchObject({ fitContent: false, minHeight: MOVEMENTS_TABLE_MIN_HEIGHT, fill: true });
+    });
+
+    it('keeps the full floor and no content fit when the request fails', async () => {
+      mocks.apiFetch.mockImplementation(async (path) => {
+        if (path.startsWith('/stock')) return respond([]);
+        throw new Error('boom');
+      });
+      render(<ProductMovementsTab data={storable} isActive />);
+      await screen.findByTestId('product-movements-error');
+      expect(lastOptions()).toMatchObject({ fitContent: false, minHeight: MOVEMENTS_TABLE_MIN_HEIGHT });
+    });
+
+    it('fits the content with the compact floor for loaded rows, with the scroll tolerance when no more pages exist', async () => {
+      route({ pages: [[row({ id: 'a-0' }), row({ id: 'a-1' })]], total: 2 });
+      render(<ProductMovementsTab data={storable} isActive />);
+      await waitFor(() => expect(screen.getAllByTestId('product-movements-row')).toHaveLength(2));
+      expect(lastOptions()).toMatchObject({
+        fitContent: true,
+        minHeight: MOVEMENTS_TABLE_COMPACT_MIN_HEIGHT,
+        scrollTolerance: MOVEMENTS_TABLE_SCROLL_TOLERANCE_PX,
+      });
+      expect(MOVEMENTS_TABLE_SCROLL_TOLERANCE_PX).toBe(4);
+    });
+
+    it('never hides the scrollbar while more pages can load (tolerance 0 when hasMore)', async () => {
+      const full = Array.from({ length: 50 }, (_, i) => row({ id: `p-${i}` }));
+      route({ pages: [full], total: 120 });
+      render(<ProductMovementsTab data={storable} isActive />);
+      await waitFor(() => expect(screen.getAllByTestId('product-movements-row')).toHaveLength(50));
+      expect(lastOptions()).toMatchObject({ fitContent: true, scrollTolerance: 0 });
+    });
+
+    it('fits the content with the compact floor in the empty states too (none at all and filtered)', async () => {
+      route({ pages: [[]], total: 0 });
+      render(<ProductMovementsTab data={storable} isActive />);
+      await screen.findByTestId('product-movements-empty');
+      expect(lastOptions()).toMatchObject({ fitContent: true, minHeight: MOVEMENTS_TABLE_COMPACT_MIN_HEIGHT });
+    });
   });
 
   it('renders the total as a sticky sibling of the scroll box (not inside it, no mt-auto), offset -bottom-2', async () => {
@@ -524,9 +604,10 @@ describe('ProductMovementsTab (ETP-5889)', () => {
     render(<ProductMovementsTab data={storable} isActive />);
     const total = await screen.findByTestId('product-movements-total');
     const box = screen.getByTestId('product-movements-scroll');
-    expect(box.className.split(' ')).toEqual(expect.arrayContaining(['flex', 'flex-col', 'overflow-y-auto', '[scrollbar-gutter:stable]']));
+    expect(box.className.split(' ')).toEqual(expect.arrayContaining(['flex', 'flex-col', 'overflow-y-auto']));
+    expect(box.className).not.toContain('scrollbar-gutter');
     const tokens = total.className.split(' ');
-    expect(tokens).toEqual(expect.arrayContaining(['sticky', '-bottom-2', 'z-40', 'overflow-hidden']));
+    expect(tokens).toEqual(expect.arrayContaining(['sticky', '-bottom-2', '-mb-4', 'z-40', 'overflow-hidden']));
     expect(tokens).not.toContain('mt-auto');
     expect(box.contains(total)).toBe(false);
     // Rows must not shrink inside the flex column.
@@ -557,8 +638,8 @@ describe('ProductMovementsTab (ETP-5889)', () => {
     expect(header.className).toContain('sticky');
     expect(header.className).toContain('top-0');
     expect(header.className).toContain('bg-card');
-    expect(header.className).toContain('min-w-[994px]');
-    expect(line.className).toContain('min-w-[994px]');
+    expect(header.className).toContain('min-w-[1014px]');
+    expect(line.className).toContain('min-w-[1014px]');
   });
 
   it('derives the row minimum width from its own columns: min-w equals track minimums + gaps + horizontal padding', async () => {

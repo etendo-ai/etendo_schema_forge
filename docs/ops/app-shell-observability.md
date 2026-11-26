@@ -66,6 +66,28 @@ To validate emission on purpose from a developer machine, build or run with
 `VITE_MIXPANEL_ALLOW_LOCAL=true` (only the literal `true`) in addition to the switch and the token.
 Never set it in a deployment workflow.
 
+### Mixpanel waits for the cookie banner (ETP-6363)
+
+On a production host Mixpanel starts only once the visitor accepts the **Analytics** category of
+marketing's cookie banner (HubSpot's, loaded by GTM; `src/lib/marketing/consent.js` listens with
+`_hsp.push(['addPrivacyConsentListener', …])`). Until then the provider's `enabled` is false for
+the gateway, which reads it on every call: the SDK is not downloaded, no cookie is written and the
+events are dropped, not queued. On acceptance the gateway starts it and hands it the current user
+and groups, so the identity is not lost. If the visitor withdraws consent, Mixpanel stops for the
+rest of the page load and its `mp_*` cookies are removed.
+
+Consequences to keep in mind when reading the KPIs:
+
+- A visitor who never accepts is never counted, and the events before the acceptance are not
+  replayed (the onboarding's first steps of someone who accepts late).
+- Where the banner does not load (`app.etendo.software`, outside GTM's hosts; a support session;
+  GTM blocked) Mixpanel never starts.
+- `VITE_MIXPANEL_ALLOW_LOCAL=true` on a developer machine needs no banner.
+
+The cookie is set on the parent domain (`.etendo.ai`), shared with the website's Mixpanel, as
+marketing asked. `feature_flag_evaluated` and `feature_flags_diagnostic` no longer go to Mixpanel
+(they were 72 % of the project's volume); Datadog keeps them.
+
 | Variable | Description |
 |----------|-------------|
 | `VITE_MIXPANEL_ALLOW_LOCAL` | Set to `true` to let Mixpanel emit from a non-production host (local validation only). Off by default. |
@@ -888,7 +910,11 @@ HubSpot's banner (`_hsp.push(['showBanner'])`). Signing up never depends on acce
 **`hubspotutk` and the sign-up** (`etendo-go-core` `onboarding/hubspotAttribution.js`). The
 register and single sign-on requests carry `hubspotContext`: `hutk` (only when the cookie exists),
 `pageUri` (the address with its campaign parameters only, `utm_*`, `hsa_*`, `gclid`, `fbclid`,
-`msclkid`, `li_fat_id`..., so no token in the address leaves the app) and `pageName`. The backend
+`msclkid`, `li_fat_id`..., so no token in the address leaves the app) and `pageName`. The app's
+redirect from `/` to `/onboarding` drops the campaign parameters, so `main.jsx` keeps the landing
+page of the tab's first load that carries them (`captureLandingAttribution`, in `sessionStorage`,
+already reduced to its campaign parameters) and the sign-up sends that page as `pageUri`; it
+survives a single sign-on, which returns to the same tab. The backend
 keeps it on the account and submits the confirmed sign-up to HubSpot's form (see
 `com.etendoerp.go` `docs/hubspot-sync.md`, `SIGNUP_FORM`).
 
