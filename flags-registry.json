@@ -352,7 +352,7 @@
           {
             "root": "backend",
             "path": "src-test/src/com/etendoerp/go/schemaforge/webhooks/SFAcctProcessMonitorTest.java",
-            "note": "EXISTS on feature/ETP-5269 in the com.etendoerp.go worktree. The scorer resolves roots.backend to etendo_core/modules/com.etendoerp.go, which is the MAIN checkout and currently sits on a different branch, so it reports this file missing. Left scoring as-is on purpose: marking it expected:true would suppress a real 5 pts on every future run to paper over a local path artifact that disappears once the branches are co-located."
+            "note": "Present on com.etendoerp.go develop since ETP-5269 merged; the scorer finds it when roots.backend points at a checkout of that branch (ETENDO_GO_MODULE)."
           },
           {
             "root": "backend",
