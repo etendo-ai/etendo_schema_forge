@@ -410,14 +410,14 @@ rendered the filters, "0 registros" and the backend's raw English "Forbidden".
 Two layers now:
 
 - **Route guard.** The registry entry (`windows/custom/not-posted-documents/index.jsx`) wraps the
-  page in `ProcessAccessGuard` (`tools/app-shell/src/components/access/ProcessAccessGuard.jsx`),
-  which checks the process id against `useRoleMenu()` — the same role-filtered id set the
-  sidebar filters by, so page and sidebar always agree. A role without the process gets the
-  shared access-denied screen (`data-testid="window-access-denied"`, i18n `windowAccessDenied`,
-  identical to `WindowAccessGuard`) and the page never mounts or fires a request. While access
-  is still loading it shows a neutral placeholder; when the menu map is unreachable it fails
-  OPEN, like the sidebar.
-- **Backend 403.** If the header load still answers 403 (guard failed open, or a grant revoked
+  page in `WindowAccessGuard` and reads access with `useWindowAccess` under the GO feature id
+  `not-posted-documents` (ETP-4802), the same key the backend publishes in the `windowAccess` map
+  and the sidebar filters by (`accessFeature`), so page and sidebar always agree. A role without
+  the feature gets the shared access-denied screen (`data-testid="window-access-denied"`, i18n
+  `windowAccessDenied`) and the page never mounts or fires a request. While access is still
+  loading the guard also shows the access-denied screen, and it **no longer fails open**: when the
+  access map is unreachable the page stays closed (the backend 403 is the real gate).
+- **Backend 403.** If the header load still answers 403 (a grant revoked
   mid-session), the page swaps itself for the same access-denied screen and hides the header
   record count. Any other load error shows a translated message: a known backend message via
   `translateBackendError`, otherwise `documentsLoadError`. Raw backend text and the HTTP status
@@ -572,7 +572,7 @@ means "this document has no accounting", not "pending".
 - `tools/app-shell/src/windows/registry.js` — `not-posted-documents` in `customLoaders`.
 - `tools/app-shell/src/windows/custom/not-posted-documents/NotPostedDocumentsPage.jsx` — main component; `notPostedDocumentsFilters.js` (filter state, URL form, status table — `__tests__/notPostedDocumentsFilters.vitest.js`); `NotPostedRowActions.jsx` (hover actions, "Abrir documento" targets). Page behaviour: `__tests__/NotPostedDocumentsPage.vitest.jsx`, real-locale copy: `__tests__/NotPostedDocumentsPage.breadcrumb.i18n.vitest.jsx`, browser flows: `e2e/tests/flows/accounting/not-posted-documents.mocked.spec.js`.
 - `tools/app-shell/src/components/contract-ui/DataTable.jsx` — opt-in `emptyState` prop (ETP-5591), `__tests__/DataTable.emptyState.vitest.jsx`. Multi-select / heading / badge options of `DistinctValuesFilter` come from `@etendo-ai/app-shell-core` (documented in schema_forge_core `docs/list-filters.md`).
-- `tools/app-shell/src/windows/custom/not-posted-documents/index.jsx` — route entry wrapped in `ProcessAccessGuard` (ETP-5485); covered by `__tests__/index.access.vitest.jsx`, `components/access/__tests__/ProcessAccessGuard.vitest.jsx`, the 403/error cases in `__tests__/NotPostedDocumentsPage.vitest.jsx`, and the "direct route without process access" block of `e2e/tests/flows/accounting/not-posted-documents.mocked.spec.js`.
+- `tools/app-shell/src/windows/custom/not-posted-documents/index.jsx` — route entry wrapped in `WindowAccessGuard` under the feature id (ETP-4802, was `ProcessAccessGuard` in ETP-5485); covered by `__tests__/index.access.vitest.jsx`, the 403/error cases in `__tests__/NotPostedDocumentsPage.vitest.jsx`, and the "direct route without process access" block of `e2e/tests/flows/accounting/not-posted-documents.mocked.spec.js`.
 - `modules/com.etendoerp.go/src/com/etendoerp/go/schemaforge/handlers/NotPostedDocumentsHandler.java` — `@Named("not-posted-documents")`; dynamic `c_acctschema_table` check + `APRM_DISABLED_TYPES` static exclusion set (includes BS, PIN, POT, R plus the ETP-4452 global exclusions BMP, DD, LC, LCC, CA); `DS_LABEL_TO_DOCUMENT_TYPE_CODE` + `tableIdForLabel` row enrichment (ETP-5591; replaced `DOCUMENT_TYPE_TO_TABLE_ID`), `enrichWithAccountingState` / `loadAccountingStates` (row status + transaction account), all covered by `NotPostedDocumentsHandlerTest`; `ACCOUNTING_STATUS_KEY_TO_ID` UUID map; `DEFAULT_ACCOUNTING_STATUS_KEYS`; `AccessibleDS` inner subclass.
 - `modules/com.etendoerp.go/src-db/database/sourcedata/ETGO_SF_ENTITY.xml` — `isget=Y, ispost=Y`.
 - i18n keys (`en_US.json` / `es_ES.json`): `notPostedDocuments`, `allDocuments`, `allErrors`, `postedStatusCostNotCalculated` (shared), `statusesCount`, `openDocument`, `notPostedStatusUnposted`, `notPostedStatusInvalidAccount`, `notPostedStatusError`, `notPostedEmptyFilteredTitle`, `notPostedEmptyFilteredDescription`, `notPostedEmptyNoneTitle`, plus shared `postedStatusPeriodClosed`, `statusLabel`, `documentType`, `resetFilters`, `selected`, `post`, `postingFailed`, `documentPosted`, `documentsLoadError`, `linkCopied`, `copyFailed`, `copyLink`, `accountingDate`.
