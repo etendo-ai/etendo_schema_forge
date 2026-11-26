@@ -358,6 +358,27 @@ describe('ProductMovementsTab (ETP-5889)', () => {
     expect(timeEl.parentElement).not.toHaveTextContent('20/10/2026');
   });
 
+  it('gives the type pill priority: it never shrinks, the document link compacts (min 40 px, truncated label, full name in title)', async () => {
+    route({ pages: [[row({ etgoDocLabel: 'QA ETP-5908 inv Principal' })]], total: 1 });
+    render(<ProductMovementsTab data={storable} isActive />);
+    const pill = await screen.findByTestId('product-movements-type');
+    const link = screen.getByTestId('product-movements-doc-link');
+    const cell = pill.parentElement;
+    expect(pill.className).toContain('shrink-0');
+    expect(pill.className).not.toContain('truncate');
+    expect(link.className).not.toContain('shrink-0');
+    expect(link.className).toContain('min-w-[40px]');
+    expect(link.className).toContain('max-w-full');
+    expect(link.getAttribute('title')).toBe('QA ETP-5908 inv Principal');
+    expect(link.querySelector('svg, [data-testid="FileText__763719"]').getAttribute('class')).toContain('shrink-0');
+    const label = [...link.querySelectorAll('span')].find((el) => el.textContent === 'QA ETP-5908 inv Principal');
+    expect(label.className).toContain('truncate');
+    expect(label.className).toContain('min-w-0');
+    // Nothing paints over the next column.
+    expect(cell.className).toContain('overflow-hidden');
+    expect(cell.className).toContain('min-w-0');
+  });
+
   it('shows the movement date as the day when the row has no process timestamp', async () => {
     route({ pages: [[row({ movementDate: '2026-10-20' })]], total: 1 });
     render(<ProductMovementsTab data={storable} isActive />);
@@ -1380,12 +1401,13 @@ describe('ProductMovementsTab (ETP-5889)', () => {
       expect(time.parentElement.className).toContain('whitespace-nowrap');
     });
 
-    it('renders the type label truncated with the full text in a title, never wrapping', async () => {
+    it('renders the type label with the full text in a title, never wrapping and never shrinking (the document link gives way)', async () => {
       route({ pages: [[row({ etgoDocKind: 'goods-movements' })]] });
       render(<ProductMovementsTab data={storable} isActive />);
       const type = await screen.findByTestId('product-movements-type');
       expect(type).toHaveAttribute('title', 'productMovementsTypeTransfer');
-      expect(type.className).toContain('truncate');
+      expect(type.className).toContain('shrink-0');
+      expect(type.parentElement.className).toContain('whitespace-nowrap');
     });
 
     it('styles the document link as an underlined text link with a document icon, no pill and no arrow', async () => {

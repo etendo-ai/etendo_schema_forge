@@ -79,6 +79,9 @@ const SEGMENT_IDLE = { color: 'hsl(var(--foreground))', fontWeight: 400 };
 const rowsOf = (json) => json?.response?.data ?? json?.data ?? [];
 const ARIA_SORT = { asc: 'ascending', desc: 'descending' };
 
+// The document link is the one that compacts when the Type cell is narrow (the type pill never does): it keeps at
+// least the file icon (14 px), the gap (4 px) and about two letters of the name (the Tailwind `min-w-[40px]` below).
+// Its full name is in `title`.
 function DocumentLink({ row, label, openInNewTab }) {
   const open = () => {
     window.open(`${window.location.origin}${getRouterBase()}/${row.etgoDocWindow}/${row.etgoDocHeaderId}`, '_blank', 'noopener,noreferrer');
@@ -88,13 +91,14 @@ function DocumentLink({ row, label, openInNewTab }) {
       type="button"
       onClick={open}
       data-testid="product-movements-doc-link"
-      className="inline-flex shrink-0 items-center gap-1 rounded-sm text-xs text-[hsl(var(--foreground))] underline underline-offset-2 transition-colors hover:text-primary"
+      title={label}
+      className="inline-flex min-w-[40px] max-w-full items-center gap-1 rounded-sm text-xs text-[hsl(var(--foreground))] underline underline-offset-2 transition-colors hover:text-primary"
     >
       <FileTextIcon
-        className="h-3.5 w-3.5 text-muted-foreground"
+        className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
         aria-hidden="true"
         data-testid="FileText__763719" />
-      <span>{label}</span>
+      <span className="min-w-0 truncate">{label}</span>
       <span className="sr-only">{openInNewTab}</span>
     </button>
   );
@@ -112,8 +116,8 @@ function MovementRow({ row, ui, currency }) {
         <span className="font-medium tabular-nums">{formatCalendarDate(movementDateTime(row))}</span>
         {time ? <span className="text-xs tabular-nums text-muted-foreground" data-testid="product-movements-time">{time}</span> : null}
       </div>
-      <div role="cell" className="flex min-w-0 flex-nowrap items-center gap-2 whitespace-nowrap">
-        <span className="min-w-0 truncate" title={typeLabel} data-testid="product-movements-type">
+      <div role="cell" className="flex min-w-0 flex-nowrap items-center gap-2 overflow-hidden whitespace-nowrap">
+        <span className="shrink-0" title={typeLabel} data-testid="product-movements-type">
           <Tag variant={TAG_VARIANT[tone]} data-testid="Tag__763719">{typeLabel}</Tag>
         </span>
         {hasDocument ? <DocumentLink
