@@ -46,14 +46,18 @@ import { login } from '../../helpers/auth.js';
  *   5. closing (X, Esc, backdrop, "Ir a conciliación manual") with rows checked asks "¿Deseas cerrar
  *      la ventana?": "Seguir trabajando" keeps the modal and the selection, "Cerrar" closes it; with
  *      nothing checked there is no dialog;
- *   6. "Descartadas" lists the discarded lines (`status=discarded`) and "Restaurar par" POSTs
- *      `restorePair`;
+ *   6. "Descartadas" (`status=discarded`) lists ONE ROW PER DISCARDED PAIR, on its outflow, counted by
+ *      `counts.discardedPairs`; the selected pair's footer names both lines ("Salida descartada",
+ *      "Rechazo") and "Restaurar par" POSTs `restorePair`;
  *   7. flag off: no yellow card, no bounce KPI, the original apply payload;
- *   8. "No es un rechazo" POSTs `dismissPair` with the selected line and the other line of the pair,
- *      and a failing `dismissPair` changes nothing on screen (no error toast);
+ *   8. "No es un rechazo" is stored (ETP-6359): it POSTs `dismissPair` with the selected line and the
+ *      other line of the pair, then the lines and the suggestions reload and the pair never comes
+ *      back; a failing `dismissPair` shows an error toast and keeps the pair; a line marked so shows
+ *      its notice under "Pendientes", and "Volver a considerar como posible rechazo" POSTs
+ *      `restoreBounceSuggestion` and reloads;
  *   9. a pair sent to the panel, then checked and unchecked again in the reopened modal, is
  *      reported as `unchecked`, not `sent_to_panel`;
- *  10. read-only tier: the modal never opens and "No es un rechazo" posts nothing;
+ *  10. read-only tier: the modal never opens and "No es un rechazo" is disabled (nothing is posted);
  *  11. (E2E_TELEMETRY=configured only) the `bounce_suggestions_viewed` / `_dismissed` Mixpanel
  *      events, read from the requests to the Mixpanel host — see the describe below.
  *
@@ -217,7 +221,7 @@ const PENDING_LINES = [
 ];
 const PENDING_COUNTS = {
   all: PENDING_LINES.length, pending: 0, suggested: 1, byRule: 0, difference: 0, reconciled: 0,
-  bounce: PENDING_LINES.length - 1, discarded: 2,
+  bounce: PENDING_LINES.length - 1, discarded: 2, discardedPairs: 1,
 };
 
 const DISCARDED_AT = `${day(20)}T09:30:00Z`;
@@ -233,6 +237,35 @@ const DISCARDED_LINES = [
     bounceLink: { counterpartLineId: 'bsl-disc-out', discardedAt: DISCARDED_AT, signal: 'pis_link', confidence: 'high' },
   },
 ];
+
+// ETP-6359 — when "No es un rechazo" was stored: the backend puts `bounceDismissedAt` on the pair's
+// rejection line, which is a plain pending line from then on. MARKED_LINE is one such line.
+const DISMISSED_MARK_AT = `${day(1)}T10:00:00Z`;
+const MARKED_LINE = {
+  id: 'bsl-marked-in', date: day(6), description: 'ABONO CLIENTE SIN RECHAZO', amount: 15,
+  status: 'pending', state: 'pending', bounceDismissedAt: DISMISSED_MARK_AT,
+};
+
+/**
+ * The answers once "No es un rechazo" is stored for the pair `statementLineId` belongs to: its group
+ * leaves the automatch answer, its lines are plain pending lines and the rejection carries the mark.
+ */
+function withoutDismissedPair(data, statementLineId) {
+  const key = data.lines.find((l) => l.id === statementLineId)?.bouncePair?.groupKey;
+  if (!key) return data;
+  const freed = data.lines.filter((l) => l.bouncePair?.groupKey === key).length;
+  const lines = data.lines.map((l) => {
+    if (l.bouncePair?.groupKey !== key) return l;
+    const { bouncePair: annotation, ...plain } = l;
+    return { ...plain, state: 'pending', ...(annotation.role === 'bounce' ? { bounceDismissedAt: DISMISSED_MARK_AT } : {}) };
+  });
+  return {
+    groups: data.groups.filter((g) => g.groupKey !== key),
+    kpis: { ...data.kpis, bouncePairs: data.kpis.bouncePairs - 1 },
+    lines,
+    counts: { ...data.counts, bounce: data.counts.bounce - freed, pending: data.counts.pending + freed },
+  };
+}
 
 /** The flag-on answer, and the flag-off one (no kind, no bouncePairs, no bounce state). */
 function answers(flagOn) {
@@ -322,15 +355,25 @@ const json = (route, body, status = 200) => route.fulfill({
  *   = once a discard succeeds, the lines / groups the next reads answer are those of FREE_RELOAD
  *   (the discarded pair's lines are gone and the other pair is re-detected).
  *   `extraPairs`: 'free' and/or 'orphan', see EXTRA_PAIRS. `onlyPairs`: the answer holds possible
- *   rejections only (no transaction group).
+ *   rejections only (no transaction group). `markedLine`: the answer also holds MARKED_LINE.
+ *   A successful `dismissPair` stores the dismissal (`withoutDismissedPair`), and a
+ *   `restoreBounceSuggestion` clears the line's mark, for the reads that follow.
  * @returns {Promise<{ posts: Record<string, object[]>, pendingQueries: URLSearchParams[],
  *   autoMatchRequests: { count: number } }>}
  */
 async function installMocks(page, {
   flagOn = true, dismissPairStatus = 200, refusePairs = [], ai = null, discardPairStale = false,
   longDescriptions = false, aiAfterReload, extraPairs = [], onlyPairs = false, discardRefusals = [], reloadAfterDiscard = null,
+  markedLine = false,
 } = {}) {
   let data = answers(flagOn);
+  if (markedLine) {
+    data = {
+      ...data,
+      lines: [...data.lines, MARKED_LINE],
+      counts: { ...data.counts, all: data.counts.all + 1, pending: data.counts.pending + 1 },
+    };
+  }
   if (onlyPairs) {
     // A run that found only possible rejections: no transaction group, and its line is not pending.
     data = {
@@ -369,7 +412,9 @@ async function installMocks(page, {
   let staleLeft = discardPairStale === true ? Infinity : Number(discardPairStale) || 0;
   const refusalsLeft = [...discardRefusals];
   let reloadPending = reloadAfterDiscard;
-  const posts = { discardPair: [], restorePair: [], applySuggestions: [], dismissPair: [] };
+  const posts = {
+    discardPair: [], restorePair: [], applySuggestions: [], dismissPair: [], restoreBounceSuggestion: [],
+  };
   const pendingQueries = [];
   const autoMatchRequests = { count: 0 };
 
@@ -418,7 +463,21 @@ async function installMocks(page, {
           await json(route, { error: { status: dismissPairStatus, message: 'Internal error' } }, dismissPairStatus);
           return;
         }
-        await json(route, { response: { data: { dismissed: true } } });
+        data = withoutDismissedPair(data, body.statementLineId);
+        await json(route, { response: { data: { ok: true, dismissedLineId: body.statementLineId, bounceDismissedAt: DISMISSED_MARK_AT } } });
+        return;
+      }
+      if (action === 'restoreBounceSuggestion') {
+        posts.restoreBounceSuggestion.push(body);
+        data = {
+          ...data,
+          lines: data.lines.map((l) => {
+            if (l.id !== body.statementLineId) return l;
+            const { bounceDismissedAt: _mark, ...unmarked } = l;
+            return unmarked;
+          }),
+        };
+        await json(route, { response: { data: { restored: true, statementLineId: body.statementLineId } } });
         return;
       }
       if (action === 'restorePair') {
@@ -466,7 +525,7 @@ async function installMocks(page, {
       pendingQueries.push(url.searchParams);
       const discarded = url.searchParams.get('status') === 'discarded';
       const lines = discarded ? DISCARDED_LINES : data.lines;
-      const counts = discarded ? { discarded: DISCARDED_LINES.length } : data.counts;
+      const counts = discarded ? { discarded: DISCARDED_LINES.length, discardedPairs: 1 } : data.counts;
       await json(route, { response: { data: { lines, total: lines.length, counts, draftReconciliationCount: 0 } } });
       return;
     }
@@ -873,18 +932,27 @@ test.describe('Reconciliation — bounce-pair suggestions (mocked)', () => {
     await closeThroughConfirmation(page, () => modalX(page).click());
 
     await page.getByRole('button', { name: /^Pendientes \(/ }).click();
-    await page.getByRole('option', { name: /^Descartadas \(2\)/ }).click();
+    // The figure is the number of discarded PAIRS (`counts.discardedPairs`), not of lines.
+    await page.getByRole('option', { name: /^Descartadas \(1\)/ }).click();
 
+    // One row per pair, on its outflow (the earlier line): the rejection has no row on the left.
     const discardedRow = page.getByTestId('recon-line-row-bsl-disc-out');
     await expect(discardedRow).toBeVisible();
+    await expect(page.getByTestId('recon-line-row-bsl-disc-in')).toHaveCount(0);
     expect(pendingQueries.some((q) => q.get('status') === 'discarded')).toBe(true);
     await expect(page.getByTestId(`recon-line-row-${TX_LINE.id}`)).toHaveCount(0);
+    await expect(page.getByTestId('recon-right-empty')).toBeVisible();
 
     await discardedRow.click();
     const panel = page.getByTestId('recon-bounce-panel');
     await expect(panel).toBeVisible();
     await expect(panel.getByTestId('recon-bounce-row-bsl-disc-in')).toBeVisible();
     await expect(panel.getByTestId('recon-bounce-dismiss')).toHaveCount(0);
+    // The footer names both lines of the pair, outflow first, then the net and "Restaurar par".
+    await expect(panel.getByTestId('recon-bounce-total-selected')).toContainText('Salida descartada');
+    await expect(panel.getByTestId('recon-bounce-total-other')).toContainText('Rechazo');
+    await expect(panel.getByTestId('recon-bounce-total-net')).toBeVisible();
+    await expect(panel.getByTestId('recon-bounce-restore')).toHaveText(/Restaurar par/);
 
     const post = page.waitForRequest((r) => r.method() === 'POST' && r.url().includes('action=restorePair'));
     await panel.getByTestId('recon-bounce-restore').click();
@@ -952,20 +1020,47 @@ async function selectBounceLineInPanel(page, bounceId, outflowId) {
   await page.getByTestId(`recon-line-row-${bounceId}`).click();
 }
 
+/**
+ * "Revisar en el panel" on the pair `key` of the open modal: the modal closes and the panel shows
+ * the pair's rejection. Returns the panel.
+ */
+async function reviewPairInPanel(page, key) {
+  await expect(modal(page)).toBeVisible();
+  await page.getByTestId(`automatch-bounce-review-${key}`).click();
+  await expect(modal(page)).toHaveCount(0);
+  const panel = page.getByTestId('recon-bounce-panel');
+  await expect(panel).toBeVisible();
+  return panel;
+}
+
+/** How many times the page has read the lines and the suggestions so far. */
+const readsOf = (pendingQueries, autoMatchRequests) => ({
+  lines: pendingQueries.length, autoMatch: autoMatchRequests.count,
+});
+
+/** Waits until both the lines and the suggestions were read again after `before`. */
+async function expectReloaded(pendingQueries, autoMatchRequests, before) {
+  await expect.poll(() => pendingQueries.length).toBeGreaterThan(before.lines);
+  await expect.poll(() => autoMatchRequests.count).toBeGreaterThan(before.autoMatch);
+}
+
+/** Reopens the automatch modal with its button. */
+async function reopenAutomatch(page) {
+  await page.getByTestId('financial-account-automatch').click();
+  await expect(modal(page)).toBeVisible();
+}
+
 test.describe('Reconciliation — bounce-pair KPI reporting (mocked)', () => {
-  test('"No es un rechazo" posts dismissPair with the selected line and the other line of the pair', async ({ page }) => {
+  // ETP-6359 — "No es un rechazo" is stored: the pair is never proposed again.
+  test('"No es un rechazo" posts dismissPair with both lines, then the lines and the suggestions reload without the pair', async ({ page }) => {
     await login(page);
-    const { posts } = await installMocks(page);
+    const { posts, pendingQueries, autoMatchRequests } = await installMocks(page);
     await openReconciliation(page);
-    await expect(modal(page)).toBeVisible();
-
-    await page.getByTestId('automatch-bounce-review-bp-review').click();
-    await expect(modal(page)).toHaveCount(0);
+    const panel = await reviewPairInPanel(page, 'bp-review');
     await expect(page.getByTestId(`recon-line-radio-${REVIEW_BOUNCE.id}`)).toBeChecked();
-    const panel = page.getByTestId('recon-bounce-panel');
-    await expect(panel).toBeVisible();
+    const before = readsOf(pendingQueries, autoMatchRequests);
 
-    const post = page.waitForRequest((r) => r.method() === 'POST' && r.url().includes('action=dismissPair'));
+    const post = requestsOf(page, 'dismissPair');
     await panel.getByTestId('recon-bounce-dismiss').click();
     await post;
 
@@ -974,40 +1069,68 @@ test.describe('Reconciliation — bounce-pair KPI reporting (mocked)', () => {
       statementLineId: REVIEW_BOUNCE.id,
       counterpartLineId: REVIEW_ORIGINAL.id,
     }]);
-    await expect(page.locator('[data-type="success"]').first()).toBeVisible();
-    // The pair is hidden for the session: neither of its lines is left in either table, while
-    // the other pairs' outflows stay.
+    await expect(page.locator('[data-type="success"]', { hasText: 'Marcada como no rechazo. No se volverá a sugerir.' })).toBeVisible();
+    await expectReloaded(pendingQueries, autoMatchRequests, before);
+    // Neither of its lines is left in either table, while the other pairs' outflows stay.
     await expect(page.getByTestId(`recon-line-row-${REVIEW_BOUNCE.id}`)).toHaveCount(0);
     await expect(page.getByTestId(`recon-outflow-row-${REVIEW_ORIGINAL.id}`)).toHaveCount(0);
     await expect(page.getByTestId(`recon-outflow-row-${HIGH_ORIGINAL.id}`)).toBeVisible();
+    // The reopened modal, from the reloaded suggestions, does not offer it again.
+    await reopenAutomatch(page);
+    await expect(pairCheck(page, 'bp-high')).toBeVisible();
+    await expect(pairCheck(page, 'bp-review')).toHaveCount(0);
   });
 
-  test('a failing dismissPair changes nothing on screen and shows no error', async ({ page }) => {
+  test('a failing dismissPair shows an error toast and keeps the pair', async ({ page }) => {
     await login(page);
-    const { posts } = await installMocks(page, { dismissPairStatus: 500 });
+    const { posts, pendingQueries } = await installMocks(page, { dismissPairStatus: 500 });
     await openReconciliation(page);
-    await expect(modal(page)).toBeVisible();
-
-    await page.getByTestId('automatch-bounce-review-bp-review').click();
-    const panel = page.getByTestId('recon-bounce-panel');
-    await expect(panel).toBeVisible();
+    const panel = await reviewPairInPanel(page, 'bp-review');
+    const linesRead = pendingQueries.length;
 
     const answered = page.waitForResponse((r) => r.request().method() === 'POST' && r.url().includes('action=dismissPair'));
     await panel.getByTestId('recon-bounce-dismiss').click();
     expect((await answered).status()).toBe(500);
     expect(posts.dismissPair).toHaveLength(1);
 
-    // Exactly what a successful report leaves: the confirmation, and the pair hidden.
-    await expect(page.locator('[data-type="success"]').first()).toBeVisible();
-    await expect(page.getByTestId(`recon-line-row-${REVIEW_BOUNCE.id}`)).toHaveCount(0);
-    await expect(page.getByTestId(`recon-outflow-row-${REVIEW_ORIGINAL.id}`)).toHaveCount(0);
-    await expect(page.locator('[data-type="error"]')).toHaveCount(0);
-    // Still hidden when the modal is reopened: the failure did not undo the dismissal.
-    await page.getByTestId('financial-account-automatch').click();
+    await expect(page.locator('[data-type="error"]').first()).toBeVisible();
+    await expect(page.locator('[data-type="success"]')).toHaveCount(0);
+    // Nothing is hidden nor reloaded: the pair stays selected, in both tables.
+    await expect(page.getByTestId(`recon-line-radio-${REVIEW_BOUNCE.id}`)).toBeChecked();
+    await expect(page.getByTestId(`recon-outflow-row-${REVIEW_ORIGINAL.id}`)).toBeVisible();
+    await expect(panel).toBeVisible();
+    await settle(page);
+    expect(pendingQueries.length).toBe(linesRead);
+    // The reopened modal still offers it.
+    await reopenAutomatch(page);
+    await expect(pairCheck(page, 'bp-review')).toBeVisible();
+  });
+
+  test('a line marked "No es un rechazo" shows its notice; "Volver a considerar" posts restoreBounceSuggestion and reloads', async ({ page }) => {
+    await login(page);
+    const { posts, pendingQueries, autoMatchRequests } = await installMocks(page, { markedLine: true });
+    await openReconciliation(page);
     await expect(modal(page)).toBeVisible();
-    await expect(pairCheck(page, 'bp-high')).toBeVisible();
-    await expect(pairCheck(page, 'bp-review')).toHaveCount(0);
-    await expect(page.locator('[data-type="error"]')).toHaveCount(0);
+    await closeThroughConfirmation(page, () => modalX(page).click());
+
+    // Under "Pendientes" it is a plain pending line; selected, it says when it was marked.
+    await page.getByTestId(`recon-line-row-${MARKED_LINE.id}`).click();
+    await expect(page.getByTestId(`recon-line-radio-${MARKED_LINE.id}`)).toBeChecked();
+    const notice = page.getByTestId('recon-bounce-dismissed-notice');
+    await expect(notice).toContainText('Marcada como no rechazo el');
+    await expect(page.getByTestId('recon-bounce-panel')).toHaveCount(0);
+    const before = readsOf(pendingQueries, autoMatchRequests);
+
+    const post = requestsOf(page, 'restoreBounceSuggestion');
+    await notice.getByTestId('recon-bounce-restore-suggestion').click();
+    await post;
+
+    expect(posts.restoreBounceSuggestion).toEqual([{ financialAccountId: ACCOUNT_ID, statementLineId: MARKED_LINE.id }]);
+    await expect(page.locator('[data-type="success"]', { hasText: 'La línea vuelve a considerarse como posible rechazo.' })).toBeVisible();
+    await expectReloaded(pendingQueries, autoMatchRequests, before);
+    // The reloaded line carries no mark any more: still selected, without the notice.
+    await expect(page.getByTestId(`recon-line-radio-${MARKED_LINE.id}`)).toBeChecked();
+    await expect(notice).toHaveCount(0);
   });
 
   test('a pair sent to the panel, then checked and unchecked again, is reported as unchecked', async ({ page }) => {
@@ -1039,7 +1162,7 @@ test.describe('Reconciliation — bounce-pair KPI reporting (mocked)', () => {
     ]);
   });
 
-  test('read-only tier: the modal never opens and "No es un rechazo" posts nothing', async ({ page }) => {
+  test('read-only tier: the modal never opens and "No es un rechazo" is disabled', async ({ page }) => {
     await login(page, { windowAccessOverrides: { [FINANCIAL_ACCOUNT_WINDOW_ID]: 'read-only' } });
     const { posts } = await installMocks(page);
     const dismissRequests = recordDismissPairRequests(page);
@@ -1051,12 +1174,12 @@ test.describe('Reconciliation — bounce-pair KPI reporting (mocked)', () => {
     await expect(modal(page)).toHaveCount(0);
     await expect(page.getByTestId('financial-account-automatch')).toHaveCount(0);
 
-    await page.getByTestId('recon-bounce-panel').getByTestId('recon-bounce-dismiss').click();
-    // The session-only hide still happens; only the report is skipped. Both tables drop the pair
-    // (the outflow row is the non-vacuous check: it was on screen before the dismissal).
-    await expect(page.getByTestId(`recon-line-row-${REVIEW_BOUNCE.id}`)).toHaveCount(0);
-    await expect(page.getByTestId(`recon-outflow-row-${REVIEW_ORIGINAL.id}`)).toHaveCount(0);
-    await expect(page.getByTestId(`recon-outflow-row-${HIGH_ORIGINAL.id}`)).toBeVisible();
+    // ETP-6359 — the dismissal is stored now, a write: disabled, and a forced click changes nothing.
+    const dismiss = page.getByTestId('recon-bounce-panel').getByTestId('recon-bounce-dismiss');
+    await expect(dismiss).toBeDisabled();
+    await dismiss.click({ force: true });
+    await expect(page.getByTestId(`recon-line-row-${REVIEW_BOUNCE.id}`)).toBeVisible();
+    await expect(page.getByTestId(`recon-outflow-row-${REVIEW_ORIGINAL.id}`)).toBeVisible();
     await settle(page);
     expect(dismissRequests).toEqual([]);
     expect(posts.dismissPair).toEqual([]);
@@ -1207,7 +1330,7 @@ test.describe('Reconciliation — bounce suggestion events (Mixpanel, mocked)', 
     await installMocks(page);
     await openReconciliation(page);
     await selectBounceLineInPanel(page, REVIEW_BOUNCE.id, REVIEW_ORIGINAL.id);
-    await page.getByTestId('recon-bounce-panel').getByTestId('recon-bounce-dismiss').click();
+    await expect(page.getByTestId('recon-bounce-panel').getByTestId('recon-bounce-dismiss')).toBeDisabled();
 
     // Control: telemetry does flow in this page, so the empty result below means something.
     await expect.poll(() => named(events, 'app_started').length).toBeGreaterThan(0);
@@ -1273,12 +1396,7 @@ const outflowOrder = (page) => page.locator('[data-testid^="recon-outflow-row-"]
 
 /** Sends the ambiguous pair to the panel, as "Revisar en el panel" does. */
 async function reviewAmbiguousInPanel(page) {
-  await expect(modal(page)).toBeVisible();
-  await page.getByTestId('automatch-bounce-review-bp-amb').click();
-  await expect(modal(page)).toHaveCount(0);
-  const panel = page.getByTestId('recon-bounce-panel');
-  await expect(panel).toBeVisible();
-  return panel;
+  return reviewPairInPanel(page, 'bp-amb');
 }
 
 test.describe('Reconciliation — AI suggestion on bank rejections (mocked)', () => {
@@ -1988,14 +2106,14 @@ test.describe('Reconciliation — free picks in the two-table view (mocked)', ()
     await expect(page.getByRole('radio', { name: new RegExp(`Ref\\. ${FREE_BOUNCE.referenceNo}$`) })).toBeVisible();
   });
 
-  test('read-only tier in the two-table view: "Descartar par" is disabled and nothing is POSTed', async ({ page }) => {
+  test('read-only tier in the two-table view: "Descartar par" and "No es un rechazo" are disabled and nothing is POSTed', async ({ page }) => {
     await login(page, { windowAccessOverrides: { [FINANCIAL_ACCOUNT_WINDOW_ID]: 'read-only' } });
     const { posts } = await installMocks(page);
     await openReconciliation(page);
     await selectBounceLineInPanel(page, REVIEW_BOUNCE.id, REVIEW_ORIGINAL.id);
     const panel = page.getByTestId('recon-bounce-panel');
     await expect(panel.getByTestId('recon-bounce-discard')).toBeDisabled();
-    await expect(panel.getByTestId('recon-bounce-dismiss')).toBeEnabled();
+    await expect(panel.getByTestId('recon-bounce-dismiss')).toBeDisabled();
     await panel.getByTestId('recon-bounce-discard').click({ force: true });
     await panel.getByTestId('recon-bounce-discard').focus();
     await page.keyboard.press('Enter');

@@ -479,7 +479,9 @@ export function FinancialAccountDetail({ recordId }) {
     reloadAutoMatch();
     reloadMovements();
     reloadReconciliations();
-    // A fresh automatch run proposes again the bounce pairs dismissed with "No es un rechazo".
+    // Forget the pairs hidden locally with "No es un rechazo": a stored dismissal (ETP-6359) is
+    // never proposed again, so this only lets a pair whose dismissal was NOT stored (the answer had
+    // no `dismissedLineId`, e.g. before the backend column exists) come back with the fresh run.
     clearDismissed();
     setReconciliationRefreshKey((k) => k + 1);
   }, [reloadAccountAndList, reloadAutoMatch, reloadMovements, reloadReconciliations, clearDismissed]);

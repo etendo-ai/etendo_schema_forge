@@ -26,7 +26,7 @@ import {
 } from '../useReconciliation.js';
 import { useReconciliationPost, RECONCILIATION_BASE_PATH } from '../useReconciliationPost.js';
 import {
-  useDiscardPair, useDismissPair, usePendingLineCounts, useRestorePair,
+  useDiscardPair, useDismissPair, usePendingLineCounts, useRestoreBounceSuggestion, useRestorePair,
 } from '../useBouncePairActions.js';
 import { findFetchCall } from './findFetchCall.js';
 
@@ -825,6 +825,39 @@ describe('useRestorePair (POST restorePair)', () => {
     expect(caught.message).toBe('plain');
     expect(caught.code).toBeNull();
     expect(caught.status).toBe(409);
+  });
+});
+
+describe('useRestoreBounceSuggestion (POST restoreBounceSuggestion, the undo of "No es un rechazo")', () => {
+  it('posts the restoreBounceSuggestion action with the account and the line, and returns the answer', async () => {
+    const answer = { restored: true, statementLineId: 'L-IN' };
+    mockActionResponse(postResponse(answer));
+    const { result } = renderHook(() => useRestoreBounceSuggestion(), { wrapper });
+    const payload = { financialAccountId: 'acc-1', statementLineId: 'L-IN' };
+
+    let returned;
+    await act(async () => { returned = await result.current.restoreBounceSuggestion(payload); });
+
+    const [url, init] = findFetchCall(`/etendo${BASE}?action=restoreBounceSuggestion`);
+    expect(url).toBe(`/etendo${BASE}?action=restoreBounceSuggestion`);
+    expect(init.method).toBe('POST');
+    expect(init.headers.Authorization).toBe('Bearer test-token');
+    expect(JSON.parse(init.body)).toEqual(payload);
+    expect(returned).toEqual(answer);
+  });
+
+  it('rejects a 409 LINE_NOT_PENDING with its code and body', async () => {
+    mockActionResponse(bounceRefusal('LINE_NOT_PENDING', 'ETGO_BounceLineNotPending', 'not pending'));
+    const { result } = renderHook(() => useRestoreBounceSuggestion(), { wrapper });
+    let caught;
+    await act(async () => {
+      caught = await result.current
+        .restoreBounceSuggestion({ financialAccountId: 'acc-1', statementLineId: 'x' }).catch((e) => e);
+    });
+    expect(caught).toBeInstanceOf(Error);
+    expect(caught.code).toBe('LINE_NOT_PENDING');
+    expect(caught.body.code).toBe('LINE_NOT_PENDING');
+    expect(result.current.error).toBe(caught);
   });
 });
 

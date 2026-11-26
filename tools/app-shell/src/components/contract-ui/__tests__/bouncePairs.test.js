@@ -52,6 +52,8 @@ import {
   buildBouncePairRows,
   buildBounceOutflows,
   countBouncePairs,
+  buildDiscardedPairRows,
+  isDiscardedOutflow,
 } from '../bouncePairs.js';
 
 const MODULE_URL = pathToFileURL(
@@ -692,7 +694,10 @@ describe('bouncePanelModel — AI second layer (bounceAiAssessments)', () => {
 });
 
 describe('bouncePanelModel — discarded lines', () => {
-  const partner = { id: 'L-IN', state: DISCARDED_STATE, amount: 120.5 };
+  // The partner points back at the line: a mutual link is what makes the two a restorable pair.
+  const partner = {
+    id: 'L-IN', state: DISCARDED_STATE, amount: 120.5, bounceLink: { counterpartLineId: ORIGINAL.id },
+  };
 
   it('paired: lists the line it was discarded with, found in the discarded lines', () => {
     const line = { ...ORIGINAL, state: DISCARDED_STATE,
@@ -714,6 +719,21 @@ describe('bouncePanelModel — discarded lines', () => {
     assert.deepEqual(m.rows, []);
     assert.equal(m.other, null);
     assert.equal(m.net, null);
+  });
+
+  it('a one-sided link (the partner on screen points elsewhere): a lone line, no row and no net', () => {
+    const line = { ...ORIGINAL, state: DISCARDED_STATE, bounceLink: { counterpartLineId: 'L-IN' } };
+    for (const other of [
+      { ...partner, bounceLink: { counterpartLineId: 'SOMEONE-ELSE' } },
+      { ...partner, bounceLink: null },
+    ]) {
+      const m = bouncePanelModel(line, { discardedLines: [line, other] });
+      assert.equal(m.paired, false);
+      assert.deepEqual(m.rows, []);
+      assert.equal(m.other, null);
+      assert.equal(m.net, null);
+      assert.equal(m.link, line.bounceLink);
+    }
   });
 
   it('alone (Classic per-line discard): not paired, no row, null link', () => {
@@ -1274,5 +1294,107 @@ describe('resolvePairOutflows — a checked pair keeps the outflow it was ticked
     });
     assert.equal(plan.get('bp-s').checked, true);
     assert.equal(plan.get('bp-s').source, null);
+  });
+});
+
+// --- The "Descartadas" pair view (ETP-6359) -------------------------------
+
+/** A discarded line linked to `partnerId` (null: discarded on its own). */
+function discardedLine(id, amount, date, partnerId, extra = {}) {
+  return {
+    id, amount, date, state: DISCARDED_STATE, status: DISCARDED_STATE, discarded: true,
+    bounceLink: partnerId ? { counterpartLineId: partnerId, discardedAt: '2026-09-10T10:00:00Z' } : null,
+    ...extra,
+  };
+}
+const pairKeys = (rows) => rows.map((r) => [r.anchor.id, r.counterpart?.id ?? null]);
+
+describe('isDiscardedOutflow (which line of a discarded pair is the original)', () => {
+  it('the earlier line is the outflow, whatever its sign', () => {
+    const early = { date: '2026-09-01', amount: -50 };
+    const late = { date: '2026-09-03', amount: 50 };
+    assert.equal(isDiscardedOutflow(early, late), true);
+    assert.equal(isDiscardedOutflow(late, early), false);
+    // An outflow dated AFTER its rejection: the earlier (positive) line is read as the original.
+    const positiveFirst = { date: '2026-09-01', amount: 50 };
+    const negativeLater = { date: '2026-09-02', amount: -50 };
+    assert.equal(isDiscardedOutflow(positiveFirst, negativeLater), true);
+    assert.equal(isDiscardedOutflow(negativeLater, positiveFirst), false);
+  });
+  it('on the same day, or with a date missing, the lower amount is the outflow', () => {
+    const out = { date: '2026-09-01', amount: -50 };
+    const back = { date: '2026-09-01', amount: 50 };
+    assert.equal(isDiscardedOutflow(out, back), true);
+    assert.equal(isDiscardedOutflow(back, out), false);
+    assert.equal(isDiscardedOutflow({ amount: -5 }, { date: '2026-09-01', amount: 5 }), true);
+    assert.equal(isDiscardedOutflow({ date: '2026-09-01', amount: 5 }, { amount: -5 }), false);
+  });
+  it('a full tie keeps the first line as the outflow', () => {
+    const a = { date: '2026-09-01', amount: -5 };
+    assert.equal(isDiscardedOutflow(a, { ...a }), true);
+  });
+});
+
+describe('buildDiscardedPairRows (one row per discarded pair, anchored on the outflow)', () => {
+  const D1 = discardedLine('D1', -50, '2026-09-01', 'D2', { description: 'Cuota gimnasio' });
+  const D2 = discardedLine('D2', 50, '2026-09-03', 'D1', { description: 'Cuota devuelta', referenceNo: 'REF-77' });
+  const D3 = discardedLine('D3', -7, '2026-08-20', null, { description: 'Comision' });
+
+  it('pairs two lines that point at each other, anchored on the earlier one', () => {
+    assert.deepEqual(pairKeys(buildDiscardedPairRows([D1, D2])), [['D1', 'D2']]);
+    const [entry] = buildDiscardedPairRows([D1, D2]);
+    assert.equal(entry.key, 'D1');
+    assert.equal(entry.anchor, D1);
+    assert.equal(entry.counterpart, D2);
+  });
+  it('the earlier line is the anchor even when the rejection is listed first', () => {
+    assert.deepEqual(pairKeys(buildDiscardedPairRows([D2, D1])), [['D1', 'D2']]);
+  });
+  it('on the same day the lower amount is the anchor', () => {
+    const out = discardedLine('S1', -30, '2026-09-05', 'S2');
+    const back = discardedLine('S2', 30, '2026-09-05', 'S1');
+    assert.deepEqual(pairKeys(buildDiscardedPairRows([back, out])), [['S1', 'S2']]);
+  });
+  it('an outflow dated after its rejection: the earlier positive line is the anchor', () => {
+    const back = discardedLine('R1', 40, '2026-09-01', 'R2');
+    const out = discardedLine('R2', -40, '2026-09-04', 'R1');
+    assert.deepEqual(pairKeys(buildDiscardedPairRows([out, back])), [['R1', 'R2']]);
+  });
+  it('a line discarded on its own is a row of its own, never dropped', () => {
+    assert.deepEqual(pairKeys(buildDiscardedPairRows([D3])), [['D3', null]]);
+  });
+  it('a line whose partner is not on screen (outside the date range) is a row alone', () => {
+    assert.deepEqual(pairKeys(buildDiscardedPairRows([D2])), [['D2', null]]);
+  });
+  it('a one-sided link (legacy data) gives two rows, each alone', () => {
+    const a = discardedLine('A1', -10, '2026-09-01', 'A2');
+    const b = discardedLine('A2', 10, '2026-09-02', 'ZZ');
+    assert.deepEqual(pairKeys(buildDiscardedPairRows([a, b])), [['A1', null], ['A2', null]]);
+  });
+  it('a line linked to itself is a row alone', () => {
+    const self = discardedLine('SELF', -10, '2026-09-01', 'SELF');
+    assert.deepEqual(pairKeys(buildDiscardedPairRows([self])), [['SELF', null]]);
+  });
+  it('the search keeps a pair matching only its rejection (description, partner or reference)', () => {
+    const rows = [D1, D2, D3];
+    assert.deepEqual(pairKeys(buildDiscardedPairRows(rows, { query: 'devuelta' })), [['D1', 'D2']]);
+    assert.deepEqual(pairKeys(buildDiscardedPairRows(rows, { query: '  ref-77 ' })), [['D1', 'D2']]);
+    assert.deepEqual(pairKeys(buildDiscardedPairRows(rows, { query: 'comision' })), [['D3', null]]);
+    assert.deepEqual(buildDiscardedPairRows(rows, { query: 'zzz' }), []);
+  });
+  it('orders the rows by the anchor\'s date, then as their first line came', () => {
+    const t1 = discardedLine('T1', -1, '2026-09-01', null);
+    const t2 = discardedLine('T2', -2, '2026-09-01', null);
+    // D1, T2 and T1 share a date: the pair keeps the place of its first line (D2), the earliest.
+    assert.deepEqual(pairKeys(buildDiscardedPairRows([D2, t2, D1, D3, t1])), [
+      ['D3', null], ['D1', 'D2'], ['T2', null], ['T1', null],
+    ]);
+  });
+  it('ignores the lines that are not discarded, and tolerates no lines', () => {
+    const pending = { id: 'P1', state: 'pending', amount: 50, date: '2026-09-03', bounceLink: { counterpartLineId: 'X1' } };
+    const partnerPending = discardedLine('X1', -50, '2026-09-01', 'P1');
+    assert.deepEqual(pairKeys(buildDiscardedPairRows([pending, partnerPending, D3])), [['D3', null], ['X1', null]]);
+    assert.deepEqual(buildDiscardedPairRows(null), []);
+    assert.deepEqual(buildDiscardedPairRows(undefined), []);
   });
 });

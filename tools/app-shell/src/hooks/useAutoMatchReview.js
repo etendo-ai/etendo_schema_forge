@@ -228,10 +228,12 @@ export function useAutoMatchSelection(groups, aiAssessments = null, { dismissedK
  * - `startReview(group)` — "Revisar en el panel": asks the panel to select the pair's bounce line
  *   (`focus`, consumed by the panel with `consumeFocus`). The host closes the modal; there is no
  *   way back other than the Automatch button, which reopens it;
- * - `dismissedKeys` / `dismiss` — pairs the user said are not a bounce ("No es un rechazo"). Nothing
- *   is persisted: they are hidden from the panel and the modal until `clearDismissed`, which the
- *   host calls when the automatch is recomputed (the header refresh). The Automatch button does
- *   NOT clear them: a pair just dismissed in the panel must not reappear in the modal.
+ * - `dismissedKeys` / `dismiss` — pairs the user said are not a bounce ("No es un rechazo"). Since
+ *   ETP-6359 the backend persists that and never proposes the pair again; these keys only hide the
+ *   pair from the panel and the modal at once, until the reload that follows the dismissal lands.
+ *   `clearDismissed` forgets them: the host calls it when the automatch is recomputed (the header
+ *   refresh), and the panel after "Volver a considerar como posible rechazo" (the pair may come
+ *   back). The Automatch button does NOT clear them.
  *
  * - `sentToPanelKeys` — pairs sent to the panel with "Revisar en el panel" during this modal
  *   session, reported as `sent_to_panel` in the apply's `bounceDecisions` (KPI events). The session
@@ -368,10 +370,10 @@ export function useAutoMatchReview(groups, { active = true, bounceAiAssessments 
   // stale there, so it does not preselect a recommendation the modal already found stale.
   const panel = useMemo(() => ({
     focus, onFocusConsumed: consumeFocus, dismissedKeys, onDismiss: dismiss,
-    picks, onPick: pickOutflow,
+    onClearDismissed: clearDismissed, picks, onPick: pickOutflow,
     // Only when the automatch brought an AI layer: without it the bundle is what it always was.
     ...(assessments ? { aiAssessments: assessments } : {}),
-  }), [focus, consumeFocus, dismissedKeys, dismiss, picks, pickOutflow, assessments]);
+  }), [focus, consumeFocus, dismissedKeys, dismiss, clearDismissed, picks, pickOutflow, assessments]);
 
   return {
     selection,

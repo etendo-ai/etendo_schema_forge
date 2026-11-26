@@ -32,13 +32,15 @@ import {
   STATUS_CODES, countForStatus, matchesStatus,
 } from './reconciliationStatusFilter.js';
 import {
-  BOUNCE_STATE, canPairOutflow, isBounceReviewLine, pendingLinesStatusParam,
+  BOUNCE_STATE, DISCARDED_STATE, canPairOutflow, isBounceReviewLine, pendingLinesStatusParam,
 } from './bouncePairs.js';
 import { pairBadgeAndReason } from './AutoMatchBounceSection.jsx';
 import {
-  AiPercentText, BounceFooter, BounceNotice, chooseLabel,
+  AiPercentText, BounceFooter, BounceNotice, LineRefText, chooseLabel, lineChoiceLabel,
 } from './BouncePairPanel.jsx';
-import { useBounceLines, useBouncePairPanel, useBouncePairRows } from './useBouncePairReview.jsx';
+import {
+  useBounceLines, useBouncePairPanel, useDismissedSuggestionNotice, usePairTableViews,
+} from './useBouncePairReview.jsx';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DistinctValuesFilter } from '@/components/ui/distinct-values-filter';
 import { DateRangePopover } from '@/components/ui/date-range-popover';
@@ -275,17 +277,15 @@ function ToolbarShell({ children, search, onSearchChange, testIdPrefix }) {
 }
 
 function ReconciliationStatusFilter({
-  value, onChange, counts = {}, codes = STATUS_CODES, bouncePairCount = null,
+  value, onChange, counts = {}, codes = STATUS_CODES, pairCounts = null,
 }) {
   const ui = useUI();
   // Summed over the states each code covers, not read straight off `counts` — the "Pendiente" entry
   // is a superset, so its own bucket would under-report the rows it shows (ETP-5033).
-  // ETP-6359 — "Posibles rechazos" counts PAIRS (the list shows one row per pair), while the
-  // backend's `counts.bounce` counts lines; only this entry is replaced, "Pendiente" keeps summing
-  // the unmodified line counts.
-  const countFor = (code) => (code === 'bounce' && bouncePairCount != null
-    ? bouncePairCount
-    : countForStatus(counts, code));
+  // ETP-6359 — "Posibles rechazos" and "Descartadas" count PAIRS (their lists show one row per
+  // pair), while the backend's `counts.bounce` / `counts.discarded` count lines; only those entries
+  // are replaced (when their figure is known), "Pendiente" keeps summing the unmodified line counts.
+  const countFor = (code) => pairCounts?.[code] ?? countForStatus(counts, code);
   return (
     <DistinctValuesFilter
       value={value}
@@ -383,7 +383,9 @@ function renderRows({ loading, items, colSpan, emptyTitle, emptyHint, renderRow 
  * report on ETP-4921. With a fixed layout the declared widths win, the free column absorbs
  * whatever is left, and `truncate` finally has a bound to ellipsise against.
  */
-function PanelTable({ headCells, loading, items, renderRow, colSpan = 5 }) {
+function PanelTable({
+  headCells, loading, items, renderRow, colSpan = 5, emptyTitle = null, emptyHint = null,
+}) {
   const ui = useUI();
   // A refresh over rows that are already on screen dims instead of collapsing into skeletons —
   // see renderRows' matching `items.length === 0` gate.
@@ -408,12 +410,13 @@ function PanelTable({ headCells, loading, items, renderRow, colSpan = 5 }) {
             // Its own key rather than the Movimientos tab's `financeAccountMovementsEmpty`
             // ("Aún no hay movimientos", paired there with a "+ Nuevo movimiento" hint):
             // in the reconciliation panels the list is always the result of a filter, so
-            // "not found" is the accurate wording and the hint does not apply.
-            emptyTitle: ui('financeReconcileEmpty'),
+            // "not found" is the accurate wording and the hint does not apply. A caller whose list
+            // is not a filter result (the rejection of a discarded pair) passes its own.
+            emptyTitle: emptyTitle ?? ui('financeReconcileEmpty'),
             // The list here is ALWAYS a filter result (status + date range + search), so the
             // hint names the way out instead of the "+ Nuevo movimiento" nudge the Movimientos
             // tab pairs with its own empty copy.
-            emptyHint: ui('financeReconcileEmptyHint'),
+            emptyHint: emptyHint ?? ui('financeReconcileEmptyHint'),
             renderRow,
           })}
         </TableBody>
@@ -599,10 +602,209 @@ function ProgressCell({ line, currency, cellClassName, gridWidth }) {
   );
 }
 
+/** i18n keys of a pair-view radio that selects a pair: without, and with, the bank reference. */
+const REJECTION_RADIO_KEYS = ['financeReconcileBounceSelectRejection', 'financeReconcileBounceSelectRejectionRef'];
+const DISCARDED_RADIO_KEYS = ['financeReconcileDiscardedSelectPair', 'financeReconcileDiscardedSelectPairRef'];
+
+/** The right side's placeholder of each pair view while nothing is selected. */
+const BOUNCE_EMPTY_RIGHT = {
+  titleKey: 'financeReconcileBounceRightEmptyTitle', hintKey: 'financeReconcileBounceRightEmptyHint',
+};
+const DISCARDED_EMPTY_RIGHT = {
+  titleKey: 'financeReconcileBounceRightEmptyTitle', hintKey: 'financeReconcileDiscardedRightEmptyHint',
+};
+
+/** The header of a pair-view table: radio, date, `middle` (the list's title or "Información"), amount. */
+function pairHeadCells(ui, middle) {
+  return (
+    <>
+      <TableHead className="w-8 px-0 pl-2" data-testid="TableHead__d0f4d5" />
+      <TableHead className="w-[108px] px-3" data-testid="TableHead__d0f4d5">{ui('financeReconcileColDate')}</TableHead>
+      <TableHead className="px-3" data-testid="TableHead__d0f4d5">{middle}</TableHead>
+      <TableHead className="w-[139px] px-3 text-right" data-testid="TableHead__d0f4d5">{ui('financeReconcileColAmount')}</TableHead>
+    </>
+  );
+}
+
+/**
+ * One row of the two-table pair views (ETP-6359), built from the blocks of the normal view: the
+ * radio cell (empty when `radio` is null), the date, the description over a line of `children`
+ * (badges, reference, marks) and the amount. `selected` raises the row (`raise`, its z-index) with
+ * the muted background; `onSelect` makes it clickable and is also the radio's change handler.
+ * `radio` carries the radio's own attributes (name, accessible name, test id).
+ */
+function PairLineRow({
+  line, testId, descTestId, selected = false, raise = 'z-20', onSelect = null, radio = null,
+  currency, bcpLocale, children,
+}) {
+  const cellBg = cn('transition-colors', selected ? 'bg-[hsl(var(--muted))]' : 'bg-card');
+  return (
+    <TableRow
+      data-testid={testId}
+      onClick={onSelect ?? undefined}
+      className={cn(
+        'group relative h-[62px] border-b border-[hsl(var(--border-subtle))] bg-card transition-shadow',
+        onSelect && 'cursor-pointer',
+        selected ? `${raise} ${ELEVATED_SHADOW}` : onSelect && 'hover:z-10 hover:bg-card hover:shadow-lg',
+      )}>
+      <TableCell
+        className={cn('h-[62px] w-8 px-0 pl-2', cellBg)}
+        onClick={(e) => e.stopPropagation()}
+        data-testid="TableCell__d0f4d5">
+        {radio ? (
+          <input
+            type="radio"
+            {...radio}
+            checked={selected}
+            onChange={onSelect ?? undefined}
+            className="h-4 w-4 accent-primary" />
+        ) : null}
+      </TableCell>
+      <DateCell
+        date={line.date}
+        bcpLocale={bcpLocale}
+        cellClassName={cn('w-[108px]', cellBg)}
+        data-testid="DateCell__d0f4d5" />
+      <TableCell
+        className={cn('h-[62px] px-3 py-2 text-sm text-[hsl(var(--foreground))]', cellBg)}
+        data-testid="TableCell__d0f4d5">
+        <div className="flex w-full min-w-0 flex-col items-start gap-0.5">
+          <TruncatedText
+            text={line.description || line.partnerName || line.referenceNo || '—'}
+            className={cn('leading-5', selected ? 'font-semibold' : 'font-normal')}
+            data-testid={descTestId} />
+          <div className="flex w-full min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1">
+            {children}
+          </div>
+        </div>
+      </TableCell>
+      <MoneyCell
+        value={line.amount}
+        currency={currency}
+        bold
+        cellClassName={cn('w-[139px]', cellBg)}
+        data-testid="MoneyCell__d0f4d5" />
+    </TableRow>
+  );
+}
+
+/**
+ * A pair-view row whose radio SELECTS THE PAIR: the rejection in "Posibles rechazos", the outflow
+ * in "Descartadas". The left list's radio group and `recon-line-*` test ids, the radio named by
+ * `labelKeys` (date, amount and reference, so identical-looking lines are told apart), and the
+ * line's bank reference after the `children` badges.
+ */
+function PairSelectRow({
+  line, selected, onSelect, labelKeys, currency, bcpLocale, children,
+}) {
+  const ui = useUI();
+  return (
+    <PairLineRow
+      line={line}
+      testId={`recon-line-row-${line.id}`}
+      descTestId={`recon-line-desc-${line.id}`}
+      selected={selected}
+      onSelect={() => onSelect(line)}
+      radio={{
+        name: 'recon-statement-line',
+        'aria-label': lineChoiceLabel(ui, labelKeys, line, currency, bcpLocale),
+        'data-testid': `recon-line-radio-${line.id}`,
+      }}
+      currency={currency}
+      bcpLocale={bcpLocale}
+      data-testid="PairLineRow__d0f4d5">
+      {children}
+      <LineRefText line={line} testId={`recon-line-ref-${line.id}`} data-testid="LineRefText__d0f4d5" />
+    </PairLineRow>
+  );
+}
+
+/** The footer of the selected pair (net effect and actions), from the pair panel's `parts`. */
+function PairPartsFooter({ parts, currency, bcpLocale }) {
+  return (
+    <BounceFooter
+      model={parts.model}
+      line={parts.line}
+      currency={currency}
+      bcpLocale={bcpLocale}
+      onDismiss={parts.onDismiss}
+      onDiscard={parts.onDiscard}
+      onRestore={parts.onRestore}
+      busy={parts.busy}
+      windowReadOnly={parts.windowReadOnly}
+      data-testid="BounceFooter__d0f4d5" />
+  );
+}
+
+/**
+ * The frame of the two-table pair views (ETP-6359), shared by "Posibles rechazos"
+ * ({@link PairTablesView}) and "Descartadas" ({@link DiscardedPairsView}): the pair's `notice` on
+ * top, then ONE grid of three rows (toolbar / table / footer) over two columns, so the toolbars and
+ * the two footer bars line up and the left cells' right border is one continuous divider down to
+ * the bottom. The left column holds the toolbar, its table (`left`: items, row renderer, title)
+ * and an empty footer bar (no total in a pair view). The right one holds `right` (title pill,
+ * table, footer) or, while it is null, the centred placeholder `emptyRight`. No sort headers, and
+ * outside the personal column grid: the persisted layout of the flat list is untouched.
+ */
+function PairTablesLayout({
+  testId, notice = null, toolbar, loading, left, right = null, emptyRight,
+}) {
+  const ui = useUI();
+  return (
+    <div className="flex min-w-[30%] flex-1 flex-col overflow-hidden" data-testid={testId}>
+      {notice ? <div className="pt-2">{notice}</div> : null}
+      <div className="grid min-h-0 flex-1 grid-cols-2 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
+        <div className="col-start-1 row-start-1 min-w-0 border-r border-[hsl(var(--border-subtle))]">{toolbar}</div>
+        <div className="col-start-1 row-start-2 flex min-h-0 min-w-0 flex-col overflow-hidden border-r border-[hsl(var(--border-subtle))]" data-testid="recon-outflows-table">
+          <PanelTable
+            loading={loading}
+            items={left.items}
+            renderRow={left.renderRow}
+            colSpan={4}
+            headCells={pairHeadCells(ui, left.title)}
+            data-testid="PanelTable__d0f4d5" />
+        </div>
+        <div className="col-start-1 row-start-3 min-w-0 border-r border-t border-[hsl(var(--border-subtle))]" data-testid="recon-outflows-footer" />
+        {right ? (
+          <>
+            <div className="col-start-2 row-start-1 flex min-w-0 flex-wrap items-center gap-2 p-2">
+              <span
+                className="inline-flex h-10 items-center rounded-lg border border-border bg-card px-3 text-sm font-medium leading-6 text-[hsl(var(--foreground))]"
+                data-testid="recon-rejections-title">
+                {right.title}
+              </span>
+            </div>
+            <div className="col-start-2 row-start-2 flex min-h-0 min-w-0 flex-col overflow-hidden" data-testid="recon-rejections-table">
+              <PanelTable
+                loading={loading}
+                items={right.items}
+                renderRow={right.renderRow}
+                colSpan={4}
+                emptyTitle={right.emptyTitle}
+                emptyHint={right.emptyHint}
+                headCells={pairHeadCells(ui, ui('financeReconcileColInfo'))}
+                data-testid="PanelTable__d0f4d5" />
+            </div>
+            <div className="col-start-2 row-start-3 min-w-0">
+              {right.footer ?? <div className="h-full border-t border-[hsl(var(--border-subtle))]" />}
+            </div>
+          </>
+        ) : (
+          <RightEmptyState
+            titleKey={emptyRight.titleKey}
+            hintKey={emptyRight.hintKey}
+            className="col-start-2 row-span-3 row-start-1"
+            data-testid="RightEmptyState__d0f4d5" />
+        )}
+      </div>
+    </div>
+  );
+}
+
 /**
  * The "Posibles rechazos" view (ETP-6359): the whole split panel becomes TWO native tables side by
- * side, built from the same blocks as the normal reconciliation view (PanelTable, DateCell,
- * MoneyCell, TruncatedText, StatusBadge, the toolbar) and separated by ONE continuous divider.
+ * side ({@link PairTablesLayout}), built from the same blocks as the normal reconciliation view
+ * (PanelTable, DateCell, MoneyCell, TruncatedText, StatusBadge, the toolbar).
  * - LEFT, "Salidas": one row per distinct outflow (an original, or a candidate of an ambiguous
  *   pair), listed once even when two rejections share it. It carries the usual toolbar (status
  *   filter with the figure of PAIRS, date range, search).
@@ -670,245 +872,168 @@ function PairTablesView({
 
   const renderOutflow = ({ line }) => {
     const candidate = listed.has(line.id);
-    const chosen = !!bounce && model.chosenId === line.id;
     // Only the CHOSEN outflow is visually selected; the other candidates keep their AI figures.
-    const highlighted = chosen;
+    const chosen = !!bounce && model.chosenId === line.id;
     const pct = candidate ? model?.percents?.[line.id] ?? null : null;
     // The hint only when no rejection at all can take this outflow (else a click re-targets).
     const unpairable = !entries.some((e) => canPairOutflow(line, e.anchor));
     const noMatchId = unpairable ? `recon-outflow-nomatch-${line.id}` : undefined;
     const describedBy = [pct == null ? null : `recon-bounce-ai-pct-${line.id}`, noMatchId]
       .filter(Boolean).join(' ') || undefined;
-    const cellBg = cn('transition-colors', highlighted ? 'bg-[hsl(var(--muted))]' : 'bg-card');
-    const ref = String(line.referenceNo ?? '').trim();
     return (
-      <TableRow
+      <PairLineRow
         key={line.id}
-        data-testid={`recon-outflow-row-${line.id}`}
-        onClick={() => pickOutflow(line)}
-        className={cn(
-          'group relative h-[62px] cursor-pointer border-b border-[hsl(var(--border-subtle))] bg-card transition-shadow',
-          highlighted ? `z-10 ${ELEVATED_SHADOW}` : 'hover:z-10 hover:bg-card hover:shadow-lg',
-        )}>
-        <TableCell
-          className={cn('h-[62px] w-8 px-0 pl-2', cellBg)}
-          onClick={(e) => e.stopPropagation()}
-          data-testid="TableCell__d0f4d5">
-          <input
-            type="radio"
-            name="recon-bounce-original"
-            aria-label={chooseLabel(ui, line, currency, bcpLocale)}
-            aria-describedby={describedBy}
-            aria-disabled={unpairable ? 'true' : undefined}
-            checked={chosen}
-            onChange={() => pickOutflow(line)}
-            data-testid={candidate ? `recon-bounce-radio-${line.id}` : `recon-outflow-radio-${line.id}`}
-            className="h-4 w-4 accent-primary" />
-        </TableCell>
-        <DateCell
-          date={line.date}
-          bcpLocale={bcpLocale}
-          cellClassName={cn('w-[108px]', cellBg)}
-          data-testid="DateCell__d0f4d5" />
-        <TableCell
-          className={cn('h-[62px] px-3 py-2 text-sm text-[hsl(var(--foreground))]', cellBg)}
-          data-testid="TableCell__d0f4d5">
-          <div className="flex w-full min-w-0 flex-col items-start gap-0.5">
-            <TruncatedText
-              text={line.description || line.partnerName || line.referenceNo || '—'}
-              className={cn('leading-5', chosen ? 'font-semibold' : 'font-normal')}
-              data-testid={`recon-bounce-desc-${line.id}`} />
-            <div className="flex w-full min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1">
-              <StatusBadge kind="bounceOriginal" data-testid={`recon-bounce-badge-${line.id}`} />
-              {ref ? (
-                <TruncatedText
-                  text={ui('financeReconcileBounceRef', { ref })}
-                  className="w-auto min-w-0 text-xs font-normal leading-4 text-[hsl(var(--muted-foreground))]"
-                  data-testid={`recon-bounce-ref-${line.id}`} />
-              ) : null}
-              <AiPercentText rowId={line.id} pct={pct} data-testid="AiPercentText__d0f4d5" />
-              {unpairable ? (
-                <span
-                  id={noMatchId}
-                  className="text-xs font-normal leading-4 text-[hsl(var(--muted-foreground))]"
-                  data-testid={`recon-outflow-nomatch-${line.id}`}>
-                  {ui('financeReconcileBounceOutflowNoMatch')}
-                </span>
-              ) : null}
-            </div>
-          </div>
-        </TableCell>
-        <MoneyCell
-          value={line.amount}
-          currency={currency}
-          bold
-          cellClassName={cn('w-[139px]', cellBg)}
-          data-testid="MoneyCell__d0f4d5" />
-      </TableRow>
+        line={line}
+        testId={`recon-outflow-row-${line.id}`}
+        descTestId={`recon-bounce-desc-${line.id}`}
+        selected={chosen}
+        raise="z-10"
+        onSelect={() => pickOutflow(line)}
+        radio={{
+          name: 'recon-bounce-original',
+          'aria-label': chooseLabel(ui, line, currency, bcpLocale),
+          'aria-describedby': describedBy,
+          'aria-disabled': unpairable ? 'true' : undefined,
+          'data-testid': candidate ? `recon-bounce-radio-${line.id}` : `recon-outflow-radio-${line.id}`,
+        }}
+        currency={currency}
+        bcpLocale={bcpLocale}
+        data-testid="PairLineRow__d0f4d5">
+        <StatusBadge kind="bounceOriginal" data-testid={`recon-bounce-badge-${line.id}`} />
+        <LineRefText line={line} testId={`recon-bounce-ref-${line.id}`} data-testid="LineRefText__d0f4d5" />
+        <AiPercentText rowId={line.id} pct={pct} data-testid="AiPercentText__d0f4d5" />
+        {unpairable ? (
+          <span
+            id={noMatchId}
+            className="text-xs font-normal leading-4 text-[hsl(var(--muted-foreground))]"
+            data-testid={`recon-outflow-nomatch-${line.id}`}>
+            {ui('financeReconcileBounceOutflowNoMatch')}
+          </span>
+        ) : null}
+      </PairLineRow>
     );
   };
 
   const renderRejection = (entry) => {
-    const { anchor, group } = entry;
-    const selected = selectedEntry?.key === entry.key;
-    const cellBg = cn('transition-colors', selected ? 'bg-[hsl(var(--muted))]' : 'bg-card');
+    const { group } = entry;
     const original = group.ambiguous ? null : group.statementLine;
     const { badge, reason } = pairBadgeAndReason(ui, group, original, null, 'financeReconcileBounceTagLowConfidence');
-    const ref = String(anchor.referenceNo ?? '').trim();
-    // Each rejection radio is named by its date, signed amount and bank reference (like the
+    // The radio is named by the rejection's date, signed amount and bank reference (like the
     // outflow radios), so identical-looking rejections are told apart.
-    const labelParams = { date: formatDate(anchor.date, bcpLocale), amount: formatSigned(anchor.amount, currency) };
-    const rejectionLabel = ref
-      ? ui('financeReconcileBounceSelectRejectionRef', { ...labelParams, ref })
-      : ui('financeReconcileBounceSelectRejection', labelParams);
     return (
-      <TableRow
+      <PairSelectRow
         key={entry.key}
-        data-testid={`recon-line-row-${anchor.id}`}
-        onClick={() => onSelectLine(anchor)}
-        className={cn(
-          'group relative h-[62px] cursor-pointer border-b border-[hsl(var(--border-subtle))] bg-card transition-shadow',
-          selected ? `z-20 ${ELEVATED_SHADOW}` : 'hover:z-10 hover:bg-card hover:shadow-lg',
-        )}>
-        <TableCell
-          className={cn('h-[62px] w-8 px-0 pl-2', cellBg)}
-          onClick={(e) => e.stopPropagation()}
-          data-testid="TableCell__d0f4d5">
-          <input
-            type="radio"
-            name="recon-statement-line"
-            aria-label={rejectionLabel}
-            checked={selected}
-            onChange={() => onSelectLine(anchor)}
-            data-testid={`recon-line-radio-${anchor.id}`}
-            className="h-4 w-4 accent-primary" />
-        </TableCell>
-        <DateCell
-          date={anchor.date}
-          bcpLocale={bcpLocale}
-          cellClassName={cn('w-[108px]', cellBg)}
-          data-testid="DateCell__d0f4d5" />
-        <TableCell
-          className={cn('h-[62px] px-3 py-2 text-sm text-[hsl(var(--foreground))]', cellBg)}
-          data-testid="TableCell__d0f4d5">
-          <div className="flex w-full min-w-0 flex-col items-start gap-0.5">
-            <TruncatedText
-              text={anchor.description || anchor.partnerName || anchor.referenceNo || '—'}
-              className={cn('leading-5', selected ? 'font-semibold' : 'font-normal')}
-              data-testid={`recon-line-desc-${anchor.id}`} />
-            <div className="flex w-full min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1">
-              {badge}
-              {reason}
-              {ref ? (
-                <TruncatedText
-                  text={ui('financeReconcileBounceRef', { ref })}
-                  className="w-auto min-w-0 text-xs font-normal leading-4 text-[hsl(var(--muted-foreground))]"
-                  data-testid={`recon-line-ref-${anchor.id}`} />
-              ) : null}
-            </div>
-          </div>
-        </TableCell>
-        <MoneyCell
-          value={anchor.amount}
-          currency={currency}
-          bold
-          cellClassName={cn('w-[139px]', cellBg)}
-          data-testid="MoneyCell__d0f4d5" />
-      </TableRow>
+        line={entry.anchor}
+        selected={selectedEntry?.key === entry.key}
+        onSelect={onSelectLine}
+        labelKeys={REJECTION_RADIO_KEYS}
+        currency={currency}
+        bcpLocale={bcpLocale}
+        data-testid="PairSelectRow__d0f4d5">
+        {badge}
+        {reason}
+      </PairSelectRow>
     );
   };
 
+  const showNotice = selectedEntry && parts && model && model.mode === BOUNCE_STATE;
+  // The pair's summary and actions live in the right column, as the normal view's "Documentos
+  // seleccionados / Conciliar" block does; the left one ends with an empty bar (no total: the
+  // figure of a mix of pair lines would mean nothing).
   return (
-    <div
-      className="flex min-w-[30%] flex-1 flex-col overflow-hidden"
-      data-testid={parts ? 'recon-bounce-panel' : 'recon-bounce-pairs-view'}>
-      {selectedEntry && parts && model && model.mode === BOUNCE_STATE ? (
-        <div className="pt-2">
-          <BounceNotice model={model} bcpLocale={bcpLocale} data-testid="BounceNotice__d0f4d5" />
-        </div>
-      ) : null}
-      {/* One grid, three rows (toolbar / table / footer) over two columns: every row is shared, so
-          the toolbars and the two footer bars line up exactly, and the left cells' right border is
-          ONE continuous divider from the toolbar to the very bottom. */}
-      <div className="grid min-h-0 flex-1 grid-cols-2 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
-        <div className="col-start-1 row-start-1 min-w-0 border-r border-[hsl(var(--border-subtle))]">{toolbar}</div>
-        {!selectedEntry ? (
-          <RightEmptyState
-            titleKey="financeReconcileBounceRightEmptyTitle"
-            hintKey="financeReconcileBounceRightEmptyHint"
-            className="col-start-2 row-span-3 row-start-1"
-            data-testid="RightEmptyState__d0f4d5" />
-        ) : null}
-        {selectedEntry ? (
-        <div className="col-start-2 row-start-1 flex min-w-0 flex-wrap items-center gap-2 p-2">
-          <span
-            className="inline-flex h-10 items-center rounded-lg border border-border bg-card px-3 text-sm font-medium leading-6 text-[hsl(var(--foreground))]"
-            data-testid="recon-rejections-title">
-            {ui('financeReconcileBounceViewRejections', { count: shownEntries.length })}
-          </span>
-        </div>
-        ) : null}
-        <div className="col-start-1 row-start-2 flex min-h-0 min-w-0 flex-col overflow-hidden border-r border-[hsl(var(--border-subtle))]" data-testid="recon-outflows-table">
-          <PanelTable
-            loading={loading}
-            items={outflows}
-            renderRow={renderOutflow}
-            colSpan={4}
-            headCells={(
-              <>
-                <TableHead className="w-8 px-0 pl-2" data-testid="TableHead__d0f4d5" />
-                <TableHead className="w-[108px] px-3" data-testid="TableHead__d0f4d5">{ui('financeReconcileColDate')}</TableHead>
-                <TableHead className="px-3" data-testid="TableHead__d0f4d5">
-                  {ui('financeReconcileBounceViewOutflows', { count: outflows.length })}
-                </TableHead>
-                <TableHead className="w-[139px] px-3 text-right" data-testid="TableHead__d0f4d5">{ui('financeReconcileColAmount')}</TableHead>
-              </>
-            )}
-            data-testid="PanelTable__d0f4d5" />
-        </div>
-        {selectedEntry ? (
-        <div className="col-start-2 row-start-2 flex min-h-0 min-w-0 flex-col overflow-hidden" data-testid="recon-rejections-table">
-          <PanelTable
-            loading={loading}
-            items={shownEntries}
-            renderRow={renderRejection}
-            colSpan={4}
-            headCells={(
-              <>
-                <TableHead className="w-8 px-0 pl-2" data-testid="TableHead__d0f4d5" />
-                <TableHead className="w-[108px] px-3" data-testid="TableHead__d0f4d5">{ui('financeReconcileColDate')}</TableHead>
-                <TableHead className="px-3" data-testid="TableHead__d0f4d5">{ui('financeReconcileColInfo')}</TableHead>
-                <TableHead className="w-[139px] px-3 text-right" data-testid="TableHead__d0f4d5">{ui('financeReconcileColAmount')}</TableHead>
-              </>
-            )}
-            data-testid="PanelTable__d0f4d5" />
-        </div>
-        ) : null}
-        {/* The left column ends with its own bar (no total in this filter: the figure of a mix of
-            pair lines would mean nothing); the pair's summary and actions live in the right one,
-            as the normal view's "Documentos seleccionados / Conciliar" block does. */}
-        <div className="col-start-1 row-start-3 min-w-0 border-r border-t border-[hsl(var(--border-subtle))]" data-testid="recon-outflows-footer" />
-        {selectedEntry ? (
-        <div className="col-start-2 row-start-3 min-w-0">
-          {parts && model ? (
-            <BounceFooter
-              model={model}
-              line={parts.line}
-              currency={currency}
-              bcpLocale={bcpLocale}
-              onDismiss={parts.onDismiss}
-              onDiscard={parts.onDiscard}
-              onRestore={parts.onRestore}
-              busy={parts.busy}
-              windowReadOnly={parts.windowReadOnly}
-              data-testid="BounceFooter__d0f4d5" />
-          ) : (
-            <div className="h-full border-t border-[hsl(var(--border-subtle))]" />
-          )}
-        </div>
-        ) : null}
-      </div>
-    </div>
+    <PairTablesLayout
+      testId={parts ? 'recon-bounce-panel' : 'recon-bounce-pairs-view'}
+      notice={showNotice ? <BounceNotice model={model} bcpLocale={bcpLocale} data-testid="BounceNotice__d0f4d5" /> : null}
+      toolbar={toolbar}
+      loading={loading}
+      left={{
+        items: outflows,
+        renderRow: renderOutflow,
+        title: ui('financeReconcileBounceViewOutflows', { count: outflows.length }),
+      }}
+      right={selectedEntry ? {
+        title: ui('financeReconcileBounceViewRejections', { count: shownEntries.length }),
+        items: shownEntries,
+        renderRow: renderRejection,
+        footer: parts && model
+          ? <PairPartsFooter parts={parts} currency={currency} bcpLocale={bcpLocale} data-testid="PairPartsFooter__d0f4d5" />
+          : null,
+      } : null}
+      emptyRight={BOUNCE_EMPTY_RIGHT}
+      data-testid="PairTablesLayout__d0f4d5" />
+  );
+}
+
+/**
+ * The "Descartadas" view (ETP-6359): the frame of "Posibles rechazos" ({@link PairTablesLayout}),
+ * mirrored, behind the same backend flag (with it off the filter keeps its flat list).
+ * - LEFT, "Salidas": one row per discarded pair showing its OUTFLOW with the "Descartada" tag
+ *   (`buildDiscardedPairRows`); its radio selects the pair. A line with no partner on screen is a
+ *   row of its own, so it never disappears and can still be restored.
+ * - RIGHT, "Rechazos": the rejection the selected pair was discarded with, under the pair's notice
+ *   ("Par descartado el …", or the one of a line discarded alone) and above its footer ("Línea
+ *   seleccionada", the net effect, "Restaurar par" / "Restaurar línea"). All of it comes from
+ *   `parts` (`useBouncePairPanel`) keyed on the outflow, so the restore is exactly the one of the
+ *   single-line panel: the selected line and, when linked both ways, its partner.
+ */
+function DiscardedPairsView({
+  toolbar, loading, entries, selectedLine, onSelectLine, parts, currency, bcpLocale,
+}) {
+  const ui = useUI();
+  const selectedId = selectedLine?.id ?? null;
+  const isSelected = entries.some((e) => e.anchor.id === selectedId);
+  const model = isSelected && parts?.model?.mode === DISCARDED_STATE ? parts.model : null;
+
+  const renderPair = (entry) => (
+    <PairSelectRow
+      key={entry.key}
+      line={entry.anchor}
+      selected={entry.anchor.id === selectedId}
+      onSelect={onSelectLine}
+      labelKeys={DISCARDED_RADIO_KEYS}
+      currency={currency}
+      bcpLocale={bcpLocale}
+      data-testid="PairSelectRow__d0f4d5">
+      <StatusBadge kind={DISCARDED_STATE} data-testid={`recon-line-badge-${entry.anchor.id}`} />
+    </PairSelectRow>
+  );
+
+  const renderRejection = (line) => (
+    <PairLineRow
+      key={line.id}
+      line={line}
+      testId={`recon-bounce-row-${line.id}`}
+      descTestId={`recon-bounce-desc-${line.id}`}
+      currency={currency}
+      bcpLocale={bcpLocale}
+      data-testid="PairLineRow__d0f4d5">
+      <StatusBadge kind={DISCARDED_STATE} data-testid={`recon-bounce-badge-${line.id}`} />
+      <LineRefText line={line} testId={`recon-bounce-ref-${line.id}`} data-testid="LineRefText__d0f4d5" />
+    </PairLineRow>
+  );
+
+  return (
+    <PairTablesLayout
+      testId={model ? 'recon-bounce-panel' : 'recon-discarded-pairs-view'}
+      notice={model ? <BounceNotice model={model} bcpLocale={bcpLocale} data-testid="BounceNotice__d0f4d5" /> : null}
+      toolbar={toolbar}
+      loading={loading}
+      left={{
+        items: entries,
+        renderRow: renderPair,
+        title: ui('financeReconcileBounceViewOutflows', { count: entries.length }),
+      }}
+      right={model ? {
+        title: ui('financeReconcileBounceViewRejections', { count: model.rows.length }),
+        items: model.rows,
+        renderRow: renderRejection,
+        // A line discarded alone, or whose partner is outside the date range, has no row here.
+        emptyTitle: ui('financeReconcileDiscardedNoRejection'),
+        emptyHint: ui('financeReconcileDiscardedNoRejectionHint'),
+        footer: <PairPartsFooter parts={parts} currency={currency} bcpLocale={bcpLocale} data-testid="PairPartsFooter__d0f4d5" />,
+      } : null}
+      emptyRight={DISCARDED_EMPTY_RIGHT}
+      data-testid="PairTablesLayout__d0f4d5" />
   );
 }
 
@@ -918,9 +1043,12 @@ function StatementLinesPanel({
   sortKey = null, sortDirection = 'asc', onSort,
   // ETP-5581 — the filter codes to offer (the bounce / discarded entries only when reported).
   statusCodes = STATUS_CODES,
-  // ETP-6359 — the "Posibles rechazos" filter lists ONE ROW PER PAIR (`bouncePairRows`, from
-  // `buildBouncePairRows`) instead of one row per line; `bouncePairCount` is its figure in the filter.
-  bouncePairRows = null, bounceOutflows = [], bouncePairCount = null, bouncePairParts = null,
+  // ETP-6359 — the "Posibles rechazos" and "Descartadas" filters list ONE ROW PER PAIR
+  // (`bouncePairRows` / `discardedPairRows`, from `buildBouncePairRows` / `buildDiscardedPairRows`)
+  // instead of one row per line; `pairCounts` holds their figures in the filter, and
+  // `bouncePairParts` the selected pair's panel pieces (`useBouncePairPanel`).
+  bouncePairRows = null, bounceOutflows = [], discardedPairRows = null, pairCounts = null,
+  bouncePairParts = null,
 }) {
   const ui = useUI();
 
@@ -1010,7 +1138,7 @@ function StatementLinesPanel({
       >
         <ArrowLeftIcon className="h-5 w-5" data-testid="ArrowLeft__d0f4d5" />
       </button>
-      <ReconciliationStatusFilter value={status} onChange={onStatusChange} counts={statusCounts} codes={statusCodes} bouncePairCount={bouncePairCount} data-testid="ReconciliationStatusFilter__d0f4d5" />
+      <ReconciliationStatusFilter value={status} onChange={onStatusChange} counts={statusCounts} codes={statusCodes} pairCounts={pairCounts} data-testid="ReconciliationStatusFilter__d0f4d5" />
       <DateRangePopover value={dateRange} onChange={onDateRangeChange} placeholder={ui('dateRangeAnyTime')} data-testid="DateRangePopover__d0f4d5" />
     </ToolbarShell>
   );
@@ -1028,6 +1156,20 @@ function StatementLinesPanel({
         currency={currency}
         bcpLocale={bcpLocale}
         data-testid="PairTablesView__d0f4d5" />
+    );
+  }
+  if (discardedPairRows) {
+    return (
+      <DiscardedPairsView
+        toolbar={toolbar}
+        loading={loading}
+        entries={discardedPairRows}
+        selectedLine={selectedLine}
+        onSelectLine={onSelectLine}
+        parts={bouncePairParts}
+        currency={currency}
+        bcpLocale={bcpLocale}
+        data-testid="DiscardedPairsView__d0f4d5" />
     );
   }
 
@@ -2124,6 +2266,11 @@ export function ReconciliationSplitPanel({
     status: leftStatus, setStatus: setLeftStatus, setSearch: setLeftSearch, dateRange: leftDateRange,
     setDateRange: setLeftDateRange, selectLine,
   });
+  // ETP-6359 — a line marked "No es un rechazo": when, and the undo, above its candidates.
+  const dismissedNotice = useDismissedSuggestionNotice({
+    accountId, line: selectedLine, statusCounts, bcpLocale, windowReadOnly, reloadLines,
+    onChanged: onReconcileSuccess, clearDismissed: bounceLines.clearDismissed,
+  });
 
   const visibleLines = useMemo(() => {
     const q = leftSearch.trim().toLowerCase();
@@ -2137,10 +2284,11 @@ export function ReconciliationSplitPanel({
     });
   }, [lines, leftSearch, leftStatus]);
 
-  // ETP-6359 — "Posibles rechazos": one row per pair, and the pair count shown in the filter.
+  // ETP-6359 — "Posibles rechazos" and "Descartadas": one row per pair, and the pair counts shown in
+  // the filter. `tableView` is whether one of them is active (it then lays out both sides itself).
   const {
-    pairMode, bouncePairRows, bounceOutflows, bouncePairCount,
-  } = useBouncePairRows({
+    tableView, bouncePairRows, bounceOutflows, discardedPairRows, pairCounts,
+  } = usePairTableViews({
     lines, search: leftSearch, status: leftStatus, loading: linesLoading, statusCounts, selectedLine,
     selectLine,
   });
@@ -2579,7 +2727,8 @@ export function ReconciliationSplitPanel({
           onSelectLine={selectLine}
           bouncePairRows={bouncePairRows}
           bounceOutflows={bounceOutflows}
-          bouncePairCount={bouncePairCount}
+          discardedPairRows={discardedPairRows}
+          pairCounts={pairCounts}
           bouncePairParts={bouncePairParts}
           status={leftStatus}
           onStatusChange={setLeftStatus}
@@ -2591,7 +2740,7 @@ export function ReconciliationSplitPanel({
           onSearchChange={setLeftSearch}
           onBack={onBack}
           data-testid="StatementLinesPanel__d0f4d5" />
-        {pairMode ? null : (bouncePanel ?? (
+        {tableView ? null : (bouncePanel ?? (
         <CandidateOperationsPanel
           line={selectedLine}
           candidates={visibleCandidates}
@@ -2608,13 +2757,16 @@ export function ReconciliationSplitPanel({
           readOnly={isReconciledLine}
           windowReadOnly={windowReadOnly}
           differenceBanner={
-            <DifferenceBanner
-              info={differenceInfo}
-              currency={currency}
-              onDismiss={() => setDiffDismissed(true)}
-              onPost={() => setDiffModalOpen(true)}
-              windowReadOnly={windowReadOnly}
-              data-testid="DifferenceBanner__d0f4d5" />
+            <>
+              {dismissedNotice}
+              <DifferenceBanner
+                info={differenceInfo}
+                currency={currency}
+                onDismiss={() => setDiffDismissed(true)}
+                onPost={() => setDiffModalOpen(true)}
+                windowReadOnly={windowReadOnly}
+                data-testid="DifferenceBanner__d0f4d5" />
+            </>
           }
           source={rightSource}
           onSourceChange={changeSource}

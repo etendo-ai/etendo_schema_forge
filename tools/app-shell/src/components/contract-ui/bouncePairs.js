@@ -669,20 +669,34 @@ function bounceRoleModel(line, pair, { chosenOriginalId, chosenOriginalLine, aiA
   };
 }
 
-/** {@link bouncePanelModel} for a discarded line. */
+/** Whether `partner`'s discard link points back at `line` (what makes the two a restorable pair). */
+function pointsBack(partner, line) {
+  return partner?.bounceLink?.counterpartLineId === line?.id;
+}
+
+/**
+ * {@link bouncePanelModel} for a discarded line. Its partner is the line its `bounceLink` names,
+ * looked up in `discardedLines`, but only when that line points back (ETP-6359, the same rule as
+ * {@link buildDiscardedPairRows}). A partner on screen that does not is a one-sided (legacy) link:
+ * the backend's "Restaurar" restores this line alone, so it reads as a lone line (`paired: false`,
+ * no row, no net, "Restaurar línea"). A partner that is not on screen (outside the date range)
+ * keeps `paired`: the backend restores both when the link is mutual.
+ */
 function discardedModel(line, discardedLines) {
   const link = line.bounceLink ?? null;
   const counterpartId = link?.counterpartLineId ?? null;
-  const counterpart = counterpartId
+  const found = counterpartId
     ? (discardedLines.find((l) => l.id === counterpartId) ?? null)
     : null;
+  const oneSided = found != null && !pointsBack(found, line);
+  const counterpart = oneSided ? null : found;
   return {
     mode: DISCARDED_STATE,
     link,
     rows: counterpart ? [counterpart] : [],
     rowBadge: DISCARDED_STATE,
     other: counterpart,
-    paired: !!counterpartId,
+    paired: !!counterpartId && !oneSided,
     net: pairNet(line, counterpart),
   };
 }
@@ -773,6 +787,27 @@ function lineMatchesQuery(line, q) {
     .some((v) => (v || '').toLowerCase().includes(q));
 }
 
+/** A free-text query as the pair lists match it: trimmed and lower-cased ('' for none). */
+function normalizedQuery(query) {
+  return String(query ?? '').trim().toLowerCase();
+}
+
+/**
+ * `items` ordered by the business date `dateOf` reads, then as they came (a stable sort): the order
+ * of the pair views' left tables.
+ *
+ * @template T
+ * @param {Array<T>} items
+ * @param {(item: T) => string|null|undefined} dateOf
+ * @returns {Array<T>}
+ */
+function sortByDate(items, dateOf) {
+  return items
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => String(dateOf(a.item) ?? '').localeCompare(String(dateOf(b.item) ?? '')) || a.index - b.index)
+    .map(({ item }) => item);
+}
+
 /**
  * One entry per detected pair for the panel's "Posibles rechazos" list: the `bounce`-state rows
  * grouped by `bouncePair.groupKey`, anchored on the pair's bounce row (or, when the date range cut
@@ -802,7 +837,7 @@ export function buildBouncePairRows(lines, { query = '' } = {}) {
       entry.index = index;
     }
   });
-  const q = String(query ?? '').trim().toLowerCase();
+  const q = normalizedQuery(query);
   return [...entries.values()]
     .filter((e) => {
       if (!q) return true;
@@ -851,10 +886,7 @@ export function buildBounceOutflows(lines, { query = '' } = {}) {
       }
     }
   }
-  return [...byId.values()]
-    .map((e, index) => ({ e, index }))
-    .sort((a, b) => String(a.e.line.date ?? '').localeCompare(String(b.e.line.date ?? '')) || a.index - b.index)
-    .map(({ e }) => e);
+  return sortByDate([...byId.values()], (e) => e.line.date);
 }
 
 /**
@@ -867,6 +899,73 @@ export function buildBounceOutflows(lines, { query = '' } = {}) {
 export function countBouncePairs(lines) {
   return buildBouncePairRows(lines).length;
 }
+
+/**
+ * Whether `line` is the OUTFLOW (the original) of the discarded pair it forms with `other`
+ * (ETP-6359). A discard stores no role, both lines just point at each other, so the roles are read
+ * the way the server decides them when it discards (`BankBouncePairService`): the EARLIER line is
+ * the original; on the same day (or with a date missing) the outgoing line, i.e. the lower amount,
+ * the detector's own fallback (`BankBounceDetector.originalFirstOnSameDay`). A full tie keeps
+ * `line`.
+ *
+ * @param {object} line a discarded line
+ * @param {object} other the line it was discarded with
+ * @returns {boolean}
+ */
+export function isDiscardedOutflow(line, other) {
+  const days = daysBetween(line?.date, other?.date);
+  if (days != null && days !== 0) return days > 0;
+  return (Number(line?.amount) || 0) <= (Number(other?.amount) || 0);
+}
+
+/**
+ * The line `line` was discarded with, when it is among `byId` and still free AND points back at
+ * `line` (what "Restaurar par" needs to restore both, see {@link discardedModel}); else null.
+ */
+function mutualDiscardPartner(line, byId, taken) {
+  const partner = byId.get(line.bounceLink?.counterpartLineId);
+  if (!partner || partner === line || taken.has(partner.id)) return null;
+  return pointsBack(partner, line) ? partner : null;
+}
+
+/**
+ * One entry per discarded pair for the panel's "Descartadas" view (ETP-6359), the twin of
+ * {@link buildBouncePairRows}: the `discarded` rows grouped with the line each was discarded with
+ * when both point at each other (`bounceLink.counterpartLineId`), anchored on the pair's OUTFLOW
+ * ({@link isDiscardedOutflow}) with the rejection as `counterpart`.
+ *
+ * A line with no partner on screen is an entry of its own (`counterpart: null`), never dropped, so
+ * it can still be selected and restored: one discarded on its own in Classic (`bounceLink: null`),
+ * one whose partner is outside the date range, or a one-sided link (legacy data).
+ *
+ * `query` keeps an entry when the description, partner or reference of EITHER line matches. The
+ * entries are ordered by the anchor's date, then as their first line came in `lines`.
+ *
+ * @param {Array<object>} lines the left panel's lines (the `status=discarded` answer)
+ * @param {{ query?: string }} [options]
+ * @returns {Array<{ key: string, anchor: object, counterpart: object|null }>}
+ */
+export function buildDiscardedPairRows(lines, { query = '' } = {}) {
+  const discarded = (lines ?? []).filter((l) => l?.state === DISCARDED_STATE);
+  const byId = new Map(discarded.map((l) => [l.id, l]));
+  const taken = new Set();
+  const entries = [];
+  for (const line of discarded) {
+    if (taken.has(line.id)) continue;
+    taken.add(line.id);
+    const partner = mutualDiscardPartner(line, byId, taken);
+    if (partner) taken.add(partner.id);
+    const lineFirst = !partner || isDiscardedOutflow(line, partner);
+    const anchor = lineFirst ? line : partner;
+    entries.push({ key: anchor.id, anchor, counterpart: lineFirst ? partner : line });
+  }
+  const q = normalizedQuery(query);
+  const shown = q
+    ? entries.filter((e) => lineMatchesQuery(e.anchor, q) || lineMatchesQuery(e.counterpart, q))
+    : entries;
+  return sortByDate(shown, (e) => e.anchor.date);
+}
+
 
 /** Days two lines of a pair may be apart (the backend's `BankBounceDetector.WINDOW_DAYS`). */
 export const BOUNCE_WINDOW_DAYS = 60;

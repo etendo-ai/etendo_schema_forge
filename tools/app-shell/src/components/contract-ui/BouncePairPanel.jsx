@@ -12,7 +12,7 @@ import { formatDate, formatSigned } from '@/lib/formatSigned';
 import { formatGroupedNumber } from '@/lib/formatCurrency.js';
 import { cn } from '@/lib/utils';
 import { StatusBadge } from './reconciliationBadges.jsx';
-import { DISCARDED_STATE } from './bouncePairs.js';
+import { DISCARDED_STATE, isDiscardedOutflow } from './bouncePairs.js';
 
 const ELEVATED_SHADOW =
   'shadow-[0px_10px_15px_-3px_hsl(var(--foreground) / 0.08),0px_4px_6px_-2px_hsl(var(--foreground) / 0.05)]';
@@ -86,12 +86,30 @@ function lineMeta(ui, line, bcpLocale) {
   return parts.length ? parts.join(' · ') : null;
 }
 
-/** Footer label of the line selected in the left panel: a return, an outgoing line, or a discarded line. */
-function selectedLineLabel(ui, model) {
-  if (model.mode === DISCARDED_STATE) return ui('financeReconcileBounceSelectedLine');
-  return model.role === 'bounce'
-    ? ui('financeReconcileBounceSelectedBounce')
-    : ui('financeReconcileBounceTotalOriginal');
+/**
+ * The line rows of a pair's footer, in order, each `{ key, label, line }` (`key` names its test id:
+ * `selected` for the line selected in the left panel, `other` for its counterpart; `line` may be
+ * null, shown as "—"):
+ * - a pair under review: the selected line ("Rechazo seleccionado" / "Salida seleccionada"), then
+ *   the counterpart ("Salida seleccionada" / "Rechazo");
+ * - a discarded pair (ETP-6359): "Salida descartada" then "Rechazo", whichever of the two is the
+ *   selected one ({@link isDiscardedOutflow});
+ * - a discarded line with no partner on screen: just "Línea seleccionada".
+ */
+function footerLines(ui, model, line) {
+  if (model.mode !== DISCARDED_STATE) {
+    const bounceRole = model.role === 'bounce';
+    const own = { key: 'selected', line, label: ui(bounceRole ? 'financeReconcileBounceSelectedBounce' : 'financeReconcileBounceTotalOriginal') };
+    const other = { key: 'other', line: model.other, label: ui(bounceRole ? 'financeReconcileBounceTotalOriginal' : 'financeReconcileBounceTotalBounce') };
+    return line ? [own, other] : [other];
+  }
+  if (!model.other) return line ? [{ key: 'selected', line, label: ui('financeReconcileBounceSelectedLine') }] : [];
+  const [outflow, rejection] = isDiscardedOutflow(line, model.other) ? [line, model.other] : [model.other, line];
+  const keyOf = (l) => (l === line ? 'selected' : 'other');
+  return [
+    { key: keyOf(outflow), line: outflow, label: ui('financeReconcileBounceTotalDiscardedOutflow') },
+    { key: keyOf(rejection), line: rejection, label: ui('financeReconcileBounceTotalBounce') },
+  ];
 }
 
 function TotalRow({ label, value, meta = null, tone = 'neutral', testId }) {
@@ -118,17 +136,46 @@ function TotalRow({ label, value, meta = null, tone = 'neutral', testId }) {
   );
 }
 
+/** i18n keys of a candidate's radio name: without, and with, the bank reference. */
+const CHOOSE_ORIGINAL_KEYS = ['financeReconcileBounceChooseOriginalLine', 'financeReconcileBounceChooseOriginalLineRef'];
+
 /**
- * The accessible name of a candidate's radio. Candidates of an ambiguous pair share the amount and
- * often the text, so the name carries what tells them apart: the date, the amount and the bank
- * reference when there is one.
+ * The accessible name of a radio that picks a statement line: `keys[0]` with the line's date and
+ * signed amount, or `keys[1]` with its bank reference too when it has one. Lines of a pair share the
+ * amount and often the text, so the name carries what tells them apart.
+ *
+ * @param {(key: string, params?: object) => string} ui
+ * @param {[string, string]} keys the i18n keys without and with the reference
+ * @param {object} row the line
+ * @param {string} currency
+ * @param {string} bcpLocale
+ * @returns {string}
  */
-export function chooseLabel(ui, row, currency, bcpLocale) {
+export function lineChoiceLabel(ui, [key, refKey], row, currency, bcpLocale) {
   const ref = String(row.referenceNo ?? '').trim();
   const params = { date: formatDate(row.date, bcpLocale), amount: formatSigned(row.amount, currency) };
-  return ref
-    ? ui('financeReconcileBounceChooseOriginalLineRef', { ...params, ref })
-    : ui('financeReconcileBounceChooseOriginalLine', params);
+  return ref ? ui(refKey, { ...params, ref }) : ui(key, params);
+}
+
+/** The accessible name of a candidate's radio (see {@link lineChoiceLabel}). */
+export function chooseLabel(ui, row, currency, bcpLocale) {
+  return lineChoiceLabel(ui, CHOOSE_ORIGINAL_KEYS, row, currency, bcpLocale);
+}
+
+/**
+ * A line's bank reference, muted ("Ref. X"), or nothing when it has none: what tells two lines of
+ * the same text and amount apart without a column of their own.
+ */
+export function LineRefText({ line, testId }) {
+  const ui = useUI();
+  const ref = String(line?.referenceNo ?? '').trim();
+  if (!ref) return null;
+  return (
+    <TruncatedText
+      text={ui('financeReconcileBounceRef', { ref })}
+      className="w-auto min-w-0 text-xs font-normal leading-4 text-[hsl(var(--muted-foreground))]"
+      data-testid={testId} />
+  );
 }
 
 /**
@@ -159,7 +206,6 @@ function PairRow({ row, model, onChoose, currency, bcpLocale }) {
   const ui = useUI();
   const chosen = row.id === model.chosenId;
   const amount = Number(row.amount) || 0;
-  const ref = String(row.referenceNo ?? '').trim();
   // ETP-6359 — the AI's mark for this original (sparkle + percentage, absent without AI): the
   // percentage is spoken through aria-describedby, the sparkle is decorative.
   const pct = model.percents?.[row.id] ?? null;
@@ -204,12 +250,7 @@ function PairRow({ row, model, onChoose, currency, bcpLocale }) {
             <StatusBadge kind={model.rowBadge} data-testid={`recon-bounce-badge-${row.id}`} />
             {/* The bank reference, muted: two outgoing lines with the same text and amount are
                 told apart by it without a column of their own. */}
-            {ref ? (
-              <TruncatedText
-                text={ui('financeReconcileBounceRef', { ref })}
-                className="w-auto min-w-0 text-xs font-normal leading-4 text-[hsl(var(--muted-foreground))]"
-                data-testid={`recon-bounce-ref-${row.id}`} />
-            ) : null}
+            <LineRefText line={row} testId={`recon-bounce-ref-${row.id}`} data-testid="LineRefText__4bce30" />
             <AiPercentText rowId={row.id} pct={pct} data-testid="AiPercentText__4bce30" />
           </div>
         </div>
@@ -245,9 +286,10 @@ export function BounceNotice({ model, bcpLocale }) {
 }
 
 /**
- * The footer of a pair: the selected line, its counterpart and the net effect, and the actions
- * ("No es un rechazo", "Descartar par" / "Restaurar par"). Shared by the single-line panel and the
- * two-list "Posibles rechazos" view.
+ * The footer of a pair: its lines ({@link footerLines}) and the net effect, and the actions ("No es
+ * un rechazo", "Descartar par" / "Restaurar par"). Shared by the single-line panel and the two-table
+ * "Posibles rechazos" and "Descartadas" views. Every action writes, so all are disabled under the
+ * read-only tier and while one is in flight.
  */
 export function BounceFooter({
   model, line, currency, bcpLocale, onDismiss, onDiscard, onRestore, busy = false,
@@ -255,30 +297,20 @@ export function BounceFooter({
 }) {
   const ui = useUI();
   const discarded = model.mode === DISCARDED_STATE;
-  const otherLabel = model.role === 'bounce'
-    ? ui('financeReconcileBounceTotalOriginal')
-    : ui('financeReconcileBounceTotalBounce');
   return (
   <div className="border-t border-[hsl(var(--border-subtle))] bg-card px-0 pt-2 pb-1" data-testid="recon-bounce-footer">
     <div className="flex flex-col gap-1">
-      {/* The line selected in the left panel, with its date and bank reference: two returns of
-          the same text and amount the same day are otherwise indistinguishable here. */}
-      {line ? (
+      {/* Each line of the pair with its date and bank reference: two returns of the same text and
+          amount the same day are otherwise indistinguishable here. */}
+      {footerLines(ui, model, line).map((row) => (
         <TotalRow
-          label={selectedLineLabel(ui, model)}
-          value={formatSigned(line.amount, currency)}
-          meta={lineMeta(ui, line, bcpLocale)}
-          testId="recon-bounce-total-selected"
-          data-testid="TotalRow__bounce-selected" />
-      ) : null}
-      {discarded ? null : (
-        <TotalRow
-          label={otherLabel}
-          value={model.other ? formatSigned(model.other.amount, currency) : '—'}
-          meta={lineMeta(ui, model.other, bcpLocale)}
-          testId="recon-bounce-total-other"
-          data-testid="TotalRow__bounce-other" />
-      )}
+          key={row.key}
+          label={row.label}
+          value={row.line ? formatSigned(row.line.amount, currency) : '—'}
+          meta={lineMeta(ui, row.line, bcpLocale)}
+          testId={`recon-bounce-total-${row.key}`}
+          data-testid={`TotalRow__bounce-${row.key}`} />
+      ))}
       {model.net == null && discarded ? null : (
         <TotalRow
           label={ui('financeReconcileBounceTotalNet')}
@@ -294,6 +326,7 @@ export function BounceFooter({
           type="button"
           variant="outline"
           onClick={onDismiss}
+          disabled={busy || windowReadOnly}
           className={SECONDARY_BTN}
           data-testid="recon-bounce-dismiss">
           <EyeSlashIcon className="h-4 w-4" data-testid="EyeOff__bounce-dismiss" />
@@ -327,6 +360,35 @@ export function BounceFooter({
 }
 
 /**
+ * The notice of a line the user marked "No es un rechazo" (ETP-6359), shown above its candidate
+ * operations: when it was marked, and "Volver a considerar como posible rechazo" (the undo, a write:
+ * disabled under the read-only tier and while it runs).
+ */
+export function BounceDismissedNotice({
+  dismissedAt, bcpLocale, onRestore, busy = false, windowReadOnly = false,
+}) {
+  const ui = useUI();
+  return (
+    <div
+      role="status"
+      className="mx-2 mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-[hsl(var(--muted))] px-3 py-2 text-[13px] leading-[18px] text-[hsl(var(--muted-foreground))]"
+      data-testid="recon-bounce-dismissed-notice">
+      <span>{ui('financeReconcileBounceDismissedNotice', { date: formatDate(dismissedAt, bcpLocale) })}</span>
+      <Button
+        type="button"
+        variant="outline"
+        onClick={onRestore}
+        disabled={busy || windowReadOnly}
+        className={SECONDARY_BTN}
+        data-testid="recon-bounce-restore-suggestion">
+        <ArrowCounterClockwiseIcon className="h-4 w-4" data-testid="RotateCcw__bounce-restore-suggestion" />
+        {ui('financeReconcileBounceRestoreSuggestion')}
+      </Button>
+    </div>
+  );
+}
+
+/**
  * The right panel of the bank reconciliation for a line of a possible bounce pair, or for a
  * discarded line (ETP-5581). Same structure as the candidate operations panel it replaces: a
  * toolbar, a notice, the rows and a footer with the totals and the actions.
@@ -334,7 +396,7 @@ export function BounceFooter({
  * - A line of a detected pair lists its counterpart line(s): the possible outgoing lines when the
  *   selected line is the bounce (a radio each when the pair is ambiguous), or the bounce line. The
  *   notice says why the pair is proposed, the footer shows the pair's net effect, and the actions
- *   are "No es un rechazo" (hides it for the session, persists nothing) and "Descartar par".
+ *   are "No es un rechazo" (persisted: the rejection is never proposed again) and "Descartar par".
  * - A discarded line lists the line it was discarded with and offers "Restaurar par" (or
  *   "Restaurar línea" for a line discarded on its own).
  * - Identical-looking lines are told apart without a new column: each row shows the bank

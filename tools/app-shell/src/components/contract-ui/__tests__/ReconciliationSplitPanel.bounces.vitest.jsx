@@ -89,14 +89,21 @@ vi.mock('@/hooks/useReconciliation', async () => {
 const discardPairMock = vi.fn();
 const restorePairMock = vi.fn();
 const dismissPairMock = vi.fn();
-// Read on every render, so a test can put a discard or a restore in flight (the panel's `busy`).
-const pairActions = { discarding: false, restoring: false };
+// Read on every render, so a test can put a discard, a restore, a dismissal or the undo of a
+// dismissal in flight (the panel's `busy`).
+const pairActions = {
+  discarding: false, restoring: false, dismissing: false, restoringSuggestion: false,
+};
 const pendingLineCountsMock = vi.fn();
+const restoreSuggestionMock = vi.fn();
 vi.mock('@/hooks/useBouncePairActions.js', () => ({
   useDiscardPair: () => ({ discardPair: discardPairMock, loading: pairActions.discarding, error: null }),
   useRestorePair: () => ({ restorePair: restorePairMock, loading: pairActions.restoring, error: null }),
-  useDismissPair: () => ({ dismissPair: dismissPairMock, loading: false, error: null }),
+  useDismissPair: () => ({ dismissPair: dismissPairMock, loading: pairActions.dismissing, error: null }),
   usePendingLineCounts: () => pendingLineCountsMock,
+  useRestoreBounceSuggestion: () => ({
+    restoreBounceSuggestion: restoreSuggestionMock, loading: pairActions.restoringSuggestion, error: null,
+  }),
 }));
 
 import { render, renderHook, screen, fireEvent, waitFor, within } from '@testing-library/react';
@@ -105,9 +112,13 @@ import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 import { toast } from 'sonner';
 import { ReconciliationSplitPanel } from '@/components/contract-ui/ReconciliationSplitPanel.jsx';
 import { formatDate, formatSigned } from '@/lib/formatSigned';
-import { AiPercentText, BounceNotice, BounceFooter } from '@/components/contract-ui/BouncePairPanel.jsx';
+import {
+  AiPercentText, BounceDismissedNotice, BounceNotice, BounceFooter,
+} from '@/components/contract-ui/BouncePairPanel.jsx';
 import { bouncePanelModel } from '@/components/contract-ui/bouncePairs.js';
-import { useBouncePairRows } from '@/components/contract-ui/useBouncePairReview.jsx';
+import {
+  useBouncePairRows, useDiscardedPairRows, usePairTableViews,
+} from '@/components/contract-ui/useBouncePairReview.jsx';
 
 // ── Fixtures ───────────────────────────────────────────────────────────────────
 
@@ -143,6 +154,7 @@ const C2 = { ...C2_SHORT, state: 'bounce', status: 'pending', bouncePair: { ...A
 const BOUNCE_LINES = [PLAIN, O1, B1, C1, C2, B3];
 const BOUNCE_COUNTS = {
   all: 6, pending: 1, suggested: 0, byRule: 0, difference: 0, reconciled: 0, bounce: 5, discarded: 3,
+  discardedPairs: 2,
 };
 
 const DISCARDED_AT = '2026-09-10T10:00:00Z';
@@ -160,7 +172,7 @@ const D3 = {
 
 /** The flag-on answer, and the `status=discarded` one when that filter is active. */
 function bounceAnswer(filters) {
-  if (filters.status === 'discarded') return { lines: [D1, D2, D3], counts: { discarded: 3 } };
+  if (filters.status === 'discarded') return { lines: [D1, D2, D3], counts: { discarded: 3, discardedPairs: 2 } };
   return { lines: BOUNCE_LINES, counts: BOUNCE_COUNTS };
 }
 
@@ -199,14 +211,20 @@ beforeEach(() => {
   pending.answer = bounceAnswer;
   pairActions.discarding = false;
   pairActions.restoring = false;
+  pairActions.dismissing = false;
+  pairActions.restoringSuggestion = false;
   pending.calls = [];
   pending.reload = vi.fn();
   pending.refetchOnReload = false;
   candidateLineIds.length = 0;
   discardPairMock.mockReset().mockResolvedValue({ discarded: true });
   restorePairMock.mockReset().mockResolvedValue({ restored: ['D1', 'D2'] });
-  dismissPairMock.mockReset().mockResolvedValue({});
+  // The stored answer (ETP-6359): the mark was put on the pair's rejection line.
+  dismissPairMock.mockReset().mockResolvedValue({
+    ok: true, dismissedLineId: 'B1', bounceDismissedAt: '2026-10-20T09:00:00Z',
+  });
   pendingLineCountsMock.mockReset().mockResolvedValue(null);
+  restoreSuggestionMock.mockReset().mockResolvedValue({ restored: true });
   toast.success.mockClear();
   toast.error.mockClear();
   Element.prototype.scrollIntoView.mockClear();
@@ -229,13 +247,16 @@ describe('ReconciliationSplitPanel — bounce lines in the left panel', () => {
   // The backend only sends counts.discarded with the flag on, and then always with counts.bounce:
   // an account whose pairs were all discarded answers `bounce: 0` next to `discarded: N`.
   it('flag on with no pair left but discarded lines: offers Posibles rechazos (0) and Descartadas', async () => {
-    pending.answer = () => ({ lines: [PLAIN], counts: { all: 1, pending: 1, bounce: 0, discarded: 2 } });
+    pending.answer = () => ({
+      lines: [PLAIN], counts: { all: 1, pending: 1, bounce: 0, discarded: 2, discardedPairs: 1 },
+    });
     renderPanel();
     await screen.findByTestId('recon-line-row-P1');
     expect(lastCall().status).toBeUndefined();
     openStatus('financeReconcileFilterStatusPending');
     expect(screen.getByText(/^financeReconcileFilterStatusBounce \(0\)/)).toBeInTheDocument();
-    expect(screen.getByText(/^financeReconcileFilterStatusDiscarded \(2\)/)).toBeInTheDocument();
+    // The backend's 2 discarded lines are ONE pair (`counts.discardedPairs`).
+    expect(screen.getByText(/^financeReconcileFilterStatusDiscarded \(1\)/)).toBeInTheDocument();
   });
 
   it('shows the "Posible rechazo" badge, the bounce entry and counts bounce lines as Pendientes', async () => {
@@ -249,7 +270,8 @@ describe('ReconciliationSplitPanel — bounce lines in the left panel', () => {
     openStatus('financeReconcileFilterStatusPending');
     // Posibles rechazos counts PAIRS (g-high, g-amb), not the 5 lines of the backend's count.
     expect(screen.getByText(/^financeReconcileFilterStatusBounce \(2\)/)).toBeInTheDocument();
-    expect(screen.getByText(/^financeReconcileFilterStatusDiscarded \(3\)/)).toBeInTheDocument();
+    // So does Descartadas (`counts.discardedPairs`: D1+D2 and D3 alone), not the 3 lines.
+    expect(screen.getByText(/^financeReconcileFilterStatusDiscarded \(2\)/)).toBeInTheDocument();
   });
 
   it('the Posibles rechazos filter shows one row per pair, still without a status param', async () => {
@@ -440,11 +462,16 @@ describe('ReconciliationSplitPanel — the bounce-pair panel', () => {
 // ── Dismissal ("No es un rechazo") ──────────────────────────────────────────────
 
 describe('ReconciliationSplitPanel — "No es un rechazo"', () => {
-  it('without a bounceReview prop: the pair turns back into pending lines, locally', async () => {
-    renderPanel();
+  // ETP-6359 — persisted: the backend marks the pair's rejection and never proposes it again. Once
+  // it answers, the pair is hidden at once and the lines (and, through the host, the suggestions)
+  // reload, which drop it for good.
+  it('without a bounceReview prop: once stored, the pair turns into pending lines and everything reloads', async () => {
+    const { onReconcileSuccess } = renderPanel();
     await selectLineRow('O1');
     fireEvent.click(screen.getByTestId('recon-bounce-dismiss'));
-    expect(toast.success).toHaveBeenCalledWith('financeReconcileBounceToastDismissed');
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('financeReconcileBounceToastDismissed'));
+    expect(pending.reload).toHaveBeenCalled();
+    expect(onReconcileSuccess).toHaveBeenCalled();
     expect(screen.queryByTestId('recon-bounce-panel')).toBeNull();
     expect(within(row('O1')).getByText('financeReconcileBadgePending')).toBeInTheDocument();
     expect(within(row('B1')).getByText('financeReconcileBadgePending')).toBeInTheDocument();
@@ -462,7 +489,7 @@ describe('ReconciliationSplitPanel — "No es un rechazo"', () => {
     const { rerender } = renderPanel({ bounceReview: review });
     await selectLineRow('B3');
     fireEvent.click(screen.getByTestId('recon-bounce-dismiss'));
-    expect(onDismiss).toHaveBeenCalledWith('g-amb');
+    await waitFor(() => expect(onDismiss).toHaveBeenCalledWith('g-amb'));
     expect(toast.success).toHaveBeenCalledWith('financeReconcileBounceToastDismissed');
 
     rerender(
@@ -475,7 +502,7 @@ describe('ReconciliationSplitPanel — "No es un rechazo"', () => {
     expect(screen.queryByTestId('recon-bounce-panel')).toBeNull();
   });
 
-  // ETP-5581 KPI: the dismissal is also reported to the backend (dismissPair), fire-and-forget.
+  // The dismissal is stored with dismissPair (ETP-6359), which also emits the ETP-5581 KPI event.
 
   it('reports it with dismissPair: the selected line and the other line of the pair', async () => {
     renderPanel();
@@ -504,26 +531,28 @@ describe('ReconciliationSplitPanel — "No es un rechazo"', () => {
     expect(dismissPairMock).toHaveBeenCalledWith({ financialAccountId: 'ACC-1', statementLineId: 'B3' });
   });
 
-  it('a failed report is silent: the pair is still hidden, only the dismissal toast shows', async () => {
-    dismissPairMock.mockRejectedValue(new Error('HTTP 500'));
-    renderPanel();
+  it('a refusal (409 LINE_NOT_PENDING) is translated and keeps the pair, with no reload', async () => {
+    dismissPairMock.mockRejectedValue(Object.assign(new Error('x'), {
+      body: { error: { message: 'x', messageKeys: ['ETGO_BounceLineNotPending'] } },
+    }));
+    const { onReconcileSuccess } = renderPanel();
     await selectLineRow('O1');
     fireEvent.click(screen.getByTestId('recon-bounce-dismiss'));
-    await waitFor(() => expect(dismissPairMock).toHaveBeenCalled());
-    await Promise.resolve();
-    expect(toast.success).toHaveBeenCalledWith('financeReconcileBounceToastDismissed');
-    expect(toast.error).not.toHaveBeenCalled();
-    expect(screen.queryByTestId('recon-bounce-panel')).toBeNull();
-    expect(within(row('O1')).getByText('financeReconcileBadgePending')).toBeInTheDocument();
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('T(backendError.bounceLineNotPending)'));
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(screen.getByTestId('recon-bounce-panel')).toBeInTheDocument();
+    expect(within(row('O1')).getByText('financeReconcileBadgeBounce')).toBeInTheDocument();
+    expect(pending.reload).not.toHaveBeenCalled();
+    expect(onReconcileSuccess).not.toHaveBeenCalled();
   });
 
-  it('a report that throws synchronously does not break the dismissal either', async () => {
+  it('a failure without a body (even a synchronous throw) falls back to the action message', async () => {
     dismissPairMock.mockImplementation(() => { throw new Error('boom'); });
     renderPanel();
     await selectLineRow('O1');
     fireEvent.click(screen.getByTestId('recon-bounce-dismiss'));
-    expect(toast.success).toHaveBeenCalledWith('financeReconcileBounceToastDismissed');
-    expect(screen.queryByTestId('recon-bounce-panel')).toBeNull();
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('financeReconcileBounceToastDismissError'));
+    expect(screen.getByTestId('recon-bounce-panel')).toBeInTheDocument();
   });
 });
 
@@ -540,11 +569,12 @@ describe('ReconciliationSplitPanel — the Descartadas filter', () => {
   it('asks for status=discarded and keeps the counts of the default answer for the other entries', async () => {
     await openDiscarded();
     expect(lastCall().status).toBe('discarded');
+    // One row per pair, on its outflow (D1, not its rejection D2), D3 alone; by the outflow's date.
     expect(screen.queryAllByTestId(/^recon-line-row-/).map((el) => el.dataset.testid))
-      .toEqual(['recon-line-row-D1', 'recon-line-row-D2', 'recon-line-row-D3']);
+      .toEqual(['recon-line-row-D3', 'recon-line-row-D1']);
     expect(within(row('D1')).getByText('financeReconcileBadgeDiscarded')).toBeInTheDocument();
     openStatus('financeReconcileFilterStatusDiscarded');
-    expect(screen.getAllByText(/^financeReconcileFilterStatusDiscarded \(3\)/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/^financeReconcileFilterStatusDiscarded \(2\)/).length).toBeGreaterThan(0);
     expect(screen.getByText(/^financeReconcileFilterStatusPending \(6\)/)).toBeInTheDocument();
     expect(screen.getByText(/^financeReconcileFilterStatusBounce \(2\)/)).toBeInTheDocument();
   });
@@ -562,7 +592,7 @@ describe('ReconciliationSplitPanel — the Descartadas filter', () => {
     expect(candidateLineIds.at(-1)).toBeNull();
     expect(screen.getByTestId('recon-bounce-row-D2')).toBeInTheDocument();
     expect(screen.getByTestId('recon-bounce-badge-D2')).toHaveTextContent('financeReconcileBadgeDiscarded');
-    expect(screen.getByTestId('recon-bounce-source')).toHaveTextContent('financeReconcileBounceSourceDiscarded:{"count":1}');
+    expect(screen.getByTestId('recon-rejections-title')).toHaveTextContent('financeReconcileBounceViewRejections:{"count":1}');
     expect(screen.getByTestId('recon-bounce-notice')).toHaveTextContent(
       `financeReconcileBounceDiscardedNotice:${JSON.stringify({ date: formatDate(DISCARDED_AT, 'es-ES') })}`,
     );
@@ -610,8 +640,8 @@ describe('ReconciliationSplitPanel — the Descartadas filter', () => {
     }));
     openStatus('financeReconcileFilterStatusDiscarded');
     await waitFor(() => expect(screen.getByText(/^financeReconcileFilterStatusPending \(8\)/)).toBeInTheDocument());
-    // The discarded count still comes from the discarded answer.
-    expect(screen.getAllByText(/^financeReconcileFilterStatusDiscarded \(3\)/).length).toBeGreaterThan(0);
+    // The discarded count still comes from the discarded answer (its pairs).
+    expect(screen.getAllByText(/^financeReconcileFilterStatusDiscarded \(2\)/).length).toBeGreaterThan(0);
   });
 
   it('a failed re-read of the counts keeps the last ones and shows no error', async () => {
@@ -655,24 +685,25 @@ describe('ReconciliationSplitPanel — the Descartadas filter', () => {
 // ── Read-only tier ─────────────────────────────────────────────────────────────
 
 describe('ReconciliationSplitPanel — bounce panel under the read-only tier', () => {
-  it('disables Descartar par but keeps "No es un rechazo" available', async () => {
+  // ETP-6359 — "No es un rechazo" is stored now: a write like the others.
+  it('disables Descartar par and "No es un rechazo"', async () => {
     renderPanel({ windowReadOnly: true });
     await selectLineRow('O1');
     expect(screen.getByTestId('recon-bounce-discard')).toBeDisabled();
-    expect(screen.getByTestId('recon-bounce-dismiss')).toBeEnabled();
+    expect(screen.getByTestId('recon-bounce-dismiss')).toBeDisabled();
     fireEvent.click(screen.getByTestId('recon-bounce-discard'));
     await Promise.resolve();
     expect(discardPairMock).not.toHaveBeenCalled();
   });
 
-  it('"No es un rechazo" still hides the pair, but reports nothing to the backend', async () => {
+  it('"No es un rechazo" neither hides the pair nor stores anything', async () => {
     renderPanel({ windowReadOnly: true });
     await selectLineRow('O1');
     fireEvent.click(screen.getByTestId('recon-bounce-dismiss'));
-    expect(toast.success).toHaveBeenCalledWith('financeReconcileBounceToastDismissed');
-    expect(screen.queryByTestId('recon-bounce-panel')).toBeNull();
     await Promise.resolve();
     expect(dismissPairMock).not.toHaveBeenCalled();
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(screen.getByTestId('recon-bounce-panel')).toBeInTheDocument();
   });
 
   it('with an AI assessment the percentages show, but Descartar par is disabled and nothing is POSTed', async () => {
@@ -975,14 +1006,22 @@ describe('ReconciliationSplitPanel — the footer of the bounce panel', () => {
     expect(within(total('other')).getByText('financeReconcileBounceTotalBounce')).toBeInTheDocument();
   });
 
-  it('a discarded line: "Línea seleccionada" with its amount', async () => {
+  // ETP-6359 — a discarded PAIR names both lines, like "Posibles rechazos"; a lone line keeps
+  // "Línea seleccionada" alone.
+  it('a discarded pair: "Salida descartada" and "Rechazo" with their amounts; a lone line: "Línea seleccionada"', async () => {
     renderPanel();
     await screen.findByTestId('recon-line-row-R-B1');
     selectStatus('financeReconcileFilterStatusPending', 'financeReconcileFilterStatusDiscarded');
     fireEvent.click(await screen.findByTestId('recon-line-radio-D1'));
-    expect(within(total('selected')).getByText('financeReconcileBounceSelectedLine')).toBeInTheDocument();
+    expect(within(total('selected')).getByText('financeReconcileBounceTotalDiscardedOutflow')).toBeInTheDocument();
     expect(totalValue('selected')).toBe(formatSigned(-50, 'EUR'));
     expect(screen.getByTestId('recon-bounce-total-selected-meta').textContent).toBe(formatDate('2026-09-01', 'es-ES'));
+    expect(within(total('other')).getByText('financeReconcileBounceTotalBounce')).toBeInTheDocument();
+    expect(totalValue('other')).toBe(formatSigned(50, 'EUR'));
+    expect(screen.getByTestId('recon-bounce-total-other-meta').textContent).toBe(formatDate('2026-09-03', 'es-ES'));
+
+    fireEvent.click(screen.getByTestId('recon-line-radio-D3'));
+    expect(within(total('selected')).getByText('financeReconcileBounceSelectedLine')).toBeInTheDocument();
     expect(screen.queryByTestId('recon-bounce-total-other')).toBeNull();
   });
 });
@@ -1001,12 +1040,12 @@ describe('ReconciliationSplitPanel — buttons and radios of the bounce panel', 
     expect(dismiss.className).not.toContain('bg-primary');
   });
 
-  it('"Descartar par" is disabled while a discard or a restore is in flight', async () => {
+  it('"Descartar par" and "No es un rechazo" are disabled while a discard or a restore is in flight', async () => {
     pairActions.discarding = true;
     renderPanel();
     await selectLineRow('O1');
     expect(screen.getByTestId('recon-bounce-discard')).toBeDisabled();
-    expect(screen.getByTestId('recon-bounce-dismiss')).toBeEnabled();
+    expect(screen.getByTestId('recon-bounce-dismiss')).toBeDisabled();
   });
 
   it('"Restaurar par" is the blue primary Button, enabled when idle', async () => {
@@ -1522,7 +1561,7 @@ describe('BouncePairPanel building blocks — AiPercentText, BounceNotice, Bounc
     expect(onDiscard).toHaveBeenCalledTimes(1);
   });
 
-  it('BounceFooter disables the discard while busy and under the read-only tier, but keeps "No es un rechazo" enabled', () => {
+  it('BounceFooter disables the discard and "No es un rechazo" while busy and under the read-only tier', () => {
     const model = bouncePanelModel(B1);
     const { rerender } = render(
       <BounceFooter model={model} line={B1} currency="EUR" bcpLocale="es-ES" onDismiss={vi.fn()} onDiscard={vi.fn()} onRestore={vi.fn()} busy />,
@@ -1532,7 +1571,7 @@ describe('BouncePairPanel building blocks — AiPercentText, BounceNotice, Bounc
       <BounceFooter model={model} line={B1} currency="EUR" bcpLocale="es-ES" onDismiss={vi.fn()} onDiscard={vi.fn()} onRestore={vi.fn()} windowReadOnly />,
     );
     expect(screen.getByTestId('recon-bounce-discard')).toBeDisabled();
-    expect(screen.getByTestId('recon-bounce-dismiss')).toBeEnabled();
+    expect(screen.getByTestId('recon-bounce-dismiss')).toBeDisabled();
   });
 });
 
@@ -1969,5 +2008,416 @@ describe('useBouncePairRows — the one-row-per-pair view of "Posibles rechazos"
     expect(renderRows({ selectedLine: O1, lines: [PLAIN, O1] }).selectLine).not.toHaveBeenCalled();
     // A line that is not part of any pair.
     expect(renderRows({ selectedLine: PLAIN }).selectLine).not.toHaveBeenCalled();
+  });
+});
+
+// ── "Descartadas", the pair view (ETP-6359) ────────────────────────────────────
+
+describe('ReconciliationSplitPanel — the "Descartadas" pair view', () => {
+  async function openDiscardedView() {
+    renderPanel();
+    await screen.findByTestId('recon-line-row-B3');
+    selectStatus('financeReconcileFilterStatusPending', 'financeReconcileFilterStatusDiscarded');
+    await screen.findByTestId('recon-line-row-D1');
+  }
+
+  it('before a selection the right side is the placeholder that asks to pick an outflow', async () => {
+    await openDiscardedView();
+    expect(screen.getByTestId('recon-discarded-pairs-view')).toBeInTheDocument();
+    const empty = screen.getByTestId('recon-right-empty');
+    expect(empty).toHaveTextContent('financeReconcileBounceRightEmptyTitle');
+    expect(empty).toHaveTextContent('financeReconcileDiscardedRightEmptyHint');
+    expect(screen.queryByTestId('recon-rejections-title')).toBeNull();
+    expect(screen.queryByTestId('recon-bounce-footer')).toBeNull();
+  });
+
+  it('a line discarded alone shows the "no rejection" empty state on the right', async () => {
+    await openDiscardedView();
+    fireEvent.click(screen.getByTestId('recon-line-radio-D3'));
+    const empty = within(screen.getByTestId('recon-rejections-table')).getByTestId('recon-rows-empty');
+    expect(empty).toHaveTextContent('financeReconcileDiscardedNoRejection');
+    expect(empty).toHaveTextContent('financeReconcileDiscardedNoRejectionHint');
+    expect(screen.getByTestId('recon-rejections-title')).toHaveTextContent('financeReconcileBounceViewRejections:{"count":0}');
+  });
+
+  it('names each pair radio by its outflow\'s date and amount, and the bank reference when it has one', async () => {
+    const D1_REF = { ...D1, referenceNo: 'REF-9' };
+    pending.answer = (filters) => (filters.status === 'discarded'
+      ? { lines: [D1_REF, D2, D3], counts: { discarded: 3, discardedPairs: 2 } }
+      : { lines: BOUNCE_LINES, counts: BOUNCE_COUNTS });
+    await openDiscardedView();
+    expect(screen.getByTestId('recon-line-radio-D1')).toHaveAttribute('aria-label',
+      `financeReconcileDiscardedSelectPairRef:${JSON.stringify({
+        date: formatDate('2026-09-01', 'es-ES'), amount: formatSigned(-50, 'EUR'), ref: 'REF-9',
+      })}`);
+    expect(screen.getByTestId('recon-line-radio-D3')).toHaveAttribute('aria-label',
+      `financeReconcileDiscardedSelectPair:${JSON.stringify({
+        date: formatDate('2026-08-20', 'es-ES'), amount: formatSigned(-7, 'EUR'),
+      })}`);
+    expect(screen.getByTestId('recon-line-ref-D1')).toHaveTextContent('financeReconcileBounceRef:{"ref":"REF-9"}');
+  });
+
+  it('under the read-only tier "Restaurar línea" of a lone line is disabled and posts nothing', async () => {
+    renderPanel({ windowReadOnly: true });
+    await screen.findByTestId('recon-line-row-B3');
+    selectStatus('financeReconcileFilterStatusPending', 'financeReconcileFilterStatusDiscarded');
+    fireEvent.click(await screen.findByTestId('recon-line-radio-D3'));
+    expect(screen.getByTestId('recon-bounce-restore')).toBeDisabled();
+    fireEvent.click(screen.getByTestId('recon-bounce-restore'));
+    await Promise.resolve();
+    expect(restorePairMock).not.toHaveBeenCalled();
+  });
+
+  it('the discarded answer\'s pair figure wins on the filter while "Descartadas" is shown', async () => {
+    pending.answer = (filters) => (filters.status === 'discarded'
+      ? { lines: [D3], counts: { discarded: 1, discardedPairs: 1 } }
+      : { lines: BOUNCE_LINES, counts: BOUNCE_COUNTS });
+    renderPanel();
+    await screen.findByTestId('recon-line-row-B3');
+    selectStatus('financeReconcileFilterStatusPending', 'financeReconcileFilterStatusDiscarded');
+    await screen.findByTestId('recon-line-row-D3');
+    expect(screen.getByText(/^financeReconcileFilterStatusDiscarded \(1\)/)).toBeInTheDocument();
+  });
+
+  it('without counts.discardedPairs the filter falls back to the backend\'s line count', async () => {
+    const { discardedPairs, ...noPairs } = BOUNCE_COUNTS;
+    expect(discardedPairs).toBe(2);
+    pending.answer = (filters) => (filters.status === 'discarded'
+      ? { lines: [D1, D2, D3], counts: { discarded: 3 } }
+      : { lines: BOUNCE_LINES, counts: noPairs });
+    renderPanel();
+    await screen.findByTestId('recon-line-row-B3');
+    openStatus('financeReconcileFilterStatusPending');
+    expect(screen.getByText(/^financeReconcileFilterStatusDiscarded \(3\)/)).toBeInTheDocument();
+  });
+
+  it('flag off: "Descartadas" keeps the flat list of lines and the line count', async () => {
+    pending.answer = (filters) => (filters.status === 'discarded'
+      ? { lines: [D1, D2, D3], counts: { discarded: 3, discardedPairs: 2 } }
+      : { lines: [PLAIN], counts: { all: 1, pending: 1, reconciled: 0, discarded: 3 } });
+    renderPanel();
+    await screen.findByTestId('recon-line-row-P1');
+    selectStatus('financeReconcileFilterStatusPending', 'financeReconcileFilterStatusDiscarded');
+    await screen.findByTestId('recon-line-row-D2');
+    expect(lastCall().status).toBe('discarded');
+    expect(screen.queryByTestId('recon-discarded-pairs-view')).toBeNull();
+    expect(screen.queryByTestId('recon-outflows-table')).toBeNull();
+    expect(screen.queryAllByTestId(/^recon-line-row-/)).toHaveLength(3);
+    // The pair figure is ignored with the flag off: the filter shows the 3 lines.
+    expect(screen.getAllByText(/^financeReconcileFilterStatusDiscarded \(3\)/).length).toBeGreaterThan(0);
+  });
+});
+
+// ── "No es un rechazo": the order of the hide and the in-flight state (ETP-6359) ──
+
+describe('ReconciliationSplitPanel — "No es un rechazo" waits for the backend', () => {
+  it('review.onDismiss and the toast come only once dismissPair answers', async () => {
+    let answer;
+    dismissPairMock.mockImplementation(() => new Promise((res) => { answer = res; }));
+    const onDismiss = vi.fn();
+    renderPanel({
+      bounceReview: { focus: null, onFocusConsumed: vi.fn(), dismissedKeys: new Set(), onDismiss },
+    });
+    await selectLineRow('O1');
+    fireEvent.click(screen.getByTestId('recon-bounce-dismiss'));
+    expect(dismissPairMock).toHaveBeenCalledTimes(1);
+    await Promise.resolve();
+    expect(onDismiss).not.toHaveBeenCalled();
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(pending.reload).not.toHaveBeenCalled();
+    expect(screen.getByTestId('recon-bounce-panel')).toBeInTheDocument();
+
+    answer({ ok: true, dismissedLineId: 'B1', bounceDismissedAt: '2026-10-20T09:00:00Z' });
+    await waitFor(() => expect(onDismiss).toHaveBeenCalledWith('g-high'));
+    expect(toast.success).toHaveBeenCalledWith('financeReconcileBounceToastDismissed');
+    expect(pending.reload).toHaveBeenCalled();
+  });
+
+  // No `dismissedLineId`: nothing was stored (the column is not mapped yet, or the lines are no
+  // longer a detected pair); the pair is only hidden for now, and the toast says it may come back.
+  it('an answer without dismissedLineId hides the pair with the session toast', async () => {
+    dismissPairMock.mockResolvedValue({ ok: true, dismissedLineId: null, bounceDismissedAt: null });
+    const { onReconcileSuccess } = renderPanel();
+    await selectLineRow('O1');
+    fireEvent.click(screen.getByTestId('recon-bounce-dismiss'));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('financeReconcileBounceToastDismissedSession'));
+    expect(toast.success).not.toHaveBeenCalledWith('financeReconcileBounceToastDismissed');
+    expect(within(row('O1')).getByText('financeReconcileBadgePending')).toBeInTheDocument();
+    expect(pending.reload).toHaveBeenCalled();
+    expect(onReconcileSuccess).toHaveBeenCalled();
+  });
+
+  it('a refusal never reaches review.onDismiss', async () => {
+    dismissPairMock.mockRejectedValue(Object.assign(new Error('x'), { status: 409 }));
+    const onDismiss = vi.fn();
+    renderPanel({
+      bounceReview: { focus: null, onFocusConsumed: vi.fn(), dismissedKeys: new Set(), onDismiss },
+    });
+    await selectLineRow('O1');
+    fireEvent.click(screen.getByTestId('recon-bounce-dismiss'));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('financeReconcileBounceToastDismissError'));
+    expect(onDismiss).not.toHaveBeenCalled();
+  });
+
+  it('while a dismissal is in flight every action of the footer is disabled', async () => {
+    pairActions.dismissing = true;
+    renderPanel();
+    await selectLineRow('O1');
+    expect(screen.getByTestId('recon-bounce-dismiss')).toBeDisabled();
+    expect(screen.getByTestId('recon-bounce-discard')).toBeDisabled();
+    fireEvent.click(screen.getByTestId('recon-bounce-dismiss'));
+    await Promise.resolve();
+    expect(dismissPairMock).not.toHaveBeenCalled();
+  });
+});
+
+// ── A line marked "No es un rechazo": the notice and its undo (ETP-6359) ──────────
+
+const MARKED_AT = '2026-10-20T09:00:00Z';
+const MARKED = {
+  id: 'M1', state: 'pending', status: 'pending', amount: 75, date: '2026-10-04', description: 'Abono marcado',
+  bounceDismissedAt: MARKED_AT,
+};
+
+describe('ReconciliationSplitPanel — the notice of a line marked "No es un rechazo"', () => {
+  const markedAnswer = (counts = { ...BOUNCE_COUNTS, all: 7, pending: 2 }) => (filters) => (
+    filters.status === 'discarded'
+      ? { lines: [D1, D2, D3], counts: { discarded: 3, discardedPairs: 2 } }
+      : { lines: [...BOUNCE_LINES, MARKED], counts }
+  );
+  beforeEach(() => { pending.answer = markedAnswer(); });
+
+  it('says when the line was marked, above its candidate operations', async () => {
+    renderPanel();
+    await selectLineRow('M1');
+    const notice = screen.getByTestId('recon-bounce-dismissed-notice');
+    expect(notice).toHaveAttribute('role', 'status');
+    expect(notice).toHaveTextContent(
+      `financeReconcileBounceDismissedNotice:${JSON.stringify({ date: formatDate(MARKED_AT, 'es-ES') })}`,
+    );
+    expect(screen.getByTestId('recon-bounce-restore-suggestion')).toHaveTextContent('financeReconcileBounceRestoreSuggestion');
+    expect(screen.queryByTestId('recon-bounce-panel')).toBeNull();
+    expect(candidateLineIds.at(-1)).toBe('M1');
+  });
+
+  it('is absent for a plain line', async () => {
+    renderPanel();
+    await selectLineRow('P1');
+    expect(screen.queryByTestId('recon-bounce-dismissed-notice')).toBeNull();
+  });
+
+  it('is absent with the flag off, even for a line carrying bounceDismissedAt', async () => {
+    pending.answer = markedAnswer({ all: 2, pending: 2, reconciled: 0 });
+    renderPanel();
+    await selectLineRow('M1');
+    expect(screen.queryByTestId('recon-bounce-dismissed-notice')).toBeNull();
+  });
+
+  it('"Volver a considerar" posts restoreBounceSuggestion, toasts, forgets the hidden pairs and reloads', async () => {
+    const onClearDismissed = vi.fn();
+    const { onReconcileSuccess } = renderPanel({
+      bounceReview: {
+        focus: null, onFocusConsumed: vi.fn(), dismissedKeys: new Set(), onDismiss: vi.fn(), onClearDismissed,
+      },
+    });
+    await selectLineRow('M1');
+    fireEvent.click(screen.getByTestId('recon-bounce-restore-suggestion'));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('financeReconcileBounceToastSuggestionRestored'));
+    expect(restoreSuggestionMock).toHaveBeenCalledTimes(1);
+    expect(restoreSuggestionMock).toHaveBeenCalledWith({ financialAccountId: 'ACC-1', statementLineId: 'M1' });
+    expect(onClearDismissed).toHaveBeenCalledTimes(1);
+    expect(pending.reload).toHaveBeenCalled();
+    expect(onReconcileSuccess).toHaveBeenCalled();
+  });
+
+  it('without a bounceReview prop the undo brings back a pair dismissed in this session', async () => {
+    renderPanel();
+    await selectLineRow('O1');
+    fireEvent.click(screen.getByTestId('recon-bounce-dismiss'));
+    await waitFor(() => expect(within(row('O1')).getByText('financeReconcileBadgePending')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('recon-line-radio-M1'));
+    fireEvent.click(screen.getByTestId('recon-bounce-restore-suggestion'));
+    await waitFor(() => expect(within(row('O1')).getByText('financeReconcileBadgeBounce')).toBeInTheDocument());
+  });
+
+  it.each([
+    ['a 403 BOUNCE_SUGGESTIONS_OFF', { status: 403, body: { code: 'BOUNCE_SUGGESTIONS_OFF', error: { message: 'off', messageKeys: ['ETGO_BounceSuggestionsOff'] } } }, 'T(backendError.bounceSuggestionsOff)'],
+    ['a 409 LINE_NOT_PENDING', { status: 409, body: { code: 'LINE_NOT_PENDING', error: { message: 'x', messageKeys: ['ETGO_BounceLineNotPending'] } } }, 'T(backendError.bounceLineNotPending)'],
+    ['a 404 without a body', { status: 404 }, 'financeReconcileBounceToastSuggestionRestoreError'],
+  ])('%s is shown translated and changes nothing', async (_label, fields, expected) => {
+    restoreSuggestionMock.mockRejectedValue(Object.assign(new Error('refused'), fields));
+    const onClearDismissed = vi.fn();
+    const { onReconcileSuccess } = renderPanel({
+      bounceReview: {
+        focus: null, onFocusConsumed: vi.fn(), dismissedKeys: new Set(), onDismiss: vi.fn(), onClearDismissed,
+      },
+    });
+    await selectLineRow('M1');
+    fireEvent.click(screen.getByTestId('recon-bounce-restore-suggestion'));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(expected));
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(onClearDismissed).not.toHaveBeenCalled();
+    expect(pending.reload).not.toHaveBeenCalled();
+    expect(onReconcileSuccess).not.toHaveBeenCalled();
+    expect(screen.getByTestId('recon-bounce-dismissed-notice')).toBeInTheDocument();
+  });
+
+  it('is disabled under the read-only tier and posts nothing', async () => {
+    renderPanel({ windowReadOnly: true });
+    await selectLineRow('M1');
+    expect(screen.getByTestId('recon-bounce-restore-suggestion')).toBeDisabled();
+    fireEvent.click(screen.getByTestId('recon-bounce-restore-suggestion'));
+    await Promise.resolve();
+    expect(restoreSuggestionMock).not.toHaveBeenCalled();
+  });
+
+  it('is disabled while the undo is in flight', async () => {
+    pairActions.restoringSuggestion = true;
+    renderPanel();
+    await selectLineRow('M1');
+    expect(screen.getByTestId('recon-bounce-restore-suggestion')).toBeDisabled();
+  });
+});
+
+describe('BounceDismissedNotice', () => {
+  it('formats the date and wires the undo, disabled while busy or read-only', () => {
+    const onRestore = vi.fn();
+    const { rerender } = render(<BounceDismissedNotice dismissedAt={MARKED_AT} bcpLocale="en-US" onRestore={onRestore} />);
+    expect(screen.getByTestId('recon-bounce-dismissed-notice')).toHaveTextContent(
+      `financeReconcileBounceDismissedNotice:${JSON.stringify({ date: formatDate(MARKED_AT, 'en-US') })}`,
+    );
+    fireEvent.click(screen.getByTestId('recon-bounce-restore-suggestion'));
+    expect(onRestore).toHaveBeenCalledTimes(1);
+    rerender(<BounceDismissedNotice dismissedAt={MARKED_AT} bcpLocale="en-US" onRestore={onRestore} busy />);
+    expect(screen.getByTestId('recon-bounce-restore-suggestion')).toBeDisabled();
+    rerender(<BounceDismissedNotice dismissedAt={MARKED_AT} bcpLocale="en-US" onRestore={onRestore} windowReadOnly />);
+    expect(screen.getByTestId('recon-bounce-restore-suggestion')).toBeDisabled();
+  });
+});
+
+// ── BounceFooter: the order of a pair's lines (ETP-6359) ─────────────────────
+
+describe('BounceFooter — the lines of each kind of pair', () => {
+  const footerRows = () => screen.queryAllByTestId(/^recon-bounce-total-(selected|other)$/)
+    .map((el) => [el.dataset.testid.replace('recon-bounce-total-', ''), el.textContent]);
+  const renderFooter = (model, line) => render(
+    <BounceFooter model={model} line={line} currency="EUR" bcpLocale="es-ES"
+      onDismiss={vi.fn()} onDiscard={vi.fn()} onRestore={vi.fn()} />,
+  );
+
+  it('a discarded pair with its REJECTION selected still lists the outflow first', () => {
+    renderFooter(bouncePanelModel(D2, { discardedLines: [D1, D2, D3] }), D2);
+    const rows = footerRows();
+    expect(rows.map(([key]) => key)).toEqual(['other', 'selected']);
+    expect(rows[0][1]).toContain('financeReconcileBounceTotalDiscardedOutflow');
+    expect(rows[0][1]).toContain(formatSigned(-50, 'EUR'));
+    expect(rows[1][1]).toContain('financeReconcileBounceTotalBounce');
+    expect(rows[1][1]).toContain(formatSigned(50, 'EUR'));
+    expect(screen.getByTestId('recon-bounce-total-net')).toBeInTheDocument();
+  });
+
+  it('a lone discarded line: "Línea seleccionada" alone, no net', () => {
+    renderFooter(bouncePanelModel(D3, { discardedLines: [D1, D2, D3] }), D3);
+    expect(footerRows()).toEqual([['selected', expect.stringContaining('financeReconcileBounceSelectedLine')]]);
+    expect(screen.queryByTestId('recon-bounce-total-net')).toBeNull();
+  });
+
+  it('a pair under review keeps its labels: the selected original, then the rejection', () => {
+    renderFooter(bouncePanelModel(O1), O1);
+    const rows = footerRows();
+    expect(rows.map(([key]) => key)).toEqual(['selected', 'other']);
+    expect(rows[0][1]).toContain('financeReconcileBounceTotalOriginal');
+    expect(rows[1][1]).toContain('financeReconcileBounceTotalBounce');
+  });
+
+  it('a pair under review without a selected line shows only the counterpart', () => {
+    renderFooter(bouncePanelModel(B1), null);
+    expect(footerRows()).toEqual([['other', expect.stringContaining('financeReconcileBounceTotalOriginal')]]);
+  });
+});
+
+// ── useDiscardedPairRows / usePairTableViews, driven directly ──────────────────
+
+describe('useDiscardedPairRows — the one-row-per-pair view of "Descartadas"', () => {
+  const FLAG_ON = { ...BOUNCE_COUNTS, discarded: 3, discardedPairs: 2 };
+  const baseArgs = {
+    lines: [D1, D2, D3], search: '', status: 'discarded', loading: false, statusCounts: FLAG_ON, selectedLine: null,
+  };
+  const renderRows = (args = {}) => {
+    const selectLine = vi.fn();
+    const utils = renderHook((props) => useDiscardedPairRows(props), {
+      initialProps: { ...baseArgs, selectLine, ...args },
+    });
+    return { ...utils, selectLine };
+  };
+
+  it('is on only under "Descartadas" with the flag on', () => {
+    expect(renderRows().result.current.discardedMode).toBe(true);
+    for (const args of [{ status: null }, { status: 'bounce' }, { statusCounts: { discarded: 3, discardedPairs: 2 } }]) {
+      const { result } = renderRows(args);
+      expect(result.current.discardedMode).toBe(false);
+      expect(result.current.discardedPairRows).toBeNull();
+    }
+  });
+
+  it('builds one row per pair on its outflow, filtered by the search', () => {
+    const { result, rerender, selectLine } = renderRows();
+    expect(result.current.discardedPairRows.map((r) => [r.anchor.id, r.counterpart?.id ?? null]))
+      .toEqual([['D3', null], ['D1', 'D2']]);
+    rerender({ ...baseArgs, selectLine, search: 'devuelta' });
+    expect(result.current.discardedPairRows.map((r) => r.anchor.id)).toEqual(['D1']);
+  });
+
+  it('moves the selection of a pair\'s rejection to its outflow row, and leaves the others alone', () => {
+    const { selectLine } = renderRows({ selectedLine: D2 });
+    expect(selectLine).toHaveBeenCalledTimes(1);
+    expect(selectLine).toHaveBeenCalledWith(D1);
+    expect(renderRows({ selectedLine: D1 }).selectLine).not.toHaveBeenCalled();
+    expect(renderRows({ selectedLine: D3 }).selectLine).not.toHaveBeenCalled();
+    expect(renderRows({ selectedLine: D2, status: null }).selectLine).not.toHaveBeenCalled();
+  });
+
+  it('counts pairs from counts.discardedPairs, and keeps the last figure when the field disappears', () => {
+    const { result, rerender, selectLine } = renderRows({ status: null });
+    expect(result.current.discardedPairCount).toBe(2);
+    rerender({ ...baseArgs, selectLine, statusCounts: { ...FLAG_ON, discardedPairs: 1 } });
+    expect(result.current.discardedPairCount).toBe(1);
+    const { discardedPairs, ...withoutPairs } = FLAG_ON;
+    expect(discardedPairs).toBe(2);
+    rerender({ ...baseArgs, selectLine, statusCounts: withoutPairs });
+    expect(result.current.discardedPairCount).toBe(1);
+  });
+
+  it('has no figure before one comes (the filter then shows the line count) and none with the flag off', () => {
+    const { discardedPairs, ...withoutPairs } = FLAG_ON;
+    expect(discardedPairs).toBe(2);
+    expect(renderRows({ statusCounts: withoutPairs }).result.current.discardedPairCount).toBeNull();
+    expect(renderRows({ statusCounts: { discarded: 3, discardedPairs: 2 } }).result.current.discardedPairCount).toBeNull();
+  });
+});
+
+describe('usePairTableViews — both pair views in one call', () => {
+  const COUNTS = { ...BOUNCE_COUNTS, discardedPairs: 2 };
+  const view = (status, lines) => renderHook(() => usePairTableViews({
+    lines, search: '', status, loading: false, statusCounts: COUNTS, selectedLine: null, selectLine: vi.fn(),
+  })).result.current;
+
+  it('tableView under "Posibles rechazos" and "Descartadas", not under the plain filters', () => {
+    const bounce = view('bounce', BOUNCE_LINES);
+    expect(bounce.tableView).toBe(true);
+    expect(bounce.bouncePairRows).toHaveLength(2);
+    expect(bounce.discardedPairRows).toBeNull();
+    const discarded = view('discarded', [D1, D2, D3]);
+    expect(discarded.tableView).toBe(true);
+    expect(discarded.bouncePairRows).toBeNull();
+    expect(discarded.discardedPairRows).toHaveLength(2);
+    const plain = view(null, BOUNCE_LINES);
+    expect(plain.tableView).toBe(false);
+    expect(plain.bouncePairRows).toBeNull();
+    expect(plain.discardedPairRows).toBeNull();
+  });
+
+  it('pairCounts carries the pair figures of both entries', () => {
+    expect(view(null, BOUNCE_LINES).pairCounts).toEqual({ bounce: 2, discarded: 2 });
   });
 });

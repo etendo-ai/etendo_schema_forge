@@ -92,6 +92,8 @@ describe('useAutoMatchReview', () => {
       onFocusConsumed: result.current.consumeFocus,
       dismissedKeys: result.current.dismissedKeys,
       onDismiss: result.current.dismiss,
+      // ETP-6359 — the panel forgets its hidden pairs after "Volver a considerar como posible rechazo".
+      onClearDismissed: result.current.clearDismissed,
       picks: result.current.picks,
       onPick: result.current.pickOutflow,
     });
@@ -168,6 +170,17 @@ describe('useAutoMatchReview', () => {
     expect(result.current.dismissedKeys).toBe(empty);
     act(() => result.current.dismiss('bp-high'));
     act(() => result.current.clearDismissed());
+    expect(result.current.dismissedKeys.size).toBe(0);
+  });
+
+  // ETP-6359 — the panel calls it after "Volver a considerar como posible rechazo".
+  it('panel.onClearDismissed empties the dismissed keys the panel and the modal read', () => {
+    const { result } = renderHook(() => useAutoMatchReview(GROUPS));
+    act(() => result.current.panel.onDismiss('bp-review'));
+    act(() => result.current.panel.onDismiss('bp-high'));
+    expect([...result.current.panel.dismissedKeys]).toEqual(['bp-review', 'bp-high']);
+    act(() => result.current.panel.onClearDismissed());
+    expect(result.current.panel.dismissedKeys.size).toBe(0);
     expect(result.current.dismissedKeys.size).toBe(0);
   });
 
