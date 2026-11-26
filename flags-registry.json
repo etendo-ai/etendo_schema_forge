@@ -2995,8 +2995,8 @@
       "flag": {
         "key": "mcp-routines",
         "defaultValue": false,
-        "ttl": "2027-03-31",
-        "ttlNote": "PLACEHOLDER, not a commitment: end of Q1 2027. Revisit once the first accounts are targeted and the KR2.1 child KPI (agent_kr21_routines_win_rate) has an official run.",
+        "ttl": "2026-12-01",
+        "ttlNote": "Agreed with the owner on 2026-11-26 (ETP-6461), replacing the end-of-Q1-2027 placeholder. Rollout is managed in the flags panel (beta = @etendo-ai, alpha = 2 emails). On this date decide whether it goes GA (retire the flag, keep the tool) or the TTL moves, based on the beta feedback and the KR2.1 child KPI (agent_kr21_routines_win_rate).",
         "symbols": [
           "mcp-routines",
           "MCP_ROUTINES",
