@@ -3,7 +3,7 @@
  * `node --test` can cover them): what the batch dialog shows, the numbering range of the result
  * toast, and the toast text itself.
  */
-import { CONFIRM_SEVERAL_KEY, confirmReasonKey } from './invoiceInboxMessages.js';
+import { CONFIRM_SEVERAL_KEY, confirmFailedDetail, confirmReasonKey } from './invoiceInboxMessages.js';
 import { isConfirmableRow, STATUS } from './invoiceInboxFilters.js';
 
 const ISO_CODE = /^[A-Z]{3}$/;
@@ -112,15 +112,37 @@ export function numberingText(numbers, ui) {
   return list.length > TOAST_LISTED_NUMBERS ? `${shown}, …` : shown;
 }
 
+/** JSON with object keys sorted at every level, so equal params always serialize equally. */
+function stableStringify(value) {
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  if (value && typeof value === 'object') {
+    const entries = Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`);
+    return `{${entries.join(',')}}`;
+  }
+  return JSON.stringify(value ?? null);
+}
+
+/**
+ * What makes two failures "the same reason": the code and, for a `confirm_failed`, its detail code and
+ * ALL its params (a different line, reason, amount or message is a different cause).
+ */
+function failureSignature(failure) {
+  const info = failure.code === 'confirm_failed' ? failure.detailInfo : null;
+  return info?.code ? `${failure.code}:${info.code}:${stableStringify(info.params ?? {})}` : String(failure.code);
+}
+
 /** The reason of a failed batch: the stopping one, the shared one, or "several". */
 function batchReason(result) {
   if (result.stopped) return result.stopped;
-  const codes = new Set(result.failed.map((failure) => failure.code));
-  return codes.size === 1 ? result.failed[0] : { reasonKey: CONFIRM_SEVERAL_KEY };
+  const signatures = new Set(result.failed.map(failureSignature));
+  return signatures.size === 1 ? result.failed[0] : { reasonKey: CONFIRM_SEVERAL_KEY };
 }
 
+/** A `confirm_failed` reason is its translated detail (`detailInfo`); without one it is the generic text. */
 function reasonText(reason, ui) {
-  return reason.reasonText ?? ui(reason.reasonKey ?? confirmReasonKey(reason.code));
+  if (reason.reasonText) return reason.reasonText;
+  const detail = reason.code === 'confirm_failed' && reason.detailInfo ? confirmFailedDetail(ui, reason.detailInfo) : null;
+  return detail || ui(reason.reasonKey ?? confirmReasonKey(reason.code));
 }
 
 /** "2 facturas registradas en Etendo · FC1000143 a FC1000144 · 2 productos creados". */
