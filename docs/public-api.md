@@ -639,7 +639,7 @@ GET /api/v1/contacts/{id}/contacts?filter[phone][contains]=555
 ```
 
 - `links` are root-relative, like the `links.self` of every resource, and keep the client's `filter` and `sort` parameters; `page[size]` is always explicit. `prev` and `next` are `null` when there is no such page.
-- `meta.page.total` is the exact number of records matching the filters. NEO computes it with a count query (the gateway never asks it to skip the count). If NEO ever answers without a usable count, the gateway omits `meta.page.total` and `links.last` and offers `next` only while the page came back full; it never reports an estimate.
+- `meta.page.total` is the exact number of records matching the filters. The gateway explicitly sends `_noCount=false` to NEO for every top-level and child list, requesting a count query; without it, NEO returns a grid-scroll estimate. This adds one count query per list request. If NEO ever answers without a usable count, the gateway omits `meta.page.total` and `links.last` and offers `next` only while the page came back full; it never reports an estimate.
 - A page beyond the last one answers `200` with `data: []`, the real `total`, and a `prev` that points at the last page. (NEO's datasource would answer its first page for such a request; the gateway turns that into the empty page.)
 - A single record read has no `meta.page` and no `links` other than the resource's own.
 

@@ -77,11 +77,9 @@ describe('list queries on product-category', () => {
       assert.deepEqual(new Set(seen), new Set(ids.values()));
     });
 
-    // docs 4.10: `meta.page.total` is the exact number of matching records. Suspected bug when this fails:
-    // without `_noCount=false` core skips the count and answers "rows shown + offset (+1 when the page is
-    // full)", a grid scroll hint (DefaultJsonDataService.fetch, preventCountOperation), and the REST path
-    // never sends `_noCount=false` (only the MCP list does, McpToolRouter). A 3-record set read with
-    // page[size]=2 happens to give 3 that way, so only a page size that does not coincide shows it.
+    // docs 4.10: totals must be exact. The gateway sends `_noCount=false` so core counts instead
+    // of returning its grid-scroll estimate. Three records with page[size]=2 can hide that bug;
+    // page[size]=1 exposes it. A deployed gateway predating this fix still fails this regression.
     it('meta.page.total is the real count of matches on any page size, and links.last points at the last page', async () => {
       const res = await api('GET', `product-category?${SCOPE}&sort=search_key&page[size]=1`);
       expectStatus(res, 200);
