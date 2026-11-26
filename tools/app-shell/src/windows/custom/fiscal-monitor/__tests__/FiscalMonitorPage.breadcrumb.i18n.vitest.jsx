@@ -151,10 +151,10 @@ describe('FiscalMonitorPage — breadcrumb against the real locale dictionary (E
   // configured system the title was the profile label ("SII", "SII + TBAI", ...); the system is
   // shown in the page body instead.
   it.each([
-    ['unconfigured', realUiEs, 'Monitor Fiscal', 'Impuestos / Monitor Fiscal', 'No hay sistema fiscal configurado para esta organización.'],
-    [null, realUiEs, 'Monitor Fiscal', 'Impuestos / Monitor Fiscal', 'No hay sistema fiscal configurado para esta organización.'],
-    ['unconfigured', realUiEn, 'Fiscal Monitor', 'Taxes / Fiscal Monitor', 'No fiscal system configured for this organization.'],
-  ])('keeps a title and breadcrumb when the profile is %s', async (profile, ui, title, breadcrumb, emptyText) => {
+    ['unconfigured', realUiEs, 'Monitor Fiscal', 'Impuestos / Monitor Fiscal', 'No hay sistema fiscal configurado para esta organización.', /Configúralo en Impuestos → Configuración Fiscal para/],
+    [null, realUiEs, 'Monitor Fiscal', 'Impuestos / Monitor Fiscal', 'No hay sistema fiscal configurado para esta organización.', /Configúralo en Impuestos → Configuración Fiscal para/],
+    ['unconfigured', realUiEn, 'Fiscal Monitor', 'Taxes / Fiscal Monitor', 'No fiscal system configured for this organization.', /Configure it in Taxes → Fiscal Configuration to/],
+  ])('keeps a title and breadcrumb when the profile is %s', async (profile, ui, title, breadcrumb, emptyText, setupHint) => {
     activeProfile = profile;
     activeUi = ui;
     render(<FiscalMonitorPage {...baseProps} />);
@@ -165,6 +165,8 @@ describe('FiscalMonitorPage — breadcrumb against the real locale dictionary (E
     const lastCall = setMetaMock.mock.calls.at(-1)[0];
     expect(lastCall.title).toBe(title);
     expect(lastCall.breadcrumb).toBe(breadcrumb);
+    // ETP-6380 CP-12 — the setup hint names the menu section, not just the window.
+    expect(screen.getByText(setupHint)).toBeInTheDocument();
   });
 
   it.each([
