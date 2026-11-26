@@ -830,7 +830,12 @@ export default function InviteAcceptancePage({ apiBase = import.meta.env.VITE_AP
           <p className="mt-3 text-base text-muted-foreground sm:text-xl">
             {ui('invitePageInvalidDescription')}
           </p>
-          <ErrorScreenButton signedIn={errorButtonSignedIn} navigate={navigate} ui={ui} className="mt-6 h-12 w-full rounded-lg text-base font-medium" />
+          <ErrorScreenButton
+            signedIn={errorButtonSignedIn}
+            navigate={navigate}
+            ui={ui}
+            className="mt-6 h-12 w-full rounded-lg text-base font-medium"
+            data-testid="ErrorScreenButton__fa3cd9" />
         </div>
       </AuthShell>
     );
@@ -938,7 +943,14 @@ export default function InviteAcceptancePage({ apiBase = import.meta.env.VITE_AP
               {actionError}
             </div>
           )}
-          <JoinActions showNotice={showJoinNotice} mismatch={accountMismatch} submitting={submitting} onAccept={handleAcceptExisting} onSignOut={handleCloseSessionAndContinue} ui={ui} />
+          <JoinActions
+            showNotice={showJoinNotice}
+            mismatch={accountMismatch}
+            submitting={submitting}
+            onAccept={handleAcceptExisting}
+            onSignOut={handleCloseSessionAndContinue}
+            ui={ui}
+            data-testid="JoinActions__fa3cd9" />
         </div>
       </AuthShell>
     );
@@ -988,7 +1000,12 @@ export default function InviteAcceptancePage({ apiBase = import.meta.env.VITE_AP
               </p>
             </div>
             <div className="pt-2">
-              <ErrorScreenButton signedIn={errorButtonSignedIn} navigate={navigate} ui={ui} className="w-full" />
+              <ErrorScreenButton
+                signedIn={errorButtonSignedIn}
+                navigate={navigate}
+                ui={ui}
+                className="w-full"
+                data-testid="ErrorScreenButton__fa3cd9" />
             </div>
           </div>
         )}
@@ -1071,7 +1088,15 @@ export default function InviteAcceptancePage({ apiBase = import.meta.env.VITE_AP
 
             {existingAuthenticated ? (
               <div className="space-y-3" data-testid="invite-authenticated-step">
-                <JoinActions compact showNotice={showJoinNotice} mismatch={accountMismatch} submitting={submitting} onAccept={handleAcceptExisting} onSignOut={handleCloseSessionAndContinue} ui={ui} />
+                <JoinActions
+                  compact
+                  showNotice={showJoinNotice}
+                  mismatch={accountMismatch}
+                  submitting={submitting}
+                  onAccept={handleAcceptExisting}
+                  onSignOut={handleCloseSessionAndContinue}
+                  ui={ui}
+                  data-testid="JoinActions__fa3cd9" />
               </div>
             ) : null}
           </div>
