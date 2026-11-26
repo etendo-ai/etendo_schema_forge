@@ -74,7 +74,7 @@ import {
 import { cn } from '@/lib/utils.js';
 import { useMenuLabel, useUI, useLocaleSwitch } from '@/i18n';
 import { useFavorites } from '@/components/layout/FavoritesContext';
-import { useFeatureFlag, PROOF_OF_CONCEPT_MENU, PUBLIC_API_KEYS, UNIFIED_CALENDAR_POC, DOC_TEMPLATE_SELECTION } from '@/lib/flags';
+import { useFeatureFlag, PROOF_OF_CONCEPT_MENU, PUBLIC_API_KEYS, DOC_TEMPLATE_SELECTION } from '@/lib/flags';
 import { useEnvironmentSwitch } from '@/hooks/useEnvironmentSwitch.js';
 import { useSupportSession } from '@/hooks/useSupportSession.js';
 import { isSupportRestrictedMenuItem } from '@/lib/supportSession.js';
@@ -672,7 +672,6 @@ export default function SideMenu({
   const showProofOfConceptMenu = useFeatureFlag(PROOF_OF_CONCEPT_MENU);
   const showPublicApiKeys = useFeatureFlag(PUBLIC_API_KEYS);
   const showDocTemplateSelection = useFeatureFlag(DOC_TEMPLATE_SELECTION);
-  const showUnifiedCalendarPoc = useFeatureFlag(UNIFIED_CALENDAR_POC);
   // Unconditional since ETP-4966: owning more than one environment is a shipped
   // capability, so the switcher is always available. The hook already returns an
   // empty list for a session that cannot list environments, which is what keeps
@@ -704,10 +703,7 @@ export default function SideMenu({
     // with showProofOfConceptMenu's group-level gate above, or an item inside an unlocked
     // group would still be filtered out here as if the flag were unset.
     [PROOF_OF_CONCEPT_MENU]: showProofOfConceptMenu,
-    // Unified Calendar PoC — item-level flag. It sits inside the Proof of Concept group, so it is
-    // visible only when BOTH proof-of-concept-menu (group gate above) and this flag are on.
-    [UNIFIED_CALENDAR_POC]: showUnifiedCalendarPoc,
-  }), [showPublicApiKeys, showDocTemplateSelection, showProofOfConceptMenu, showUnifiedCalendarPoc]);
+  }), [showPublicApiKeys, showDocTemplateSelection, showProofOfConceptMenu]);
 
   // Applied to Favorites TOO. Favorites are rebuilt from the user's own saved list rather than
   // from menuGroups, so returning early for that group let a favourited flag-gated item stay
