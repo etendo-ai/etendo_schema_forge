@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useUI } from '@/i18n';
 import { LinesBottomSection } from '@/components/contract-ui';
 import RelatedDocuments from '@/windows/custom/purchase-invoice/RelatedDocuments.jsx';
+import ImportDuaLinesSection from '@/windows/custom/purchase-invoice/ImportDuaLinesSection.jsx';
 import ImportFromGoodsReceiptModal from './ImportFromGoodsReceiptModal';
 import ImportFromPurchaseOrderModal from './ImportFromPurchaseOrderModal';
 import ImportFromGoodsReturnModal from './ImportFromGoodsReturnModal';
@@ -17,13 +18,19 @@ import { IMPORT_SAVE_OPTIONS } from '@/windows/custom/shared/importSaveOptions.j
  * so the Docs/Notes/Totals layout stays identical to the rest of the
  * inline-editable family; injects the purchase-invoice-specific RelatedDocuments
  * and the SIF (fiscal) data tabs as the `notesExtra` slot beneath the notes block.
+ *
+ * ETP-6284: the "Importación con DUA" check and its DUA / import-tax cards
+ * (`ImportDuaLinesSection`, behind the `siiImportDua` capability) go first, right below the lines.
  */
 export default function PurchaseInvoiceBottomPanel(props) {
   return (
-    <LinesBottomSection
-      {...props}
-      relatedDocuments={RelatedDocuments}
-    />
+    <>
+      <ImportDuaLinesSection {...props} data-testid="ImportDuaLinesSection__pinv" />
+      <LinesBottomSection
+        {...props}
+        relatedDocuments={RelatedDocuments}
+        data-testid="LinesBottomSection__9f9b08" />
+    </>
   );
 }
 

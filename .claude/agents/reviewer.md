@@ -25,7 +25,7 @@ Schema Forge is now **two sibling repos + one runtime module**:
 | **com.etendoerp.go** (runtime) | `{etendo_root}/modules/com.etendoerp.go` | NEO Headless engine (Java), ETGO_SF_* tables | runtime API |
 | shared bucket | duplicated in **both** SF repos | `cli/src/data-fixes/**`, `cli/src/db.js`, `cli/src/lib/**` | DB access from either side |
 
-**The functional repo consumes the tooling as published npm packages** (`@etendosoftware/schema-forge-cli`, `-core`, `app-shell-core`) from `node_modules`; here the pipeline is driven via `make` targets. The generators/extractors/pipeline source lives in `schema_forge_core`. **Golden rule:** *changing the tool → `schema_forge_core` (publish + bump); using the tool → `etendo_schema_forge`.*
+**The functional repo consumes the tooling as published npm packages** (`@etendo-ai/schema-forge-cli`, `-core`, `app-shell-core`) from `node_modules`; here the pipeline is driven via `make` targets. The generators/extractors/pipeline source lives in `schema_forge_core`. **Golden rule:** *changing the tool → `schema_forge_core` (publish + bump); using the tool → `etendo_schema_forge`.*
 
 **When reviewing, target the correct repo.** A PR of functional changes (windows, `decisions.json`, app-shell components, artifacts) belongs to `etendosoftware/etendo_schema_forge`. A PR of tooling changes (generators, extractors, pipeline, `packages/**`) belongs to `etendosoftware/schema_forge_core`. Use the matching `--repo` on every `gh pr …` command. A change that spans both must be TWO PRs (one per repo) — flag any single PR that mixes functional + tooling files as a split violation (see the `migrate-pre-split-pr` skill).
 

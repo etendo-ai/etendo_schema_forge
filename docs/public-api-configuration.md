@@ -84,6 +84,11 @@ must really return it under `internalPath`, or the attribute never appears.
 }
 ```
 
+An input field whose `internalPath` is not a field of the entity's `schema-raw.json` is generated with
+`queryable: false`: it is not a column of the entity, so the gateway
+answers `400 invalid_query_parameter` to a `filter` or `sort` on it and the OpenAPI document lists no
+`filter` parameter for it. One backed by a real column (`currency_rate`, internal `eTGOCurrencyRate`) stays queryable.
+
 A name that collides with a published field fails the generation.
 
 Real example: the headers of `sales-quotation`, `sales-order` and `purchase-order` publish the

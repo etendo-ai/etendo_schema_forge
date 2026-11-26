@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { isNetworkError } from '@etendosoftware/app-shell-core/auth';
+import { isNetworkError } from '@etendo-ai/app-shell-core/auth';
 import { useRecordWriteQueue } from '@/hooks/useRecordWriteQueue.js';
 import { applyOperations, confirmInboxDocument, markReviewed } from './invoiceInboxApi.js';
 import { applyPendingToReview, canConfirm, canMarkReviewed, isReloadCode, saveErrorKey } from './invoiceInboxReviewModel.js';

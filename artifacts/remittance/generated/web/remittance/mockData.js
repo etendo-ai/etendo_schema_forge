@@ -14,7 +14,6 @@ export const remittance = [
     "processed": "Sample processed",
     "remittanceStatus": "DR",
     "directDebitScheme": "Sample directDebitScheme",
-    "financed": "Sample financed",
     "iBAN": "Sample iBAN"
   },
   {
@@ -30,7 +29,6 @@ export const remittance = [
     "processed": "Sample processed",
     "remittanceStatus": "CO",
     "directDebitScheme": "Sample directDebitScheme",
-    "financed": "Sample financed",
     "iBAN": "Sample iBAN"
   },
   {
@@ -46,7 +44,6 @@ export const remittance = [
     "processed": "Sample processed",
     "remittanceStatus": "VO",
     "directDebitScheme": "Sample directDebitScheme",
-    "financed": "Sample financed",
     "iBAN": "Sample iBAN"
   },
   {
@@ -62,7 +59,6 @@ export const remittance = [
     "processed": "Sample processed",
     "remittanceStatus": "IP",
     "directDebitScheme": "Sample directDebitScheme",
-    "financed": "Sample financed",
     "iBAN": "Sample iBAN"
   },
   {
@@ -78,7 +74,6 @@ export const remittance = [
     "processed": "Sample processed",
     "remittanceStatus": "DR",
     "directDebitScheme": "Sample directDebitScheme",
-    "financed": "Sample financed",
     "iBAN": "Sample iBAN"
   },
   {
@@ -94,7 +89,6 @@ export const remittance = [
     "processed": "Sample processed",
     "remittanceStatus": "CO",
     "directDebitScheme": "Sample directDebitScheme",
-    "financed": "Sample financed",
     "iBAN": "Sample iBAN"
   },
   {
@@ -110,7 +104,6 @@ export const remittance = [
     "processed": "Sample processed",
     "remittanceStatus": "VO",
     "directDebitScheme": "Sample directDebitScheme",
-    "financed": "Sample financed",
     "iBAN": "Sample iBAN"
   },
   {
@@ -126,7 +119,6 @@ export const remittance = [
     "processed": "Sample processed",
     "remittanceStatus": "IP",
     "directDebitScheme": "Sample directDebitScheme",
-    "financed": "Sample financed",
     "iBAN": "Sample iBAN"
   },
   {
@@ -142,7 +134,6 @@ export const remittance = [
     "processed": "Sample processed",
     "remittanceStatus": "DR",
     "directDebitScheme": "Sample directDebitScheme",
-    "financed": "Sample financed",
     "iBAN": "Sample iBAN"
   },
   {
@@ -158,7 +149,6 @@ export const remittance = [
     "processed": "Sample processed",
     "remittanceStatus": "CO",
     "directDebitScheme": "Sample directDebitScheme",
-    "financed": "Sample financed",
     "iBAN": "Sample iBAN"
   },
   {
@@ -174,7 +164,6 @@ export const remittance = [
     "processed": "Sample processed",
     "remittanceStatus": "VO",
     "directDebitScheme": "Sample directDebitScheme",
-    "financed": "Sample financed",
     "iBAN": "Sample iBAN"
   },
   {
@@ -190,7 +179,6 @@ export const remittance = [
     "processed": "Sample processed",
     "remittanceStatus": "IP",
     "directDebitScheme": "Sample directDebitScheme",
-    "financed": "Sample financed",
     "iBAN": "Sample iBAN"
   }
 ];

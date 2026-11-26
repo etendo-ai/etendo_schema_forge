@@ -16,7 +16,7 @@ let mockTier = 'full';
 let mockAuth = {};
 const mockWindowIds = [];
 
-vi.mock('@etendosoftware/app-shell-core/auth', () => ({ useAuthOptional: () => mockAuth }));
+vi.mock('@etendo-ai/app-shell-core/auth', () => ({ useAuthOptional: () => mockAuth }));
 vi.mock('@/auth/AuthContext.jsx', () => ({ useWindowAccess: (id) => { mockWindowIds.push(id); return mockTier; } }));
 vi.mock('@/hooks/useCapabilitiesSafe.js', () => ({ useCapabilitiesSafe: () => mockCapabilities }));
 vi.mock('@/components/access/ProcessAccessGuard.jsx', () => ({
@@ -34,19 +34,12 @@ vi.mock('@/windows/custom/shared/pdfUtils.js', async (importOriginal) => ({
   ...(await importOriginal()),
   downloadBlobAsFile: (...args) => mockDownloadBlobAsFile(...args),
 }));
-vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }));
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() } }));
 vi.mock('@generated/remittance/custom/RemittanceSentDialog.jsx', () => ({
   default: (props) => (
     <div data-testid="row-sent-dialog" data-record={props.record?.id} data-api={props.apiBaseUrl}>
       <button type="button" data-testid="row-dialog-refresh" onClick={() => props.onRefresh()}>refresh</button>
       <button type="button" data-testid="row-dialog-close" onClick={() => props.onClose()}>close</button>
-    </div>
-  ),
-}));
-vi.mock('@generated/remittance/custom/RemittanceRegenerateDialog.jsx', () => ({
-  default: (props) => (
-    <div data-testid="regenerate-dialog-stub" data-record={props.record?.id} data-api={props.apiBaseUrl}>
-      <button type="button" data-testid="regenerate-dialog-close" onClick={() => props.onClose()}>close</button>
     </div>
   ),
 }));
@@ -245,14 +238,12 @@ describe('Remittance i18n keys', () => {
     for (const m of src.matchAll(/\b(?:ui|t)\(\s*'([A-Za-z][\w.]*)'/g)) literal.add(m[1]);
     for (const m of src.matchAll(/'((?:backendError\.)?remittance[A-Z]\w*)'/g)) literal.add(m[1]);
   }
-  // `remittanceFile${verb}…` in RemittanceFileCard: verb is Generate | Regenerate.
-  const dynamic = ['Generate', 'Regenerate'].flatMap((verb) => ['', 'ConfirmTitle', 'ConfirmBody', 'd', 'Error'].map((sfx) => `remittanceFile${verb}${sfx}`));
-  const keys = [...new Set([...literal, ...dynamic])].sort();
+  const keys = [...literal].sort();
   const own = keys.filter((k) => /^(backendError\.)?remittance[A-Z]/.test(k));
 
   it('finds the keys it is supposed to check (guards against a regex that matches nothing)', () => {
     expect(keys.length).toBeGreaterThan(60);
-    expect(keys).toEqual(expect.arrayContaining(['remittanceReturnTitle', 'remittanceFileGenerateConfirmBody', 'remittanceFileRegenerateError', 'remittanceFileRegenerated', 'remittanceFileGenerated']));
+    expect(keys).toEqual(expect.arrayContaining(['remittanceReturnTitle', 'remittanceFileDownload', 'remittanceFileIncludesReturnedLines']));
   });
 
   it.each([['en_US', enUS], ['es_ES', esES]])('every key the custom files use exists in %s', (_loc, json) => {
@@ -268,9 +259,12 @@ describe('Remittance i18n keys', () => {
   it('the parameterized messages keep their placeholders in the three locales', () => {
     for (const json of [enUS, esES, esAR]) {
       expect(json.genericLabels.remittanceReturnSuccess).toContain('{count}');
+      // The singular is written out (1 cobro / 1 collection), as remittanceLinesTotalOne.
+      expect(json.genericLabels.remittanceReturnSuccessOne).not.toContain('{count}');
+      expect(json.genericLabels.remittanceReturnSuccessOne).toMatch(/\b1\b/);
       expect(json.genericLabels.remittanceReturnReturnedOn).toContain('{date}');
-      expect(json.genericLabels.remittanceFileGenerated).toContain('{fileName}');
-      expect(json.genericLabels.remittanceFileRegenerated).toContain('{fileName}');
+      // No count on purpose: returnedCount counts payments, not the invoices the lines show.
+      expect(json.genericLabels.remittanceFileIncludesReturnedLines).not.toContain('{count}');
     }
   });
 });
@@ -355,8 +349,7 @@ describe('Row menu (grid ⋮) «Descargar fichero»', () => {
     return mockAppProps.rowQuickActions.menuActions({ row: { id: 'rem-7', remittanceStatus: status } });
   };
   const downloadEntry = (status) => menuFor(status).find((a) => a.key === 'downloadFile');
-  const fileBytes = () => ({ ok: true, status: 200, blob: async () => new Blob(['<xml/>']) });
-  const readiness = (latestFile) => ({ ok: true, status: 200, json: async () => ({ response: { data: { latestFile } } }) });
+  const fileAnswer = (extra = {}) => ({ ok: true, status: 200, json: async () => ({ response: { data: { fileName: 'remesa.xml', content: '<Document/>', returnedCount: 0, ...extra } } }) });
 
   beforeEach(() => {
     mockApiFetch.mockReset();
@@ -376,74 +369,43 @@ describe('Row menu (grid ⋮) «Descargar fichero»', () => {
     expect(downloadEntry(status)).toBeUndefined();
   });
 
-  it('downloads the main file named by fileReadiness, through the same path as the card, and opens nothing', async () => {
-    mockApiFetch.mockResolvedValue(readiness({ attachmentId: 'att-1', fileName: 'remesa.xml' }));
-    mockRootFetch.mockResolvedValue(fileBytes());
+  it('downloads the file generated on the fly (downloadFile, no attachment) and opens nothing', async () => {
+    mockApiFetch.mockResolvedValue(fileAnswer());
     await act(async () => { await downloadEntry('SB').onClick({ row: { id: 'rem-7' } }); });
-    expect(mockApiFetch.mock.calls[0][0]).toBe('/remittance/rem-7/action/fileReadiness');
-    expect(mockRootFetch).toHaveBeenCalledWith('/sws/neo/attachments/file/att-1');
+    expect(mockApiFetch).toHaveBeenCalledTimes(1);
+    expect(mockApiFetch.mock.calls[0][0]).toBe('/remittance/rem-7/action/downloadFile');
+    expect(mockRootFetch).not.toHaveBeenCalled();
     expect(mockDownloadBlobAsFile).toHaveBeenCalledWith(expect.any(Blob), 'remesa.xml');
     expect(screen.queryByTestId('row-sent-dialog')).toBeNull();
     expect(toast.error).not.toHaveBeenCalled();
   });
 
-  it('falls back to the newest .xml attachment when fileReadiness names no file (like the card)', async () => {
-    mockApiFetch.mockResolvedValue(readiness(null));
-    mockRootFetch.mockImplementation((url) => Promise.resolve(url.startsWith('/sws/neo/attachments/file/')
-      ? fileBytes()
-      : { ok: true, status: 200, json: async () => ({ items: [{ id: 'a2', name: 'new.xml', uploadedAt: '2026-11-10T10:00:00Z' }] }) }));
-    await act(async () => { await downloadEntry('CT').onClick({ row: { id: 'rem-7' } }); });
-    expect(mockRootFetch).toHaveBeenCalledWith('/sws/neo/attachments/REM_Remittance/rem-7');
-    expect(mockDownloadBlobAsFile).toHaveBeenCalledWith(expect.any(Blob), 'new.xml');
-  });
-
-  it('toasts that there is no file when none is found', async () => {
-    mockApiFetch.mockResolvedValue(readiness(null));
-    mockRootFetch.mockResolvedValue({ ok: true, status: 200, json: async () => ({ items: [] }) });
-    await act(async () => { await downloadEntry('CT').onClick({ row: { id: 'rem-7' } }); });
-    expect(toast.error).toHaveBeenCalledWith('remittanceFileNone');
-    expect(mockDownloadBlobAsFile).not.toHaveBeenCalled();
+  it('adds an informative toast when the file carries returned receipts', async () => {
+    mockApiFetch.mockResolvedValue(fileAnswer({ returnedCount: 1 }));
+    await act(async () => { await downloadEntry('CP').onClick({ row: { id: 'rem-7' } }); });
+    expect(toast.info).toHaveBeenCalledWith('remittanceFileIncludesReturnedLines');
   });
 
   it('toasts a failed download with the translated fallback', async () => {
-    mockApiFetch.mockResolvedValue(readiness({ attachmentId: 'att-1', fileName: 'remesa.xml' }));
-    mockRootFetch.mockResolvedValue({ ok: false, status: 500, json: async () => ({}) });
+    mockApiFetch.mockResolvedValue({ ok: false, status: 500, json: async () => ({}) });
     await act(async () => { await downloadEntry('PR').onClick({ row: { id: 'rem-7' } }); });
     expect(toast.error).toHaveBeenCalledWith('remittanceFileDownloadError');
     expect(mockDownloadBlobAsFile).not.toHaveBeenCalled();
   });
 });
 
-// ETP-6247 — the detail: «Descargar fichero» in the top bar and «Regenerar fichero» in the kebab.
+// ETP-6247 — the detail: «Descargar fichero» in the top bar. There is no «Regenerar fichero» any more: the file is
+// generated on the fly at every download, nothing is stored.
 describe('Detail file actions', () => {
-  const kebab = (status) => {
-    render(<RemittanceRoute apiBaseUrl="/sws/neo/remittance" />);
-    return mockAppProps.menuActions({ data: { id: 'rem-9', remittanceStatus: status } });
-  };
 
   it('hands the top-bar slot the download button (topbarSecondary)', () => {
     render(<RemittanceRoute apiBaseUrl="/sws/neo/remittance" />);
     expect(mockAppProps.topbarSecondary.name ?? mockAppProps.topbarSecondary.displayName).toBe('RemittanceDownloadButton');
   });
 
-  it.each([['PR'], ['SB']])('a %s remittance has «Regenerar fichero» in the kebab', (status) => {
-    const menu = kebab(status);
-    expect(menu).toHaveLength(1);
-    expect(menu[0]).toMatchObject({ key: 'regenerateFile', labelKey: 'remittanceFileRegenerate' });
-    expect(menu[0].icon).toBeTruthy();
-  });
-
-  it.each([['PE'], ['CT'], ['PT'], ['CP'], ['PP'], ['AN'], [undefined]])('a %s remittance has none', (status) => {
-    expect(kebab(status)).toEqual([]);
-  });
-
-  it('choosing it opens the confirmation on the record and closing removes it', () => {
-    const menu = kebab('PR');
-    act(() => { menu[0].onClick(); });
-    expect(screen.getByTestId('regenerate-dialog-stub')).toHaveAttribute('data-record', 'rem-9');
-    expect(screen.getByTestId('regenerate-dialog-stub')).toHaveAttribute('data-api', '/sws/neo/remittance');
-    fireEvent.click(screen.getByTestId('regenerate-dialog-close'));
-    expect(screen.queryByTestId('regenerate-dialog-stub')).toBeNull();
+  it.each([['PE'], ['PR'], ['SB'], ['CT'], ['PT'], ['CP'], ['PP'], ['AN']])('a %s remittance gets no detail kebab entry (no «Regenerar fichero»)', () => {
+    render(<RemittanceRoute apiBaseUrl="/sws/neo/remittance" />);
+    expect(mockAppProps.menuActions).toBeUndefined();
   });
 
   it('a caller\'s own menuActions / topbarSecondary win', () => {

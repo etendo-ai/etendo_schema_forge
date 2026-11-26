@@ -2,8 +2,7 @@
 
 The BFF keeps the OpenCode Go credential server-side and forwards only the
 current browser session credential to Etendo Go's MCP endpoint. The existing
-Copilot popup calls this BFF when the `webmcp-agent-chat` feature flag is on;
-when it is off, the legacy Copilot API remains unchanged.
+Copilot popup always calls this BFF; there is no feature flag or override.
 
 ## The forwarded credential: two schemes, three headers
 
@@ -60,13 +59,26 @@ code. In production, expose the same `/api/ai/chat` contract through the
 server-side Cloud Function/BFF and keep the browser session token as the only
 credential forwarded to the Etendo MCP endpoint.
 
-When the feature flag is enabled, the BFF also advertises the browser-side
+The BFF also advertises the browser-side
 `inspect_page_dom` and `interact_with_page` tools. The browser returns visible
 interactive elements as temporary IDs, and subsequent interactions must use an
 ID from the latest inspection. The interaction surface is limited to click,
 fill, type, and key press operations; it does not expose arbitrary selectors,
 JavaScript execution, password values, or a second authorization mechanism.
-The app-shell also provides a throttled floating page-help action that asks the
+`highlight_element` is the tutorial half of that surface: it draws a ring
+around one element and shows the model's explanation next to it, and nothing
+else — it never clicks, focuses, types, or changes a value, and it refuses
+password fields. `inspect_page_dom` reports a stable `fieldKey` for every form
+field (read-only fields included) whose key is unique among the visible fields,
+which the model should prefer over the positional `dom-N` id because it
+survives a re-render. A key that repeats (one per grid row, or a header field
+sharing its key with a line column) is withheld, so the model addresses that
+field by its `dom-N` id instead; resolving a `fieldKey` always picks its first
+visible match, never a hidden twin. One element is
+highlighted at a time: a second call replaces the first, which is how a
+sequence of atomic calls reads as a guided tour.
+
+The app-shell also provides a throttled floating page-help action (behind the `page-help-suggestions` flag) that asks the
 model to inspect the current page after navigation or meaningful UI interaction
 and present a contextual suggestion in a floating callout. Clicking that callout
 opens the existing Copilot conversation with the help context. It is advisory:
@@ -322,7 +334,7 @@ pipeline itself is broken), run the same script on a Linux host with Docker
 update the service:
 
 ```bash
-export GH_TOKEN=<token with repo + read:packages>   # the build installs @etendosoftware packages
+export GH_TOKEN=<token with repo + read:packages>   # the build installs @etendo-ai packages
 bash $S build  production <forge_sha>              # prints DIGEST=sha256:…
 bash $S deploy production sha256:<digest>          # verifies, rolls back on failure
 ```

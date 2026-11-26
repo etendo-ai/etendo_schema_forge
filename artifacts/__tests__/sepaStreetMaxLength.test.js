@@ -19,7 +19,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { STREET_NAME_MAX_LENGTH } from '@etendosoftware/app-shell-core/lib/locationAddress.js';
+import { STREET_NAME_MAX_LENGTH } from '@etendo-ai/app-shell-core/lib/locationAddress.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SEPA_STREET_COLUMN = 'EM_OBSEPA_StrtNm';

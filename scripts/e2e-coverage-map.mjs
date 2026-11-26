@@ -26,7 +26,7 @@ export function buildMap(results, { commit = null } = {}) {
     if (status && status !== 'passed' && status !== 'skipped') partial.add(spec);
     for (const file of files) {
       // Third-party code cannot change in a commit of this repo; the core package can, by a bump.
-      if (file.includes('node_modules/') && !file.includes('node_modules/@etendosoftware/')) continue;
+      if (file.includes('node_modules/') && !file.includes('node_modules/@etendo-ai/')) continue;
       if (!byFile.has(file)) byFile.set(file, new Set());
       byFile.get(file).add(spec);
     }

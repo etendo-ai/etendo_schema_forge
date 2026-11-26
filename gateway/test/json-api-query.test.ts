@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { HttpException } from '@nestjs/common';
-import type { PublicApiEntity } from '@etendosoftware/api-gateway-core';
+import type { PublicApiEntity } from '@etendo-ai/api-gateway-core';
 import { filterOperatorsFor, neoListParams, pagination, parseListQuery } from '../src/public-api/json-api-query.ts';
 
 const field = (internalPath: string, dataType: Record<string, string> | undefined, extra: Record<string, unknown> = {}) =>
@@ -23,6 +23,7 @@ const entity = {
     category: field('productCategory', { type: 'string' }, { relationship: { resource: 'product-category', cardinality: 'one', foreignKey: 'category' } }),
     secret: field('secretCode', { type: 'string' }, { direction: 'in' }),
     blob: field('blob', { type: 'object' }),
+    cityName: field('cityName', { type: 'string' }, { queryable: false }),
   },
 } as unknown as PublicApiEntity;
 
@@ -260,4 +261,19 @@ test('pagination without an exact total omits total and last, and offers next on
   assert.equal('last' in full.links, false);
   assert.equal(full.links.next, '/api/v1/c?page[number]=3&page[size]=10');
   assert.equal(pagination('/api/v1/c', query, 4, undefined).links.next, null);
+});
+
+test('a field the manifest marks queryable: false is refused in filter and sort', () => {
+  for (const query of [{ filter: { cityName: 'Madrid' } }, { filter: { cityName: { contains: 'Mad' } } }]) {
+    const refused = refusal(query);
+    assert.equal(refused.parameter, 'filter[cityName]');
+    assert.match(refused.detail, /cityName/);
+  }
+  for (const sort of ['cityName', '-cityName', 'name,cityName']) {
+    const refused = refusal({ sort });
+    assert.equal(refused.parameter, 'sort');
+    assert.match(refused.detail, /cityName/);
+  }
+  assert.ok(parseListQuery(entity, { filter: { name: 'a' }, sort: '-name' }).criteria);
+  assert.deepEqual(filterOperatorsFor(entity.fields.cityName as never), []);
 });

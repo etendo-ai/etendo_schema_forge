@@ -35,7 +35,10 @@ vi.mock('@/windows/custom/shared/documentPdfRegistry.js', () => ({
 // The send path stops at the email-send boundary: what it receives as `pdfBlobUrl` is the file
 // cached as the record's main attachment, i.e. the one the customer gets.
 const mockSendDocumentEmail = vi.fn();
-vi.mock('../documentEmailSend.js', () => ({
+// Partial mock: only the send is replaced; every other export (e.g. `documentEmailBodyKey`, which
+// the modal calls to pick its default message) stays real, so a new export cannot break this file.
+vi.mock('../documentEmailSend.js', async (importOriginal) => ({
+  ...(await importOriginal()),
   sendDocumentEmail: (...args) => mockSendDocumentEmail(...args),
 }));
 

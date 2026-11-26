@@ -1,8 +1,8 @@
 {
-  "version": "0.95.0",
+  "version": "0.96.0",
   "generatedAt": "2026-10-19T17:29:21.531Z",
-  "updatedAt": "2026-11-18T15:10:53.247Z",
-  "checksum": "88aacfce30a7e237",
+  "updatedAt": "2026-11-25T18:56:50.834Z",
+  "checksum": "caa4d48fb06feed0",
   "frontendContract": {
     "window": {
       "id": "167",
@@ -1700,6 +1700,25 @@
             "validation": {
               "maxLength": 0
             }
+          },
+          {
+            "name": "etgoRemittedAmt",
+            "apiKey": "etgoRemittedAmt",
+            "column": "EM_Etgo_Remitted_Amt",
+            "label": "EM_Etgo_Remitted_Amt",
+            "type": "amount",
+            "tsType": "number",
+            "visibility": "readOnly",
+            "required": false,
+            "grid": false,
+            "form": false,
+            "computed": {
+              "mode": "stored",
+              "refresh": "synchronous"
+            },
+            "validation": {
+              "maxLength": 22
+            }
           }
         ],
         "searchableFields": [
@@ -2806,13 +2825,12 @@
             "apiKey": "rate",
             "column": "Rate",
             "label": "Rate",
-            "type": "number",
+            "type": "decimal",
             "tsType": "number",
             "visibility": "editable",
             "required": false,
             "grid": true,
             "form": true,
-            "explicitType": true,
             "validation": {
               "maxLength": 10
             },
@@ -4663,6 +4681,14 @@
             "type": "date",
             "visibility": "readOnly",
             "required": false
+          },
+          {
+            "name": "etgoRemittedAmt",
+            "apiKey": "etgoRemittedAmt",
+            "column": "EM_Etgo_Remitted_Amt",
+            "type": "amount",
+            "visibility": "readOnly",
+            "required": false
           }
         ],
         "namedFilters": [
@@ -5601,7 +5627,7 @@
             "name": "rate",
             "apiKey": "rate",
             "column": "Rate",
-            "type": "number",
+            "type": "decimal",
             "visibility": "editable",
             "required": false
           },
@@ -8276,6 +8302,14 @@
         "description": "Field 'eTGODueDate' should be present in header"
       },
       {
+        "id": "t-field-presence-header-etgoRemittedAmt",
+        "category": "field-presence",
+        "entity": "header",
+        "field": "etgoRemittedAmt",
+        "runner": "node",
+        "description": "Field 'etgoRemittedAmt' should be present in header"
+      },
+      {
         "id": "t-field-presence-header-eTGOTbaiStatus",
         "category": "field-presence",
         "entity": "header",
@@ -9042,6 +9076,14 @@
         "field": "eTGODueDate",
         "runner": "node",
         "description": "Field 'eTGODueDate' should have type 'string' in header"
+      },
+      {
+        "id": "t-field-type-header-etgoRemittedAmt",
+        "category": "field-type",
+        "entity": "header",
+        "field": "etgoRemittedAmt",
+        "runner": "node",
+        "description": "Field 'etgoRemittedAmt' should have type 'number' in header"
       },
       {
         "id": "t-field-type-header-eTGOTbaiStatus",
@@ -12629,15 +12671,15 @@
       }
     ],
     "summary": {
-      "total": 711,
+      "total": 713,
       "byCategory": {
         "action-endpoint": 26,
         "crud-flags": 6,
         "default-value-type": 26,
         "displaylogic-evaluable": 32,
         "displaylogic-valid": 32,
-        "field-presence": 96,
-        "field-type": 96,
+        "field-presence": 97,
+        "field-type": 97,
         "readonlylogic-evaluable": 51,
         "readonlylogic-valid": 51,
         "rule-declared": 10,
@@ -12647,7 +12689,7 @@
         "visibility": 6
       },
       "byRunner": {
-        "node": 711,
+        "node": 713,
         "junit": 0
       }
     }

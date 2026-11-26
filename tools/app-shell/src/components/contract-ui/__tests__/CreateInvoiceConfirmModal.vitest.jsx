@@ -2,7 +2,7 @@
 // Mocks BEFORE imports
 // ETP-5022 — the component's requests now come from `useApiFetch`, which reads the bearer
 // token from the session instead of from the `token` prop.
-vi.mock('@etendosoftware/app-shell-core/auth', async (importOriginal) => ({
+vi.mock('@etendo-ai/app-shell-core/auth', async (importOriginal) => ({
   ...(await importOriginal()),
   useAuthOptional: () => ({ token: 'test-token' }),
 }));
@@ -46,7 +46,7 @@ vi.mock('@/components/ui/select', () => ({
 }));
 
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
-import { setSessionCredentials, CREDENTIAL_MODES } from '@etendosoftware/app-shell-core/auth/sessionCredentials.js';
+import { setSessionCredentials, CREDENTIAL_MODES } from '@etendo-ai/app-shell-core/auth/sessionCredentials.js';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import CreateInvoiceConfirmModal from '@/components/contract-ui/CreateInvoiceConfirmModal';
 import * as formatCurrencyModule from '@/lib/formatCurrency.js';

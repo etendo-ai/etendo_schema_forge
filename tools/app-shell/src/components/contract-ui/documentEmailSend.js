@@ -1,6 +1,6 @@
 import { uploadAndMarkMainAttachment } from '../copilot/ocr/listAttachments.js';
 
-import { apiFetch } from '@etendosoftware/app-shell-core/auth/api';
+import { apiFetch } from '@etendo-ai/app-shell-core/auth/api';
 export function resolveNeoBaseUrl(apiBaseUrl) {
   return apiBaseUrl ? apiBaseUrl.replace(/\/[^/]+$/, '') : '/sws/neo';
 }
@@ -19,6 +19,27 @@ async function resolveTable(specName, attachmentTable) {
 
 export function resolveDocumentEmailContract(windowName) {
   return `${windowName}-send`;
+}
+
+/**
+ * The send modal's default-message key per email contract whose module catalog declares its own
+ * `<contract>.body` (ETP-6209). Supplier documents keep «usted» («Le enviamos su …»); every other
+ * contract falls back to `document.body` («Te enviamos tu …») and so to `sendModalDefaultMessage`.
+ *
+ * Keyed by CONTRACT, the same name the backend reads its catalog with, not by window: a contract
+ * the catalog declares a body for must appear here, which `defaultCopyInSync.vitest.js` checks
+ * against the catalog. `return-to-vendor-send` has no send trigger today (see
+ * `DefaultDocumentSendEmailContract#getSpecName`); it is listed so the two tables stay identical.
+ */
+export const DOCUMENT_EMAIL_BODY_KEYS = Object.freeze({
+  'purchase-order-send': 'sendModalDefaultMessageSupplier',
+  'return-to-vendor-send': 'sendModalDefaultMessageSupplier',
+  'return-to-vendor-shipment-send': 'sendModalDefaultMessageSupplier',
+});
+
+/** The i18n key of the send modal's default message for a window (its contract's body). */
+export function documentEmailBodyKey(windowName) {
+  return DOCUMENT_EMAIL_BODY_KEYS[resolveDocumentEmailContract(windowName)] ?? 'sendModalDefaultMessage';
 }
 
 export function buildEmailContractCommand(contractName, documentId, options = {}) {

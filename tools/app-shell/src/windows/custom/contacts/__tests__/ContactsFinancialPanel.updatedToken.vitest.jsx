@@ -32,7 +32,7 @@ import {
   neoResponse, bodyOf, writeCalls, resetRecordVersionsForTests, rememberRecordVersion,
   createRealUseApiFetchMock,
 } from '@/test/realApiFetch.js';
-import { getRecordVersion } from '@etendosoftware/app-shell-core/lib/recordVersions.js';
+import { getRecordVersion } from '@etendo-ai/app-shell-core/lib/recordVersions.js';
 import ContactsFinancialPanel from '../ContactsFinancialPanel.jsx';
 
 const BP_ID = 'bp-1';

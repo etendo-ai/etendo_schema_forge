@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button.jsx';
 import { useUI } from '@/i18n';
 import { useCsvExport } from '@/hooks/useCsvExport';
-import { outputFormats } from '@etendosoftware/app-shell-core/lib/import/importFormats.js';
+import { outputFormats } from '@etendo-ai/app-shell-core/lib/import/importFormats.js';
 import { buildExportColumns, buildExportValueMaps, serializeExportColumns } from '@/lib/importExportColumns.js';
 import {
   DropdownMenu,

@@ -1,0 +1,250 @@
+import { WarningIcon } from '@phosphor-icons/react';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { DateField } from '@/components/ui/date-field';
+import RequiredMark from '@/components/ui/required-mark.jsx';
+import { Switch } from '@/components/ui/switch';
+import { InfoBanner } from '@/components/InfoBanner.jsx';
+import { parseCalendarDate } from '@/lib/dateOnly.js';
+import SiiPanelCard from '@/windows/custom/shared/SiiPanelCard.jsx';
+import { useCapabilitiesSafe } from '@/hooks/useCapabilitiesSafe.js';
+import { SII_IMPORT_DUA_CAPABILITY, isCapabilityVisible } from '@/lib/capabilityVisibility.js';
+
+/**
+ * ETP-6284 — the import-with-DUA block of the purchase invoice, shown in the Lines tab while the
+ * header check "Importación con DUA" (`etgoImportDua`, `ImportDuaLinesSection`) is on, behind the
+ * `siiImportDua` capability (backend flag `sii-import-dua`, see `useSiiImportDuaEnabled`). One
+ * card, no step numbers: the DUA data first, then `children` — the import tax lines
+ * (`SiiImportTaxesSection`). It does NOT depend on SII: an organization that imports but does not
+ * file SII from Etendo uses it too. SII reads the same columns (C_Invoice.EM_Aeatsii_Dua /
+ * _Fecha_Dua / _Multi_Dua) when it sends.
+ *
+ *   - Multiple DUA (`aeatsiiMultiDua`): the "Múltiple DUA" switch at the top right of the card.
+ *   - DUA (`aeatsiiDua`) and DUA date (`aeatsiiFechaDua`): shown while Multiple DUA is off. With
+ *     Multiple DUA on they move to each import tax line (SiiImportTaxesSection).
+ *
+ * Read-only: `readOnly` from the caller (completed, sent to SII, or a read-only role).
+ *
+ * Required (`duaRequired`): only when the organization files SII for the invoice (the caller
+ * resolves it like the SIF tab: `getInvoiceFiscalTargets(...).showSii` plus the SII adoption date
+ * vs the accounting date). Then DUA and DUA date are required unless Multiple DUA is checked
+ * (com.etendoerp.go `PurchaseInvoiceImportDua` refuses the save otherwise, on every channel), so
+ * both carry the red `*` (and the error outline while empty). For any other organization they stay
+ * optional: no `*`, no outline.
+ *
+ * LC (customs complementary liquidation, SII invoice type): the field holds the liquidation number,
+ * not a DUA — no 18-character counter when `siiTypeKey` is LC. The LC prefix warning belongs to the
+ * SII panel of the SIF tab (`SiiLcPrefixHint`), next to the invoice type it is about.
+ *
+ * DUA format: a DUA has 18 characters. The counter and the warning are a hint only — the SII
+ * module checks the DUA format for IGIC organizations only, so for IVA it must never block a save.
+ *
+ * DUA date vs accounting register date: a non-blocking warning when the DUA date is later than
+ * Fecha registro contable (`aeatsiiFechaRegCont`); no warning while that date is empty. Classic
+ * checks it only at send time (`SIIUtils.invoicePreviousValidations`), and the automatic background
+ * send skips the invoice without a message, so the user is told here. With Multiple DUA the same
+ * warning is shown by the import-taxes section over its rows' dates (`isDuaDateAfterAccountingDate`).
+ *
+ * Writes go through `onChange` into DetailView's shared editing state, like every other header
+ * field; the header save persists them.
+ */
+export const DUA_LENGTH = 18;
+const ERROR_OUTLINE = 'border-destructive focus-visible:ring-destructive focus-within:ring-destructive';
+
+function isChecked(value) {
+  return value === true || value === 'Y';
+}
+
+// Prefixes of a customs complementary-liquidation number (Tipo factura LC). AEAT SII for IVA
+// rejects others with error 1271; Classic's IGIC validation
+// (SII2025ReceivedInvoicesValidations.evaluateDocNoForF5OrLCInvoices) requires CLC or 599.
+export const LC_PREFIXES = Object.freeze({ IVA: ['LC', 'A01', 'A02'], IGIC: ['CLC', '599'] });
+
+/**
+ * True when a non-empty LC number does not start with an accepted prefix (hint only, never
+ * blocks). With an unknown tax type, either set is accepted.
+ *
+ * @param {string} value the DUA field value
+ * @param {'IVA'|'IGIC'|null} taxType the organization's SII tax type
+ */
+export function isLcNumberPrefixOff(value, taxType) {
+  const v = String(value ?? '').trim().toUpperCase();
+  if (!v) return false;
+  const prefixes = LC_PREFIXES[taxType] ?? [...LC_PREFIXES.IVA, ...LC_PREFIXES.IGIC];
+  return !prefixes.some(prefix => v.startsWith(prefix));
+}
+
+/** i18n key of the LC prefix hint for the organization's tax type. */
+export function lcHintKey(taxType) {
+  if (taxType === 'IGIC') return 'sifDataTabs.dua.lcHintIgic';
+  if (taxType === 'IVA') return 'sifDataTabs.dua.lcHintIva';
+  return 'sifDataTabs.dua.lcHintAny';
+}
+
+/**
+ * True when both dates are set and the DUA date is a later calendar day than the accounting
+ * register date (hint only, never blocks). Compared as calendar dates, never as instants.
+ */
+export function isDuaDateAfterAccountingDate(duaDate, accountingRegisterDate) {
+  const dua = parseCalendarDate(duaDate);
+  const reg = parseCalendarDate(accountingRegisterDate);
+  return Boolean(dua && reg) && dua.getTime() > reg.getTime();
+}
+
+/** True when a non-empty DUA does not have its 18 characters (hint only, never blocks). */
+export function isDuaLengthOff(value) {
+  const length = String(value ?? '').trim().length;
+  return length > 0 && length !== DUA_LENGTH;
+}
+
+function DuaField({ label, htmlFor, required, aside, helper, children }) {
+  return (
+    <div className="space-y-1 min-w-0" data-testid={`DuaField__${htmlFor}`}>
+      <div className="flex items-baseline justify-between gap-2" data-testid={`DuaField__${htmlFor}_labelRow`}>
+        <Label
+          htmlFor={htmlFor}
+          className="text-sm text-foreground font-medium"
+          data-testid={`Label__siiDua_${htmlFor}`}>
+          {label}
+          {required && <RequiredMark aria-hidden="true" data-testid={`RequiredMark__sif_${htmlFor}`} />}
+        </Label>
+        {aside}
+      </div>
+      {children}
+      {helper && <p className="text-xs text-muted-foreground" data-testid={`DuaField__${htmlFor}_helper`}>{helper}</p>}
+    </div>
+  );
+}
+
+/**
+ * Whether imports with DUA are on for this user: `capabilities.siiImportDua` off
+ * `SFWindowAccessMap`, which mirrors the backend-only `sii-import-dua` flag. Fails closed (an
+ * unloaded map or no AuthProvider reads off). The one reader of the capability on the SPA side.
+ */
+export function useSiiImportDuaEnabled() {
+  return isCapabilityVisible(useCapabilitiesSafe(), SII_IMPORT_DUA_CAPABILITY);
+}
+
+/**
+ * ETP-6284 — the LC prefix warning of the SII panel (SIF tab): with SII invoice type LC and a
+ * single DUA, warns when the liquidation number does not start with an accepted prefix. Hint only.
+ */
+export function SiiLcPrefixHint({ ui, siiTypeKey, dua, multiDua, siiTaxType = null, className }) {
+  if (siiTypeKey !== 'LC' || multiDua || !isLcNumberPrefixOff(dua, siiTaxType)) return null;
+  return (
+    <InfoBanner
+      tone="warning"
+      icon={WarningIcon}
+      dismissible={false}
+      className={className}
+      data-testid="SiiImportDuaSection__lcHint">
+      {ui(lcHintKey(siiTaxType))}
+    </InfoBanner>
+  );
+}
+
+export default function SiiImportDuaSection({
+  ui, siiTypeKey = null, getVal, getDateVal, onChange, readOnly, duaRequired: siiRequires = false,
+  children,
+}) {
+  const enabled = useSiiImportDuaEnabled();
+  if (!enabled) return null;
+
+  const multiDua = isChecked(getVal('aeatsiiMultiDua'));
+  const duaRequired = siiRequires && !multiDua && !readOnly;
+  const dua = String(getVal('aeatsiiDua') ?? '');
+  const duaDate = getDateVal('aeatsiiFechaDua');
+  const duaMissing = duaRequired && !dua.trim();
+  const dateMissing = duaRequired && !duaDate;
+  // LC: the field holds the customs complementary-liquidation number, not an 18-char DUA.
+  const isLc = siiTypeKey === 'LC';
+  const showLengthHint = !isLc && isDuaLengthOff(dua);
+  const showDateHint = isDuaDateAfterAccountingDate(duaDate, getDateVal('aeatsiiFechaRegCont'));
+
+  const modeControl = (
+    <div className="flex items-center gap-2" data-testid="SiiImportDuaSection__mode">
+      <Switch
+        id="sif-multiDua"
+        checked={multiDua}
+        onCheckedChange={val => onChange?.('aeatsiiMultiDua', val)}
+        disabled={readOnly}
+        data-testid="Switch__siiMultiDua" />
+      <Label htmlFor="sif-multiDua" className="text-sm text-foreground font-medium" data-testid="Label__siiMultiDua">
+        {ui('sifDataTabs.field.multiDua')}
+      </Label>
+    </div>
+  );
+
+  return (
+    <SiiPanelCard
+      title={ui('sifDataTabs.option.importDua')}
+      action={modeControl}
+      testId="SiiImportDuaSection__card"
+      data-testid="SiiPanelCard__siiImportDua">
+      {!multiDua && (
+        <div className="grid grid-cols-2 gap-3" data-testid="SiiImportDuaSection__fields">
+          <DuaField
+            label={ui('sifDataTabs.field.dua')}
+            htmlFor="sif-dua"
+            required={duaRequired}
+            aside={isLc ? null : (
+              <span
+                className={`text-xs tabular-nums ${showLengthHint ? 'text-status-warning-foreground' : 'text-muted-foreground'}`}
+                data-testid="SiiImportDuaSection__duaCounter">
+                {`${dua.trim().length} / ${DUA_LENGTH}`}
+              </span>
+            )}
+            helper={isLc ? ui('sifDataTabs.dua.lcHelper') : undefined}
+            data-testid="DuaField__dua">
+            <Input
+              id="sif-dua"
+              type="text"
+              maxLength={255}
+              value={dua}
+              onChange={e => onChange?.('aeatsiiDua', e.target.value)}
+              disabled={readOnly}
+              aria-required={duaRequired || undefined}
+              aria-invalid={duaMissing || undefined}
+              className={`bg-card ${duaMissing ? ERROR_OUTLINE : ''}`}
+              data-testid="Input__siiDua" />
+          </DuaField>
+          <DuaField
+            label={ui('sifDataTabs.field.duaDate')}
+            htmlFor="sif-duaDate"
+            required={duaRequired}
+            helper={ui('sifDataTabs.dua.dateHelper')}
+            data-testid="DuaField__duaDate">
+            <DateField
+              id="sif-duaDate"
+              value={duaDate}
+              onChange={iso => onChange?.('aeatsiiFechaDua', iso)}
+              disabled={readOnly}
+              className={dateMissing ? ERROR_OUTLINE : undefined}
+              data-testid="DateField__siiDuaDate" />
+          </DuaField>
+          {showLengthHint && (
+            <InfoBanner
+              tone="warning"
+              icon={WarningIcon}
+              dismissible={false}
+              className="col-span-2"
+              data-testid="SiiImportDuaSection__duaHint">
+              {ui('sifDataTabs.dua.lengthHint')}
+            </InfoBanner>
+          )}
+          {showDateHint && (
+            <InfoBanner
+              tone="warning"
+              icon={WarningIcon}
+              dismissible={false}
+              className="col-span-2"
+              data-testid="SiiImportDuaSection__dateHint">
+              {ui('sifDataTabs.dua.dateAfterAccountingDate')}
+            </InfoBanner>
+          )}
+        </div>
+      )}
+      {children}
+    </SiiPanelCard>
+  );
+}

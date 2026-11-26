@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildPerEntityOpenApiPaths } from '../../src/openapi/build-per-entity-paths.ts';
-import type { PublicApiSchema } from '@etendosoftware/api-gateway-core';
+import type { PublicApiSchema } from '@etendo-ai/api-gateway-core';
 
 const schema: PublicApiSchema = {
   apiVersion: 'v1',
@@ -486,4 +486,14 @@ test('a list response documents prev and next links as nullable', () => {
   assert.equal(links.prev.nullable, true);
   assert.equal(links.next.nullable, true);
   assert.equal(links.self.nullable, undefined);
+});
+
+test('a field marked queryable: false has no filter parameter and is not listed as sortable', () => {
+  const rich = structuredClone(schema) as any;
+  rich.entities.product.fields.cityName = { publicApi: true, direction: 'out', internalPath: 'cityName', dataType: { type: 'string' }, queryable: false };
+  const parameters = buildPerEntityOpenApiPaths(rich)['/api/v1/product'].get.parameters as any[];
+  assert.equal(parameters.some((parameter) => parameter.name === 'filter[cityName]'), false);
+  assert.doesNotMatch(parameters.find((parameter) => parameter.name === 'sort').description, /cityName/);
+  assert.ok(parameters.some((parameter) => parameter.name === 'filter[name]'));
+  assert.match(parameters.find((parameter) => parameter.name === 'sort').description, /Sortable fields: .*name/);
 });

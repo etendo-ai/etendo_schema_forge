@@ -7807,7 +7807,7 @@
       ]
     },
     "71ffdfc8865e7daf652e4f855e18d8bb6126fff59ba2b01e651989778533de54": {
-      "checksum": "608ddfc2a9718d196c12f0bc9df420a8243f4ffe9602f19c15b995716360f40e",
+      "checksum": "37983451b0f2e895b2371e35ba36e463df944b2910310825e0663c7c12a9fae5",
       "params": [
         "FF8080812E71F7C7012E71FD0499001B"
       ],
@@ -7970,14 +7970,6 @@
           "displaylogic_server": null,
           "displaylogicgrid": null,
           "name": "IBAN",
-          "readonlylogic": "@Processed@='Y'"
-        },
-        {
-          "columnname": "IsFinanced",
-          "displaylogic": null,
-          "displaylogic_server": null,
-          "displaylogicgrid": null,
-          "name": "Financed",
           "readonlylogic": "@Processed@='Y'"
         },
         {

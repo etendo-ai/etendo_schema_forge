@@ -1,4 +1,4 @@
-import { registerImportRowValidator } from '@etendosoftware/app-shell-core/lib/import/rowValidators.js';
+import { registerImportRowValidator } from '@etendo-ai/app-shell-core/lib/import/rowValidators.js';
 import { parseStatementAmount, isInvalidStatementAmount } from './statementAmount.js';
 import { isInvalidStatementDate } from './statementDate.js';
 
@@ -6,7 +6,7 @@ import { isInvalidStatementDate } from './statementDate.js';
  * Field descriptor for the bank-statement CSV/Excel import (ETP-4954).
  *
  * Shaped exactly like a `window.import.fields` block in `decisions.json`, so every generic
- * module in `@etendosoftware/app-shell-core` consumes it unchanged: `mapColumns` for the
+ * module in `@etendo-ai/app-shell-core` consumes it unchanged: `mapColumns` for the
  * auto-match, `buildTemplateCsv`/`buildTemplateXlsx` for the downloadable templates,
  * `validateRows` for the per-row checks and `ImportColumnMapping` for the manual mapping UI.
  * Statements are not a ListView window — they live in a tab of the financial account's detail

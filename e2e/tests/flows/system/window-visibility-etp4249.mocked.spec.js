@@ -115,8 +115,8 @@ test.describe('TC-35 — Tax Category window accessible', () => {
 // the retired entry used to live in.
 //
 // Anchors that moved out of Settings, so they no longer open the right group:
-// `tax`/`tax-category` (ETP-5146, to Finance) and `payment-term` (ETP-6389, to
-// Tesorería). Re-check which group an anchor lives in before changing it.
+// `tax`/`tax-category` (ETP-5146, to Finance; ETP-6380, to Impuestos), `fiscal-config`
+// (ETP-6380, to Impuestos) and `payment-term` (ETP-6389, to Tesorería). Re-check which group an anchor lives in before changing it.
 // ---------------------------------------------------------------------------
 test.describe('ETP-5068 — Conversion Rate Downloader Log retired from the menu', () => {
   test.beforeEach(async ({ page }) => {
@@ -143,7 +143,9 @@ test.describe('ETP-5068 — Conversion Rate Downloader Log retired from the menu
 // ---------------------------------------------------------------------------
 // ETP-6389 — Tesorería (Treasury) group
 //
-// Cobro (payment-in), Pago (payment-out), Cuentas (financial-account), an Informes link
+// Cobro (payment-in), Pago (payment-out), Remesas (remittance, moved from Finanzas in ETP-6247;
+// the mocked login grants every capability and window, sepaRemittances included), Cuentas
+// (financial-account), an Informes link
 // (report-viewer?category=treasury, the two aging reports) and Condiciones de pago (payment-term,
 // last) form their own group, placed right before Finanzas. Neither Finanzas nor Configuración
 // holds them any more. The mocked login() is an admin with every report
@@ -154,7 +156,7 @@ test.describe('ETP-5068 — Conversion Rate Downloader Log retired from the menu
 // absence check pins a sibling that must be present.
 // ---------------------------------------------------------------------------
 test.describe('Tesorería menu group', () => {
-  const TREASURY_ITEMS = ['payment-in', 'payment-out', 'financial-account', 'report-viewer-treasury', 'payment-term'];
+  const TREASURY_ITEMS = ['payment-in', 'payment-out', 'remittance', 'financial-account', 'report-viewer-treasury', 'payment-term'];
 
   /** The `menu-item-*` names rendered under one expanded group, in DOM order. */
   async function itemsOfGroup(page, groupSlug) {
@@ -180,7 +182,7 @@ test.describe('Tesorería menu group', () => {
     expect(groups.indexOf('menu-group-finance')).toBe(treasury + 1);
   });
 
-  test('Tesorería lists Cobro, Pago, Cuentas, Informes and Condiciones de pago, in that order', async ({ page }) => {
+  test('Tesorería lists Cobro, Pago, Remesas, Cuentas, Informes and Condiciones de pago, in that order', async ({ page }) => {
     // /payment-in makes Tesorería the active group, which opens it.
     await expect(page.getByTestId('menu-group-treasury')).toHaveAttribute('aria-expanded', 'true');
     expect(await itemsOfGroup(page, 'treasury')).toEqual(TREASURY_ITEMS);

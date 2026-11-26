@@ -1,10 +1,9 @@
 /**
  * @covers tools/app-shell/src/components/CopilotContext.jsx
  */
-import { renderHook } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, renderHook } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 
-const flag = { on: true };
 const legacy = {
   state: { conversations: [{ conversation_id: 'LEG' }], archivedConversations: [], attachments: [], labels: {}, conversationId: null },
   actions: { uploadFile: vi.fn(), removeFile: vi.fn(), clearAttachments: vi.fn(), loadConversations: vi.fn(), selectConversation: vi.fn() },
@@ -28,16 +27,13 @@ const ai = {
 vi.mock('../copilot/useCopilotChat.js', () => ({ useCopilotChat: () => legacy }));
 vi.mock('../copilot/useAiCopilotChat.js', () => ({ useAiCopilotChat: () => ai }));
 vi.mock('@/auth/AuthContext.jsx', () => ({ useAuth: () => ({ token: 'tk' }) }));
-vi.mock('@/lib/flags', () => ({ useFeatureFlag: () => flag.on, WEBMCP_AGENT_CHAT: 'webmcp-agent-chat' }));
 
 import { CopilotProvider, useCopilot } from '../CopilotContext.jsx';
 
 const wrapper = ({ children }) => <CopilotProvider>{children}</CopilotProvider>;
 
 describe('CopilotProvider history wiring', () => {
-  beforeEach(() => { flag.on = true; });
-
-  it('agent mode exposes the real conversations, ids and history actions', () => {
+  it('exposes the real conversations, ids and history actions', () => {
     const { result } = renderHook(() => useCopilot(), { wrapper });
     expect(result.current.state.conversations).toEqual(ai.conversations);
     expect(result.current.state.archivedConversations).toEqual(ai.archivedConversations);
@@ -49,17 +45,26 @@ describe('CopilotProvider history wiring', () => {
     }
   });
 
-  it('agent mode queues files with the agent, not the legacy upload service', () => {
+  it('queues files with the agent, not the legacy upload service', () => {
     const { result } = renderHook(() => useCopilot(), { wrapper });
     expect(result.current.actions.uploadFile).toBe(aiActions.uploadFile);
     expect(result.current.actions.removeFile).toBe(aiActions.removeFile);
     expect(result.current.state.files).toEqual(ai.files);
   });
 
-  it('legacy mode keeps the legacy state and actions untouched', () => {
-    flag.on = false;
+  it('clears attached context when the panel closes', () => {
+    legacy.actions.clearAttachments.mockClear();
     const { result } = renderHook(() => useCopilot(), { wrapper });
-    expect(result.current.state.conversations).toEqual(legacy.state.conversations);
-    expect(result.current.actions.selectConversation).toBe(legacy.actions.selectConversation);
+    act(() => result.current.close());
+    expect(legacy.actions.clearAttachments).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears attached context when toggling the panel closed, not when opening it', () => {
+    legacy.actions.clearAttachments.mockClear();
+    const { result } = renderHook(() => useCopilot(), { wrapper });
+    act(() => result.current.open());
+    expect(legacy.actions.clearAttachments).not.toHaveBeenCalled();
+    act(() => result.current.toggle());
+    expect(legacy.actions.clearAttachments).toHaveBeenCalledTimes(1);
   });
 });

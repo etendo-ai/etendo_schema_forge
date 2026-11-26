@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { detectBaseUrl } from '@etendosoftware/app-shell-core/auth';
+import { detectBaseUrl } from '@etendo-ai/app-shell-core/auth';
 import { useApiFetch } from '@/auth/useApiFetch.js';
 
 // The year selector's own cap (ReportSelectorsServlet MAX_LIMIT): covers every year of a calendar.

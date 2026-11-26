@@ -1,12 +1,12 @@
-import { registerImportDescriptor } from '@etendosoftware/app-shell-core/lib/import/buildOperations.js';
-import { registerImportRowValidator } from '@etendosoftware/app-shell-core/lib/import/rowValidators.js';
+import { registerImportDescriptor } from '@etendo-ai/app-shell-core/lib/import/buildOperations.js';
+import { registerImportRowValidator } from '@etendo-ai/app-shell-core/lib/import/rowValidators.js';
 // Shared with `validateRow`'s `isNumeric` check, so the review queue and the send path
 // cannot disagree about whether a price cell is a number (ETP-4996).
-import { parseImportNumber } from '@etendosoftware/app-shell-core/lib/import/parseImportNumber.js';
-import { resolveOrAutoCreateDependentEntity, getResolutionCache } from '@etendosoftware/app-shell-core/lib/import/resolveDependentEntity.js';
-import { registerImportRunReset } from '@etendosoftware/app-shell-core/lib/import/importRunState.js';
-import { fetchNeoList } from '@etendosoftware/app-shell-core/lib/import/fetchNeoList.js';
-import { getFkResolver } from '@etendosoftware/app-shell-core/lib/import/fkResolvers.js';
+import { parseImportNumber } from '@etendo-ai/app-shell-core/lib/import/parseImportNumber.js';
+import { resolveOrAutoCreateDependentEntity, getResolutionCache } from '@etendo-ai/app-shell-core/lib/import/resolveDependentEntity.js';
+import { registerImportRunReset } from '@etendo-ai/app-shell-core/lib/import/importRunState.js';
+import { fetchNeoList } from '@etendo-ai/app-shell-core/lib/import/fetchNeoList.js';
+import { getFkResolver } from '@etendo-ai/app-shell-core/lib/import/fkResolvers.js';
 import {
   getCachedCategories,
   categoryLookupFailedMessage,
@@ -21,7 +21,7 @@ import { resolveCodedCellOrThrow, codedCellError, codeLabels } from '@/lib/coded
 import { registerExportHints } from '@/lib/importExportColumns.js';
 import { asDependentEntityInput } from '@/lib/dependentEntityCell.js';
 
-import { apiFetch } from '@etendosoftware/app-shell-core/auth/api';
+import { apiFetch } from '@etendo-ai/app-shell-core/auth/api';
 // Columns copied verbatim onto the product body. Everything else declared in
 // `window.import.fields` needs interpreting first: `productType`, `uOM` and `taxCategory` are
 // resolved below, the four Yes/No flags are parsed, the two price columns become their own

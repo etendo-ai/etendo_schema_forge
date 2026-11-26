@@ -22,7 +22,7 @@ import { login } from '../../helpers/auth.js';
  *    dispatches two writes also dispatches them in order, so an order-only assertion would pass
  *    against the exact bug);
  *  - the second PATCH carries the token the first one's RESPONSE returned, not the one it consumed.
- *    That half is guaranteed below the panel, in `@etendosoftware/app-shell-core` (`auth/api.js`),
+ *    That half is guaranteed below the panel, in `@etendo-ai/app-shell-core` (`auth/api.js`),
  *    which serialises versioned writes per record and awaits the version harvest before releasing
  *    the next one. See `amortization-lines-single-flight.mocked.spec.js` for the full diagnosis.
  *
