@@ -15,6 +15,8 @@ import {
   policyEnvironment,
   applyEnvironment,
   rollbackEnvironment,
+  loadPolicyByName,
+  assertPathsAllowed,
 } from '../cloudfront-security-headers.mjs';
 
 const desired = loadDesiredPolicy();
@@ -298,5 +300,133 @@ describe('rollbackEnvironment', () => {
     assert.equal(f.state.dist.DefaultCacheBehavior.ResponseHeadersPolicyId, '');
     writeFileSync(join(dir, 'D1-b.json'), readFileSync(snap));
     assert.throws(() => rollbackEnvironment({ aws: f.aws, distributionId: 'D1', snapshotDir: dir }), /exactly one/);
+  });
+});
+
+const ENV = { CSP_CONNECT_ORIGINS: 'https://glitchtip.example.com' };
+const HTML = 'etendo-go-security-headers-v2';
+const ASSETS = 'etendo-go-assets-headers-v2';
+
+describe('v2 policies scoped by path', () => {
+  it('requires an explicit paths list for every policy except v1', () => {
+    assert.doesNotThrow(() => assertPathsAllowed(desired, undefined));
+    for (const name of [HTML, ASSETS]) {
+      for (const paths of [undefined, []]) {
+        assert.throws(() => assertPathsAllowed(loadPolicyByName(name, ENV), paths), /requires an explicit --paths/);
+      }
+    }
+    assert.doesNotThrow(() => assertPathsAllowed(loadPolicyByName(HTML, ENV), ['default']));
+  });
+  it('refuses the assets policy on the default (HTML) behavior', () => {
+    const assets = loadPolicyByName(ASSETS, ENV);
+    assert.throws(() => assertPathsAllowed(assets, ['/assets/*', 'default']), /default \(HTML\) behavior/);
+    assert.doesNotThrow(() => assertPathsAllowed(assets, ['/assets/*']));
+  });
+  it('applyEnvironment with the assets policy and empty paths or on default writes nothing', () => {
+    const calls = [];
+    const aws = (args) => { calls.push(args[1]); throw new Error('unexpected aws call'); };
+    for (const paths of [undefined, ['default']]) {
+      assert.throws(() => applyEnvironment({
+        aws, distributionId: 'D', snapshotDir: mkdtempSync(join(tmpdir(), 's-')),
+        desired: loadPolicyByName(ASSETS, ENV), paths,
+      }), /--paths|default \(HTML\)/);
+    }
+    assert.deepEqual(calls, []);
+  });
+  it('verifyEnvironment refuses a v2 policy without paths', () => {
+    assert.throws(() => verifyEnvironment({ aws: () => { throw new Error('x'); }, distributionId: 'D', desired: loadPolicyByName(HTML, ENV) }), /requires an explicit --paths/);
+  });
+});
+
+describe('attaching by path pattern', () => {
+  const config = {
+    DefaultCacheBehavior: { TargetOriginId: 's3' },
+    CacheBehaviors: { Quantity: 2, Items: [{ PathPattern: '/assets/*' }, { PathPattern: '/etendo/*' }] },
+  };
+  it('attaches only the listed behaviors and verifies only those', () => {
+    const r = attachPolicy(config, 'A', { paths: ['/assets/*'] });
+    assert.deepEqual(r.attach, ['/assets/*']);
+    assert.equal(r.config.DefaultCacheBehavior.ResponseHeadersPolicyId, undefined);
+    assert.equal(verifyDistribution(r.config, 'A', { paths: ['/assets/*'] }).ok, true);
+    assert.equal(verifyDistribution(r.config, 'A').ok, false);
+  });
+  it('rejects a path that is not a behavior of the distribution', () => {
+    assert.throws(() => attachPolicy(config, 'A', { paths: ['/nope/*'] }), /\/nope\/\*/);
+  });
+});
+
+
+describe('applyEnvironment with paths', () => {
+  it('applyEnvironment refuses an unknown path before any update-distribution', () => {
+    const calls = [];
+    const aws = (args) => {
+      calls.push(args[1]);
+      if (args[1] === 'list-response-headers-policies') {
+        return { ResponseHeadersPolicyList: { Items: [{ ResponseHeadersPolicy: { Id: 'P', ResponseHeadersPolicyConfig: loadPolicyByName(ASSETS, ENV) } }] } };
+      }
+      if (args[1] === 'get-distribution-config') {
+        return { ETag: 'E', DistributionConfig: { DefaultCacheBehavior: {}, CacheBehaviors: { Quantity: 0 } } };
+      }
+      throw new Error('unexpected');
+    };
+    assert.throws(() => applyEnvironment({
+      aws, distributionId: 'D', snapshotDir: mkdtempSync(join(tmpdir(), 's-')),
+      desired: loadPolicyByName(ASSETS, ENV), paths: ['/assets/*'],
+    }), /\/assets\/\*/);
+    assert.ok(!calls.includes('update-distribution'));
+  });
+});
+
+
+describe('rollback after two applies with different policies on disjoint behaviors', () => {
+  const dist = () => ({
+    DefaultCacheBehavior: { TargetOriginId: 's3', ResponseHeadersPolicyId: 'V1' },
+    CacheBehaviors: { Quantity: 1, Items: [{ PathPattern: '/assets/*', ResponseHeadersPolicyId: 'V1' }] },
+  });
+  const policies = () => [
+    { Id: 'HTML2', ResponseHeadersPolicyConfig: loadPolicyByName(HTML, ENV) },
+    { Id: 'ASSETS2', ResponseHeadersPolicyConfig: loadPolicyByName(ASSETS, ENV) },
+  ];
+  function setup() {
+    const state = { dist: dist(), etag: 'E1', policies: policies() };
+    const aws = (args, body) => {
+      const op = args[1];
+      if (op === 'list-response-headers-policies') {
+        return { ResponseHeadersPolicyList: { Items: state.policies.map((p) => ({ ResponseHeadersPolicy: p })) } };
+      }
+      if (op === 'get-distribution-config') return { DistributionConfig: structuredClone(state.dist), ETag: state.etag };
+      if (op === 'update-distribution') { state.dist = body; state.etag += '1'; return {}; }
+      throw new Error(`unexpected ${op}`);
+    };
+    const apply = (desired, paths) => applyEnvironment({
+      aws, distributionId: 'D', snapshotDir: mkdtempSync(join(tmpdir(), 'snap-')), desired, paths, replaceExisting: true,
+    }).snapshotFile;
+    const ids = () => [state.dist.DefaultCacheBehavior.ResponseHeadersPolicyId, state.dist.CacheBehaviors.Items[0].ResponseHeadersPolicyId];
+    return { aws, apply, ids };
+  }
+  const twoApplies = () => {
+    const t = setup();
+    const snapA = t.apply(loadPolicyByName(ASSETS, ENV), ['/assets/*']);
+    const snapB = t.apply(loadPolicyByName(HTML, ENV), ['default']);
+    assert.deepEqual(t.ids(), ['HTML2', 'ASSETS2']);
+    return { ...t, snapA, snapB };
+  };
+  it('oldest snapshot alone restores every behavior to its prior id', () => {
+    const t = twoApplies();
+    rollbackEnvironment({ aws: t.aws, distributionId: 'D', snapshotFile: t.snapA });
+    assert.deepEqual(t.ids(), ['V1', 'V1']);
+  });
+  it('newest first, then oldest, also ends on the prior ids', () => {
+    const t = twoApplies();
+    rollbackEnvironment({ aws: t.aws, distributionId: 'D', snapshotFile: t.snapB });
+    assert.deepEqual(t.ids(), ['V1', 'ASSETS2']);
+    rollbackEnvironment({ aws: t.aws, distributionId: 'D', snapshotFile: t.snapA });
+    assert.deepEqual(t.ids(), ['V1', 'V1']);
+  });
+  it('oldest first, then newest, leaves /assets/* on the assets policy (wrong order)', () => {
+    const t = twoApplies();
+    rollbackEnvironment({ aws: t.aws, distributionId: 'D', snapshotFile: t.snapA });
+    rollbackEnvironment({ aws: t.aws, distributionId: 'D', snapshotFile: t.snapB });
+    assert.deepEqual(t.ids(), ['V1', 'ASSETS2']);
   });
 });
