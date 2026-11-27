@@ -19,8 +19,7 @@ import { t } from '../../helpers/i18n.js';
  * account → ledger → entry → document. With the flag off the old viewer still opens.
  *
  * The flag is fixed when Vite starts (`VITE_FEATURE_FLAGS`, no runtime override), so the flag-on
- * tests skip themselves unless the server was started with it, as in
- * `acct-process-monitor.mocked.spec.js`:
+ * tests skip themselves unless the server was started with it:
  *
  *   npx vite --port 3105        # flag off (default): only the flag-off test runs
  *   VITE_FEATURE_FLAGS='{"dynamic-reports":true}' npx vite --port 3105

@@ -435,6 +435,12 @@ they score at all.
 
 ### 4.4 Retiring a flag
 
+> **Gate first.** No retirement starts until `make flag-retire-check FLAG=<key>` passes:
+> every deferred item, pending spec, `ttlNote` and ticket debt line resolved with
+> evidence or accepted by a named human. The full procedure, the `retirement` record and the
+> ETP-6425 counter-example are in [flag-retirement.md](flag-retirement.md); the
+> `retire-flag` skill drives it. This section keeps only the reasoning behind the branches.
+
 What expires at the TTL is the **ability to hide** — never the feature, and never
 its measurement. Retirement is committing to one of two branches, and it is
 mechanical only if the layout rule was honoured throughout:

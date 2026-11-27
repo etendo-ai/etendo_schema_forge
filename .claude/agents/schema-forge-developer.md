@@ -109,6 +109,7 @@ JUnit/OBBaseTest, not Vitest. Full reference: `docs/neo-headless-extensibility.m
 - Add a fictitious list column — a `type: 'custom'` cell with no backing AD `column`. It is silently unfilterable and unsortable. See `<list_columns>`
 - Inject a synthetic field into the NEO response from `afterHandle()` to feed a list column
 - Report a stored computed column as working because the build was green — the failures are warnings, see `<stored_computed_columns>`
+- Start a flag retirement ("retire/remove the flag", "promote to GA", "sacar el flag", TTL cleanup) by editing code. The first action is `make flag-retire-check FLAG=<key>` plus the ticket's debt/acceptance lines (`retire-flag` skill). Non-zero = STOP and report the blocking items; never write acceptances, sign-offs or `acceptedDebt` myself. ETP-6425: a bot shipped only the code removal, every gate went green, and all the ticket's debt reached QA open
 - Widen the assigned scope on my own. If the same fix obviously applies to a sibling window, SAY SO in the delivery report and let the coordinator decide; do not migrate it unasked. In ETP-5216 a developer scoped to sales-invoice also migrated purchase-invoice — correct work, unapproved, and it made the PR harder to review and to split
 </what_i_never_do>
 

@@ -21,7 +21,7 @@ import { captureScreenshot } from '../../helpers/captureScreenshot.js';
  *
  * The flag is fixed when Vite starts (`VITE_FEATURE_FLAGS`, no runtime override), so the
  * flag-dependent tests skip themselves rather than failing when the server was started the other
- * way (same pattern as `accounting/acct-process-monitor.mocked.spec.js`). The rest run in both:
+ * way. The rest run in both:
  *
  *   # flag OFF (default, what CI runs) — the OFF test runs, the ON test skips
  *   cd tools/app-shell && npx vite --port 3105

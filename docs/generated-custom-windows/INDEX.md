@@ -135,7 +135,7 @@ Menu group "Impuestos" (ETP-6380), in the Finance section right after Finanzas: 
 | [business-partner-category.md](business-partner-category.md) | Generated business-partner-category master/detail flow behind a thin wrapper; contact type + accounts by type (Accounting tab), list type columns and contact-type quick filter behind the `contact-category-type` flag (ETP-5791) |
 | [user.md](user.md) | Generated user window — multi-role template composition with a live permission-preview matrix (ETP-4906) and defaults dependencies |
 | [not-posted-documents.md](not-posted-documents.md) | Custom cross-document posting window — aggregates all unposted documents, single-row and bulk Post actions |
-| [acct-process-monitor.md](acct-process-monitor.md) | Synthetic admin-only page (ETP-5269, flag `acct-process-monitor`) — status, next automatic run and execution history of the accounting server process, plus a manual run scoped to the caller's own company. No logs, by design |
+| [acct-process-monitor.md](acct-process-monitor.md) | Synthetic admin-only page (ETP-5269; GA since ETP-6425, no feature flag) — gated only by `capability: isAdminOrClientAdmin` in the menu (visual) and by `NeoAccessHelper.isAdminOrClientAdmin` server-side (the real boundary). Status, next automatic run and execution history of the accounting server process, plus a manual run scoped to the caller's own company. No logs, by design |
 | [conversion-rate-downloader-log.md](conversion-rate-downloader-log.md) | API-only window (ETP-5068) — read-only audit log of automated conversion-rate downloader runs, retired from the Settings menu |
 
 ## Scope

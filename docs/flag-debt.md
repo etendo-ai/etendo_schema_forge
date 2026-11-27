@@ -267,6 +267,13 @@ coverage and open items keep scoring. Retiring a flag therefore lowers the score
 without deleting the accounting — deleting the whole entry would delete the
 *evidence*, not the debt.
 
+**Retiring is gated, not scored.** This scorer always exits 0; the retirement gate does not.
+Before a flag is retired, `make flag-retire-check FLAG=<key>` must pass: it reads both
+registries and blocks on every open deferred item, unwritten spec, `ttlNote` and
+ticket debt line that is neither resolved with evidence nor accepted by a named human. The
+evidence lives in a `retirement` object on the feature entry, which the gate reads and this
+scorer ignores. Procedure and schema: [flag-retirement.md](flag-retirement.md).
+
 Three things are worth getting right:
 
 - **`paths` are owned code only** — files that exist *because* the flag exists

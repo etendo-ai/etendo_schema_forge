@@ -16,6 +16,8 @@ Like Not Posted Documents, this has **no backing AD window** — it is a synthet
 
 Delivered by **ETP-5269** and promoted to general availability by **ETP-6425**: the `acct-process-monitor` feature flag was retired and the page is permanent.
 
+**User documentation (Spanish admin guide):** [Cómo revisar el proceso contable](https://help.etendo.ai/sistema/configuracion/como-revisar-el-proceso-contable/como-revisar-el-proceso-contable/) (ETP-5532) — declared for this feature with `features: [acct-process-monitor]` in its `etendo-docs` front matter.
+
 ---
 
 ## What this page should allow
@@ -319,11 +321,12 @@ Prerequisites: an Etendo GO instance with the accounting process installed and a
 
 Recorded honestly so nobody reads absence of evidence as evidence:
 
-- **Non-admin denial at runtime.** The instance holds only one Etendo GO account, so no second, restricted session could be produced. The denial path is covered by unit tests (`SFAcctProcessMonitorTest` — restricted role, no role, and restricted-role-with-`Action=trigger`) and by the mocked E2E spec, but it was **not** exercised against a live server. Step 12 above is the first opportunity to close this.
+- **Non-admin denial at runtime.** The instance holds only one Etendo GO account, so no second, restricted session could be produced. The denial path is covered by unit tests (`SFAcctProcessMonitorTest` — restricted role, no role, and restricted-role-with-`Action=trigger`) and by the mocked E2E spec, but it was **not** exercised against a live server — through none of the entry points: menu, Favorites, command palette, direct URL, or the webhook itself (`GET /sws/neo/acctprocessmonitor`, with and without `Action=trigger`). Step 12 above is the first opportunity to close this.
 - **Documents actually being posted.** The instance had **zero** unposted documents anywhere, so every manual run was a legitimate no-op. The run was proven to *execute with the right scope* (see below), but "the caller's pending documents got posted, and only the caller's" has not been observed end to end against a real backlog.
+- **The `systemClientNotScopable` refusal, live.** No System-context session pressed the button on a deployed build. Unit-covered (a System-context caller is refused and schedules nothing), not runtime-observed. Step 11 above closes it.
 - **The `alreadyRunning` refusal, live.** Runs finish in roughly 85 ms, so the race could not be won by hand. Unit-covered (`A run already in progress refuses the trigger instead of stacking a second one`, `A one-shot already queued for this client refuses the trigger`), not runtime-observed.
 
-These correspond to the open `manual-trigger-runtime-verification` item in `flags-registry.json`.
+These correspond to the open `manual-trigger-runtime-verification` item in `flags-registry.json`, which stays open until QA observes all of them on a real instance — in particular a run with pending documents in two companies (A's posted, B's still pending).
 
 ---
 
@@ -351,7 +354,7 @@ These correspond to the open `manual-trigger-runtime-verification` item in `flag
 - `tools/app-shell/src/pages/acct-process-monitor/__tests__/useAcctProcessMonitor.vitest.js` — 36 cases, including the `awaitingRun` poll and its 60 s deadline.
 - `tools/app-shell/src/lib/__tests__/acctProcessMonitorApi.vitest.js` — 12 cases.
 - `tools/app-shell/src/pages/acct-process-monitor/__tests__/RunStatusPill.vitest.jsx` — 7 cases.
-- `tools/app-shell/src/components/layout/SideMenu/__tests__/SideMenu.vitest.jsx` + `windows/__tests__/navigationExpectations.js` (`catalogFeatureFlags`) + `windows/__tests__/registry.vitest.jsx` (`capabilitySiblings`) — catalog membership and flag gating. `registry.vitest.jsx` needed the `capabilitySiblings` change because a capability is a **named boolean**, not a per-entry grant: this is the second `isAdminOrClientAdmin` entry next to `roles`, which made that latent distinction visible.
+- `tools/app-shell/src/components/layout/SideMenu/__tests__/SideMenu.vitest.jsx` + `windows/__tests__/navigationExpectations.js` (its `exceptions` entry, `capability: 'isAdminOrClientAdmin'`) + `windows/__tests__/registry.vitest.jsx` (`capabilitySiblings`) — catalog membership and menu gating. At delivery this included the per-item feature-flag gating; since ETP-6425 the entry is gated only by its `isAdminOrClientAdmin` capability (including in Favorites). `registry.vitest.jsx` needed the `capabilitySiblings` change because a capability is a **named boolean**, not a per-entry grant: this is the second `isAdminOrClientAdmin` entry next to `roles`, which made that latent distinction visible.
 - Whole-suite result at delivery: **16,348 vitest + 2,160 node tests green**.
 
 **E2E — `e2e/tests/flows/accounting/acct-process-monitor.mocked.spec.js`** (no feature flag or `VITE_FEATURE_FLAGS` needed):
