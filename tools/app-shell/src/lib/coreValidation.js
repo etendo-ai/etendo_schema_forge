@@ -11,32 +11,9 @@
 //   - code → i18n descriptor mapping (`{ key, params }`), shared by every presentation;
 //   - the native-control attributes (`maxLength`, `min`, `max`, `inputMode`).
 // It never mutates data and contains no window-specific branch.
-import * as engine from '@etendosoftware/app-shell-core/lib/validation/index.js';
-
-const { validateRecord, ERROR_CODES, inferFormatConstraints } = engine;
-
-// `describeValidationError` ships with the next app-shell-core release (ETP-4557). Until the pinned
-// version has it, a namespace import keeps module loading safe (a missing named export would throw
-// at link time and break every suite that loads this file against the published package) and this
-// mirror is used. REMOVE the fallback when `package.json` is bumped to that release.
-function fallbackDescribe(error) {
-  if (!error) return null;
-  switch (error.code) {
-    case ERROR_CODES.MAX_LENGTH: return { key: 'fieldMaxLengthError', params: { maxLength: error.max } };
-    case ERROR_CODES.MIN_LENGTH: return { key: 'fieldMinLengthError', params: { minLength: error.min } };
-    case ERROR_CODES.MINIMUM: return { key: 'fieldMinValueError', params: { min: error.min } };
-    case ERROR_CODES.MAXIMUM: return { key: 'fieldMaxValueError', params: { max: error.max } };
-    case ERROR_CODES.REQUIRED: return { key: 'importErrorRequiredGeneric', params: {} };
-    case ERROR_CODES.DISALLOWED_SCHEME: return { key: 'websiteInsecureUrl', params: {} };
-    case ERROR_CODES.INVALID_FORMAT:
-      if (error.format === 'email') return { key: 'sendModalInvalidEmail', params: {} };
-      if (error.format === 'phone') return { key: 'phoneInvalidChars', params: {} };
-      if (error.format === 'url') return { key: 'websiteInsecureUrl', params: {} };
-      return { key: 'fieldInvalidValue', params: {} };
-    default: return { key: 'fieldInvalidValue', params: {} };
-  }
-}
-const describeValidationError = engine.describeValidationError ?? fallbackDescribe;
+import {
+  validateRecord, ERROR_CODES, inferFormatConstraints, describeValidationError,
+} from '@etendosoftware/app-shell-core/lib/validation/index.js';
 
 export { ERROR_CODES };
 
@@ -198,18 +175,17 @@ export function mapBackendFieldErrors(payload) {
 }
 
 /**
- * Localized message for a failed response carrying structured validation codes, or null when the
- * body has none we recognise (the caller then falls back to its generic path). Reads a CLONE, so
- * the original body stays available. Raw backend text is never returned.
+ * First structured validation error of a failed response, localized and tied to its field, or
+ * null when the body has no code we recognise (the caller then falls back to its generic path).
+ * Reads a CLONE, so the original body stays available. Raw backend text is never returned.
  * @param {Response} res failed response.
  * @param {Function} ui translator.
- * @returns {Promise<string|null>} localized message or null.
+ * @returns {Promise<{field:string, message:string}|null>} offending field key + localized message, or null.
  */
-export async function structuredBackendMessage(res, ui) {
+export async function structuredBackendError(res, ui) {
   try {
-    const mapped = mapBackendFieldErrors(await res.clone().json());
-    const first = Object.values(mapped)[0];
-    return first ? ui(first.key, first.params) : null;
+    const [field, first] = Object.entries(mapBackendFieldErrors(await res.clone().json()))[0] ?? [];
+    return first ? { field, message: ui(first.key, first.params) } : null;
   } catch {
     return null;
   }
@@ -249,6 +225,5 @@ const JAVA_CLASS_RE = /\b[A-Z]\w*Exception\b|\b(?:org|java|javax|com)\.[a-z][\w.
 export function safeBackendMessage(msg, ui) {
   if (typeof msg !== 'string' || msg.trim() === '') return msg;
   if (!(INTERNAL_DETAIL_RE.test(msg) || SERVER_TEXT_RE.test(msg) || JAVA_CLASS_RE.test(msg) || msg.length > 600)) return msg;
-  const generic = typeof ui === 'function' ? ui('backendGenericError') : null;
-  return generic && generic !== 'backendGenericError' ? generic : 'The operation could not be completed. Please try again.';
+  return typeof ui === 'function' ? ui('backendGenericError') : 'backendGenericError';
 }

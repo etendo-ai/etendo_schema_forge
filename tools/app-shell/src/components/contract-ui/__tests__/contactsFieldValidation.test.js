@@ -1,3 +1,4 @@
+// @covers tools/app-shell/src/components/contract-ui/contactsFieldValidation.js
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 

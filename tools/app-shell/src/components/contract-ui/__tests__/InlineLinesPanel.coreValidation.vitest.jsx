@@ -139,4 +139,14 @@ describe('InlineLinesPanel inline edit — shared core validator (ETP-4557)', ()
     expect(onUpdateRow.mock.calls[0][1]).toBe('etgoEmail');
     expect(onUpdateRow.mock.calls[0][2]).toBe('ok@acme.com');
   });
+
+  it('a structured backend code from the PATCH flags the cell it names', async () => {
+    const onUpdateRow = vi.fn().mockRejectedValue(Object.assign(new Error('x'), { userNotified: true, invalidField: 'etgoEmail' }));
+    renderPanel(columns, onUpdateRow);
+    const row = screen.getByTestId('line-row-L1');
+    await enterEditMode(row);
+    await commit(row, 'ok@acme.com');
+    expect(onUpdateRow).toHaveBeenCalledTimes(1);
+    expect(within(row).getByTestId('field-etgoEmail')).toHaveAttribute('aria-invalid', 'true');
+  });
 });

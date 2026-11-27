@@ -1181,6 +1181,20 @@ export async function saveWithReadOnlyFieldRetry(apiFetch, url, method, payload,
  */
 const SAVE_CONFLICT_TOAST_ID = 'etgo-save-conflict';
 
+// ETP-4557: structured validation codes map onto the offending inputs, localized. Only recognised
+// codes are shown; the raw backend message (SQL, stack, internals) never is. Returns true when handled.
+function applyStructuredFieldErrors(body, ui, setFieldErrors, setSaveError) {
+    const mapped = body ? mapBackendFieldErrors(body) : {};
+    if (Object.keys(mapped).length === 0) return false;
+    const errors = {};
+    for (const [k, d] of Object.entries(mapped)) errors[k] = ui(d.key, d.params);
+    setFieldErrors(errors);
+    const generic = ui('fieldInvalidValue');
+    setSaveError(generic);
+    toast.error(generic);
+    return true;
+}
+
 export async function handleSaveErrorResponse(res, ui, setFieldErrors, setSaveError, onStaleRecord, record) {
     // ETP-3894: parse a structured MISSING_REQUIRED_FIELDS 400 from the backend so
     // the UI can highlight the missing fields. Falls back to the regular error
@@ -1235,20 +1249,7 @@ export async function handleSaveErrorResponse(res, ui, setFieldErrors, setSaveEr
         });
         return;
     }
-    // ETP-4557: structured validation codes map onto the offending inputs, localized. Only
-    // recognised codes are shown; the raw backend message (SQL, stack, internals) never is.
-    if (!backendFieldErrors && structuredBody) {
-        const mapped = mapBackendFieldErrors(structuredBody);
-        if (Object.keys(mapped).length > 0) {
-            backendFieldErrors = {};
-            for (const [k, d] of Object.entries(mapped)) backendFieldErrors[k] = ui(d.key, d.params);
-            setFieldErrors(backendFieldErrors);
-            const generic = ui('fieldInvalidValue');
-            setSaveError(generic);
-            toast.error(generic);
-            return;
-        }
-    }
+    if (applyStructuredFieldErrors(backendFieldErrors ? null : structuredBody, ui, setFieldErrors, setSaveError)) return;
     if (backendFieldErrors) {
         setFieldErrors(backendFieldErrors);
         const msg = ui('requiredFieldsMissing');
@@ -3055,6 +3056,7 @@ export function useEntity(entity, childEntity, {
         isDirtyHeader, dirtyHeaderFieldKeys, hasUserHeaderEdits,
         isValid, missingRequired, missingRequiredFields,
         fieldErrors, setFieldError, registerFields,
+        formErrorProps: { fieldErrors, onFieldError: setFieldError, loadedData: selected }, // ETP-4557: spread onto EntityForm
         handleSelect, handleNew, handleChange, handleSave, handleSaveAndProcess, handleDelete, handleProcess,
         handleAddChild, handleUpdateChild, handleDeleteChild, primeSaved, applyPersistedFields,
         refresh, fetchById, fetchChildren, fetchChildDefaults, loadMore, refreshHeaderTotals, clearUserChangedKey,

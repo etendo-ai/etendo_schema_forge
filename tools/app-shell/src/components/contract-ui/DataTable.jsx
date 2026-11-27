@@ -1597,9 +1597,10 @@ const InlineAddRow = forwardRef(function InlineAddRow({ columns, fields, onAdd, 
     // Cleared AFTER it is assigned: a submit that fails validation settles synchronously, and
     // clearing it from inside the async body left a stale resolved promise that every later
     // submit (the corrected value) was deduped against.
-    run.finally(() => {
+    const clearInflight = () => {
       if (inflightRef.current === run) inflightRef.current = null;
-    });
+    };
+    run.then(clearInflight, clearInflight);
     return run;
   }, [data, fields, onAdd, onCancel, ui, buildEmpty]);
 

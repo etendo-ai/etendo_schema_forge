@@ -1,7 +1,7 @@
 // @covers tools/app-shell/src/hooks/useEntity.js
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { toast } from 'sonner';
-import { useEntity } from '../useEntity';
+import { useEntity, getCoreFieldViolation, handleSaveErrorResponse } from '../useEntity';
 
 // Mock dependencies
 vi.mock('sonner', () => ({
@@ -1462,5 +1462,153 @@ describe('useEntity', () => {
       expect(toast.error).toHaveBeenCalledWith('phoneInvalidChars', { id: 'core-field-etgoPhone' });
       expect(globalThis.fetch.mock.calls.some(c => c[1]?.method === 'PATCH')).toBe(false);
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ETP-4557 — shared core validator in the save gate and the structured-error branch
+// ---------------------------------------------------------------------------
+const baseOpts = { token: 'test-token', apiBaseUrl: 'http://localhost/api' };
+
+describe('useEntity — save gate uses the core validator (ETP-4557)', () => {
+  beforeEach(() => {
+    globalThis.fetch = vi.fn();
+    vi.clearAllMocks();
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  const fields = [
+    { key: 'name', column: 'Name', type: 'text', maxLength: 5 },
+    { key: 'etgoEmail', column: 'EM_Etgo_Email', type: 'text' },
+    { key: 'locked', column: 'Locked', type: 'text', maxLength: 1, readOnly: true },
+  ];
+  const record = { id: 'rec-1', name: 'abc', etgoEmail: '', updated: 'v1' };
+
+  function setup() {
+    const requests = [];
+    globalThis.fetch.mockImplementation(async (url, opts) => {
+      if (url.includes('/defaults')) return { ok: true, json: async () => ({ defaults: {} }) };
+      if (opts?.method === 'PATCH' || opts?.method === 'PUT' || opts?.method === 'POST') {
+        requests.push(opts.method);
+        return { ok: true, json: async () => ({ response: { data: [{ ...record, id: 'rec-1' }] } }) };
+      }
+      return { ok: true, json: async () => ({ response: { data: [] } }) };
+    });
+    const hook = renderHook(() => useEntity('header', null, { ...baseOpts, skipListFetch: true }));
+    return { hook, requests };
+  }
+
+  for (const silent of [false, true]) {
+    it(`blocks the request for a changed invalid value (silent=${silent}), flags the field, and saves after the correction`, async () => {
+      const { hook, requests } = setup();
+      act(() => { hook.result.current.registerFields(fields, 'form-1'); });
+      act(() => { hook.result.current.handleSelect(record); });
+      act(() => { hook.result.current.handleChange('name', 'abcdefg'); });
+      await act(async () => { await hook.result.current.handleSave({ silent }); });
+      expect(requests).toHaveLength(0);
+      expect(hook.result.current.fieldErrors).toHaveProperty('name', 'fieldMaxLengthError');
+
+      act(() => { hook.result.current.handleChange('name', 'abcd'); });
+      expect(hook.result.current.fieldErrors.name).toBeUndefined();
+      await act(async () => { await hook.result.current.handleSave({ silent }); });
+      expect(requests).toHaveLength(1);
+    });
+  }
+
+  it('does not block an unrelated edit because of an untouched legacy-invalid value', async () => {
+    const { hook, requests } = setup();
+    const legacy = { ...record, name: 'way-too-long' };
+    act(() => { hook.result.current.registerFields(fields, 'form-1'); });
+    act(() => { hook.result.current.handleSelect(legacy); });
+    act(() => { hook.result.current.handleChange('etgoEmail', 'ok@acme.com'); });
+    await act(async () => { await hook.result.current.handleSave({ silent: true }); });
+    expect(requests).toHaveLength(1);
+  });
+
+  it('skips a section that unregistered its fields, and read-only fields', async () => {
+    const { hook, requests } = setup();
+    act(() => { hook.result.current.registerFields([{ key: 'name', column: 'Name', type: 'text', maxLength: 5 }], 'form-2'); });
+    act(() => { hook.result.current.handleSelect(record); });
+    act(() => { hook.result.current.handleChange('name', 'abcdefg'); });
+    await act(async () => { await hook.result.current.handleSave({ silent: true }); });
+    expect(requests).toHaveLength(0);
+    act(() => { hook.result.current.registerFields(null, 'form-2'); });
+    await act(async () => { await hook.result.current.handleSave({ silent: true }); });
+    expect(requests).toHaveLength(1);
+  });
+
+  it('fully validates a new record: an invalid value blocks the POST', async () => {
+    const { hook, requests } = setup();
+    await act(async () => { await hook.result.current.handleNew(); });
+    act(() => { hook.result.current.registerFields(fields, 'form-1'); });
+    act(() => { hook.result.current.handleChange('etgoEmail', 'not-an-email'); });
+    await act(async () => { await hook.result.current.handleSave({ silent: true }); });
+    expect(requests).toHaveLength(0);
+    expect(hook.result.current.fieldErrors).toHaveProperty('etgoEmail', 'sendModalInvalidEmail');
+  });
+
+  it('skips a field hidden by display logic', async () => {
+    const { hook, requests } = setup();
+    const hidden = { key: 'name', column: 'Name', type: 'text', maxLength: 5, displayLogic: () => false };
+    act(() => { hook.result.current.registerFields([hidden], 'form-1'); });
+    act(() => { hook.result.current.handleSelect(record); });
+    act(() => { hook.result.current.handleChange('name', 'abcdefg'); });
+    await act(async () => { await hook.result.current.handleSave({ silent: true }); });
+    expect(requests).toHaveLength(1);
+    expect(hook.result.current.fieldErrors.name).toBeUndefined();
+  });
+});
+
+const coreGateFields = [
+  { key: 'name', type: 'text', maxLength: 5 },
+  { key: 'etgoEmail', column: 'EM_Etgo_Email', type: 'text' },
+  { key: 'hiddenText', type: 'text', maxLength: 1, readOnly: true },
+];
+
+describe('getCoreFieldViolation (save gate)', () => {
+  it('blocks a changed invalid value and points at the right field', () => {
+    expect(getCoreFieldViolation(coreGateFields, { name: 'abcdefg' }, { name: 'abc' }))
+      .toMatchObject({ key: 'name', errorKey: 'fieldMaxLengthError', errorParams: { maxLength: 5 } });
+  });
+  it('lets an unrelated edit through when the legacy-invalid value is untouched', () => {
+    expect(getCoreFieldViolation(coreGateFields, { name: 'abcdefg', etgoEmail: 'a@b.co' }, { name: 'abcdefg', etgoEmail: '' })).toBeNull();
+  });
+  it('a correction clears the violation', () => {
+    expect(getCoreFieldViolation(coreGateFields, { name: 'abc' }, { name: 'abcdefg' })).toBeNull();
+  });
+  it('on create (no loaded record) every value is validated', () => {
+    expect(getCoreFieldViolation(coreGateFields, { name: 'abcdefg' }, null)?.key).toBe('name');
+    expect(getCoreFieldViolation(coreGateFields, { etgoEmail: 'bad' }, null)?.errorKey).toBe('sendModalInvalidEmail');
+  });
+  it('skips read-only fields and accepts optional empties', () => {
+    expect(getCoreFieldViolation(coreGateFields, { hiddenText: 'toolong', name: '' }, null)).toBeNull();
+  });
+});
+
+describe('handleSaveErrorResponse — structured backend validation errors (ETP-4557)', () => {
+  const LEAK = 'ERROR: duplicate key value violates constraint "c_bpartner_key" at org.hibernate.Foo(Foo.java:12)';
+  const ui = (key, params) => `[${key}${params ? `:${JSON.stringify(params)}` : ''}]`;
+
+  it('maps each code onto its field, shows only the generic summary, and never the raw message', async () => {
+    const body = { error: { message: LEAK, fieldErrors: [
+      { field: 'name', code: 'MAX_LENGTH', max: 5 },
+      { field: 'etgoEmail', code: 'INVALID_FORMAT', format: 'email' },
+    ] } };
+    const res = { clone: () => ({ json: async () => body }), json: async () => body };
+    const setFieldErrors = vi.fn();
+    const setSaveError = vi.fn();
+    toast.error.mockClear();
+
+    await handleSaveErrorResponse(res, ui, setFieldErrors, setSaveError);
+
+    expect(setFieldErrors).toHaveBeenCalledWith({
+      name: '[fieldMaxLengthError:{"maxLength":5}]',
+      etgoEmail: '[sendModalInvalidEmail:{}]',
+    });
+    expect(setSaveError).toHaveBeenCalledWith('[fieldInvalidValue]');
+    expect(toast.error).toHaveBeenCalledWith('[fieldInvalidValue]');
+    const shown = JSON.stringify([setFieldErrors.mock.calls, setSaveError.mock.calls, toast.error.mock.calls]);
+    expect(shown).not.toContain('duplicate key');
+    expect(shown).not.toContain('hibernate');
   });
 });

@@ -2388,9 +2388,7 @@ export function DetailView({
                               selectorContext={selectorContextByEntity[entity]}
                               labelOverrides={labelOverrides}
                               registerFields={hook.registerFields}
-                              fieldErrors={hook.fieldErrors}
-                              onFieldError={hook.setFieldError}
-                              loadedData={hook.selected}
+                              {...hook.formErrorProps}
                               documentDateField={documentDateField}
                               onFieldBlur={autoSaveOnBlur ? handleFieldBlur : undefined}
                               trailing={inlineTrailing}
@@ -2419,9 +2417,7 @@ export function DetailView({
                                   selectorContext={selectorContextByEntity[entity]}
                                   labelOverrides={labelOverrides}
                                   registerFields={hook.registerFields}
-                                  fieldErrors={hook.fieldErrors}
-                                  onFieldError={hook.setFieldError}
-                                  loadedData={hook.selected}
+                                  {...hook.formErrorProps}
                                   documentDateField={documentDateField}
                                   onFieldBlur={autoSaveOnBlur ? handleFieldBlur : undefined}
                                   data-testid="Form__fa3275" />
@@ -3033,9 +3029,7 @@ export function DetailView({
                               apiBaseUrl={apiBaseUrl}
                               selectorContext={selectorContextByEntity[entity]}
                               labelOverrides={labelOverrides}
-                              fieldErrors={hook.fieldErrors}
-                              onFieldError={hook.setFieldError}
-                              loadedData={hook.selected}
+                              {...hook.formErrorProps}
                               documentDateField={documentDateField}
                               data-testid="Form__fa3275" />
                           </div>

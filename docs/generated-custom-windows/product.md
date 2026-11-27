@@ -1860,3 +1860,7 @@ document type. Before it, an agent asked "what moved for this product" read the 
 document type and failed (`goodsReceiptLine` and others cannot be listed across parents). MCP test
 `q-product-movements` (suite `okr`). The text lives in this window's `decisions.json` and in
 `com.etendoerp.go`'s `ETGO_SF_ENTITY` sourcedata; keep both equal.
+
+## ETP-4557 — Product import enforces the contract's text limits
+
+The product import now validates each text cell against the length the contract declares, through the shared core validator (`docs/shared-field-validation.md`): `searchKey` is limited to 40 characters and `name` to 60. A longer value is flagged in the review queue with the same `MAX_LENGTH` error the form and the inline grid return. Only text constraints reach the import; numeric, date, enum and foreign-key columns are unchanged.

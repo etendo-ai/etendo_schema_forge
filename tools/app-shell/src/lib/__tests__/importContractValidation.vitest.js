@@ -1,4 +1,5 @@
-// @covers tools/app-shell/src/lib/coreValidation.js
+// @covers packages/app-shell-core/src/lib/import/validateRows.js
+// @covers packages/app-shell-core/src/lib/import/fieldConstraints.js
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';

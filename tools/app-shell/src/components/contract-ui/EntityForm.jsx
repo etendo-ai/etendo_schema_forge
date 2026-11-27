@@ -854,6 +854,27 @@ function useLoadedMinDateValues(data, fields) {
   return ref.current.values;
 }
 
+// ETP-4557: the shared core validator decides length/max/enum/format on blur (the numeric min/integer
+// check keeps its own stable toast id), so blur, save, grid and import agree. Compatibility policy:
+// on an existing record an UNCHANGED value (equal to the loaded one) is not re-validated, so tabbing
+// through a legacy-invalid field does not flag it. Returns true when the value was flagged.
+function applyCoreBlurValidation(f, value, loadedData, ui, onFieldError, trackSaveBlockToast) {
+  const hasPrevious = Boolean(loadedData?.id) && Object.prototype.hasOwnProperty.call(loadedData, f.key);
+  const coreErr = getFieldError(f, value, { hasPrevious, previous: loadedData?.[f.key] });
+  if (!coreErr) {
+    // A valid non-empty value clears the inline error a previous blur or save set for this input
+    // (an empty value keeps any `required` error: the engine does not evaluate required here).
+    if (String(value ?? '').trim() !== '') onFieldError?.(f.key, null);
+    return false;
+  }
+  const coreMessage = ui(coreErr.key, coreErr.params);
+  const coreToastId = `core-field-${f.key}`;
+  onFieldError?.(f.key, coreMessage);
+  toast.error(coreMessage, { id: coreToastId });
+  trackSaveBlockToast(coreToastId);
+  return true;
+}
+
 export function EntityForm({ entity, windowName, fields = [], data, onChange, catalogs, layout, cols, section, excludeFields = [], displayLogic, api, token, apiBaseUrl, selectorContext = {}, readOnly: formReadOnly = false, onFieldBlur, savingField = null, labelOverrides, registerFields, fieldErrors, onFieldError, loadedData, optionalSuffix = false, trailing, renderAsFragment = false, navigate, initialRows, documentDateField, variant = 'default', gap }) {
   const compact = variant === 'compact';
   const t = useLabel(labelOverrides ?? api?.labelOverrides);
@@ -1375,23 +1396,7 @@ export function EntityForm({ entity, windowName, fields = [], data, onChange, ca
       trackSaveBlockToast(toastId);
       return;
     }
-    // ETP-4557: the shared core validator decides length/max/enum/format (the numeric min/integer
-    // check above keeps its own stable toast id), so blur, save, grid and import agree.
-    // Compatibility policy: on an existing record an UNCHANGED value (equal to the loaded one) is
-    // not re-validated, so tabbing through a legacy-invalid field does not flag it.
-    const hasPrevious = Boolean(loadedData?.id) && Object.prototype.hasOwnProperty.call(loadedData, f.key);
-    const coreErr = getFieldError(f, value, { hasPrevious, previous: loadedData?.[f.key] });
-    if (coreErr) {
-      const coreMessage = ui(coreErr.key, coreErr.params);
-      const coreToastId = `core-field-${f.key}`;
-      onFieldError?.(f.key, coreMessage);
-      toast.error(coreMessage, { id: coreToastId });
-      trackSaveBlockToast(coreToastId);
-      return;
-    }
-    // A valid non-empty value clears the inline error a previous blur or save set for this input
-    // (an empty value keeps any `required` error: the engine does not evaluate required here).
-    if (String(value ?? '').trim() !== '') onFieldError?.(f.key, null);
+    if (applyCoreBlurValidation(f, value, loadedData, ui, onFieldError, trackSaveBlockToast)) return;
     // ETP-5031: Contacts-only text-field validation (length + unsafe chars). A
     // no-op for every other window — getContactsTextFieldError gates on
     // windowName === 'contacts' as its first check.
@@ -1576,7 +1581,7 @@ export function EntityForm({ entity, windowName, fields = [], data, onChange, ca
           onBlur={() => onFieldBlur?.(f.key)}
           placeholder={placeholder}
           disabled={isReadOnly}
-          maxLength={getNativeInputProps(f).maxLength}
+          {...getNativeInputProps(f, fieldErrors?.[f.key])}
           className={[
             'flex w-full rounded-lg border border-[hsl(var(--border-control))] p-2 text-sm shadow-[0px_1px_2px_hsl(var(--foreground) / 0.05)]',
             `placeholder:text-muted-foreground resize-none${minHeightClass}`,

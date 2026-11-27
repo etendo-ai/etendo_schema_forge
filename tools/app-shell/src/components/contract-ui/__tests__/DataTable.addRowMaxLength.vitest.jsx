@@ -1,3 +1,4 @@
+// @covers tools/app-shell/src/components/contract-ui/DataTable.jsx
 /**
  * ETP-5323 — DataTable's add-row `renderInputCell` text `<input>` must apply the
  * field's `maxLength` (mirrors InlineLinesPanel.maxLength.vitest.jsx's edit-mode

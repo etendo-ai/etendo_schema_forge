@@ -266,7 +266,7 @@ describe('buildCompletedLineFieldUpdateHandler — backend failure', () => {
     mockApiFetch.mockResolvedValue(res);
     const args = makeArgs({ ui: (key, params) => `${key}:${params?.maxLength ?? ''}` });
     const handler = buildCompletedLineFieldUpdateHandler(args);
-    await expect(handler(ROW, 'project', 'PRJ-NEW', {})).rejects.toMatchObject({ userNotified: true });
+    await expect(handler(ROW, 'project', 'PRJ-NEW', {})).rejects.toMatchObject({ userNotified: true, invalidField: 'project' });
     expect(toast.error).toHaveBeenCalledWith('fieldMaxLengthError:5');
     expect(args.extractErrorMessage).not.toHaveBeenCalled();
   });

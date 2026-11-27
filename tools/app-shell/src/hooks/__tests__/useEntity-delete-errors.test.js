@@ -1,3 +1,4 @@
+// @covers tools/app-shell/src/hooks/useEntity.js
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
@@ -202,7 +203,7 @@ describe('extractErrorMessage — FK-constraint-violation detection (ETP-4656)',
       const msg = await extractErrorMessage(fakeRes(raw), ui);
       assert.notEqual(msg, 'SHOULD_NOT_BE_USED');
       // ETP-4557: raw SQL / constraint text is never shown; the generic localized message is.
-      assert.equal(msg, 'The operation could not be completed. Please try again.');
+      assert.equal(msg, 'backendGenericError');
     });
   });
 
@@ -242,7 +243,7 @@ describe('extractErrorMessage — FK-constraint-violation detection (ETP-4656)',
       const msg = await extractErrorMessage(fakeRes(raw), ui);
       assert.notEqual(msg, 'SHOULD_NOT_BE_USED');
       // ETP-4557: raw SQL / constraint text is never shown; the generic localized message is.
-      assert.equal(msg, 'The operation could not be completed. Please try again.');
+      assert.equal(msg, 'backendGenericError');
     });
 
     it('maps the "aún se hace referencia a la llave" DETAIL message', async () => {

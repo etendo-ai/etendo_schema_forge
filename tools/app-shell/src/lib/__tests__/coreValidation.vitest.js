@@ -1,7 +1,7 @@
 // @covers tools/app-shell/src/lib/coreValidation.js
 import { describe, it, expect } from 'vitest';
 import {
-  getFieldError, getFieldErrors, getFirstViolation, getNativeInputProps, mapBackendFieldErrors, structuredBackendMessage, safeBackendMessage, ERROR_CODES,
+  getFieldError, getFieldErrors, getFirstViolation, getNativeInputProps, mapBackendFieldErrors, structuredBackendError, safeBackendMessage, ERROR_CODES,
 } from '../coreValidation.js';
 import { validateRow } from '@etendosoftware/app-shell-core/lib/import/validateRows.js';
 
@@ -86,7 +86,7 @@ describe('coreValidation — same code across form, grid and import (ETP-4557)',
     { key: 'etgoEmail', column: 'EM_Etgo_Email', type: 'text' },
   ];
   const declared = legacy.map((f, i) => ({ ...f, validation: { format: ['url', 'phone', 'email'][i], ...(i === 0 ? { allowedSchemes: ['https'] } : {}) } }));
-  const values = { website: 'https://asda', phone: 'abc', etgoEmail: 'bad' };
+  const values = { website: 'asda', phone: 'abc', etgoEmail: 'bad' };
   const identities = Object.fromEntries(legacy.map((f) => [f.key, { column: f.column, type: f.type }]));
 
   for (const [label, fields] of [['legacy contract (inferred)', legacy], ['contract declaring format', declared]]) {
@@ -99,9 +99,7 @@ describe('coreValidation — same code across form, grid and import (ETP-4557)',
         const formCode = getFirstViolation([f], values).code;
         const importCodes = imp.errors.filter((e) => e.target === f.key).map((e) => e.code);
         expect(formCode).toBe(gridCode);
-        // A website import cell is a bare host ("acme.com", the descriptor prefixes the scheme),
-        // so the strict https rule is the form/grid's; every other format agrees in import.
-        if (f.key !== 'website') expect(importCodes).toContain(gridCode);
+        expect(importCodes).toContain(gridCode);
       }
     });
   }
@@ -127,12 +125,12 @@ describe('coreValidation — error association and backend responses', () => {
     expect(getNativeInputProps({ key: 'name', maxLength: 5 }, { key: 'x' }))
       .toMatchObject({ 'aria-invalid': true, 'aria-describedby': 'error-name-msg' });
   });
-  it('structuredBackendMessage localizes a known code and hides SQL/stack text', async () => {
+  it('structuredBackendError localizes a known code and hides SQL/stack text', async () => {
     const ui = (k, p) => `${k}:${JSON.stringify(p)}`;
     const known = new Response(JSON.stringify({ error: { fieldErrors: [{ field: 'name', code: 'MAX_LENGTH', max: 5 }] } }), { status: 400 });
-    expect(await structuredBackendMessage(known, ui)).toBe('fieldMaxLengthError:{"maxLength":5}');
+    expect(await structuredBackendError(known, ui)).toEqual({ field: 'name', message: 'fieldMaxLengthError:{"maxLength":5}' });
     const leaky = new Response(JSON.stringify({ error: { message: 'ERROR: duplicate key org.hibernate.exception at Foo.java:12' } }), { status: 500 });
-    expect(await structuredBackendMessage(leaky, ui)).toBeNull();
+    expect(await structuredBackendError(leaky, ui)).toBeNull();
   });
 });
 

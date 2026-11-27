@@ -4,7 +4,7 @@
 // ETP-5692 — `buildInlineRowUpdateHandler` moved here VERBATIM from DetailView.jsx (which keeps
 // re-exporting it, so every suite importing it from 'DetailView.jsx' is untouched) to make room
 // for its completed-document counterpart, `buildCompletedLineFieldUpdateHandler`, below.
-import { structuredBackendMessage } from '@/lib/coreValidation.js';
+import { structuredBackendError } from '@/lib/coreValidation.js';
 import { toast } from 'sonner';
 // Plain module: the core subpath, never the `@/auth/api.js` barrel (docs/request-policy.md).
 import { apiFetch } from '@etendosoftware/app-shell-core/auth/api';
@@ -110,13 +110,14 @@ export function buildInlineRowUpdateHandler({ linesLayout, isDocumentReadOnly, a
       // Asked first so it reads the CLONED body before extractErrorMessage consumes the original.
       const raised = await raiseRowSaveConflict?.(res, row.id);
       // ETP-4557: a structured validation code reads as a localized message; raw text never shows.
-      const msg = (await structuredBackendMessage(res, ui)) ?? await extractErrorMessage(res);
+      const structured = await structuredBackendError(res, ui);
+      const msg = structured?.message ?? await extractErrorMessage(res);
       if (!raised) toast.error(msg || ui('networkError'));
       // The throw is what stops InlineLinesPanel from claiming the row was saved, but its catch
       // also toasts — so every inline failure used to surface TWICE (identical text, two stacked
       // toasts). `userNotified` tells it the user has already been told, here by the toast above
       // or by the conflict dialog.
-      throw Object.assign(new Error(msg || 'PATCH failed'), { userNotified: true });
+      throw Object.assign(new Error(msg || 'PATCH failed'), { userNotified: true, invalidField: structured?.field });
     }
   } : undefined;
 }
@@ -161,9 +162,10 @@ export function buildCompletedLineFieldUpdateHandler({ canEditField, api, detail
       return;
     }
     const raised = await raiseRowSaveConflict?.(res, row.id);
-    const msg = (await structuredBackendMessage(res, ui)) ?? await extractErrorMessage(res);
+    const structured = await structuredBackendError(res, ui);
+    const msg = structured?.message ?? await extractErrorMessage(res);
     if (!raised) toast.error(msg || ui('networkError'));
-    throw Object.assign(new Error(msg || 'PATCH failed'), { userNotified: true });
+    throw Object.assign(new Error(msg || 'PATCH failed'), { userNotified: true, invalidField: structured?.field });
   };
 }
 
