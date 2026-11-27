@@ -1,3 +1,6 @@
+/**
+ * @covers tools/app-shell/src/components/copilot/agentHistory.js
+ */
 import { describe, expect, it } from 'vitest';
 import {
   CONVERSATION_TITLE_MAX,
@@ -72,6 +75,16 @@ describe('toUiMessages', () => {
       { id: 'm1', role: 'user', parts: [text('q')] },
       { id: 'm2', role: 'assistant', parts: [text('a')] },
       { id: 'm3', role: 'assistant', parts: [text('b')] },
+    ]);
+  });
+});
+
+describe('attachment notes in persisted text', () => {
+  it('leaves the [Archivo adjunto] note out of the saved text', () => {
+    const message = { id: 'u1', role: 'user', parts: [text('importa'), text('[Archivo adjunto "c.csv"]')] };
+    expect(uiMessageText(message)).toBe('importa');
+    expect(unsavedMessages([message], new Set())).toEqual([
+      { id: 'u1', role: 'user', text: 'importa', external_id: 'u1' },
     ]);
   });
 });

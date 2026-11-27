@@ -199,6 +199,15 @@ file is readable and non-empty, its content replaces the default for both modes.
 It is read on every request, so edits apply without a restart; an unreadable or
 empty file falls back to the default.
 
+## Spreadsheet attachments (CSV, TSV, TXT, XLSX)
+
+The agent chat accepts tabular files (paperclip in the copilot panel), e.g. a contact list to import.
+
+- **Client** (`useAiCopilotChat`): queues files locally (`uploadFile` / `removeFile`) and sends them as AI SDK `file` parts with the next message. Limits: 512 KB per file and in total, plus a whole-request budget (`AGENT_REQUEST_MAX_CHARS`, 900 KB of serialized `chat.messages` + base64 files, under the BFF's 1 MB `BFF_MAX_BODY_BYTES`): a send over it is refused with `copilotRequestTooLarge` and the files stay queued; other formats are rejected with a translated error (`copilotFile*` keys). A file error is not retryable (`errorRetryable: false`): the panel shows only Dismiss, because Retry regenerates the last turn and the agent would run its tools again.
+- **BFF** (`src/attachments.js`): `tabularAttachmentsToText` replaces each file part with a text part holding the table as CSV, so the model never receives a binary part. It never trusts the client: it re-checks `maxBytes` (512 KB), caps the *uncompressed* size of an XLSX at 8 MB (decompression-bomb guard: `fflate` inflates the entries in 1 KB input steps and counts the bytes really produced, stopping at the cap, so a zip whose headers lie about its sizes is caught too; only then does `read-excel-file` parse it), reads at most 3 sheets, 500 rows per sheet and 100,000 characters per file (shared across its sheets), and appends a note when it truncates so the agent tells the user. The content is marked as DATA, not instructions.
+- **History**: the file part is resent with every request of the turn (client-tool round-trips included), so each one carries the converted CSV; when the whole send ends, the client rewrites it to the note `[Archivo adjunto "<name>"]` (the data URL is not resent on later turns). The history cache fingerprints that notes form (`attachmentNotes`), and the cached/uncached paths both go through `buildModelMessages`. Saved conversation text leaves the notes out. The rewrite also happens when the send fails, so a retry or regenerate of that turn sends only the note: the agent will ask for the file again and the user must re-attach it.
+- **Dependencies**: `read-excel-file` (XLSX parsing) and `fflate` (size check).
+
 ## Conversation history cache
 
 The browser already sends every UIMessage (tool calls and results included)

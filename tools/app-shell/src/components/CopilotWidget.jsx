@@ -306,7 +306,7 @@ export function CopilotWidget({ hideTrigger = false }) {
     onRemoveAttachment: actions.removeAttachment,
     isSending: state.isSending,
     error: state.error,
-    onRetry: actions.retry,
+    onRetry: state.errorRetryable === false ? undefined : actions.retry,
     onDismissError: actions.dismissError,
     welcomeMessage,
     inputPlaceholder,
