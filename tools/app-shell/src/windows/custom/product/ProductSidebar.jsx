@@ -572,7 +572,7 @@ export default function ProductSidebar({ recordId, data, token, apiBaseUrl }) {
   const locationRows = buildLocationRows(stockRows);
 
   const unitSymbol = stockUnitSymbol(stockRows);
-  const fmt = v => (v === null ? null : formatStockQuantity(v));
+  const fmt = v => (v === null ? null : formatStockQuantityWithUnit(v, unitSymbol));
 
   const onHandSubtitle = resolveOnHandSubtitle(locationRows, ui);
 

@@ -331,7 +331,7 @@ describe('ProductSidebar', () => {
       transactions: [{ movementDate: '2025-03-01', movementQuantity: 20, storageBin: 'LOC1' }],
     });
     render(<ProductSidebar {...defaultProps} />);
-    expect(await screen.findByText('1.092,5')).toBeInTheDocument();
+    expect(await screen.findByText('1.092,5 kg')).toBeInTheDocument();
     fireEvent.click(await screen.findByTestId('AvailabilityCardButton'));
     await screen.findAllByText('WH-Alpha');
     const cards = screen.getAllByTestId('WarehouseCardAvailability');
@@ -344,6 +344,23 @@ describe('ProductSidebar', () => {
     const dialog = await screen.findByTestId('dialog');
     expect(dialog.textContent).toContain('12,5');
     expect(dialog.textContent).toContain('total: 1.092,5');
+  });
+
+  // Resumen total carries the unit symbol like the Almacenes cards (QA deviation from Figma).
+  it.each([
+    ['kg', 2.5, '2,5 kg'],
+    ['Ud', 2680, '2.680 Ud'],
+    [undefined, 2680, '2.680'],
+  ])('Summary total shows the unit symbol %s -> %s', async (symbol, qty, expected) => {
+    mockFetchResponses({
+      stockRows: [{ ...(symbol ? { etgoUomSymbol: symbol } : {}), storageBin: 'LOC1', 'warehouse$_identifier': 'WH-A', quantityOnHand: qty }],
+      transactions: [{ movementDate: '2025-03-01', movementQuantity: qty, storageBin: 'LOC1' }],
+    });
+    render(<ProductSidebar {...defaultProps} />);
+    const card = await screen.findByTestId('AvailabilityCardButton');
+    await waitFor(() => expect(card.textContent).toContain(expected));
+    // no symbol: the number alone, never a made-up unit
+    if (!symbol) expect(card.textContent.endsWith(expected)).toBe(true);
   });
 
   // PS-69: the unit printed after a quantity is the SYMBOL of the product's UOM, never a hard-coded "u".

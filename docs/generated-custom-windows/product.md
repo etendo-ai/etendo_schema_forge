@@ -1838,7 +1838,7 @@ A read-only history of the stock movements of the product (`M_Transaction`), dec
 
 Product-only visual changes, all driven by tokens and opt-in props so no other window changes.
 
-- **Summary stock card.** One button; its label is `Stock disponible` (key `productSidebarStockAvailable`; the warehouse cards keep `Disponible`, `stockAvailableLabel`). Hover paints the border blue.
+- **Summary stock card.** One button; its label is `Stock disponible` (key `productSidebarStockAvailable`; the warehouse cards keep `Disponible`, `stockAvailableLabel`). Hover paints the border blue. The total carries the unit symbol of the product's UOM (`2,5 kg`, `2.680 Ud`), like the Almacenes cards: `formatStockQuantityWithUnit(onHand, stockUnitSymbol(stockRows))`; no symbol means the number alone. It is a deliberate deviation from the Figma board (which shows no unit there), requested by QA.
 - **Header and tabs.** `windows/custom/product/index.jsx` passes `primarySave="strong"` to `DetailView` (the Save button of an existing record uses the filled primary style, `bg-primary` #325CFF, white text, hover `--primary-hover-strong` #2B48BC) and `tabsActiveAccent="primary"` (the active secondary tab uses `--primary` for text, icon and its 2 px underline, through `TabStripButton`'s `activeAccent`). Both are opt-in: other windows keep their look. The product header renders no "Características del producto" title (none exists in the Product window code).
 - **Tab badges.** Unchanged by this pass: Movements has none; Price and Attachments keep theirs; Costing and Accounting show their loaded row counts.
 - **Design tokens** added to `tools/app-shell/src/index.css` (use as `bg-[var(--x)]`):
