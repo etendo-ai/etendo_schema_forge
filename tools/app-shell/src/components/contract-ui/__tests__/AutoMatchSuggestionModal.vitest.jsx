@@ -41,6 +41,7 @@ vi.mock('@/hooks/useReconciliation', () => ({
 
 // --- Import under test (after mocks) ----------------------------------------
 
+import { AUTOMATCH_RIGHT_CELL } from '../AutoMatchPairRow.jsx';
 import { AutoMatchSuggestionModal } from '../AutoMatchSuggestionModal.jsx';
 import { toast } from 'sonner';
 
@@ -151,10 +152,13 @@ describe('AutoMatchSuggestionModal', () => {
     const leftBlock = statementLabel.parentElement;
     const rightBlock = opsLabel.parentElement;
 
-    // All three must share the same parent (the header row container) — i.e. be siblings.
+    // ETP-6359: same shape as a row (AutoMatchPairRow) — the `w-8` checkbox column and one block
+    // holding the two titles are siblings in the header row; the two title blocks are siblings
+    // of each other inside that block.
     const headerRow = checkboxWrapper.parentElement;
-    expect(leftBlock.parentElement).toBe(headerRow);
-    expect(rightBlock.parentElement).toBe(headerRow);
+    expect(leftBlock.parentElement.parentElement).toBe(headerRow);
+    expect(rightBlock.parentElement.parentElement).toBe(headerRow);
+    expect(leftBlock.parentElement).toBe(rightBlock.parentElement);
 
     // Regression guard: neither title block may contain the checkbox wrapper (or vice versa) —
     // that nesting is exactly what broke the 50/50 split.
@@ -177,8 +181,8 @@ describe('AutoMatchSuggestionModal', () => {
     const opsLabel = screen.getByText('financeReconcileAutomatchColOps');
     const headerRow = selectAll.parentElement.parentElement;
 
-    expect(statementLabel.parentElement.parentElement).toBe(headerRow);
-    expect(opsLabel.parentElement.parentElement).toBe(headerRow);
+    expect(statementLabel.parentElement.parentElement.parentElement).toBe(headerRow);
+    expect(opsLabel.parentElement.parentElement.parentElement).toBe(headerRow);
     // The group-count badge next to the left title must read 0, not disappear or throw.
     expect(statementLabel.parentElement).toHaveTextContent('0');
   });
@@ -198,8 +202,8 @@ describe('AutoMatchSuggestionModal', () => {
 
     // Row count is irrelevant to the header's own layout — it sits above the scrollable rows
     // container, so adding 15 rows must not perturb its sibling structure.
-    expect(statementLabel.parentElement.parentElement).toBe(headerRow);
-    expect(opsLabel.parentElement.parentElement).toBe(headerRow);
+    expect(statementLabel.parentElement.parentElement.parentElement).toBe(headerRow);
+    expect(opsLabel.parentElement.parentElement.parentElement).toBe(headerRow);
     expect(statementLabel.parentElement).toHaveTextContent('15');
   });
 
@@ -217,9 +221,23 @@ describe('AutoMatchSuggestionModal', () => {
     const opsLabel = screen.getByText('financeReconcileAutomatchColOps');
 
     expect(statementLabel.parentElement.className).toMatch(/\bmin-w-0\b/);
-    expect(statementLabel.parentElement.className).toMatch(/\bflex-1\b/);
     expect(opsLabel.parentElement.className).toMatch(/\bmin-w-0\b/);
-    expect(opsLabel.parentElement.className).toMatch(/\bflex-1\b/);
+    // ETP-6359: the halves are two equal grid tracks shared with the rows, not flex-1 blocks.
+    expect(statementLabel.parentElement.parentElement.className).toMatch(/grid-cols-\[minmax\(0,1fr\)_minmax\(0,1fr\)\]/);
+  });
+
+  it('header and rows share the divider cell classes, and the bordered cell has no vertical padding', () => {
+    // ETP-6359: one continuous divider — the bordered element stretches the full row height and
+    // the padding sits on an inner wrapper.
+    renderModal();
+    const headerRight = screen.getByText('financeReconcileAutomatchColOps').parentElement;
+    const rowRight = screen.getByTestId(`automatch-group-row-${GROUP_STANDARD.groupKey}`)
+      .querySelector('[class*="border-l"]');
+    for (const el of [headerRight, rowRight]) {
+      expect(el.className).toContain(AUTOMATCH_RIGHT_CELL);
+      expect(el.className).not.toMatch(/(^|\s)(py|pt|pb|my|mt|mb)-/);
+    }
+    expect(headerRight.parentElement.className).toBe(rowRight.parentElement.className);
   });
 
   it('renders statement line descriptions', () => {
@@ -357,9 +375,12 @@ describe('AutoMatchSuggestionModal', () => {
     expect(toast.error).not.toHaveBeenCalled();
   });
 
-  it('calls onClose when cancel is clicked', () => {
+  it('closes straight away from "Ir a conciliación manual" when nothing is selected', () => {
+    // ETP-6359: the global footer (and its Cancelar) is gone; with rows selected the close is
+    // confirmed first (AutoMatchSuggestionModal.closeConfirm), so unselect everything.
     const { props } = renderModal();
-    fireEvent.click(screen.getByTestId('automatch-modal-cancel'));
+    fireEvent.click(screen.getByTestId('automatch-select-all'));
+    fireEvent.click(screen.getByTestId('automatch-modal-open-reconciliation'));
     expect(props.onClose).toHaveBeenCalledTimes(1);
   });
 
@@ -410,12 +431,12 @@ describe('AutoMatchSuggestionModal', () => {
     expect(screen.getByText('financeReconcileAutomatchOpNew')).toBeInTheDocument();
   });
 
-  // ── Cancel button label (T7) ──────────────────────────────────────────────────
+  // ── Manual-reconciliation link label (ETP-6359) ───────────────────────────────
 
-  it('cancel button shows the "cancel" i18n key, not a hardcoded string', () => {
+  it('the header link shows the "go to manual reconciliation" i18n key, not a hardcoded string', () => {
     renderModal();
-    // The cancel button uses ui('cancel') — the mock returns the key 'cancel'.
-    expect(screen.getByTestId('automatch-modal-cancel')).toHaveTextContent('cancel');
+    expect(screen.getByTestId('automatch-modal-open-reconciliation'))
+      .toHaveTextContent('financeReconcileAutomatchActionGoManual');
   });
 
   // ── Currency correctness (ETP-4314 regression) ────────────────────────────────

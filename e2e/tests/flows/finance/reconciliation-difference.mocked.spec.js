@@ -1,5 +1,7 @@
+// @covers tools/app-shell/src/components/contract-ui/ReconciliationDifference.jsx
 import { test, expect } from '../../helpers/test.js';
 import { login } from '../../helpers/auth.js';
+import { dismissAutoMatchModalIfOpen } from '../../helpers/financial-account-helpers.js';
 
 /**
  * "Post the unreconciled statement remainder to a G/L item" — mocked.
@@ -253,7 +255,8 @@ async function installMocks(page, {
  *
  * Entering that tab MAY pop the automatch suggestions modal (ETP-4922: only when the engine finds
  * at least one suggestion for the mocked account), and while it is open its overlay swallows every
- * click on the panel behind it — so it has to be dismissed before anything else, deep link or not.
+ * click on the panel behind it — so it has to be dismissed before anything else, deep link or not
+ * (`dismissAutoMatchModalIfOpen` explains how it closes).
  *
  * @param {import('@playwright/test').Page} page
  * @returns {Promise<import('@playwright/test').Locator>}
@@ -263,11 +266,7 @@ async function openReconciliationTab(page) {
   await page.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => {});
   await expect(page.getByTestId('detail-tab-reconciliation')).toBeVisible();
 
-  const automatch = page.getByTestId('automatch-suggestion-modal');
-  if (await automatch.isVisible().catch(() => false)) {
-    await page.getByTestId('automatch-modal-cancel').click();
-    await expect(automatch).toHaveCount(0);
-  }
+  await dismissAutoMatchModalIfOpen(page);
 
   const row = page.getByTestId(`recon-line-row-${LINE_ID}`);
   await expect(row).toBeVisible();

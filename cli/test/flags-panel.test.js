@@ -8,6 +8,9 @@ import {
   impactOf,
   applyRingChange,
   expectedAudience,
+  pickVersion,
+  notifyTargets,
+  parse,
 } from '../src/flags-panel.js';
 
 /** A flag as GET /api/state returns it: `audience.beta` is cumulative (it includes alpha). */
@@ -123,5 +126,49 @@ describe('expectedAudience', () => {
   it('is nobody for off and for a flag the panel does not manage', () => {
     assert.equal(expectedAudience(flag({ rollout: { stage: 'off' } })).size, 0);
     assert.equal(expectedAudience(flag({ rollout: undefined })).size, 0);
+  });
+});
+
+describe('pickVersion', () => {
+  const comms = { versions: [{ version: 1, subject: 'first' }, { version: 2, subject: 'second' }] };
+
+  it('defaults to the latest saved version', () => {
+    assert.equal(pickVersion(comms).subject, 'second');
+  });
+
+  it('selects --version N, given as a string on the command line', () => {
+    assert.equal(pickVersion(comms, '1').subject, 'first');
+  });
+
+  it('is undefined for an unknown version or a flag with no message yet', () => {
+    assert.equal(pickVersion(comms, '7'), undefined);
+    assert.equal(pickVersion({ versions: [] }), undefined);
+  });
+});
+
+describe('notifyTargets', () => {
+  const recipients = { stage: 'beta', all: ['a@etendo.ai', 'b@etendo.ai', 'c@etendo.ai'], pending: ['a@etendo.ai', 'B@etendo.ai'] };
+
+  it('emails every tester not notified yet when no --emails is given', () => {
+    assert.deepEqual(notifyTargets(recipients), { to: ['a@etendo.ai', 'b@etendo.ai'], unknown: [] });
+  });
+
+  it('narrows to --emails, case-insensitively and without duplicates', () => {
+    assert.deepEqual(notifyTargets(recipients, ['B@etendo.ai', ' b@etendo.ai ']), { to: ['b@etendo.ai'], unknown: [] });
+  });
+
+  it('reports addresses that already got the message or are not testers of the stage', () => {
+    assert.deepEqual(notifyTargets(recipients, ['c@etendo.ai', 'zoe@etendo.ai']), { to: [], unknown: ['c@etendo.ai', 'zoe@etendo.ai'] });
+  });
+});
+
+describe('parse', () => {
+  it('reads a bare --test as "send the test to me"', () => {
+    assert.deepEqual(parse(['notify', 'some-flag', '--test']).opts, { test: true });
+    assert.deepEqual(parse(['notify', 'some-flag', '--test', '--version', '2']).opts, { test: true, version: '2' });
+  });
+
+  it('keeps an explicit --test address', () => {
+    assert.deepEqual(parse(['notify', 'some-flag', '--test', 'qa@etendo.ai']), { pos: ['notify', 'some-flag'], opts: { test: 'qa@etendo.ai' } });
   });
 });
