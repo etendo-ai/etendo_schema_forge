@@ -3,9 +3,9 @@ import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls } from 'ai';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { buildWriteHeaders } from '@/auth/api.js';
-import { useMenuLabel } from '@/i18n';
+import { useMenuLabel, useUI } from '@/i18n';
 import { createAgentConversation, appendAgentMessages, getAgentConversationMessages } from './agentChatApi.js';
-import { conversationTitle, hasPendingTool, toUiMessages, unsavedMessages } from './agentHistory.js';
+import { ATTACHED_NOTE, attachedNote, conversationTitle, hasPendingTool, toUiMessages, unsavedMessages } from './agentHistory.js';
 import { useAgentConversations } from './useAgentConversations.js';
 import { AmbiguousWindowError, UnknownWindowError, assertInternalPath, buildWindowRouteIndex, knownWindowSlugs, normalizeWindowKey } from './windowRoutes.js';
 import { FIELD_TESTID_PREFIX, accessibleElementName, fieldAccessibleName, isOrContainsPassword, isVisibleElement } from './domVisibility.js';
@@ -250,6 +250,41 @@ function traceHistory(stage, payload) {
   console.warn(`[copilot:history] ${stage}`, payload);
 }
 
+const fileNameOf = part => part.filename || '';
+const AGENT_FILE_EXTENSIONS = /\.(csv|tsv|txt|xlsx)$/i;
+const AGENT_FILE_MEDIA_TYPES = new Set([
+  'text/csv', 'text/tab-separated-values', 'text/plain',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  // Browsers (notably on Windows) report these for .csv/.xlsx.
+  'application/csv', 'application/vnd.ms-excel', 'application/octet-stream',
+]);
+// Keeps the base64 body under the BFF's 1 MB request limit.
+export const AGENT_FILE_MAX_BYTES = 512 * 1024;
+// Budget for the WHOLE chat request (history + tool outputs + base64 files), kept below the
+// BFF's 1 MB BFF_MAX_BODY_BYTES with headroom for the tool round-trips of the turn.
+export const AGENT_REQUEST_MAX_CHARS = 900 * 1024;
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+// useChat resends every message on each request: keep each data URL to the one request it
+// belongs to, leaving a short note (also used to show the file name).
+function filePartsToNotes(messages) {
+  return messages.map(message => (
+    message.role === 'user' && (message.parts || []).some(part => part.type === 'file')
+      ? { ...message, parts: message.parts.map(part => (
+        part.type === 'file' ? { type: 'text', text: attachedNote(fileNameOf(part)) } : part
+      )) }
+      : message
+  ));
+}
+
 function messageText(message) {
   if (typeof message.content === 'string') return message.content;
   return (message.parts || [])
@@ -263,6 +298,7 @@ function messageText(message) {
 export function useAiCopilotChat({ onOpenCopilot, menuGroups }) {
   const navigate = useNavigate();
   const menuLabel = useMenuLabel();
+  const ui = useUI();
   // No-op when no HighlightProvider is mounted (see HighlightContext.jsx), so
   // the Copilot still works in previews and isolated tests.
   const { highlight } = useHighlight();
@@ -424,6 +460,7 @@ export function useAiCopilotChat({ onOpenCopilot, menuGroups }) {
     }
     return lastAssistantMessageIsCompleteWithToolCalls({ messages });
   }, []);
+  // File parts stay until the whole turn ends (see sendMessage), so every client-tool round-trip carries the CSV.
   const sendAutomaticallyWhen = useCallback(
     options => sendAutomaticallyWhenFor(options, pendingToolOutputsRef),
     [sendAutomaticallyWhenFor]
@@ -449,6 +486,10 @@ export function useAiCopilotChat({ onOpenCopilot, menuGroups }) {
     }),
   }), []);
   const [input, setInput] = useState('');
+  const [files, setFiles] = useState([]);
+  const filesRef = useRef([]);
+  filesRef.current = files;
+  const [fileError, setFileError] = useState('');
   const handlePageHelpFinish = useCallback(({ message }) => {
     if (!pageHelpPendingRef.current) return;
     const hasPendingTool = (message.parts || []).some(part => (
@@ -502,6 +543,8 @@ export function useAiCopilotChat({ onOpenCopilot, menuGroups }) {
     savedIdsRef.current = new Set();
     turnAbortedRef.current = false;
     setLoadError('');
+    setFileError('');
+    setFiles([]);
     setIsLoadingMessages(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- isBusy only reads a ref
   }, [chat.setMessages, chat.stop, chat.clearError]);
@@ -577,6 +620,8 @@ export function useAiCopilotChat({ onOpenCopilot, menuGroups }) {
     if (isBusy()) chat.stop();
     chat.setMessages([]);
     chat.clearError();
+    setFileError('');
+    setFiles([]);
     conversationIdRef.current = id;
     setConversationId(id);
     conversationCreatedRef.current = true;
@@ -607,8 +652,19 @@ export function useAiCopilotChat({ onOpenCopilot, menuGroups }) {
   const dismissError = useCallback(() => {
     chat.clearError();
     setLoadError('');
+    setFileError('');
     clearHistoryError();
   }, [chat.clearError, clearHistoryError]);
+
+  // A file error is about the attachment the user picked, not about the last turn. Retrying it
+  // must not regenerate that turn: the agent would run its tools again and could repeat writes.
+  const retry = useCallback(() => {
+    if (fileError) {
+      setFileError('');
+      return;
+    }
+    chat.regenerate();
+  }, [fileError, chat.regenerate]);
 
   const pageHelpChat = useChat({
     id: 'etendo-go-page-help',
@@ -626,11 +682,21 @@ export function useAiCopilotChat({ onOpenCopilot, menuGroups }) {
     setPageHelpError(pageHelpChat.error.message || 'No se pudo analizar esta pantalla.');
   }, [pageHelpChat.error]);
 
-  const messages = useMemo(() => chat.messages.map(message => ({
-    id: message.id,
-    role: message.role === 'user' ? 'user' : 'copilot',
-    text: messageText(message),
-  })).filter(message => message.text || message.role === 'user'), [chat.messages]);
+  const messages = useMemo(() => chat.messages.map((message) => {
+    const attached = [];
+    const textParts = [];
+    for (const part of message.role === 'user' ? (message.parts || []) : []) {
+      if (part.type === 'file') attached.push({ name: fileNameOf(part) });
+      else if (part.type === 'text' && ATTACHED_NOTE.test(part.text)) attached.push({ name: part.text.match(ATTACHED_NOTE)[1] });
+      else if (part.type === 'text') textParts.push(part);
+    }
+    return {
+      id: message.id,
+      role: message.role === 'user' ? 'user' : 'copilot',
+      text: attached.length ? messageText({ ...message, parts: textParts }) : messageText(message),
+      ...(attached.length ? { files: attached } : {}),
+    };
+  }).filter(message => message.text || message.role === 'user'), [chat.messages]);
 
   // ETP-4576: no `token` in this gate. Under the cookie session the client holds none, so
   // gating on it would swallow every message silently. authHeaders() already resolves the
@@ -638,9 +704,68 @@ export function useAiCopilotChat({ onOpenCopilot, menuGroups }) {
   const sendMessage = useCallback(async (text) => {
     const value = text?.trim();
     if (!value) return;
+    setFileError('');
+    const pending = files;
+    if (!pending.length) {
+      setInput('');
+      await chat.sendMessage({ text: value });
+      return;
+    }
+    // Read first: if a file cannot be read, nothing is cleared and the user can retry.
+    let parts;
+    try {
+      parts = await Promise.all(pending.map(async file => ({
+        type: 'file',
+        mediaType: file.type || 'application/octet-stream',
+        filename: file.name,
+        url: await readFileAsDataUrl(file),
+      })));
+    } catch {
+      setFileError(ui('copilotFileReadError'));
+      return;
+    }
+    // The raw file limit is not enough: the request also carries every earlier message and tool output.
+    const requestChars = JSON.stringify(chat.messages ?? []).length
+      + parts.reduce((total, part) => total + part.url.length, 0) + value.length;
+    if (requestChars > AGENT_REQUEST_MAX_CHARS) {
+      setFileError(ui('copilotRequestTooLarge'));
+      return;
+    }
     setInput('');
-    await chat.sendMessage({ text: value });
-  }, [chat]);
+    setFiles([]);
+    try {
+      await chat.sendMessage({ text: value, files: parts });
+    } finally {
+      // sendMessage settles after the automatic client-tool resends: only now drop the data URLs.
+      chat.setMessages(filePartsToNotes);
+    }
+  }, [chat, files, ui]);
+
+  // Queued on the client only: the file travels with the next message to the agent.
+  const uploadFile = useCallback((file) => {
+    if (!file) return;
+    if (!AGENT_FILE_EXTENSIONS.test(file.name || '') || (file.type && !AGENT_FILE_MEDIA_TYPES.has(file.type))) {
+      setFileError(ui('copilotFileUnsupported'));
+      return;
+    }
+    if (file.size > AGENT_FILE_MAX_BYTES) {
+      setFileError(ui('copilotFileTooLarge'));
+      return;
+    }
+    const queued = filesRef.current;
+    if (queued.reduce((total, item) => total + item.size, 0) + file.size > AGENT_FILE_MAX_BYTES) {
+      setFileError(ui('copilotFilesTotalTooLarge'));
+      return;
+    }
+    setFileError('');
+    filesRef.current = [...queued, file];
+    setFiles(filesRef.current);
+  }, [ui]);
+
+  const removeFile = useCallback((index) => {
+    filesRef.current = filesRef.current.filter((_, i) => i !== index);
+    setFiles(filesRef.current);
+  }, []);
 
   const requestPageHelp = useCallback(async () => {
     // ETP-4576: the missing-session case is no longer detectable from a token the client does
@@ -679,6 +804,8 @@ export function useAiCopilotChat({ onOpenCopilot, menuGroups }) {
 
   const actions = useMemo(() => ({
     sendMessage,
+    uploadFile,
+    removeFile,
     setInput,
     resetConversation: startNewConversation,
     startNewConversation,
@@ -689,19 +816,22 @@ export function useAiCopilotChat({ onOpenCopilot, menuGroups }) {
     deleteConversation: history.deleteConversation,
     restoreConversation: history.restoreConversation,
     permanentDelete: history.permanentDelete,
-    retry: chat.regenerate,
+    retry,
     dismissError,
     stop,
     addToolResult: chat.addToolOutput,
     requestPageHelp,
     showPageHelp,
-  }), [chat.addToolOutput, chat.regenerate, dismissError, history.deleteConversation, history.loadArchivedConversations, history.loadConversations, history.permanentDelete, history.renameConversation, history.restoreConversation, requestPageHelp, selectConversation, sendMessage, showPageHelp, startNewConversation, stop]);
+  }), [chat.addToolOutput, dismissError, history.deleteConversation, history.loadArchivedConversations, history.loadConversations, history.permanentDelete, history.renameConversation, history.restoreConversation, requestPageHelp, retry, selectConversation, sendMessage, showPageHelp, startNewConversation, stop, uploadFile, removeFile]);
 
   return {
     messages,
     input,
+    files,
     isSending: chat.status === 'submitted' || chat.status === 'streaming',
-    error: chat.error?.message || loadError || history.historyError,
+    error: fileError || chat.error?.message || loadError || history.historyError,
+    // False while the shown error is a file error: there is no turn to retry for it.
+    errorRetryable: !fileError,
     conversationId,
     isLoadingMessages,
     conversations: history.conversations,

@@ -6,11 +6,20 @@
 export const CONVERSATION_TITLE_MAX = 60;
 const TOOL_DONE_STATES = ['output-available', 'output-error', 'output-denied'];
 
-/** Text of a UIMessage: only `text` parts, never tool inputs or outputs. */
+/** The note a sent attachment is reduced to; it labels the file, it is not message text. */
+export const ATTACHED_NOTE = /^\[Archivo adjunto "(.*)"\]$/;
+
+/** Builds the note; must stay byte-identical with `attachmentNotes` in the AI BFF (history cache). */
+export const attachedNote = name => `[Archivo adjunto "${name}"]`;
+
+/**
+ * Text of a UIMessage: only `text` parts, never tool inputs, outputs or attachment notes.
+ * A message typed literally as `[Archivo adjunto "x"]` is treated as a note and left out.
+ */
 export function uiMessageText(message) {
   if (typeof message?.content === 'string') return message.content;
   return (message?.parts || [])
-    .filter(part => part.type === 'text')
+    .filter(part => part.type === 'text' && !ATTACHED_NOTE.test(part.text))
     .map(part => part.text)
     .join('');
 }

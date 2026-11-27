@@ -1,3 +1,6 @@
+/**
+ * @covers tools/app-shell/src/components/copilot/useAiCopilotChat.js
+ */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderHook } from '@testing-library/react';
 
@@ -44,7 +47,7 @@ vi.mock('react-router-dom', () => ({
 }));
 
 vi.mock('@/auth/api.js', () => ({ authHeaders: () => ({}) }));
-vi.mock('@/i18n', () => ({ useMenuLabel: () => key => key }));
+vi.mock('@/i18n', () => ({ useMenuLabel: () => key => key, useUI: () => key => key }));
 
 const highlight = vi.fn();
 vi.mock('../highlight/HighlightContext.jsx', () => ({

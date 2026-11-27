@@ -1,10 +1,14 @@
 /**
+ * @covers tools/app-shell/src/components/copilot/useAiCopilotChat.js
  * History wiring of the agent chat: lazy conversation creation, one batch append per finished
  * turn, no save on error/abort, hydration, and resilience to save failures.
  * `useChat` is replaced by a small controllable fake so turns can be scripted.
  */
-import { act, renderHook } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+// Created at module level so a describe block can run on its own.
+globalThis.__chatApi ??= { sendMessage: vi.fn(), regenerate: vi.fn() };
 
 vi.mock('@ai-sdk/react', async () => {
   const React = await import('react');
@@ -18,12 +22,14 @@ vi.mock('@ai-sdk/react', async () => {
       const [messages, setMessages] = React.useState([]);
       const [status, setStatus] = React.useState('ready');
       const [error, setError] = React.useState(undefined);
-      globalThis.__chat = { setMessages, setStatus, setError };
+      globalThis.__chat = { setMessages, setStatus, setError, messages };
+      globalThis.__chatOptions = options;
+      const api = globalThis.__chatApi;
       return {
         messages, status, error, setMessages,
         stop: vi.fn(() => setStatus('ready')),
         clearError: () => setError(undefined),
-        sendMessage: vi.fn(), addToolOutput: vi.fn(), regenerate: vi.fn(),
+        sendMessage: api.sendMessage, addToolOutput: vi.fn(), regenerate: api.regenerate,
       };
     },
   };
@@ -44,7 +50,7 @@ vi.mock('react-router-dom', () => ({
   useNavigate: () => vi.fn(),
 }));
 vi.mock('@/auth/api.js', () => ({ buildWriteHeaders: () => ({}) }));
-vi.mock('@/i18n', () => ({ useMenuLabel: () => (key) => key }));
+vi.mock('@/i18n', () => ({ useMenuLabel: () => (key) => key, useUI: () => (key) => key }));
 
 vi.mock('../agentChatApi.js', () => ({
   createAgentConversation: vi.fn().mockResolvedValue({ success: true }),
@@ -59,7 +65,7 @@ vi.mock('../agentChatApi.js', () => ({
 }));
 
 import * as api from '../agentChatApi.js';
-import { useAiCopilotChat } from '../useAiCopilotChat.js';
+import { useAiCopilotChat, AGENT_REQUEST_MAX_CHARS } from '../useAiCopilotChat.js';
 
 const text = (t) => ({ type: 'text', text: t });
 const user = (id, t) => ({ id, role: 'user', parts: [text(t)] });
@@ -303,5 +309,130 @@ describe('agent chat history', () => {
     expect(result.current.conversations).toEqual([]);
     expect(result.current.archivedConversations).toEqual([]);
     expect(result.current.error).toBe('');
+  });
+});
+
+describe('agent chat file attachments', () => {
+  beforeEach(() => { globalThis.__chatApi.sendMessage.mockClear(); globalThis.__chatApi.regenerate.mockClear(); });
+
+  const file = (name, size = 10, type = 'text/csv', content = 'a,b') => {
+    const f = new File([content], name, { type });
+    Object.defineProperty(f, 'size', { value: size });
+    return f;
+  };
+
+  it('queues supported files on the client and rejects bad extension or size', async () => {
+    const { result } = setup();
+    await act(async () => { result.current.actions.uploadFile(file('c.csv')); });
+    expect(result.current.files).toHaveLength(1);
+    await act(async () => { result.current.actions.uploadFile(file('a.pdf', 10, 'application/pdf')); });
+    expect(result.current.files).toHaveLength(1);
+    expect(result.current.error).toBe('copilotFileUnsupported');
+    await act(async () => { result.current.actions.uploadFile(file('big.xlsx', 600 * 1024)); });
+    expect(result.current.files).toHaveLength(1);
+    expect(result.current.error).toBe('copilotFileTooLarge');
+    await act(async () => { result.current.actions.removeFile(0); });
+    expect(result.current.files).toHaveLength(0);
+  });
+
+  it('sends the queued files as file parts and empties the queue', async () => {
+    const { result } = setup();
+    await act(async () => { result.current.actions.uploadFile(file('c.csv')); });
+    await act(async () => { await result.current.actions.sendMessage('importa'); });
+    const chat = globalThis.__chatApi;
+    expect(chat.sendMessage).toHaveBeenCalledWith({
+      text: 'importa',
+      files: [expect.objectContaining({ type: 'file', mediaType: 'text/csv', filename: 'c.csv', url: expect.stringMatching(/^data:text\/csv/) })],
+    });
+    expect(result.current.files).toHaveLength(0);
+  });
+
+  it('rejects a file that would push the queue over the total limit', async () => {
+    const { result } = setup();
+    await act(async () => { result.current.actions.uploadFile(file('a.csv', 400 * 1024)); });
+    await act(async () => { result.current.actions.uploadFile(file('b.csv', 200 * 1024)); });
+    expect(result.current.files).toHaveLength(1);
+    expect(result.current.error).toBe('copilotFilesTotalTooLarge');
+  });
+
+  it('rejects a known MIME type that is not tabular', async () => {
+    const { result } = setup();
+    await act(async () => { result.current.actions.uploadFile(file('a.csv', 10, 'application/pdf')); });
+    expect(result.current.files).toHaveLength(0);
+    expect(result.current.error).toBe('copilotFileUnsupported');
+  });
+
+  it('dismissError clears a file error', async () => {
+    const { result } = setup();
+    await act(async () => { result.current.actions.uploadFile(file('a.pdf', 10, 'application/pdf')); });
+    expect(result.current.error).toBeTruthy();
+    await act(async () => { result.current.actions.dismissError(); });
+    expect(result.current.error).toBeFalsy();
+  });
+
+  it('a file error is not retryable: retry clears it and never regenerates the last turn', async () => {
+    const { result } = setup();
+    await act(async () => { result.current.actions.uploadFile(file('a.pdf', 10, 'application/pdf')); });
+    expect(result.current.error).toBe('copilotFileUnsupported');
+    expect(result.current.errorRetryable).toBe(false);
+    await act(async () => { result.current.actions.retry(); });
+    expect(globalThis.__chatApi.regenerate).not.toHaveBeenCalled();
+    expect(result.current.error).toBeFalsy();
+    expect(result.current.errorRetryable).toBe(true);
+  });
+
+  it('keeps the queue and the text when a file cannot be read', async () => {
+    const { result } = setup();
+    await act(async () => { result.current.actions.uploadFile({ name: 'c.csv', size: 1, type: 'text/csv' }); });
+    await act(async () => { await result.current.actions.sendMessage('importa'); });
+    expect(result.current.files).toHaveLength(1);
+    expect(result.current.error).toBe('copilotFileReadError');
+    expect(globalThis.__chatApi.sendMessage).not.toHaveBeenCalledWith(expect.objectContaining({ files: expect.anything() }));
+  });
+
+  it('replaces sent file parts with a note so later turns do not resend the data URL', async () => {
+    const { result } = setup();
+    await act(async () => { result.current.actions.uploadFile(file('c.csv')); });
+    await act(async () => {
+      globalThis.__chat.setMessages([{ id: 'u1', role: 'user', parts: [{ type: 'file', mediaType: 'text/csv', filename: 'c.csv', url: 'data:text/csv;base64,YSxi' }, text('importa')] }]);
+    });
+    await act(async () => { await result.current.actions.sendMessage('importa'); });
+    // Raw useChat state: this is what the next request would resend.
+    const [sent] = globalThis.__chat.messages;
+    expect(sent.parts.some(part => part.type === 'file')).toBe(false);
+    expect(sent.parts[0]).toEqual({ type: 'text', text: '[Archivo adjunto "c.csv"]' });
+    expect(JSON.stringify(globalThis.__chat.messages)).not.toContain('data:');
+    expect(result.current.messages[0]).toEqual({ id: 'u1', role: 'user', text: 'importa', files: [{ name: 'c.csv' }] });
+  });
+
+  it('keeps the file part while the turn is pending and turns it into a note once it settles', async () => {
+    const { result } = setup();
+    await act(async () => { result.current.actions.uploadFile(file('c.csv')); });
+    let settle;
+    globalThis.__chatApi.sendMessage.mockImplementationOnce(() => new Promise(resolve => { settle = resolve; }));
+    await act(async () => {
+      globalThis.__chat.setMessages([{ id: 'u1', role: 'user', parts: [{ type: 'file', mediaType: 'text/csv', filename: 'c.csv', url: 'data:text/csv;base64,YSxi' }, text('importa')] }]);
+    });
+    let sending;
+    await act(async () => { sending = result.current.actions.sendMessage('importa'); });
+    await waitFor(() => expect(settle).toBeTypeOf('function'));
+    // Simulated automatic client-tool resend while sendMessage is still pending.
+    await act(async () => { await globalThis.__chatOptions.sendAutomaticallyWhen({ messages: globalThis.__chat.messages }); });
+    expect(globalThis.__chat.messages[0].parts[0]).toMatchObject({ type: 'file', url: 'data:text/csv;base64,YSxi' });
+    await act(async () => { settle(); await sending; });
+    expect(globalThis.__chat.messages[0].parts.some(part => part.type === 'file')).toBe(false);
+    expect(globalThis.__chat.messages[0].parts[0]).toEqual({ type: 'text', text: '[Archivo adjunto "c.csv"]' });
+  });
+
+  it('refuses up front a send whose whole request exceeds the budget, keeping the file queued', async () => {
+    const { result } = setup();
+    await act(async () => { result.current.actions.uploadFile(file('c.csv', 10, 'text/csv', 'a,b')); });
+    await act(async () => {
+      globalThis.__chat.setMessages([{ id: 'a1', role: 'assistant', parts: [{ type: 'text', text: 'x'.repeat(AGENT_REQUEST_MAX_CHARS) }] }]);
+    });
+    await act(async () => { await result.current.actions.sendMessage('importa'); });
+    expect(globalThis.__chatApi.sendMessage).not.toHaveBeenCalled();
+    expect(result.current.error).toBe('copilotRequestTooLarge');
+    expect(result.current.files).toHaveLength(1);
   });
 });
