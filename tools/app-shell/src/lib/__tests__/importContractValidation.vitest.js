@@ -1,5 +1,4 @@
-// @covers packages/app-shell-core/src/lib/import/validateRows.js
-// @covers packages/app-shell-core/src/lib/import/fieldConstraints.js
+// @covers artifacts/contacts/contract.json
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';

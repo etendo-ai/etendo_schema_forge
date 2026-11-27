@@ -3048,6 +3048,8 @@ export function useEntity(entity, childEntity, {
         deferBlocking: defaultsPending && !editing?.id,
     });
 
+    const formErrorProps = useMemo(() => ({ fieldErrors, onFieldError: setFieldError, loadedData: selected }), [fieldErrors, setFieldError, selected]);
+
     return {
         items, meta, selected, editing, children, childDefaults, childrenLoading, loading, defaultsLoading, defaultsPending, loadingMore, hasMore, saveError, isSaving,
         recordError,
@@ -3056,7 +3058,7 @@ export function useEntity(entity, childEntity, {
         isDirtyHeader, dirtyHeaderFieldKeys, hasUserHeaderEdits,
         isValid, missingRequired, missingRequiredFields,
         fieldErrors, setFieldError, registerFields,
-        formErrorProps: { fieldErrors, onFieldError: setFieldError, loadedData: selected }, // ETP-4557: spread onto EntityForm
+        formErrorProps, // ETP-4557: spread onto EntityForm
         handleSelect, handleNew, handleChange, handleSave, handleSaveAndProcess, handleDelete, handleProcess,
         handleAddChild, handleUpdateChild, handleDeleteChild, primeSaved, applyPersistedFields,
         refresh, fetchById, fetchChildren, fetchChildDefaults, loadMore, refreshHeaderTotals, clearUserChangedKey,

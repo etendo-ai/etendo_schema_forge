@@ -219,7 +219,7 @@ const JAVA_CLASS_RE = /\b[A-Z]\w*Exception\b|\b(?:org|java|javax|com)\.[a-z][\w.
 /**
  * The message to show for a failed save: the localized generic one when `msg` leaks internals.
  * @param {string} msg candidate message.
- * @param {Function} [ui] translator; without it the English fallback is used.
+ * @param {Function} [ui] translator; without it the `backendGenericError` key is returned (callers always pass `ui`).
  * @returns {string} `msg` when ordinary, otherwise the generic message.
  */
 export function safeBackendMessage(msg, ui) {

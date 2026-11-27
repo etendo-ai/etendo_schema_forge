@@ -12,7 +12,7 @@ validity with the same declarative engine, `@etendosoftware/app-shell-core/lib/v
 | Form blur | `EntityForm.validateNumericOnBlur` → `getFieldError` (inline via `onFieldError`) |
 | Grid add-row / inline edit | `DataTable`, `InlineLinesPanel` → `getFieldError` |
 | Import pre-validation and review-queue re-validation | `validateRow({ emailTargets, fieldConstraints, fieldIdentities })` |
-| Backend structured errors | `useEntity.handleSaveErrorResponse`, `inlineLineUpdateHandlers` → `mapBackendFieldErrors` / `structuredBackendMessage` |
+| Backend structured errors | `useEntity.handleSaveErrorResponse`, `inlineLineUpdateHandlers` → `mapBackendFieldErrors` / `structuredBackendError` |
 
 The same value therefore returns the same engine code (`MAX_LENGTH`, `INVALID_FORMAT`, …) in every
 flow. Codes map to the shared i18n keys `fieldMaxLengthError`, `fieldMinLengthError`,
