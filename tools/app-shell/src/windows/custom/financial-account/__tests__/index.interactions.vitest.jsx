@@ -175,6 +175,8 @@ vi.mock('../ReconciliationTab.jsx', () => ({
       <button type="button" data-testid="stub-reconcile-success" onClick={onReconcileSuccess} />
       <button type="button" data-testid="stub-panel-dismiss" onClick={() => bounceReview?.onDismiss('bp-review')} />
       <button type="button" data-testid="stub-panel-focus-consumed" onClick={() => bounceReview?.onFocusConsumed()} />
+      {/* ETP-6359 — the panel picks another outflow for the bp-review rejection (B2). */}
+      <button type="button" data-testid="stub-panel-pick" onClick={() => bounceReview?.onPick?.('B2', { id: 'O-PICK' })} />
     </div>
   ),
 }));
@@ -237,8 +239,8 @@ vi.mock('../BankConnectionFlowUI.jsx', () => ({
 // (`onReviewPair`) are surfaced the same way; `onReviewPair` and the toggle act on the `bp-review` pair.
 vi.mock('@/components/contract-ui/AutoMatchSuggestionModal', () => ({
   AutoMatchSuggestionModal: ({
-    open, onClose, onSuccess, groups, selection, dismissedPairKeys, onReviewPair, sentToPanelKeys,
-    autoOpened,
+    open, onClose, onSuccess, onChanged, groups, selection, dismissedPairKeys, onReviewPair,
+    sentToPanelKeys, autoOpened,
   }) => {
     const reviewPair = (groups ?? []).find((g) => g.groupKey === 'bp-review');
     return (
@@ -248,9 +250,12 @@ vi.mock('@/components/contract-ui/AutoMatchSuggestionModal', () => ({
         data-checked={(groups ?? []).filter((g) => selection?.isChecked(g)).map((g) => g.groupKey).join(',')}
         data-dismissed={[...(dismissedPairKeys ?? [])].join(',')}
         data-sent-to-panel={[...(sentToPanelKeys ?? [])].join(',')}
-        data-auto-opened={String(autoOpened)}>
+        data-auto-opened={String(autoOpened)}
+        data-review-outflow={reviewPair ? `${selection?.pairOutflow?.(reviewPair)?.line?.id ?? ''}:${selection?.pairOutflow?.(reviewPair)?.source ?? ''}` : ''}>
         <button type="button" data-testid="stub-automatch-close" onClick={onClose} />
         <button type="button" data-testid="stub-automatch-success" onClick={onSuccess} />
+        <button type="button" data-testid="stub-automatch-changed" onClick={onChanged} />
+        <button type="button" data-testid="stub-automatch-changed-reload" onClick={() => onChanged?.({ reloadSuggestions: true })} />
         <button type="button" data-testid="stub-automatch-review" onClick={() => onReviewPair?.(reviewPair)} />
         <button type="button" data-testid="stub-automatch-toggle-review" onClick={() => selection?.toggle(reviewPair)} />
       </div>
@@ -548,6 +553,45 @@ describe('FinancialAccountDetail — automatch modal', () => {
     expect(screen.getByTestId('tab-reconciliation')).not.toBe(before);
   });
 
+  // ETP-6359 — "Excluir de la conciliación" is immediate: the modal stays open and keeps its own
+  // checks, so the host refreshes what the exclusion changed but must NOT reload the suggestions.
+  it('reloads the account, the list and the movements after an Excluir, but NOT the cached automatch', () => {
+    render(<FinancialAccountDetail recordId="acc-1" />);
+    reloadAccountMock.mockClear();
+    reloadMovementsMock.mockClear();
+    reloadAutoMatchMock.mockClear();
+
+    fireEvent.click(screen.getByTestId('stub-automatch-changed'));
+
+    expect(reloadAccountMock).toHaveBeenCalled();
+    expect(reloadMovementsMock).toHaveBeenCalled();
+    expect(reloadAutoMatchMock).not.toHaveBeenCalled();
+  });
+
+  // ETP-6359 — a 409 LINE_NOT_PENDING means the suggestions are stale: the modal asks for a reload.
+  it('reloads the automatch too when the Excluir asks for it (reloadSuggestions)', () => {
+    render(<FinancialAccountDetail recordId="acc-1" />);
+    reloadAccountMock.mockClear();
+    reloadMovementsMock.mockClear();
+    reloadAutoMatchMock.mockClear();
+
+    fireEvent.click(screen.getByTestId('stub-automatch-changed-reload'));
+
+    expect(reloadAutoMatchMock).toHaveBeenCalledTimes(1);
+    expect(reloadAccountMock).toHaveBeenCalled();
+    expect(reloadMovementsMock).toHaveBeenCalled();
+  });
+
+  it('remounts the reconciliation panel after an Excluir so it shows the pairs as discarded', () => {
+    render(<FinancialAccountDetail recordId="acc-1" />);
+    fireEvent.click(screen.getByTestId('detail-tab-reconciliation'));
+    const before = screen.getByTestId('tab-reconciliation');
+
+    fireEvent.click(screen.getByTestId('stub-automatch-changed'));
+
+    expect(screen.getByTestId('tab-reconciliation')).not.toBe(before);
+  });
+
   it('reloads all three data sources after a manual reconcile', () => {
     render(<FinancialAccountDetail recordId="acc-1" />);
     fireEvent.click(screen.getByTestId('detail-tab-reconciliation'));
@@ -731,6 +775,54 @@ describe('FinancialAccountDetail — bounce-pair review (Revisar en el panel)', 
     expect(modal()).toHaveAttribute('data-open', 'true');
     return utils;
   }
+
+  // The modal also opens by itself when the run found ONLY possible rejections (no transaction
+  // group): one non-dismissed pair is enough (ETP-6359).
+  const landWith = (groups, beforeLanding) => {
+    const utils = render(<FinancialAccountDetail recordId="acc-1" />);
+    currentAutoMatchLoading = true;
+    fireEvent.click(screen.getByTestId('detail-tab-reconciliation'));
+    beforeLanding?.();
+    currentAutoMatchGroups = groups;
+    currentAutoMatchLoading = false;
+    utils.rerender(<FinancialAccountDetail recordId="acc-1" />);
+    return utils;
+  };
+
+  it('auto-opens with only bounce pairs (no transaction group), as an automatic opening', () => {
+    landWith([HIGH, REVIEW]);
+    expect(modal()).toHaveAttribute('data-open', 'true');
+    expect(modal()).toHaveAttribute('data-auto-opened', 'true');
+  });
+
+  it('does not auto-open with zero groups and zero pairs', () => {
+    landWith([]);
+    expect(modal()).toHaveAttribute('data-open', 'false');
+  });
+
+  // ETP-6359 — the outflow picked in the panel is the one the modal row of that rejection shows
+  // (and a tick excludes), sourced "user".
+  it('an outflow picked in the panel reaches the modal row of that rejection, sourced "user"', () => {
+    renderWithPairs();
+    expect(modal()).toHaveAttribute('data-review-outflow', 'O2:');
+    fireEvent.click(screen.getByTestId('stub-automatch-close'));
+    fireEvent.click(screen.getByTestId('stub-panel-pick'));
+    expect(modal()).toHaveAttribute('data-review-outflow', 'O-PICK:user');
+  });
+
+  it('does not auto-open when every pair was dismissed in the panel', () => {
+    landWith([REVIEW], () => fireEvent.click(screen.getByTestId('stub-panel-dismiss')));
+    expect(modal()).toHaveAttribute('data-open', 'false');
+  });
+
+  it('auto-opens once: after the user closes it, a reload of the pairs does not pop it again', () => {
+    const { rerender } = landWith([HIGH]);
+    expect(modal()).toHaveAttribute('data-open', 'true');
+    fireEvent.click(screen.getByTestId('stub-automatch-close'));
+    currentAutoMatchGroups = [HIGH, REVIEW];
+    rerender(<FinancialAccountDetail recordId="acc-1" />);
+    expect(modal()).toHaveAttribute('data-open', 'false');
+  });
 
   it('starts with the default checks', () => {
     renderWithPairs();
