@@ -98,7 +98,7 @@ export function isEnterSubmitKey(event, form) {
 
 /**
  * A server wall clock in the viewer's zone, WITHOUT the zone label: the dialog's summary lines
- * leave it out (it would wrap them) since the date field above names it as its suffix.
+ * leave it out (it would wrap them) since the date field above names it in its helper text.
  */
 function shownTime(raw, zone) {
   return formatWallClock(zone.show(raw));
@@ -628,8 +628,8 @@ function RateField({ value, onChange, onBlur, inError, error, orgIso, destIso, u
 /**
  * Válido desde: in error (red border, aria-invalid) on a field error or on a server refusal of the
  * start (overlap, future); the hint stays under it, as in the error design. Typed in the viewer's
- * zone, named inside the field as a muted suffix — the compact zone name (`hora de Córdoba`, else
- * the offset `GMT-3`) so the date keeps its room and the label fits one line.
+ * zone: the field holds date and time only, and the zone is named right below it in the form's
+ * helper text (*Hora estándar de Argentina*, {@link ZoneHint}) — never as a `GMT±n` offset inside it.
  */
 function ValidFromField({ value, onChange, onBlur, max, inError, error, zone, ui }) {
   const label = ui('convRateValidFromDateTime');
@@ -640,11 +640,11 @@ function ValidFromField({ value, onChange, onBlur, max, inError, error, zone, ui
         onChange={onChange}
         onBlur={onBlur}
         max={max ?? undefined}
-        suffix={zone.compactLabel}
         invalid={inError}
         required
         aria-label={label}
         data-testid="convrate-dialog-valid-from-input" />
+      <ZoneHint text={zone.fieldHint} testId="convrate-dialog-valid-from-zone" data-testid="ZoneHint__convrate-from" />
       {error && (
         <span className="block text-xs font-normal text-destructive" data-testid="convrate-dialog-date-error">{error}</span>
       )}
@@ -654,7 +654,16 @@ function ValidFromField({ value, onChange, onBlur, max, inError, error, zone, ui
 }
 
 /**
- * Modificar: the range of the row, read-only (in the viewer's zone, named inside each field), and the
+ * The viewer's zone under a dialog date field, in the field helper style (*Hora estándar de
+ * Argentina*); nothing when the view names no zone (inactive, or a range of calendar days).
+ */
+function ZoneHint({ text, testId }) {
+  if (!text) return null;
+  return <span className="block text-xs font-normal text-muted-foreground" data-testid={testId}>{text}</span>;
+}
+
+/**
+ * Modificar: the range of the row, read-only (in the viewer's zone, named below each field), and the
  * hint that only the rate can change.
  */
 function EditRangeFields({ rateField, row, zone, ui }) {
@@ -670,18 +679,21 @@ function EditRangeFields({ rateField, row, zone, ui }) {
           <DateTimeField
             value={row?.validFromDate ? view.show(row.validFromDate) : row?.validFromDate}
             readOnly
-            suffix={view.compactLabel}
             aria-label={fromLabel}
             data-testid="convrate-dialog-valid-from" />
+          <ZoneHint text={view.fieldHint} testId="convrate-dialog-valid-from-zone" data-testid="ZoneHint__convrate-edit-from" />
         </Field>
         <Field label={toLabel} className="min-w-0" data-testid="Field__convrate-to">
           <DateTimeField
             value={isOpenEnded(row?.validToDate) ? null : view.show(row.validToDate)}
             readOnly
-            suffix={isOpenEnded(row?.validToDate) ? null : view.compactLabel}
             placeholder={ui('convRateOpenEnd')}
             aria-label={toLabel}
             data-testid="convrate-dialog-valid-to" />
+          <ZoneHint
+            text={isOpenEnded(row?.validToDate) ? null : view.fieldHint}
+            testId="convrate-dialog-valid-to-zone"
+            data-testid="ZoneHint__convrate-edit-to" />
         </Field>
       </div>
       <div className="-mt-1.5 text-xs text-muted-foreground" data-testid="convrate-dialog-edit-hint">

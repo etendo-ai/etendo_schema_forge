@@ -320,8 +320,8 @@ export function zoneOffsetLabel(zone, epoch = Date.now()) {
   }
 }
 
-/** Longest region name used inside a date field (its suffix); a longer one falls back to the offset. */
-export const COMPACT_ZONE_NAME_MAX = 14;
+/** Zone ids that ARE Coordinated Universal Time: named `UTC`, never `GMT`. */
+const UTC_ZONES = new Set(['UTC', 'Etc/UTC', 'Etc/UCT', 'UCT', 'Etc/Universal', 'Universal', 'Etc/Zulu', 'Zulu', 'Etc/GMT', 'GMT', 'Etc/GMT0', 'GMT0', 'Etc/GMT+0', 'Etc/GMT-0', 'Etc/Greenwich', 'Greenwich']);
 
 /** `es_ES` → `es-ES`; anything unusable → undefined (the browser's locale). */
 function intlLocale(locale) {
@@ -345,24 +345,41 @@ function intlZoneName(zone, epoch, locale, style) {
 }
 
 /**
- * The name of `zone` a person reads (QA CP-2/7/11), in the UI `locale`:
+ * The name of `zone` a person reads (QA CP-2/7/11), in the UI `locale` — never a `GMT±n` offset
+ * unless nothing better exists:
  *
- * - full (default): `Intl` `longGeneric` — *hora estándar de Argentina*, *hora de Europa central*,
- *   *Argentina Standard Time* — for list headers, print columns, subtitles and sentences;
- * - `compact: true`: `Intl` `shortGeneric` — *hora de Córdoba*, *hora de India* — when it is a
- *   readable name of at most {@link COMPACT_ZONE_NAME_MAX} characters, for the suffix inside a date
- *   field, where the long name would squeeze the date.
+ * 1. a UTC zone id → `UTC`;
+ * 2. `Intl` `longGeneric` when it is a readable name — *hora estándar de Argentina*, *hora de
+ *    Europa central*, *Argentina Standard Time*;
+ * 3. else `Intl` `long` when readable;
+ * 4. last resort, the offset ({@link zoneOffsetLabel}, `GMT-3`) — only when `Intl` gives no
+ *    readable name (an abbreviation such as `CET` / `ART`, an offset, or no support).
  *
- * Either falls back to the GMT offset ({@link zoneOffsetLabel}) when `Intl` gives nothing readable
- * (an abbreviation such as `CET` / `ART`, an offset, or no support), e.g. `GMT` for UTC.
+ * Used for list headers, print columns, subtitles, sentences and the helper text under the dialog's
+ * date fields ({@link capitalizeZoneName}).
  *
  * @param {string} zone IANA zone id
- * @param {{epoch?: number, locale?: string, compact?: boolean}} [options]
+ * @param {{epoch?: number, locale?: string}} [options]
  */
-export function zoneName(zone, { epoch = Date.now(), locale, compact = false } = {}) {
-  const name = intlZoneName(zone, epoch, locale, compact ? 'shortGeneric' : 'longGeneric');
-  const fits = !compact || (name ?? '').length <= COMPACT_ZONE_NAME_MAX;
-  return isReadableZoneName(name) && fits ? name : zoneOffsetLabel(zone, epoch);
+export function zoneName(zone, { epoch = Date.now(), locale } = {}) {
+  if (UTC_ZONES.has(zone)) return 'UTC';
+  for (const style of ['longGeneric', 'long']) {
+    const name = intlZoneName(zone, epoch, locale, style);
+    if (isReadableZoneName(name)) return name;
+  }
+  return zoneOffsetLabel(zone, epoch);
+}
+
+/**
+ * A zone name as the helper text under a date field: first letter upper-cased in the UI locale
+ * (*Hora estándar de Argentina*); `null` for no name.
+ *
+ * @param {string|null} name a {@link zoneName}
+ * @param {string} [locale]
+ */
+export function capitalizeZoneName(name, locale) {
+  if (!name) return null;
+  return name.charAt(0).toLocaleUpperCase(intlLocale(locale)) + name.slice(1);
 }
 
 /**
@@ -370,8 +387,8 @@ export function zoneName(zone, { epoch = Date.now(), locale, compact = false } =
  *
  * - `show(raw)` server → browser wall clock; `send(raw)` browser → server wall clock;
  * - `label` the browser zone's name now (*hora estándar de Argentina*, {@link zoneName}), for
- *   column headers, subtitles and sentences; `compactLabel` its short form (*hora de Córdoba*, or
- *   the offset `GMT-3`), for the suffix inside a date field;
+ *   column headers, subtitles and sentences; `fieldHint` the same name capitalised (*Hora estándar
+ *   de Argentina*), the helper text under the dialog's date fields;
  * - `labelAt(shown)` the name at a shown (browser) wall clock — the same as `label` except when it
  *   falls back to the offset across a DST change — for a datetime inside a sentence.
  *
@@ -386,7 +403,7 @@ export function createZoneView(serverZone, viewerZone = browserTimeZone(), refer
   const active = isKnownTimeZone(serverZone) && isKnownTimeZone(viewerZone);
   if (!active) {
     return {
-      active: false, show: (raw) => raw, send: (raw) => raw, label: null, compactLabel: null, labelAt: () => null,
+      active: false, show: (raw) => raw, send: (raw) => raw, label: null, fieldHint: null, labelAt: () => null,
     };
   }
   const epoch = reference.getTime();
@@ -396,7 +413,7 @@ export function createZoneView(serverZone, viewerZone = browserTimeZone(), refer
     show: (raw) => convertWallClock(raw, serverZone, viewerZone),
     send: (raw) => convertWallClock(raw, viewerZone, serverZone),
     label,
-    compactLabel: zoneName(viewerZone, { epoch, locale, compact: true }),
+    fieldHint: capitalizeZoneName(label, locale),
     labelAt: (shown) => {
       const p = parseWallClock(shown);
       return p ? zoneName(viewerZone, { epoch: wallClockToEpoch(p, viewerZone), locale }) : label;

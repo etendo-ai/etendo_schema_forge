@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import {
   isOpenEnded, displayValidTo, displayValidFrom, formatWallClock, convertWallClock, createZoneView,
   isCalendarDayRow, formatCalendarDay, formatStartInSentence, currentRateRow, zoneName, overlapMessage,
+  capitalizeZoneName,
 } from '../conversionRatesModel.js';
 
 describe('isOpenEnded', () => {
@@ -77,8 +78,9 @@ describe('createZoneView', () => {
     assert.equal(view.send('2026-11-20T07:00:00'), '2026-11-20T10:00:00');
     assert.equal(view.label, zoneName('America/Argentina/Buenos_Aires', { locale: 'es_ES' }));
     assert.match(view.label, /Argentina/);
-    // «hora de Buenos Aires» does not fit a date field: its suffix falls back to the offset.
-    assert.equal(view.compactLabel, 'GMT-3');
+    // The helper text under the dialog's date fields: the same name, capitalised; never an offset.
+    assert.equal(view.fieldHint, view.label.charAt(0).toUpperCase() + view.label.slice(1));
+    assert.doesNotMatch(view.label, /GMT/);
   });
 
   it('an unknown server zone converts nothing and labels nothing', () => {
@@ -129,9 +131,20 @@ describe('isCalendarDayRow', () => {
 
 describe('zoneName', () => {
   const epoch = Date.UTC(2026, 10, 25, 12);
-  it('names UTC by its offset', () => assert.equal(zoneName('UTC', { epoch, locale: 'es_ES' }), 'GMT'));
-  it('falls back to the offset for an abbreviation in compact form', () => {
-    assert.equal(zoneName('Europe/Madrid', { epoch, locale: 'es_ES', compact: true }), 'GMT+1');
+  it('names UTC as UTC, never GMT', () => {
+    assert.equal(zoneName('UTC', { epoch, locale: 'es_ES' }), 'UTC');
+    assert.equal(zoneName('Etc/UTC', { epoch, locale: 'en_US' }), 'UTC');
+  });
+  it('never names a region by its offset when Intl has a readable name', () => {
+    for (const zone of ['Europe/Madrid', 'America/Argentina/Buenos_Aires', 'Atlantic/Canary', 'Asia/Kolkata']) {
+      for (const locale of ['es_ES', 'es_AR', 'en_US']) {
+        assert.doesNotMatch(zoneName(zone, { epoch, locale }), /^GMT/, `${zone} ${locale}`);
+      }
+    }
+  });
+  it('capitalizeZoneName upper-cases the first letter only', () => {
+    assert.equal(capitalizeZoneName('hora estándar de Argentina', 'es_ES'), 'Hora estándar de Argentina');
+    assert.equal(capitalizeZoneName(null), null);
   });
   it('is a readable region name in full form', () => {
     assert.match(zoneName('Europe/Madrid', { epoch, locale: 'es_ES' }), /\p{Ll}/u);

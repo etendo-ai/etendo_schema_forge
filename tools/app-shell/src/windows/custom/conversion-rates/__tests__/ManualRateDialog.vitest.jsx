@@ -278,8 +278,10 @@ describe('ManualRateDialog — times in the viewer zone', () => {
     const { onSaved } = renderDialog(DIALOG_MODES.NEW_RATE, { zone });
     const start = screen.getByTestId('convrate-dialog-valid-from-input');
     await waitFor(() => expect(start).toHaveValue('2026-11-20T07:00:00'));
-    // The zone sits inside the field, not in its label (which must fit one line).
-    expect(screen.getByTestId('convrate-dialog-valid-from-input-suffix')).toHaveTextContent('GMT-3');
+    // The field holds date and time only; the zone is named below it, never as a GMT offset.
+    expect(screen.queryByTestId('convrate-dialog-valid-from-input-suffix')).toBeNull();
+    expect(screen.getByTestId('convrate-dialog-valid-from-zone')).toHaveTextContent(zone.fieldHint);
+    expect(screen.getByTestId('convrate-dialog-valid-from-zone')).not.toHaveTextContent('GMT');
     expect(screen.getByText(/^convRateValidFromDateTime/, { selector: 'label' })).not.toHaveTextContent('GMT');
     await typeRate(user, '1,3');
     // The debounced preview asks the server with its own wall clock.
