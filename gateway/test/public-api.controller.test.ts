@@ -34,7 +34,7 @@ const schema: PublicApiSchema = {
 
 test('list() calls NeoServlet at /sws/neo/{specName}/{entityName} and unwraps the response envelope', async () => {
   const fakeFetch = async (url: string) => {
-    assert.equal(url, 'http://neo.local/etendo/sws/neo/contacts/businessPartner?_startRow=0&_endRow=49');
+    assert.equal(url, 'http://neo.local/etendo/sws/neo/contacts/businessPartner?_startRow=0&_endRow=49&_noCount=false');
     return new Response(
       JSON.stringify({ response: { data: [{ name: 'Widget', internalCostBasis: 99 }] } }),
       { status: 200 }
@@ -192,7 +192,7 @@ test('routes every child CRUD verb through the master path and preserves the par
   await controller.removeChild('businessPartner', 'bp-1', 'locations', 'line-1', request);
 
   assert.deepEqual(calls.map(({ url, method }) => ({ url, method })), [
-    { url: 'http://neo.local/etendo/sws/neo/contacts/locationAddress?parentId=bp-1&_startRow=0&_endRow=49', method: 'GET' },
+    { url: 'http://neo.local/etendo/sws/neo/contacts/locationAddress?parentId=bp-1&_startRow=0&_endRow=49&_noCount=false', method: 'GET' },
     { url: 'http://neo.local/etendo/sws/neo/contacts/locationAddress?parentId=bp-1', method: 'POST' },
     { url: 'http://neo.local/etendo/sws/neo/contacts/locationAddress/line-1?parentId=bp-1', method: 'PUT' },
     { url: 'http://neo.local/etendo/sws/neo/contacts/locationAddress/line-1?parentId=bp-1', method: 'PATCH' },
@@ -878,6 +878,27 @@ function listing(envelope: unknown) {
 const rows = (count: number, from = 1) => Array.from({ length: count }, (_, i) => ({ id: `c-${from + i}`, name: `N${from + i}`, taxID: `T${from + i}`, secretCode: 's' }));
 const neoParams = (url: string) => new URL(url).searchParams;
 
+test('collection lists request an exact count for totals and the last-page link', async () => {
+  for (const child of [false, true]) {
+    const urls: string[] = [];
+    const fakeFetch = async (url: string) => {
+      urls.push(url);
+      // Core skips COUNT by default; only an explicit false requests a real total.
+      assert.equal(neoParams(url).get('_noCount'), 'false');
+      return new Response(JSON.stringify({ response: { startRow: 0, totalRows: 3, data: rows(1) } }));
+    };
+    const controller = new PublicApiController(listSchema, 'http://neo.local/etendo', fakeFetch as typeof fetch);
+    const query = { page: { size: '1' } };
+    const result = await (child
+      ? controller.listChild('contacts', 'bp-1', 'contacts', request, query)
+      : controller.list('contacts', request, query)) as any;
+    assert.equal(urls.length, 1);
+    assert.deepEqual(result.meta.page, { number: 1, size: 1, total: 3 });
+    const base = child ? '/api/v1/contacts/bp-1/contacts' : '/api/v1/contacts';
+    assert.equal(result.links.last, `${base}?page[number]=3&page[size]=1`);
+  }
+});
+
 test('list forwards the validated window, sort and one criteria param to NEO', async () => {
   const { urls, controller } = listing({ status: 0, startRow: 20, endRow: 29, totalRows: 95, data: rows(10, 21) });
   const result = await controller.list('contacts', request, {
@@ -907,7 +928,7 @@ test('list forwards the validated window, sort and one criteria param to NEO', a
 test('list defaults to page 1 of 50 and never sends the client text anywhere but the criteria value', async () => {
   const { urls, controller } = listing({ startRow: 0, endRow: 1, totalRows: 2, data: rows(2) });
   const result = await controller.list('contacts', request, {}) as any;
-  assert.equal(urls[0], 'http://neo.local/etendo/sws/neo/contacts/businessPartner?_startRow=0&_endRow=49');
+  assert.equal(urls[0], 'http://neo.local/etendo/sws/neo/contacts/businessPartner?_startRow=0&_endRow=49&_noCount=false');
   assert.deepEqual(result.meta, { page: { number: 1, size: 50, total: 2 } });
   assert.equal(result.links.next, null);
   assert.equal(result.links.prev, null);

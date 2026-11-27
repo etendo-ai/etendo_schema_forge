@@ -20,8 +20,8 @@ Schema Forge is now **two sibling repos + one runtime module**:
 
 | Where | Location / remote | Holds | Role |
 |-------|-------------------|-------|------|
-| **etendo_schema_forge** (functional) | `etendosoftware/etendo_schema_forge` | `tools/app-shell/**`, `artifacts/**`, `e2e/**`, per-window `decisions.json` | **USE** the tooling |
-| **schema_forge_core** (platform/tooling) | `etendosoftware/schema_forge_core` (sibling `../schema_forge_core`) | `packages/**`, pipeline CLI (generators, extractors, `pipeline.js`, `push-to-neo.js`, `resolve-curated.js`), `templates/`, `schemas/` | **CHANGE** the tooling |
+| **etendo_schema_forge** (functional) | `etendo-ai/etendo_schema_forge` | `tools/app-shell/**`, `artifacts/**`, `e2e/**`, per-window `decisions.json` | **USE** the tooling |
+| **schema_forge_core** (platform/tooling) | `etendo-ai/schema_forge_core` (sibling `../schema_forge_core`) | `packages/**`, pipeline CLI (generators, extractors, `pipeline.js`, `push-to-neo.js`, `resolve-curated.js`), `templates/`, `schemas/` | **CHANGE** the tooling |
 | **com.etendoerp.go** (runtime) | `{etendo_root}/modules/com.etendoerp.go` | NEO Headless engine + onboarding Java (`OnboardingStep` pipeline), ETGO_SF_* tables | runtime + preventive onboarding fixes |
 | **shared bucket** | duplicated in **BOTH** SF repos | `cli/src/data-fixes/**`, `cli/src/db.js`, `cli/src/lib/**` | tenant data-fixes + DB access |
 

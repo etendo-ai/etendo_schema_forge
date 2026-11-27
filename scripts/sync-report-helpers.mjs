@@ -83,7 +83,7 @@ export const IMPORT_LINE = {
 
 const MANIFEST_DESCRIPTION = [
   'Cross-repo parity contract for templates/reports/helpers/*.js.',
-  'The canonical copy lives in etendosoftware/etendo_schema_forge; the schema_forge_core',
+  'The canonical copy lives in etendo-ai/etendo_schema_forge; the schema_forge_core',
   'copy must be identical except for the report-i18n import specifier recorded below.',
   'Regenerate both copies and this file with `make sync-report-helpers` in etendo_schema_forge.',
   'Guarded by tools/app-shell/test/report-template-helpers-contract.test.js (canonical) and',
@@ -169,8 +169,8 @@ export function buildManifest() {
   return {
     version: 1,
     description: MANIFEST_DESCRIPTION,
-    canonicalRepo: 'etendosoftware/etendo_schema_forge',
-    mirrorRepo: 'etendosoftware/schema_forge_core',
+    canonicalRepo: 'etendo-ai/etendo_schema_forge',
+    mirrorRepo: 'etendo-ai/schema_forge_core',
     modules: [...HELPER_MODULES],
     importLine: { ...IMPORT_LINE },
     sha256,
