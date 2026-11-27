@@ -52,6 +52,21 @@ const HELP = `flags-panel — read and edit the feature-flags panel
                                 Ask Datadog's flag CDN what each ring member (and you, or
                                 --email) really gets; exit 2 when it differs from the panel
 
+  comms <key> [--json]          Message versions, sends, and the testers not notified yet
+  comms <key> save --subject <s> --body-file <file.md> [--channel email|release-notes]
+                                Save a new version (Markdown body), based on the latest one
+  comms <key> draft [--instructions <text>] [--channel email|release-notes]
+                                Ask the panel's AI for a new version
+  comms <key> preview [--version N]
+                                Render a version to an HTML file, as recipients will see it
+  notify <key> [--version N] [--emails a,b] --yes [--force]
+                                Email the stage's testers not notified yet (or only --emails);
+                                a release-notes version is published. Without --yes it only
+                                lists the recipients. --force is needed while the stage is not
+                                applied in Datadog yet
+  notify <key> --test [email]   Send a test of the version to yourself (or to email) right
+                                away, like the panel's test button; testers are not counted
+
   raw <METHOD> <path> [json]    Call any panel endpoint, e.g. raw GET /api/kpis
 
 Environment: ETENDO_FLAGS_URL (panel URL), ETENDO_FLAGS_OWNER (GitHub login for --mine;
@@ -285,6 +300,117 @@ async function apply(key, opts) {
   }
 }
 
+// ---------- communication ----------
+// Same endpoints as the panel's "Communication" tab: versioned messages per flag, one email per
+// tester (sent by the panel's Gmail), and a "release-notes" channel that publishes to Novedades.
+
+const CHANNELS = ['email', 'release-notes'];
+
+/** The version to act on: `--version N`, else the latest. `undefined` when there is none. */
+export function pickVersion(comms, n) {
+  const versions = comms.versions || [];
+  if (n === undefined) return versions.at(-1);
+  return versions.find((v) => v.version === Number(n));
+}
+
+/** Who a notify emails: the stage's testers not notified yet, optionally narrowed to `emails`. */
+export function notifyTargets(recipients, emails) {
+  const pending = (recipients?.pending || []).map((e) => e.toLowerCase());
+  if (!emails?.length) return { to: pending, unknown: [] };
+  const wanted = [...new Set(emails.map((e) => e.trim().toLowerCase()).filter(Boolean))];
+  return { to: wanted.filter((e) => pending.includes(e)), unknown: wanted.filter((e) => !pending.includes(e)) };
+}
+
+const sendsOf = (c, version) => (c.sends || []).filter((s) => s.version === version);
+
+function printComms(key, c) {
+  console.log(`${key} · recipients stage ${c.recipients?.stage || '-'}`);
+  console.log('versions:');
+  if (!c.versions?.length) console.log('  - (none yet: comms <key> draft, or comms <key> save)');
+  for (const v of c.versions || []) {
+    const sends = sendsOf(c, v.version);
+    const sent = sends.filter((s) => !s.test).reduce((n, s) => n + (s.sent?.length || 0), 0);
+    const tests = sends.filter((s) => s.test).length;
+    const published = sends.some((s) => s.published);
+    console.log(`  v${v.version} ${v.at.slice(0, 10)} ${v.channel} [${v.stage}] ${v.source || '-'} by ${v.by || '-'} · ${published ? 'published' : `${sent} sent${tests ? `, ${tests} test(s)` : ''}`}`);
+    console.log(`      ${v.subject || '(no subject)'}`);
+  }
+  const rc = c.recipients || { all: [], pending: [] };
+  console.log(`testers (${rc.stage}): ${rc.all.length}, not notified yet: ${rc.pending.length}`);
+  if (rc.pending.length) console.log(`  ${rc.pending.join(', ')}`);
+}
+
+async function comms(key, sub, opts) {
+  const commsPath = `/api/flags/${key}/comms`;
+  const c = await api('GET', commsPath);
+  const latest = pickVersion(c);
+  const channel = opts.channel || latest?.channel || 'email';
+  need(CHANNELS.includes(channel), `--channel ${CHANNELS.join('|')}`);
+  switch (sub) {
+    case undefined:
+      return opts.json ? print(c) : printComms(key, c);
+    case 'save': {
+      need(opts['body-file'] && (opts.subject || channel === 'release-notes'), 'comms <key> save --subject <s> --body-file <file.md> [--channel email|release-notes]');
+      const body = fs.readFileSync(opts['body-file'], 'utf8');
+      await api('POST', commsPath, { channel, subject: opts.subject || '', body, basedOn: latest?.version ?? null });
+      const v = pickVersion(await api('GET', commsPath));
+      return console.log(`${key}: saved v${v.version} (${v.channel}). Next: comms ${key} preview, then notify ${key}`);
+    }
+    case 'draft': {
+      await api('POST', `${commsPath}/generate`, { channel, instructions: opts.instructions || '', basedOn: latest?.version ?? null });
+      const v = pickVersion(await api('GET', commsPath));
+      console.log(`${key}: AI drafted v${v.version} (${v.channel}). Review it before notifying.\n`);
+      return console.log(`Subject: ${v.subject}\n\n${v.body}`);
+    }
+    case 'preview': {
+      const v = pickVersion(c, opts.version);
+      if (!v) fail(`No version ${opts.version ?? ''} for ${key}.`);
+      const { html } = await api('POST', '/api/comms/render', { subject: v.subject, body: v.body, channel: v.channel, flag: key });
+      const file = path.join(os.tmpdir(), `flags-${key}-v${v.version}.html`);
+      fs.writeFileSync(file, html);
+      return console.log(file);
+    }
+    default:
+      return fail(`Unknown comms action "${sub}" (save | draft | preview).`);
+  }
+}
+
+async function notify(key, opts) {
+  const { f } = await findFlag(key);
+  const c = await api('GET', `/api/flags/${key}/comms`);
+  const v = pickVersion(c, opts.version);
+  if (!v) fail(`No saved version for ${key}${opts.version ? ` (v${opts.version})` : ''}. Run: comms ${key} draft, or comms ${key} save`);
+  const dry = () => console.log('\nDry run. Re-run with --yes to send.');
+  const report = (r) => {
+    console.log(`sent ${r.sent.length}: ${r.sent.join(', ') || '-'}`);
+    if (r.failed.length) fail(`failed ${r.failed.length}: ${r.failed.map((x) => `${x.email || x.to || '?'} (${x.error})`).join(', ')}`);
+  };
+  if (v.channel === 'release-notes') {
+    console.log(`Publish v${v.version} "${v.subject}" in Novedades.`);
+    if (!opts.yes) return dry();
+    await api('POST', `/api/flags/${key}/comms/notify`, { version: v.version });
+    return console.log('Published.');
+  }
+  if (opts.test) {
+    // Like the panel's test button: one copy, no confirmation, nobody is marked as notified.
+    const to = opts.test === true ? (await me()).email : opts.test;
+    if (!to) fail('Signed-in email unknown: pass --test <email>.');
+    console.log(`Test send of v${v.version} "${v.subject}" to ${to}.`);
+    return report(await api('POST', `/api/flags/${key}/comms/notify`, { version: v.version, test: to }));
+  }
+  const rc = c.recipients || {};
+  if (!RINGS.includes(rc.stage)) fail('Only Alpha or Beta testers are notified. At GA publish a release-notes version instead.');
+  if (f.sync?.state === 'pending' && !opts.force) {
+    fail(`${key} is pending in the panel: testers may not have access yet. Run apply ${key} --yes first, or notify with --force.`);
+  }
+  const { to, unknown } = notifyTargets(rc, opts.emails?.split(','));
+  if (unknown.length) fail(`Not ${rc.stage} testers waiting for this message: ${unknown.join(', ')}`);
+  if (!to.length) return console.log(`Every ${rc.stage} tester was already notified.`);
+  console.log(`Email v${v.version} "${v.subject}" to ${to.length} ${rc.stage} tester(s), one email each:\n  ${to.join(', ')}`);
+  if (!opts.yes) return dry();
+  return report(await api('POST', `/api/flags/${key}/comms/notify`, { version: v.version, emails: to }));
+}
+
 // ---------- Datadog verification ----------
 // Asks Datadog's flag CDN — the same precompute-assignments call the SPA makes —
 // what each person actually gets. Independent of the panel: it proves an apply
@@ -391,16 +517,21 @@ function fail(msg) {
 }
 const print = (x) => console.log(JSON.stringify(x, null, 2));
 
-function parse(argv) {
+/** Flags that take a value only when one follows (`--test` alone means "to me"). */
+const OPTIONAL_VALUE = ['test'];
+
+export function parse(argv) {
   const pos = [];
   const opts = {};
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (!a.startsWith('--')) { pos.push(a); continue; }
     const name = a.slice(2);
+    const next = argv[i + 1];
     if (['mine', 'json', 'yes', 'force'].includes(name)) opts[name] = true;
+    else if (OPTIONAL_VALUE.includes(name) && (next === undefined || next.startsWith('--'))) opts[name] = true;
     else {
-      if (argv[i + 1] === undefined) fail(`--${name} needs a value`);
+      if (next === undefined) fail(`--${name} needs a value`);
       opts[name] = argv[++i];
     }
   }
@@ -450,6 +581,12 @@ async function main() {
     case 'apply':
       need(args[0], 'apply <key> --yes [--force]');
       return apply(args[0], opts);
+    case 'comms':
+      need(args[0], 'comms <key> [save|draft|preview]');
+      return comms(args[0], args[1], opts);
+    case 'notify':
+      need(args[0], 'notify <key> [--version N] [--emails a,b] [--test <email>] --yes [--force]');
+      return notify(args[0], opts);
     case 'raw': {
       const [method, url, json] = args;
       need(method && url?.startsWith('/'), 'raw <METHOD> </path> [json]');
