@@ -410,6 +410,87 @@ describe('InviteAcceptancePage', () => {
     expect(screen.getByTestId('action-accept-invitation')).toBeInTheDocument();
   });
 
+  // Recorded on 2026-11-27 in a local-env of develop + this branch: the invited email had already
+  // joined another company and the second invitation's AD_User was deactivated, so accept answered
+  // exactly this. Before this change the old page showed "invalid link" next to "continue to join";
+  // the first version of this fix showed "try again", which fails the same way on every click.
+  const RECORDED_USER_INVALID = {
+    ok: false,
+    status: 409,
+    json: async () => ({
+      error: {
+        code: 'INVITATION_USER_CONFIGURATION_INVALID',
+        message: 'The invitation user is no longer valid',
+        userMessage: 'The invitation user is no longer valid',
+        status: 409,
+      },
+    }),
+  };
+
+  it('shows a no-retry page of its own when the invitation user is no longer valid (ETP-5385, recorded 409)', async () => {
+    await signInAndAccept(RECORDED_USER_INVALID);
+
+    await waitFor(() => expect(screen.getByTestId('invite-error-state')).toBeInTheDocument());
+    expect(screen.getByText('invitePageUserInvalidTitle')).toBeInTheDocument();
+    expect(screen.getByText('invitePageUserInvalidDescription')).toBeInTheDocument();
+    expect(screen.queryByText('invitePageInvalidTitle')).not.toBeInTheDocument();
+    expect(screen.queryByText('invitePageAcceptFailed')).not.toBeInTheDocument();
+    expect(screen.queryByText('invitePageAuthenticatedNotice')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('action-accept-invitation')).not.toBeInTheDocument();
+    expect(screen.getByTestId('action-error-go-to-app')).toBeInTheDocument();
+  });
+
+  it('tells the support account it cannot join, with no retry (ETP-5385)', async () => {
+    await signInAndAccept(wireError(403, 'SUPPORT_SESSION_FORBIDDEN', 'Not available in a support session'));
+
+    await waitFor(() => expect(screen.getByTestId('invite-error-state')).toBeInTheDocument());
+    expect(screen.getByText('invitePageSupportAccountTitle')).toBeInTheDocument();
+    expect(screen.queryByTestId('action-accept-invitation')).not.toBeInTheDocument();
+    expect(screen.queryByText('invitePageAuthenticatedNotice')).not.toBeInTheDocument();
+  });
+
+  it('sends the visitor back to sign in when the session is not the invited active account (ETP-5385)', async () => {
+    await signInAndAccept(wireError(400, 'ACCOUNT_REQUIRED', 'No active platform account found. Registration is required.'));
+
+    await waitFor(() => expect(screen.getByTestId('action-login-submit')).toBeInTheDocument());
+    expect(screen.queryByTestId('invite-error-state')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('invite-action-error')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('action-accept-invitation')).not.toBeInTheDocument();
+  });
+
+  it('shows the weak-password message when register-and-accept answers the nested error (ETP-5385)', async () => {
+    const json = (status, body) => ({ ok: status < 400, status, json: async () => body });
+    globalThis.fetch = vi.fn(async (url) => {
+      const path = String(url);
+      if (path.includes('/sws/go/terms')) return json(200, { version: '2026-11', language: 'es_ES', content: 'Terms.', publishedAt: 0 });
+      if (path.includes('/sws/go/company-invitations/register-and-accept')) {
+        return json(400, { error: { code: 'WEAK_PASSWORD', message: 'Password too weak', userMessage: 'Password too weak', status: 400 } });
+      }
+      return json(200, {
+        status: 'SENT',
+        clientName: 'Acme Corp',
+        email: 'new.user@example.com',
+        maskedEmail: 'n***r@example.com',
+        branch: 'registration_required',
+        accountExists: false,
+      });
+    });
+
+    const { container } = renderPage('/invite?token=valid-token-456');
+    await waitFor(() => expect(screen.getByTestId('action-register-submit')).toBeInTheDocument());
+    fireEvent.change(container.querySelector('#reg-name'), { target: { value: 'New User' } });
+    fireEvent.change(container.querySelector('#reg-password'), { target: { value: 'Str0ng!Pass123' } });
+    await waitFor(() => {
+      expect(globalThis.fetch.mock.calls.some(([url]) => String(url).includes('/sws/go/terms'))).toBe(true);
+    });
+    await act(async () => {});
+    fireEvent.click(screen.getByTestId('action-register-submit'));
+
+    await waitFor(() => expect(screen.getByText(/onboardingWeakPassword/)).toBeInTheDocument());
+    expect(screen.queryByText(/invitePageInvalidDescription/)).not.toBeInTheDocument();
+    expect(screen.queryByTestId('invite-success-state')).not.toBeInTheDocument();
+  });
+
   it('resolves registration_required branch and creates account then accepts', async () => {
     // Answered by URL, not by call order: the register screen also loads the terms and
     // conditions when it opens (ETP-6081), and that request would take another one's answer.
