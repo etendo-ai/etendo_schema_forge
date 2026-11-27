@@ -164,7 +164,7 @@ Branch state of every module repo on the remote. **Fixed on epic** = the module'
 | `org.openbravo.module.bptaxidkey` | Bitbucket koodu_software | no | yes | +8 | GO | fixed on epic |
 | `com.smf.currency.apiconfig` | Bitbucket koodu_software | no | yes | +8 | GO | fixed on epic |
 | `com.smf.currency.conversionrate` | Bitbucket koodu_software | no | yes | +15 | GO | fixed on epic |
-| `com.etendoerp.psd2.bank.integration` | Bitbucket koodu_software | no | yes | +186 | GO | fixed on epic |
+| `com.etendoerp.psd2.bank.integration` | GitHub etendo-ai | no | yes | +186 | GO | fixed on epic |
 | `com.etendoerp.copilot` | GitHub etendosoftware | no | yes | +31 | GO | fixed on epic |
 | `com.etendoerp.db.extended` | GitHub etendosoftware | yes | yes | +107 | GO | fixed on epic |
 | `com.etendoerp.go.template` | GitHub etendo-ai | yes | yes | +3 | GO | fixed on epic |
@@ -240,6 +240,7 @@ git clone -b epic/ETP-3504 git@github.com:etendosoftware/com.etendoerp.go.locali
 git clone -b epic/ETP-3504 git@github.com:etendosoftware/com.etendoerp.db.extended.git
 git clone -b epic/ETP-3504 git@github.com:etendosoftware/com.etendoerp.copilot.git
 git clone -b epic/ETP-3504 git@github.com:etendosoftware/org.openbravo.sepa.iso20022.template.git
+git clone -b epic/ETP-3504 git@github.com:etendo-ai/com.etendoerp.psd2.bank.integration.git
 
 # Bitbucket SSH lives at ssh.bitbucket.org: the old bitbucket.org host refuses SSH. A module cloned
 # from the old host cannot fetch; fix it with
@@ -256,9 +257,8 @@ for m in com.etendoerp.sif.general com.smf.ticketbai com.etendoerp.verifactu \
   git clone -b epic/ETP-3504 git@ssh.bitbucket.org:koodu_software/$m.git
 done
 
-# Bitbucket modules on the epic: currency conversion rates + PSD2
-for m in com.smf.currency.conversionrate com.smf.currency.apiconfig \
-         com.etendoerp.psd2.bank.integration; do
+# Bitbucket modules on the epic: currency conversion rates
+for m in com.smf.currency.conversionrate com.smf.currency.apiconfig; do
   git clone -b epic/ETP-3504 git@ssh.bitbucket.org:koodu_software/$m.git
 done
 
