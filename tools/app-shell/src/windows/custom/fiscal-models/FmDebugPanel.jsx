@@ -245,7 +245,7 @@ export default function FmDebugPanel({ view, setView }) {
           <div style={{ fontSize: 10, color: '#a0a0cc', marginBottom: 8, display: 'flex', gap: 6, alignItems: 'center' }}>
             {(() => {
               const typeColorMap = {
-                '303': { bg: '#172554', fg: '#60a5fa', bd: '#1d4ed8' },
+                '303': { bg: '#1a2e05', fg: '#a3e635', bd: '#4d7c0f' },
                 '349': { bg: '#1e1b4b', fg: '#a78bfa', bd: '#4f46e5' },
               };
               const tc = typeColorMap[viewType] ?? { bg: '#2d2d4a', fg: '#e0e0ff', bd: '#3d3d5c' };

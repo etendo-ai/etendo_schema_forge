@@ -34,13 +34,15 @@
   --fm-blue-50:    var(--status-info-bg);
   --fm-blue-200:   var(--status-info-border);
   --fm-blue-700f:  var(--status-info-fg);
-  /* Model-tag colors (303/349/390) — single source of truth for every "303"/"349" pill/badge
-     in this window (list rows, "Modal Modelos" filter dropdown, catalog cards, upcoming
-     sidebar). Fixed brand hex values, not theme-derived — see fm-model-badge--*,
-     fm-catalog-card__badge--*, fm-upcoming__badge--* below, all of which reference these. */
-  --fm-model-303-bg:     #F0FAFF;
-  --fm-model-303-fg:     #0075AD;
-  --fm-model-303-border: #ADE4FF;
+  /* Model-tag colors (303/349/390) — single source of truth for every "303"/"349"/"390"
+     pill/badge in this window (list rows, "Modal Modelos" filter dropdown, catalog cards,
+     upcoming sidebar). Fixed brand hex values, not theme-derived — see fm-model-badge--*,
+     fm-catalog-card__badge--*, fm-upcoming__badge--* below, all of which reference these.
+     303 and 390 share the green family because both are VAT (IVA) models: the 303 is the
+     design-system tag palette's `green`, the 390 its own emerald, so they still differ. */
+  --fm-model-303-bg:     #DFF8EA;
+  --fm-model-303-fg:     #17663A;
+  --fm-model-303-border: #A8E6C1;
   --fm-model-349-bg:     #F4F1FD;
   --fm-model-349-fg:     #4316CA;
   --fm-model-349-border: #C6B6F7;
