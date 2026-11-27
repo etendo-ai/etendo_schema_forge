@@ -3,7 +3,6 @@
 // ETP-4561 — characterization: untrusted record text shown in a grid cell, a form field and
 // a record title is rendered as TEXT (React default escaping). Regression coverage only; no
 // production change. Payloads: script, event handler, attribute breakout, quotes.
-import React from 'react';
 import { render, cleanup } from '@testing-library/react';
 import { renderDefaultCell } from '../DataTable.cellRenderers.jsx';
 import { CompactHeader } from '../CompactHeader.jsx';
