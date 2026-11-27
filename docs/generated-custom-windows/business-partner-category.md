@@ -301,3 +301,12 @@ contract version and the copied `publicApi` change; the generated frontend does 
 
 `contacts.category` is now a relationship to `contact-category`, and the contact's category lookup
 answers values of that type. Contract: `docs/public-api.md` §3, §4.2.2 and §4.6.
+
+## Search key and name required on every channel — ETP-6469
+
+`BusinessPartnerCategoryHandler` refuses a create without `searchKey` or `name`, and an update that
+sends either one null or blank, with `400 MISSING_REQUIRED_FIELDS` (`error.fields` names them, message
+key `ETGO_BPGroupNameRequired`) before any SQL runs. It holds with the `contact-category-type` flag on
+or off, on REST, batch and MCP. An update that does not carry the keys is not judged. Both columns
+are `NOT NULL`, so this only turns the database failure (logged as an ERROR by Hibernate) into an
+early 400. The form already marks both fields required, so the UI does not change.
