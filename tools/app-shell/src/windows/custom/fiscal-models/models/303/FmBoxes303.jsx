@@ -24,6 +24,21 @@ function formatCell(val, colType) {
 }
 
 // Radix Select item value standing for "no value" (Radix forbids '' as an item value).
+/** Pencil button that puts one AEAT box into edit mode; shared by the generic and the compact grids. */
+function CellEditButton({ boxNum, onEdit, t }) {
+  return (
+    <button
+      type="button"
+      className="fm-aeat-cell__edit-btn"
+      aria-label={t('fm.box.edit_aria', { box: String(boxNum).padStart(2, '0') })}
+      onClick={() => onEdit(boxNum)}
+      data-testid={`FmBoxes303__edit_${boxNum}`}
+    >
+      <PencilSimpleIcon size={12} data-testid="Pencil__49d327" />
+    </button>
+  );
+}
+
 const EMPTY_OPTION = '__empty__';
 
 const COMPACT_SECTIONS = new Set(['iva_devengado', 'iva_deducible', 'resultado', 'info_adicional', 'resultado_final']);
@@ -359,15 +374,11 @@ export default function FmBoxes303({ boxes, year, period, sectionIds, identifica
             <span className="fm-aeat-cell__value">{val != null ? formatCell(val, colType) : ''}</span>
             {unit && <span className="fm-aeat-cell__unit">{unit}</span>}
             {isCellEditable && !readOnly && (
-              <button
-                type="button"
-                className="fm-aeat-cell__edit-btn"
-                aria-label={t('fm.box.edit_aria', { box: String(boxNum).padStart(2, '0') })}
-                onClick={() => startEditingCell(boxNum)}
-                data-testid={`FmBoxes303__edit_${boxNum}`}
-              >
-                <PencilSimpleIcon size={12} data-testid="Pencil__49d327" />
-              </button>
+              <CellEditButton
+                boxNum={boxNum}
+                onEdit={startEditingCell}
+                t={t}
+                data-testid="CellEditButton__49d327" />
             )}
           </>
         )}
@@ -620,15 +631,11 @@ export default function FmBoxes303({ boxes, year, period, sectionIds, identifica
                                     <>
                                       <span className="fm-aeat-cell__value">{val != null ? formatCell(val, 'amount') : ''}</span>
                                       {isCellEditable && !readOnly && (
-                                        <button
-                                          type="button"
-                                          className="fm-aeat-cell__edit-btn"
-                                          aria-label={t('fm.box.edit_aria', { box: String(boxNum).padStart(2, '0') })}
-                                          onClick={() => startEditingCell(boxNum)}
-                                          data-testid={`FmBoxes303__edit_${boxNum}`}
-                                        >
-                                          <PencilSimpleIcon size={12} data-testid="Pencil__49d327" />
-                                        </button>
+                                        <CellEditButton
+                                          boxNum={boxNum}
+                                          onEdit={startEditingCell}
+                                          t={t}
+                                          data-testid="CellEditButton__49d327" />
                                       )}
                                     </>
                                   )}
