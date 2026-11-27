@@ -46,7 +46,9 @@ const exceptions = {
   'api-keys': { capability: 'isAdminOrClientAdmin', flag: 'public-api-keys' },
   // ETP-5988 — the document template selector, behind its own flag and admin-only.
   'document-templates': { capability: 'isAdminOrClientAdmin', flag: 'doc-template-selection' },
-  'invoice-inbox': { accessWindowId: '81AC659E93504927B459E0CAE80CE923', capability: 'invoiceInbox' },
+  // ETP-6051 — a real AD_Menu node under Procurement > Transactions (com.etendoerp.go AD_MENU.xml),
+  // so it is identified by `windowId` (membership in the role menu), not by `accessWindowId`.
+  'invoice-inbox': { windowId: '81AC659E93504927B459E0CAE80CE923', capability: 'invoiceInbox' },
   // ETP-6148 — SEPA remittances: the Classic Remittance window, behind the per-account
   // sepa-remittances flag (capability) and the window grant, like invoice-inbox above.
   remittance: { accessWindowId: 'FF8080812E71F7C7012E71FD0499001B', capability: 'sepaRemittances' },

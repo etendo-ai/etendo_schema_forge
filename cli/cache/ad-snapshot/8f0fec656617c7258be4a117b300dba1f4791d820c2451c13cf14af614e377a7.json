@@ -36392,7 +36392,7 @@
       ]
     },
     "e9796a297caefaf50550fd46b064e00862567eb728d3001bd2e77bcab7db7d3b": {
-      "checksum": "815de502577c4caba7459cbc7062b1c8302a5e418cf89fdfb391d007d023b119",
+      "checksum": "820f41cb8bd4c642b19c98e0102ec808024338cc07f9aba4fc3feb79baa64dfb",
       "params": [
         "94EAA455D2644E04AB25D93BE5157B6D"
       ],
@@ -37308,6 +37308,12 @@
           "ad_table_id": "84203CBEBDA349C38319C0E549751546",
           "columnname": "EM_ETGO_Bounce_Confidence",
           "position": "31"
+        },
+        {
+          "ad_column_id": "2164FB210EF84F5C8237691BA6460B18",
+          "ad_table_id": "84203CBEBDA349C38319C0E549751546",
+          "columnname": "EM_ETGO_Bounce_Dismissed",
+          "position": "32"
         },
         {
           "ad_column_id": "828EE0AE7FEA5FA1E040007F010067C7",

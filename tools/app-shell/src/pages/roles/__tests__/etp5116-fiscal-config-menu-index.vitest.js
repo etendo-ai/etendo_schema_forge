@@ -1,3 +1,5 @@
+// @covers tools/app-shell/src/pages/roles/useRolesOverviewData.js
+// @covers tools/app-shell/src/menu.json
 import { describe, it, expect, vi } from 'vitest';
 
 vi.mock('@/lib/rolesApi.js', () => ({
@@ -57,5 +59,13 @@ describe('ETP-5116 — fiscal-config menu.json windowId (roles matrix override)'
     expect(entry.group).toBe('Settings');
     expect(entry.label).toBe('Currency Conversion');
     expect(entry.alternate).toBeUndefined();
+  });
+
+  it('indexes invoice-inbox by its real windowId, resolving to Purchases/"Invoice Inbox" (not the backend-category fallback)', () => {
+    const index = buildMenuWindowIndex();
+    const entry = index.get('81AC659E93504927B459E0CAE80CE923');
+    expect(entry, 'invoice-inbox windowId must be indexed').toBeTruthy();
+    expect(entry.group).toBe('Purchases');
+    expect(entry.label).toBe('Invoice Inbox');
   });
 });
