@@ -621,7 +621,13 @@ page). `guardedBack(onBack)` routes the "Modelos Fiscales" crumb through the sam
 by the save Generar / Presentar run first) is set by every change, while `userEdited` (what the
 guard asks) is set only by the user's. The page's automatic changes — the 390's 303 preload
 (`applyFreshPreload`) and the 303's layout-fixed `autoValueWhen` values — are still saved with the
-next save, but alone they raise no prompt. A successful save (or Registrar) clears both. *Impuestos* (the menu group since ETP-6380, formerly *Finanzas*) and the current page stay plain text, and the visible text is unchanged
+next save, but alone they raise no prompt. A successful save (or Registrar) clears both — but a
+303 / 390 save clears them only when nothing was edited while its `PUT` was in flight
+(`version()` taken before the `PUT`, `clearIfUnchanged(v)` after it; QA BUG-2, ETP-5716): an edit
+typed during the save is not in its payload, so it stays pending for the next save and keeps the
+leave prompt armed (the 349's `editVersionRef` is the same rule, see below).
+
+*Impuestos* (the menu group since ETP-6380, formerly *Finanzas*) and the current page stay plain text, and the visible text is unchanged
 ("Impuestos / Modelos Fiscales / Modelo 303 - 2026/T4"). The list page keeps its plain
 *Impuestos / Modelos Fiscales* subtitle (it is already the list). (Before ETP-5584 moved the header
 into the TopBar, ETP-5597 had shipped an in-page `FmBreadcrumb` renderer for this; it was removed
@@ -4115,7 +4121,7 @@ notices stay inside it, under the data.
 | 8 | Tributación por territorio | Toggle "Tributo a varias Administraciones"; % [87]–[91] (each 0–99), [92] total, [93] manual (refused while [85] has a value), [94] total; inline error when the percentages do not add up to 100 % | turning the toggle off clears the territory inputs |
 | 9 | Resultado de las liquidaciones | Per month "A ingresar" / "A devolver" (`INGRESAR_xx` / `DEVOLVER_xx`; the "A devolver" column is disabled unless `ISMONTHLYRETURN = 'Y'`), totals [95] / [96], [97], [98], [662] manual; inline error when DEVOLVER_12 and [97] are both filled, amber warning when [98] is filled with [96] or [97] | preloaded from the 303s (see "Preload from the 303s and cuadre"); the year's 303s are listed under the block |
 | 10 | Volumen de operaciones | [99] [103] [104] [105] [110] [125] [126] calculated, [127] [128] manual, [106] [107] (subtracted), total [108] | [112] is not shown: it is not in the 2025 model (AEAT DR390e2025) and classic never writes it from 2021 on; an old draft's `390OTHER_UEMENBER` is dropped on save |
-| 11 | Operaciones específicas | [230] [109] [231] [232] [113] [523] calculated, [111] manual | |
+| 11 | Operaciones específicas | [230] [109] [231] [523] calculated, [111] manual; [232] [113] have no source (always 0, blank cell — see below) | |
 
 Out of scope and not shown (the backend may still return them): criterio de caja, recargo de
 equivalencia, régimen simplificado, REAGYP, bienes usados, agencias de viajes, grupo de entidades,
@@ -4127,7 +4133,8 @@ concurso de acreedores), [232] (bases imponibles del IVA soportado no deducible)
 the classic `AEAT390_2025_Y` report and no input: classic writes them as zero in the file (a null
 bean value is formatted as zeros), so GO receives no box and the cell renders blank, with no pencil.
 Making them editable needs new classic tax-report input parameters (a classic dataset change) —
-pending a product decision; until then the file always carries 0 for them.
+deliberately out of scope of ETP-5716, pending a product decision; until then the file always
+carries 0 for them.
 
 - **Cells:** calculated = grey, read-only; totals in bold with the formula. **Manual cells behave
   exactly as the 303's editable boxes** (ETP-5716, `InputCell` mirrors `FmBoxes303`
@@ -4379,7 +4386,8 @@ certificate) and downloads it in every case. The validation is a warning, never 
 
 The AEAT validator answering `EV0 … No existe información del modelo: 390, <year>` (it has not
 loaded that exercise yet) is shown as **not validated** too, never as "La AEAT ha detectado errores":
-no incident is stored. In the direct presentation popup, a "Validar sin presentar" with that answer
+no incident is stored. Only an answer whose errors are ALL that `EV0` counts: an `EV0` with another
+text, or that `EV0` next to any other error, stays a rejection (red banner, incidents stored). In the direct presentation popup, a "Validar sin presentar" with that answer
 (`errorCode: NOT_VALIDATED`, 303 and 390) shows an amber banner with `fm.aeat.error.notValidated`;
 any result of a test-mode submit is titled `fm.aeat.result.test_error.title` ("No se pudo completar la
 validación") instead of "…la presentación" (`submitErrorTitle` in `AeatSubmitFlow.jsx`). The presenter
@@ -4425,7 +4433,8 @@ send, in the same request (`FiscalAeatSubmissionSupport.validateBeforeSubmission
 guard): no errors (warnings allowed) → the presentation goes ahead as before; errors → nothing is
 presented, the declaration stays a draft, the errors go to Incidencias and `AeatSubmitFlow` shows its
 error result titled "Declaración no presentada: la AEAT ha detectado errores al validarla"
-(`stage: "validation"` in the answer); no answer from the validator → the presentation goes ahead
+(`stage: "validation"` in the answer); no answer from the validator — or only the `EV0` "No existe
+información del modelo" (mixed with any other error it is still a rejection) → the presentation goes ahead
 (server constant `PRESENT_WHEN_VALIDATOR_UNANSWERED`; when false, `VALIDATION_UNAVAILABLE`). While it
 runs the button reads "Validando y presentando en la AEAT…" (one request, so one text). The check
 "Validar sin presentar" itself is unchanged. No PDF is attached for this implicit validation.
@@ -4698,7 +4707,7 @@ became dead code and was deleted (with its `.fm-more-options-trigger` CSS).
 
 ### Model color tags — centralized as CSS custom properties (ETP-4755)
 
-The 303/349/390 color pairs (background/foreground/border) are defined once, in `fiscal-models.css`, as CSS custom properties (`--fm-model-303-{bg,fg,border}`, `--fm-model-349-{bg,fg,border}`, `--fm-model-390-{bg,fg,border}`) instead of being hardcoded per usage site. The 349 tag is the design-system tag palette (`VARIANT_STYLES.purple`). The 303 and 390 have their own colours outside the palette — lime for the 303 (`#F7FEE7` / `#3F6212` / `#D9F99D`), emerald for the 390 — sharing the green family on purpose: both are VAT (IVA) models, so they read as one group while staying distinguishable (the palette's own `green` was too close to the 390's emerald). `fiscal-models.css.keyColors.test.js` asserts the 349 palette pair, the 303 lime and that the 303 and 390 differ (ETP-5716). Every place a model tag renders consumes the same pair: list-row model badges (`.fm-model-badge--303/349`), the "Todos los modelos" filter dropdown options, and the model catalog cards (`.fm-catalog-card__badge--303/349`). (The `.fm-upcoming*` rules in `fiscal-models.css`, including `.fm-upcoming__badge--303/349`, belong to an upcoming-deadlines widget that is **not rendered anywhere** — no JSX references those classes; they are orphaned CSS, corrected here in ETP-5597.) Retinting a model now means editing one variable pair, not hunting down every class that duplicated the same hex values.
+The 303/349/390 color pairs (background/foreground/border) are defined once, in `fiscal-models.css`, as CSS custom properties (`--fm-model-303-{bg,fg,border}`, `--fm-model-349-{bg,fg,border}`, `--fm-model-390-{bg,fg,border}`) instead of being hardcoded per usage site. The 349 tag is the design-system tag palette (`VARIANT_STYLES.purple`). The 303 and 390 have their own colours outside the palette — lime for the 303 (`#F7FEE7` / `#3F6212` / `#D9F99D`), emerald for the 390 — sharing the green family on purpose: both are VAT (IVA) models, so they read as one group while staying distinguishable (the palette's own `green` was too close to the 390's emerald). `fiscal-models.css.keyColors.test.js` asserts the 349 palette pair, the 303 lime and that the 303 and 390 differ (ETP-5716). Every place a model tag renders consumes the same pair: list-row model badges (`.fm-model-badge--303/349/390`), the "Todos los modelos" filter dropdown options, and the model catalog cards (`.fm-catalog-card__badge--303/349/390`). (The `.fm-upcoming*` rules in `fiscal-models.css`, including `.fm-upcoming__badge--303/349`, belong to an upcoming-deadlines widget that is **not rendered anywhere** — no JSX references those classes; they are orphaned CSS, corrected here in ETP-5597.) Retinting a model now means editing one variable pair, not hunting down every class that duplicated the same hex values.
 
 ### Resultado sign-coloring — KPI and list column (`resolveResultColors`, ETP-5236)
 
