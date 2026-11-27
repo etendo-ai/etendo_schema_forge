@@ -15,10 +15,17 @@ the flag: `SFWindowAccessMap` publishes it as `capabilities.currencyConversionV2
 entry `custom/conversion-rates/index.jsx` → `CurrencyConversionRoute.jsx` chooses the page:
 - **On:** the redesigned Currency Conversion page described in this guide.
 - **Off** (the default, and also when an older backend does not publish the capability): the window
-  as it was before ETP-6365 — the generated list and form of `artifacts/conversion-rates/generated/`
-  rendered by `LegacyConversionRatesWindow.jsx` with `window.readOnly: true` (no Nuevo, no bulk
-  delete, no print, no row edit/delete, read-only form without Eliminar), titled with the old name
-  *Conversion Rates* / *Rangos de conversión* (breadcrumb *Finance / Conversion Rates*). The backend
+  as it was before ETP-6365 — a **frozen copy** of the generated list and form as they were at
+  revision `0aa24ca6b^`, kept in `tools/app-shell/src/windows/custom/conversion-rates/legacy/`
+  (owned by the flag, deleted with it) and rendered by `LegacyConversionRatesWindow.jsx`. It is NOT
+  the current `artifacts/conversion-rates/generated/` window, which is regenerated from the
+  redesign's `decisions.json` (Status column, date-time validity, DELETE). Columns: Currency, To
+  Currency, Valid From Date and Valid To Date (type `date`: the day only, no time), Multiple Rate By,
+  Divide Rate By, Synced — no Status. `api.window.readOnly` plus `hideCreate`, and `window.readOnly`
+  forced on top: no Nuevo, no bulk delete, no print, no row edit/delete; the detail is the read-only
+  form (titled *Conversion Rate*) with its *Adjuntos* tab. Titled with the old name *Conversion
+  Rates* / *Rangos de conversión* (breadcrumb *Finance / Conversion Rates*). Every field it reads is
+  still served by the `conversion-rates` spec. The backend
   refuses every manual rate write (`createManualCurrency`, `createManualRate`, `updateManualRate`,
   `previewManualRate`, DELETE) with 403 `feature_disabled` on every channel, and the MCP only sees
   the read actions.

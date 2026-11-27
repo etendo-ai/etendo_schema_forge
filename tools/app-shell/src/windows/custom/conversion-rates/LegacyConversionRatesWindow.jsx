@@ -1,18 +1,18 @@
-import ConversionRatesApp from '@generated/conversion-rates/generated/web/conversion-rates/index.jsx';
+import LegacyConversionRatesApp from './legacy/index.jsx';
 
 /**
  * ETP-6365 — the Conversion Rates window AS IT WAS BEFORE the redesign, shown while the per-account
- * flag `currency-conversion-v2` is off (see `CurrencyConversionRoute`): the generated list and form
- * of the `conversion-rates` spec, read-only, under the old name. Owned by the flag: retiring it
- * deletes this file.
+ * flag `currency-conversion-v2` is off (see `CurrencyConversionRoute`). Owned by the flag: retiring it
+ * deletes this file and the `legacy/` folder.
  *
- * `window.readOnly` is what the generated page carried before ETP-6365 (`decisions.json`
- * `window.readOnly: true`): ListView hides «Nuevo», bulk delete, print and the row write actions,
- * and DetailView renders the form read-only with no Delete. The old name travels as the window
- * name, list title and breadcrumb; each is a menu label already translated in the locales
- * ("Conversion Rates" → "Rangos de conversión").
+ * It renders `legacy/`, a frozen copy of the generated window at revision `0aa24ca6b^` (before
+ * ETP-6365), NOT the current generated window: that one is regenerated from the redesign's
+ * decisions.json (Status column, date-time validity, organization selector, DELETE). The copy keeps
+ * the old columns (Currency, To Currency, Valid From Date, Valid To Date as dates, Multiple Rate By,
+ * Divide Rate By, Synced), the attachments tab of the detail, the old name and breadcrumb
+ * ("Conversion Rates", "Finance / Conversion Rates") and its static `api.window.readOnly` plus
+ * `hideCreate`. `window.readOnly` is forced here as well, whatever window the route passes.
  */
-// i18n-allowlist: ["Conversion Rates", "Finance / Conversion Rates"]
 export const LEGACY_WINDOW = Object.freeze({
   category: 'finance',
   name: 'Conversion Rates',
@@ -20,17 +20,6 @@ export const LEGACY_WINDOW = Object.freeze({
   id: '116',
 });
 
-export const LEGACY_LABEL = 'Conversion Rates';
-export const LEGACY_BREADCRUMB = 'Finance / Conversion Rates';
-
 export default function LegacyConversionRatesWindow({ window: _ignored, ...props }) {
-  return (
-    <ConversionRatesApp
-      {...props}
-      window={LEGACY_WINDOW}
-      // The list is titled with the old window name; the detail keeps its generated record label.
-      {...(props.recordId ? {} : { entityLabel: LEGACY_LABEL })}
-      breadcrumb={LEGACY_BREADCRUMB}
-      data-testid="ConversionRatesApp__legacy" />
-  );
+  return <LegacyConversionRatesApp {...props} window={LEGACY_WINDOW} data-testid="LegacyConversionRatesApp__6365a1" />;
 }
