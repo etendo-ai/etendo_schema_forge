@@ -4,7 +4,7 @@
 // it so the user sees the window exactly as before the redesign (read-only, date-only validity,
 // no Status column). Never regenerated and never edited to follow decisions.json; deleted with
 // the flag. The current generated window (regenerated from the new decisions.json) is not used.
-import { useMemo, useEffect } from 'react';
+import { useMemo } from 'react';
 import { ListView } from '@/components/contract-ui/ListView.jsx';
 import { DetailView } from '@/components/contract-ui/DetailView.jsx';
 import { useWindowAccess, WindowAccessGuard } from '@/auth/AuthContext.jsx';
