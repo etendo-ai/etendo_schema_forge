@@ -112,6 +112,15 @@ describe('coreValidation — same code across form, grid and import (ETP-4557)',
     expect([formCode, gridCode]).toEqual(['MAX_LENGTH', 'MAX_LENGTH']);
     expect(imp.errors.map((e) => e.code)).toContain('MAX_LENGTH');
   });
+  it('a spaced 16-character phone is measured normalised in form, grid and import, and not truncated natively', () => {
+    const phone = { key: 'etgoPhone', column: 'EM_Etgo_Phone', type: 'text', maxLength: 15, validation: { maxLength: 15 } };
+    const value = '+34 910 56 54 00';
+    expect(getFirstViolation([phone], { etgoPhone: value })).toBeNull();
+    expect(getFieldError(phone, value)).toBeNull();
+    expect(validateRow({ etgoPhone: value }, { phoneTargets: ['etgoPhone'] }).valid).toBe(true);
+    expect(getNativeInputProps(phone)).not.toHaveProperty('maxLength');
+    expect(getFieldError(phone, '1234 5678 9012 3456').code).toBe('MAX_LENGTH');
+  });
   it('valid values pass everywhere', () => {
     const ok = { website: 'https://acme.com', phone: '+34 910', etgoEmail: 'a@b.co' };
     expect(legacy.every((f) => getFieldError(f, ok[f.key]) === null)).toBe(true);

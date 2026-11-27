@@ -857,7 +857,10 @@ function useLoadedMinDateValues(data, fields) {
 // check keeps its own stable toast id), so blur, save, grid and import agree. Compatibility policy:
 // on an existing record an UNCHANGED value (equal to the loaded one) is not re-validated, so tabbing
 // through a legacy-invalid field does not flag it. Returns true when the value was flagged.
-function applyCoreBlurValidation(f, value, loadedData, ui, onFieldError, trackSaveBlockToast) {
+function applyCoreBlurValidation(f, value, loadedData, ui, onFieldError, trackSaveBlockToast, data) {
+  // Without the loaded record the legacy baseline is unknown: for an existing record do not flag on blur
+  // (the save gate still validates), so an untouched legacy-invalid value never raises a toast.
+  if (!loadedData && data?.id) return false;
   const hasPrevious = Boolean(loadedData?.id) && Object.prototype.hasOwnProperty.call(loadedData, f.key);
   const coreErr = getFieldError(f, value, { hasPrevious, previous: loadedData?.[f.key] });
   if (!coreErr) {
@@ -1395,7 +1398,7 @@ export function EntityForm({ entity, windowName, fields = [], data, onChange, ca
       trackSaveBlockToast(toastId);
       return;
     }
-    if (applyCoreBlurValidation(f, value, loadedData, ui, onFieldError, trackSaveBlockToast)) return;
+    if (applyCoreBlurValidation(f, value, loadedData, ui, onFieldError, trackSaveBlockToast, data)) return;
     // ETP-5031: Contacts-only text-field validation (length + unsafe chars). A
     // no-op for every other window — getContactsTextFieldError gates on
     // windowName === 'contacts' as its first check.

@@ -1668,7 +1668,7 @@ const InlineLinesPanel = forwardRef(function InlineLinesPanel({
       // concurrency-conflict dialog). Toasting again would stack a duplicate on top of the toast,
       // or a redundant one behind the dialog. Errors from anywhere else still land here.
       if (!err?.userNotified) toast.error(err?.message || ui('networkError'));
-      // ETP-4557: a structured backend code marks the cell it names (the edited one when it names none).
+      // ETP-4557: a structured backend code marks the cell it names.
       if (err?.invalidField) setInvalidCell({ rowId: row.id, colKey: err.invalidField });
     } finally {
       pendingEditRef.current = null;

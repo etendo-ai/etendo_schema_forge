@@ -127,6 +127,14 @@ describe('EntityForm — shared core validator (ETP-4557)', () => {
     expect(toast.error).not.toHaveBeenCalled();
   });
 
+  it('blur on an existing record without loadedData does not flag an untouched legacy-invalid value', () => {
+    const onFieldError = vi.fn();
+    render(<EntityForm fields={[email]} data={{ id: 'R1', etgoEmail: 'legacy-bad' }} onChange={vi.fn()} onFieldError={onFieldError} />);
+    fireEvent.blur(screen.getByTestId('field-etgoEmail'));
+    expect(onFieldError).not.toHaveBeenCalledWith('etgoEmail', expect.stringContaining('valid'));
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
   it('blur on a CHANGED invalid value of an existing record flags it', () => {
     const onFieldError = vi.fn();
     render(<EntityForm fields={[email]} data={{ id: 'R1', etgoEmail: 'new-bad' }} loadedData={{ id: 'R1', etgoEmail: 'old@acme.com' }}

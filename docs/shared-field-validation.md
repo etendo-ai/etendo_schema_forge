@@ -42,9 +42,8 @@ contract through `EntityForm.getInputType`.
   table (`contactsFieldValidation.js`) only applies to a field whose contract declares no length;
   its unsafe-character and tax-id checks are unchanged. The Contacts artifact now declares
   `etgoPhone.validation.maxLength: 15` (set in `decisions.json`), so a 16-character phone fails
-  with `MAX_LENGTH` in the form, the grid and import. One deliberate difference: import measures the
-  normalised phone (spaces stripped), while the form and grid measure the raw input, so
-  `+34 910 56 54 00` is accepted by import but rejected by the form and grid.
+  with `MAX_LENGTH` in the form, the grid and import. Phone length is measured on the normalised value (separators stripped) in every flow, and the native
+  `maxLength` is not emitted for a phone, so a pasted spaced number is never truncated.
 - Failed responses: structured codes map to localized inline/field messages; any other message that
   looks like SQL, a stack trace or another internal detail is replaced by `backendGenericError`
   (`extractErrorMessage` wraps every caller). Ordinary business messages keep their translation path.

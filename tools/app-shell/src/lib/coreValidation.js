@@ -1,7 +1,7 @@
 // ETP-4557 — the single app-shell adapter over the declarative validation engine
 // (`@etendo-ai/app-shell-core/lib/validation`, ETP-4556). Form save, form blur,
-// inline-grid add/edit and the import review queue all decide validity HERE, so one
-// contract produces one error code for one value regardless of the flow.
+// inline-grid add/edit decide validity HERE; the import review queue decides it in core
+// (`validateRow`) on the same engine, so one contract produces one error code for one value.
 //
 // What this module owns (and the engine deliberately does not):
 //   - building engine field descriptors from runtime field configs, including the flat
@@ -68,12 +68,16 @@ export function toDescriptor(field) {
 export function getFieldErrors(field, value, { hasPrevious = false, previous } = {}) {
   const descriptor = toDescriptor(field);
   if (!descriptor.name) return [];
-  const effective = withInputPrefix(field, value);
+  // A phone is measured like import does: separators stripped, so a spaced value that is valid
+  // once normalised is not rejected here (and the native maxLength never truncates it).
+  const isPhone = descriptor.validation.format === 'phone';
+  const prepare = (v) => { const withPrefix = withInputPrefix(field, v); return isPhone && typeof withPrefix === 'string' ? withPrefix.replace(/\s+/g, '') : withPrefix; };
+  const effective = prepare(value);
   const { errors } = validateRecord({
     fields: [descriptor],
     values: { [descriptor.name]: effective },
     operation: 'update',
-    options: hasPrevious ? { previousValues: { [descriptor.name]: withInputPrefix(field, previous) } } : {},
+    options: hasPrevious ? { previousValues: { [descriptor.name]: prepare(previous) } } : {},
   });
   return [...(errors[descriptor.name] || [])];
 }
@@ -130,13 +134,14 @@ export function getNativeInputProps(field, error) {
   const v = (field?.validation && typeof field.validation === 'object') ? field.validation : {};
   const props = {};
   const maxLength = v.maxLength ?? field?.maxLength;
-  if (maxLength != null && Number.isFinite(Number(maxLength))) props.maxLength = maxLength;
+  const format = toDescriptor(field).validation.format;
+  // Not for a phone: the limit applies to the normalised value, a native cap would truncate a pasted spaced number.
+  if (maxLength != null && Number.isFinite(Number(maxLength)) && format !== 'phone') props.maxLength = maxLength;
   const min = v.minimum ?? field?.min;
   if (min != null && Number.isFinite(Number(min))) props.min = min;
   // Only a DECLARED maximum becomes a native `max`: the flat `max` is a silent clamp, and a native
   // attribute would let the browser's own constraint validation block or tooltip it.
   if (v.maximum != null) props.max = v.maximum;
-  const format = toDescriptor(field).validation.format;
   if (format === 'email') props.inputMode = 'email';
   else if (format === 'phone') props.inputMode = 'tel';
   else if (format === 'url') props.inputMode = 'url';
@@ -224,6 +229,6 @@ const JAVA_CLASS_RE = /\b[A-Z]\w*Exception\b|\b(?:org|java|javax|com)\.[a-z][\w.
  */
 export function safeBackendMessage(msg, ui) {
   if (typeof msg !== 'string' || msg.trim() === '') return msg;
-  if (!(INTERNAL_DETAIL_RE.test(msg) || SERVER_TEXT_RE.test(msg) || JAVA_CLASS_RE.test(msg) || msg.length > 600)) return msg;
+  if (!(INTERNAL_DETAIL_RE.test(msg) || SERVER_TEXT_RE.test(msg) || JAVA_CLASS_RE.test(msg))) return msg;
   return typeof ui === 'function' ? ui('backendGenericError') : 'backendGenericError';
 }
