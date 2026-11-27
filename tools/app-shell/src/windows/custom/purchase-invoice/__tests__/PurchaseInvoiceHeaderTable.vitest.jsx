@@ -1,3 +1,4 @@
+// @covers tools/app-shell/src/windows/custom/purchase-invoice/PurchaseInvoiceHeaderTable.jsx
 // Mocks must be hoisted before imports (Vitest hoisting)
 // Mutable holders so individual tests can swap the locale dictionary / selected
 // org without re-declaring the module mocks. `defaultDictionary` is the shape
@@ -94,8 +95,10 @@ vi.mock('@/lib/dateOnly', async () => {
 
 vi.mock('@/lib/invoiceDueDate', () => ({
   getDueDateState: () => 'overdue',
-  getDueDateDotStyle: () => ({ background: 'red' }),
-  getDueDateTextStyle: () => ({ color: 'red' }),
+  // The style follows the state it is handed, so a test can tell which state the cell chose
+  // (getDueDateState itself always answers 'overdue').
+  getDueDateDotStyle: (state) => ({ background: state === 'overdue' ? 'red' : 'gray' }),
+  getDueDateTextStyle: (state) => ({ color: state === 'overdue' ? 'red' : 'gray' }),
 }));
 
 vi.mock('@/lib/formatCurrency.js', () => ({
@@ -271,7 +274,7 @@ import { render, screen, fireEvent, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { getInvoiceFiscalTargets } from '@/windows/custom/shared/fiscalTargets.js';
 import { useFiscalConfig } from '@/windows/custom/fiscal-config/useFiscalConfig.js';
-import { resolveFilterMode } from '@/lib/gridQuery';
+import { resolveFilterMode } from '@etendo-ai/app-shell-core/lib/gridQuery.js';
 import PurchaseInvoiceHeaderTable from '../PurchaseInvoiceHeaderTable.jsx';
 
 // ETP-5087: the fiscal-column tests at the bottom of this file assert the REAL
@@ -1472,5 +1475,57 @@ describe('PurchaseInvoiceHeaderTable — posted column gated on showAccountingFi
     render(<PurchaseInvoiceHeaderTable {...BASE_PROPS} />);
     const posted = capturedColumnsHolder.value.find((c) => c.key === 'posted');
     expect(posted.visibleWhenCapability).toBe('showAccountingFields');
+  });
+});
+
+// A confirmed payment remittance: the remitted part is the bank's to pay, so the list neither offers
+// it as an amount to register nor paints its due date as overdue.
+describe('PurchaseInvoiceHeaderTable — confirmed remittance', () => {
+  beforeEach(() => {
+    capturedColumnsHolder.value = null;
+  });
+
+  function renderCell(key, row) {
+    render(<PurchaseInvoiceHeaderTable {...BASE_PROPS} />);
+    const col = capturedColumnsHolder.value.find((c) => c.key === key);
+    const { container } = render(<>{col.render(row)}</>);
+    return { container, ...within(container) };
+  }
+
+  it('shows the "in remittance" chip, no amount, when the whole outstanding is remitted', () => {
+    const { getByTestId, container } = renderCell('outstandingAmount', { ...AP_INVOICE_ROW, etgoRemittedAmt: '500' });
+    const chip = getByTestId('invoice-remitted');
+    expect(chip).toHaveTextContent('remittanceInvoiceChip');
+    expect(chip.tagName).toBe('BUTTON');
+    expect(container.textContent).not.toContain('500:EUR');
+  });
+
+  it('opens the payments modal from the remitted chip', () => {
+    const { getByTestId } = renderCell('outstandingAmount', { ...AP_INVOICE_ROW, etgoRemittedAmt: '500' });
+    fireEvent.click(getByTestId('invoice-remitted'));
+    expect(screen.getByTestId('payment-history-modal')).toBeInTheDocument();
+  });
+
+  it('shows only the free part, like any pending invoice, for a partial remittance', () => {
+    const { container, queryByTestId } = renderCell('outstandingAmount', { ...AP_INVOICE_ROW, etgoRemittedAmt: '300' });
+    expect(queryByTestId('invoice-remitted')).toBeNull();
+    expect(container.textContent).toContain('200:EUR');
+    expect(container.textContent).not.toContain('300:EUR');
+  });
+
+  it('keeps the plain pending amount when nothing is remitted', () => {
+    const { container, queryByTestId } = renderCell('outstandingAmount', AP_INVOICE_ROW);
+    expect(queryByTestId('invoice-remitted')).toBeNull();
+    expect(container.textContent).toContain('500:EUR');
+  });
+
+  it('paints a fully remitted due with the neutral dot, never the overdue one', () => {
+    const { container } = renderCell('eTGODueDate', { ...AP_INVOICE_ROW, etgoRemittedAmt: '500' });
+    expect(container.querySelector('.rounded-full').style.background).toBe('gray');
+  });
+
+  it('keeps the due-date state for a partial remittance (the free part is still owed)', () => {
+    const { container } = renderCell('eTGODueDate', { ...AP_INVOICE_ROW, etgoRemittedAmt: '300' });
+    expect(container.querySelector('.rounded-full').style.background).toBe('red');
   });
 });

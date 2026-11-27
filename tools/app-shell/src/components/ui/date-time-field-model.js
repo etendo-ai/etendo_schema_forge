@@ -10,7 +10,7 @@
  * The date part follows the locale pattern of DateField (`getDatePattern`, `formatDateInput`,
  * `parseDateInput` from app-shell-core `lib/dateMask.js`), so `es-ES` reads `19/11/2026 14:20`.
  */
-import { formatDateInput, parseDateInput } from '@etendosoftware/app-shell-core/lib/dateMask.js';
+import { formatDateInput, parseDateInput } from '@etendo-ai/app-shell-core/lib/dateMask.js';
 
 const WALL_CLOCK_RE = /^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})/;
 const TIME_RE = /^([01]?\d|2[0-3]):([0-5]\d)$/;
@@ -56,6 +56,21 @@ export function maskDateTimeInput(raw, pattern) {
   if (!timeDigits) return datePart;
   const time = timeDigits.length > 2 ? `${timeDigits.slice(0, 2)}:${timeDigits.slice(2)}` : timeDigits;
   return `${datePart} ${time}`;
+}
+
+/**
+ * Masks typed text of the popover's time box to 24h `HH:mm`: only digits are kept (at most 4) and
+ * the colon is inserted, so it never depends on the OS / browser 12h a.m./p.m. setting.
+ */
+export function maskTimeInput(raw) {
+  const digits = String(raw ?? '').replace(/\D/g, '').slice(0, 4);
+  return digits.length > 2 ? `${digits.slice(0, 2)}:${digits.slice(2)}` : digits;
+}
+
+/** The typed time as `HH:mm` when it is a complete, valid 24h time, else null. */
+export function parseTimeText(text) {
+  const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(String(text ?? '').trim());
+  return m ? `${m[1]}:${m[2]}` : null;
 }
 
 /**

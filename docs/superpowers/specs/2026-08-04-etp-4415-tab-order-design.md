@@ -120,7 +120,7 @@ isn't there doesn't exist, per this repo's own policy).
 
 ## Changes by repo
 
-### A) `schema_forge_core` — generator (requires publishing `@etendosoftware/schema-forge-cli`)
+### A) `schema_forge_core` — generator (requires publishing `@etendo-ai/schema-forge-cli`)
 
 1. **`cli/src/generate-frontend.js` — `resolveSecondaryTabDefs`** (line 1843): add
    `tabOrder: cfg.tabOrder ?? 99` to the object returned per tab (currently computed only to
@@ -179,7 +179,7 @@ isn't there doesn't exist, per this repo's own policy).
 
 ## Rollout
 
-1. PR in `schema_forge_core` → publish `@etendosoftware/schema-forge-cli` → bump the version in
+1. PR in `schema_forge_core` → publish `@etendo-ai/schema-forge-cli` → bump the version in
    this repo's `package.json`.
 2. PR in `schema_forge` (`buildInitialTabs()` rewrite, Producto + Activo config, docs), built
    against the newly published CLI version. Regenerate both windows.

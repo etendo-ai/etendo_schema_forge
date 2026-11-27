@@ -1,8 +1,8 @@
 {
-  "version": "0.13.0",
+  "version": "0.14.0",
   "generatedAt": "2026-09-29T12:00:08.872Z",
-  "updatedAt": "2026-11-20T16:35:32.615Z",
-  "checksum": "44c79f4919d44ccd",
+  "updatedAt": "2026-11-26T23:44:38.971Z",
+  "checksum": "740ed51ff83087c6",
   "frontendContract": {
     "window": {
       "id": "94EAA455D2644E04AB25D93BE5157B6D",
@@ -5002,6 +5002,14 @@
             "type": "boolean",
             "visibility": "readOnly",
             "required": true
+          },
+          {
+            "name": "eTGOBounceDismissed",
+            "apiKey": "eTGOBounceDismissed",
+            "column": "EM_ETGO_Bounce_Dismissed",
+            "type": "dateTime",
+            "visibility": "system",
+            "required": false
           }
         ],
         "javaQualifier": "bankStatementEntityHandler"
@@ -12354,6 +12362,14 @@
         "description": "System field 'eTGOBounceDiscarded' should exist in backend but not frontend for bankStatementLines"
       },
       {
+        "id": "t-system-field-bankStatementLines-eTGOBounceDismissed",
+        "category": "system-field",
+        "entity": "bankStatementLines",
+        "field": "eTGOBounceDismissed",
+        "runner": "node",
+        "description": "System field 'eTGOBounceDismissed' should exist in backend but not frontend for bankStatementLines"
+      },
+      {
         "id": "t-system-field-bankStatementLines-eTGOBouncePairLine",
         "category": "system-field",
         "entity": "bankStatementLines",
@@ -13204,7 +13220,7 @@
       }
     ],
     "summary": {
-      "total": 883,
+      "total": 884,
       "byCategory": {
         "action-endpoint": 29,
         "crud-flags": 7,
@@ -13218,11 +13234,11 @@
         "rule-declared": 228,
         "searchable-filters": 2,
         "selector-endpoint": 35,
-        "system-field": 150,
+        "system-field": 151,
         "visibility": 7
       },
       "byRunner": {
-        "node": 883,
+        "node": 884,
         "junit": 0
       }
     }

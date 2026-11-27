@@ -1504,6 +1504,14 @@ const WINDOW_DELETE_ACTIONS = {
   'payment-out': 'eTPRRemovePayment',
 };
 
+export // Statuses for which a deleteAction-backed delete (WINDOW_DELETE_ACTIONS) stays hidden even
+// though that delete otherwise ignores the lifecycle: RPVOID (voided — nothing left to remove) and,
+// ETP-6247, the two remittance statuses — REM_SENT (in a confirmed remittance, not collected yet)
+// and REM_CANCEL (settled through the remittance). The remittance owns those payments: the backend
+// refuses to reactivate or remove a remitted one (ETGO_PaymentInRemittance), and removing a settled
+// one would leave the remittance pointing at nothing. Generic payment statuses, no window named.
+const DELETE_ACTION_HIDDEN_STATUSES = new Set(['RPVOID', 'REM_SENT', 'REM_CANCEL']);
+
 export // ETP-4500 — same rationale/hardcoding constraint as WINDOW_DELETE_ACTIONS above: these
 // windows show the rich Reactivar/Eliminar cartel (conditional Conciliación/Asiento items)
 // instead of the generic delete confirmation Dialog. `dir` feeds the cobro/pago wording.

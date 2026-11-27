@@ -208,6 +208,67 @@ describe('confirmToastText', () => {
   });
 });
 
+describe('confirmToastText: the reason of a confirm_failed comes from its detail', () => {
+  const base = { total: 0, ok: [], failed: [], stopped: null, notSent: [] };
+  const fail = (detailInfo) => ({ code: 'confirm_failed', reasonKey: 'invoiceInboxConfirmReasonFailed', detailInfo });
+  const detailUi = (key, params) => (params ? `${key}(${Object.entries(params).map(([k, v]) => `${k}=${v}`).join(',')})` : key);
+
+  it('one shared detail code shows its translated detail instead of the generic text', () => {
+    const t = confirmToastText({ ...base, total: 2, failed: [fail({ code: 'no_file', params: {} }), fail({ code: 'no_file', params: {} })] }, detailUi);
+    assert.equal(t.tone, 'error');
+    assert.match(t.text, /invoiceInboxConfirmFailed\(reason=invoiceInboxConfirmDetailNoFile\(\)?/);
+  });
+  it('a step_refused_status detail reaches the toast with its step and status', () => {
+    const t = confirmToastText({ ...base, total: 1, failed: [fail({ code: 'step_refused_status', params: { step: 'vendorAddress', status: 400 } })] }, detailUi);
+    assert.match(t.text, /invoiceInboxConfirmDetailStepRefusedStatus\(step=invoiceInboxConfirmStepVendorAddress/);
+    assert.match(t.text, /status=400/);
+  });
+  it('different detail codes in one run keep the several-reasons text', () => {
+    const t = confirmToastText({ ...base, total: 2, ok: [{ id: 'x', documentNo: 'FC1' }], failed: [fail({ code: 'no_file', params: {} }), fail({ code: 'attach_failed', params: {} })] }, detailUi);
+    assert.match(t.text, /reason=invoiceInboxConfirmReasonSeveral\)$/);
+  });
+  it('the same detail code with identical params still merges into one specific text', () => {
+    const info = { code: 'step_failed', params: { step: 'line', n: 2, reason: 'x' } };
+    const t = confirmToastText({ ...base, total: 2, failed: [fail(info), fail({ ...info, params: { reason: 'x', n: 2, step: 'line' } })] }, detailUi);
+    assert.match(t.text, /reason=invoiceInboxConfirmDetailStepFailed\(/);
+    assert.doesNotMatch(t.text, /Several/);
+  });
+  it('the same detail code with different params is several reasons (refused, total_mismatch, step_failed lines)', () => {
+    const pairs = [
+      [{ code: 'refused', params: { message: 'Period closed' } }, { code: 'refused', params: { message: 'No exchange rate' } }],
+      [{ code: 'total_mismatch', params: { invoice: '121.02', document: '121.00' } }, { code: 'total_mismatch', params: { invoice: '50', document: '49' } }],
+      [{ code: 'step_failed', params: { step: 'line', n: 2, reason: 'a' } }, { code: 'step_failed', params: { step: 'line', n: 5, reason: 'b' } }],
+    ];
+    for (const [one, two] of pairs) {
+      const t = confirmToastText({ ...base, total: 2, failed: [fail(one), fail(two)] }, detailUi);
+      assert.match(t.text, /reason=invoiceInboxConfirmReasonSeveral\)?$/, one.code);
+    }
+  });
+  it('the same missing array in the same order merges into one specific text', () => {
+    const info = () => ({ code: 'step_failed', params: { step: 'header', reason: 'missing', missing: ['documentNo', 'date'] } });
+    const t = confirmToastText({ ...base, total: 2, failed: [fail(info()), fail(info())] }, detailUi);
+    assert.match(t.text, /reason=invoiceInboxConfirmDetailStepFailed\(/);
+    assert.doesNotMatch(t.text, /Several/);
+  });
+  it('a different missing array is several reasons', () => {
+    const one = { code: 'step_failed', params: { step: 'header', reason: 'missing', missing: ['documentNo', 'date'] } };
+    const two = { code: 'step_failed', params: { step: 'header', reason: 'missing', missing: ['date', 'documentNo'] } };
+    const three = { code: 'step_failed', params: { step: 'header', reason: 'missing', missing: ['documentNo'] } };
+    for (const other of [two, three]) {
+      const t = confirmToastText({ ...base, total: 2, failed: [fail(one), fail(other)] }, detailUi);
+      assert.match(t.text, /reason=invoiceInboxConfirmReasonSeveral\)?$/);
+    }
+  });
+  it('a confirm_failed without detail identifier keeps the generic text', () => {
+    const t = confirmToastText({ ...base, total: 1, failed: [fail(null)] }, detailUi);
+    assert.match(t.text, /invoiceInboxConfirmReasonFailed/);
+  });
+  it('an unknown detail code with no message falls back to the generic text', () => {
+    const t = confirmToastText({ ...base, total: 1, failed: [fail({ code: 'brand_new', params: {} })] }, detailUi);
+    assert.match(t.text, /invoiceInboxConfirmReasonFailed/);
+  });
+});
+
 describe('nextPendingRow / singleConfirmResult', () => {
   const rows = [row('a', 'READY'), row('b', 'CONFIRMED'), row('c', 'ERROR', { errorCode: 'UNREADABLE' }), row('d', 'PENDING_REVIEW'), row('e', 'READY')];
   it('is the first pending or ready row AFTER the current one, in list order', () => {

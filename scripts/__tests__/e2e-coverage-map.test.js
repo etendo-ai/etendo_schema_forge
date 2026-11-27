@@ -45,9 +45,9 @@ describe('buildMap', () => {
   it('keeps the core package but drops other third-party code', () => {
     const map = buildMap([{ spec: A, files: [
       'node_modules/react-dom/cjs/react-dom.production.js',
-      'tools/app-shell/node_modules/@etendosoftware/app-shell-core/src/auth.js',
+      'tools/app-shell/node_modules/@etendo-ai/app-shell-core/src/auth.js',
     ] }]);
-    assert.deepEqual(Object.keys(map.files), ['tools/app-shell/node_modules/@etendosoftware/app-shell-core/src/auth.js']);
+    assert.deepEqual(Object.keys(map.files), ['tools/app-shell/node_modules/@etendo-ai/app-shell-core/src/auth.js']);
     assert.equal(map.commit, null);
   });
 });

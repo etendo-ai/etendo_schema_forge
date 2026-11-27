@@ -16,14 +16,14 @@ const groups = {
   Purchases: 'purchase-order goods-receipt purchase-invoice return-to-vendor-shipment matched-purchase-invoices invoice-inbox',
   Inventory: 'product product-category price-list warehouse physical-inventory goods-movements internal-consumption report-viewer-inventory',
   // ETP-6389 — Tesorería: Cobro, Pago, Cuentas, an Informes link holding only the aging reports,
-  // and Condiciones de pago (moved from Settings).
-  Treasury: 'payment-in payment-out financial-account report-viewer-treasury payment-term',
-  Finance: 'remittance chart-of-accounts cost-center service-project general-ledger-configuration calendar assets asset-group amortization not-posted-documents manual-journals conversion-rates report-viewer-finance',
+  // and Condiciones de pago (moved from Settings). ETP-6247 — Remesas moved here too, after Pago.
+  Treasury: 'payment-in payment-out remittance financial-account report-viewer-treasury payment-term',
+  Finance: 'chart-of-accounts cost-center service-project general-ledger-configuration calendar assets asset-group amortization not-posted-documents manual-journals report-viewer-finance',
   // ETP-6380 — Impuestos: the fiscal windows out of Finance, an Informes link holding only the Tax
   // Report, and Configuración fiscal (moved from Settings).
-  Taxes: 'tax tax-category fiscal-monitor report-viewer-taxes fiscal-config fiscal-models',
+  Taxes: 'tax tax-category fiscal-monitor fiscal-config fiscal-models report-viewer-taxes',
   Connections: 'authorize',
-  Settings: 'organization document-sequence business-partner-category user roles api-keys document-templates acct-process-monitor',
+  Settings: 'organization document-sequence business-partner-category user roles api-keys document-templates acct-process-monitor conversion-rates',
 };
 
 // Composition aliases documented in calendar/fiscal-monitor/fiscal-config guides.
@@ -46,17 +46,15 @@ const exceptions = {
   'api-keys': { capability: 'isAdminOrClientAdmin', flag: 'public-api-keys' },
   // ETP-5988 — the document template selector, behind its own flag and admin-only.
   'document-templates': { capability: 'isAdminOrClientAdmin', flag: 'doc-template-selection' },
-  'invoice-inbox': { accessWindowId: '81AC659E93504927B459E0CAE80CE923', capability: 'invoiceInbox' },
+  // ETP-6051 — a real AD_Menu node under Procurement > Transactions (com.etendoerp.go AD_MENU.xml),
+  // so it is identified by `windowId` (membership in the role menu), not by `accessWindowId`.
+  'invoice-inbox': { windowId: '81AC659E93504927B459E0CAE80CE923', capability: 'invoiceInbox' },
   // ETP-6148 — SEPA remittances: the Classic Remittance window, behind the per-account
   // sepa-remittances flag (capability) and the window grant, like invoice-inbox above.
   remittance: { accessWindowId: 'FF8080812E71F7C7012E71FD0499001B', capability: 'sepaRemittances' },
   // ETP-5269. Synthetic destination (runtime-routes.jsx), no AD window of its own.
-  // Additionally hidden behind the `acct-process-monitor` feature flag. That gate lives in
-  // SideMenu and is invisible to buildMenuGroups — the boundary this catalog measures — so here
-  // it is an ordinary capability-gated Settings entry, exactly like `roles` above. `flag` is
-  // metadata for the one spec that DOES cross the flag boundary (SideMenu.vitest.jsx enables
-  // every flag declared here); nothing else in this module reads it.
-  'acct-process-monitor': { capability: 'isAdminOrClientAdmin', flag: 'acct-process-monitor' },
+  // GA (ETP-6425): an ordinary capability-gated Settings entry, exactly like `roles` above.
+  'acct-process-monitor': { capability: 'isAdminOrClientAdmin' },
   // Tax Report AD window: core-maps/ad-menu-cache.json (typed window entry),
   // app-shell-functional-flows.md, "Role-gated custom pages".
   'fiscal-models': { windowId: '3E8FEA1EA7404D979306C9EE7FD2E7E8' },
@@ -95,8 +93,6 @@ export const defaultNavigation = Object.entries(groups).flatMap(([group, names])
 export const optionalNavigation = [
   { name: 'quick-sales-order', group: 'Proof of Concept', path: 'quick-sales-order', proof: true },
   { name: 'quick-purchase-order', group: 'Proof of Concept', path: 'quick-purchase-order', proof: true },
-  // Unified Calendar PoC: inside the Proof of Concept group (`proof`) AND behind its own item flag.
-  { name: 'unified-calendar', group: 'Proof of Concept', path: 'unified-calendar', proof: true, flag: 'unified-calendar-poc' },
   { name: 'app-store', group: 'Marketplace', path: 'app-store', marketplace: true },
   { name: 'spike-hello-app', group: 'Marketplace', path: 'spike-hello-app', marketplace: true, app: 'spike-hello-app' },
   { name: 'quick-order-sales', group: 'Sales', path: 'quick-order-sales', app: 'quick-order' },

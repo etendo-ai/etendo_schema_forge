@@ -1,5 +1,11 @@
 // @covers tools/app-shell/src/windows/custom/shared/preview-cards/PaymentsCard.jsx
+// @covers tools/app-shell/src/windows/custom/shared/RemittanceInfoBanner.jsx
 import { dateOnlyWithFormatter } from '@/test/dateOnlyMock.js';
+
+const caps = vi.hoisted(() => ({ current: { sepaRemittances: true } }));
+// The remittance banner offers «Ver remesa» only while the sepaRemittances capability is visible
+// (its route is guarded by the flag); RemittanceInfoBanner.vitest.jsx covers the variant without it.
+vi.mock('@/hooks/useCapabilitiesSafe.js', () => ({ useCapabilitiesSafe: () => caps.current }));
 
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', () => ({
@@ -248,6 +254,127 @@ describe('PaymentsCard', () => {
       const payments = [{ id: '1', amount: 10, paymentDate: '2026-01-01', documentNo: 'DOC-1', status: 'ETGOERR' }];
       render(<PaymentsCard payments={payments} currencyCode="EUR" specName="purchase-invoice" />);
       expect(screen.getByTestId('payments-card-state-error')).toHaveTextContent('cpPaymentStateError');
+    });
+  });
+
+  // ETP-6247 — a remittance RETURN voids the collected payment (RPVOID); the invoice is pending again.
+  describe('returned (voided) payment', () => {
+    const VOIDED = {
+      id: 'pay-v', amount: '55.66', appliedToInvoice: '27.83', paymentDate: '2026-01-01', documentNo: '1000109',
+      status: 'RPVOID', processed: true,
+    };
+
+    it('shows an RPVOID payment as voided, never as deposited', () => {
+      render(<PaymentsCard payments={[VOIDED]} currencyCode="EUR" specName="sales-invoice" />);
+      expect(screen.getByTestId('payments-card-state-voided')).toHaveTextContent('statusVoid');
+      expect(screen.queryByTestId('payments-card-state-deposited')).toBeNull();
+    });
+
+    it("shows this invoice's share, unsigned and struck through", () => {
+      render(<PaymentsCard payments={[VOIDED]} currencyCode="EUR" specName="sales-invoice" />);
+      const amount = screen.getByTestId('PaymentsCard__amount-0');
+      expect(amount).toHaveTextContent('27,83 €');
+      expect(amount).not.toHaveTextContent('55,66');
+      expect(amount).not.toHaveTextContent('+');
+      expect(amount.style.textDecoration).toBe('line-through');
+    });
+  });
+
+  it("shows a grouped payment's share of this invoice, not the payment's total (ETP-6247)", () => {
+    const payments = [{ id: 'g1', amount: '55.66', appliedToInvoice: '27.83', paymentDate: '2026-01-01', documentNo: 'G-1', status: 'RPR', processed: true }];
+    render(<PaymentsCard payments={payments} currencyCode="EUR" specName="sales-invoice" />);
+    const amount = screen.getByTestId('PaymentsCard__amount-0');
+    expect(amount).toHaveTextContent('+ 27,83 €');
+    expect(amount.style.textDecoration).toBe('');
+  });
+
+  describe('confirmed remittance', () => {
+    const REMITTED = {
+      id: 'pay-r', amount: 60, paymentDate: '2026-01-01', documentNo: 'PAY-R', status: 'REM_SENT', processed: true,
+      remittanceId: 'rem-1', remittanceDocumentNo: '1000123',
+    };
+
+    it('shows a REM_SENT payment as remitted, never as deposited', () => {
+      render(<PaymentsCard payments={[REMITTED]} currencyCode="EUR" specName="sales-invoice" />);
+      expect(screen.getByTestId('payments-card-state-remitted')).toHaveTextContent('statusRemSent');
+      expect(screen.queryByText('statusDeposited')).toBeNull();
+    });
+
+    it('shows a compact remittance banner whose «Ver remesa» opens it without opening the payment', () => {
+      render(<PaymentsCard payments={[{ ...REMITTED, remittanceStatusLabel: 'Pendiente de envío' }]} currencyCode="EUR" specName="sales-invoice" />);
+      const banner = screen.getByTestId('PaymentsCard__remittance-banner');
+      expect(banner).toHaveTextContent('invoiceRemittanceBannerTitle');
+      expect(banner).toHaveTextContent('Pendiente de envío');
+      fireEvent.click(screen.getByTestId('PaymentsCard__remittance-banner-open'));
+      expect(mockNavigate).toHaveBeenCalledTimes(1);
+      expect(mockNavigate).toHaveBeenCalledWith('/remittance/rem-1');
+    });
+
+    it('shows the remittance as the method and the amount neutral, without a sign', () => {
+      render(<PaymentsCard payments={[REMITTED]} currencyCode="EUR" specName="sales-invoice" />);
+      expect(screen.getByTestId('PaymentsCard__remittance-method-0')).toHaveTextContent('remittancePaymentLink');
+      expect(screen.getByTestId('PaymentsCard__row-0')).not.toHaveTextContent('+ ');
+    });
+
+    it('renders no banner and no remittance method for a payment that came from no remittance', () => {
+      const payments = [{ id: '1', amount: 10, paymentDate: '2026-01-01', documentNo: 'DOC-1', processed: true }];
+      render(<PaymentsCard payments={payments} currencyCode="EUR" specName="sales-invoice" />);
+      expect(screen.queryByTestId('PaymentsCard__remittance-banner')).toBeNull();
+      expect(screen.queryByTestId('PaymentsCard__remittance-method-0')).toBeNull();
+    });
+
+    it('splits a partial remittance into a free pending row and a remitted row', () => {
+      render(
+        <PaymentsCard payments={[REMITTED]} currencyCode="EUR" totalOutstanding={100} totalRemitted={60} specName="sales-invoice" />,
+      );
+      expect(screen.getByText('invoicePendingPayment')).toBeInTheDocument();
+      expect(screen.getByText('40,00 €')).toBeInTheDocument();
+      const remittedRow = screen.getByTestId('PaymentsCard__remitted');
+      expect(remittedRow).toHaveTextContent('remittanceInvoiceChip');
+      expect(remittedRow).toHaveTextContent('60,00 €');
+    });
+
+    it('shows only the remitted row when the whole outstanding is remitted', () => {
+      render(
+        <PaymentsCard payments={[REMITTED]} currencyCode="EUR" totalOutstanding={100} totalRemitted={100} specName="sales-invoice" />,
+      );
+      expect(screen.queryByText('invoicePendingPayment')).toBeNull();
+      expect(screen.getByTestId('PaymentsCard__remitted')).toHaveTextContent('100,00 €');
+    });
+
+    it('caps the remitted row at the outstanding', () => {
+      render(
+        <PaymentsCard payments={[REMITTED]} currencyCode="EUR" totalOutstanding={50} totalRemitted={80} specName="sales-invoice" />,
+      );
+      expect(screen.getByTestId('PaymentsCard__remitted')).toHaveTextContent('50,00 €');
+      expect(screen.queryByText('invoicePendingPayment')).toBeNull();
+    });
+
+    it('shows no remitted row when nothing is remitted', () => {
+      render(<PaymentsCard payments={[REMITTED]} currencyCode="EUR" totalOutstanding={100} specName="sales-invoice" />);
+      expect(screen.queryByTestId('PaymentsCard__remitted')).toBeNull();
+      expect(screen.getByText('100,00 €')).toBeInTheDocument();
+    });
+
+    it('shows no add action at all when the remittance blocks it', () => {
+      // Nothing the user does here unblocks it, and the banner says what happens next.
+      render(
+        <PaymentsCard addPaymentBlockedByRemittance payments={[]} totalOutstanding={100} specName="sales-invoice" />,
+      );
+      expect(screen.queryByText('previewCardAddCollection')).toBeNull();
+      expect(screen.queryByTestId('payments-card-add-blocked-draft')).toBeNull();
+    });
+
+    it('gives the remittance block priority over the draft one', () => {
+      render(
+        <PaymentsCard addPaymentBlockedByRemittance addPaymentBlockedByDraft payments={[]} totalOutstanding={100} />,
+      );
+      expect(screen.queryByTestId('payments-card-add-blocked-draft')).toBeNull();
+    });
+
+    it('keeps the draft reason and its testid when only the drafts block it', () => {
+      render(<PaymentsCard addPaymentBlockedByDraft payments={[]} totalOutstanding={100} />);
+      expect(screen.getByTestId('payments-card-add-blocked-draft')).toHaveAttribute('title', 'cpAddPaymentBlockedByDraft');
     });
   });
 

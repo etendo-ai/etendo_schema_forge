@@ -1,4 +1,4 @@
-import { useAuthOptional } from '@etendosoftware/app-shell-core/auth';
+import { useAuthOptional } from '@etendo-ai/app-shell-core/auth';
 import { useWindowAccess } from '@/auth/AuthContext.jsx';
 import { ListProgressBar } from '@/components/contract-ui/ListProgressBar.jsx';
 import { AccessDeniedMessage } from '@/components/access/ProcessAccessGuard.jsx';
@@ -8,10 +8,12 @@ import InvoiceInboxPage from './InvoiceInboxPage.jsx';
 
 /**
  * "Invoice Inbox" AD window — the page's access anchor. Same id as the sidebar entry
- * (`menu.json` → `accessWindowId`), the upload endpoint (`InvoiceInboxUploadEndpoint.WINDOW_ID`)
+ * (`menu.json` → `windowId`), the upload endpoint (`InvoiceInboxUploadEndpoint.WINDOW_ID`)
  * and the template-role grant (`TemplateRoleWindowAccess.INVOICE_INBOX_WINDOW_ID`) in
- * com.etendoerp.go. The window has no `AD_Menu`, which is why the menu item uses
- * `accessWindowId` and never `windowId` (ETP-5240).
+ * com.etendoerp.go. The window has an active `AD_Menu` node (Procurement Management >
+ * Transactions, shipped in com.etendoerp.go's AD_MENU.xml/AD_TREENODE.xml), which is why the menu
+ * item uses `windowId` (role-menu membership) and not `accessWindowId` (ETP-6051). Do not
+ * deactivate that node: with `windowId` the sidebar entry would vanish for every role.
  */
 export const INVOICE_INBOX_WINDOW_ID = '81AC659E93504927B459E0CAE80CE923';
 

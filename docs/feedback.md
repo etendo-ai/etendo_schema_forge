@@ -293,7 +293,7 @@ Owner: whoever next touches the goods-shipment window.
 - The "Rejected approach" note above (an expandable per-row detail surface inside `InlineLinesPanel`) is what ETP-4529 ultimately built as the generic, opt-in `dimensionsPanel` column type — it was deferred at ETP-4543 time as "a much larger feature," not permanently rejected.
 - Also discovered while wiring this in: for sales-invoice/purchase-invoice, `InvoiceLinesTable.jsx` (and its per-window wrapper components `SalesInvoiceLinesTable.jsx`/`InvoiceLineTableCustom.jsx`) are **not currently reachable from the running app** — neither window's `decisions.json` sets `window.customLinesComponent`, so `HeaderPage.jsx` renders the plain generated `LinesTable.jsx` (a separate file with its own hardcoded columns, no project/costcenter, no dimensionsPanel) via `DetailTable={LinesTable}`, never `InvoiceLinesTable.jsx` via `CustomLines`. This predates ETP-4529 (the wrapper files exist since ETP-3908/ETP-3569) and is unrelated to this fix's correctness — flagged for the coordinator since it means neither ETP-4543's original columns nor ETP-4529's `dimensionsPanel` column render live for these two windows today without further wiring work (and, per the point above, `customLinesComponent`'s contract doesn't fit `InvoiceLinesTable.jsx` as-is either).
 
-**Resolved (ETP-4529, generator support in `schema_forge_core`):** the "coordinator decision" and the "no equivalent override mechanism" gap called out above are both closed — not by adding a lines-tab override point, but by extending the generator itself. `generate-frontend.js`'s `generateTableComponent` now emits the synthetic `dimensionsPanel` column directly from a new `decisions.json` field flag (`dimensionsPanel: true`, read independently of `grid` — see `docs/decisions-reference.md`), for ANY pipeline-generated lines table. This sidesteps the `InvoiceLinesTable.jsx` reachability gap entirely for sales-invoice/purchase-invoice (that component stays dead code; the fix lives in the ACTUALLY-rendered generated `LinesTable.jsx`) and gives goods-shipment/goods-receipt the column for the first time. All four windows now set `lines.project.dimensionsPanel`/`lines.costcenter.dimensionsPanel` to `true` (grid stays `false`) and were regenerated. Verified additive: `generateTableComponent` on an entity with zero `dimensionsPanel: true` fields (e.g. `physical-inventory`) produces a byte-identical `contract.json`/generated output (same checksum, only `updatedAt` differs). Full generator design + verification: see the ETP-4529 developer delivery report (or `git log` on `cli/src/generate-frontend.js`/`resolve-curated.js`/`generate-contract.js` in `schema_forge_core` for "ETP-4529"). One pre-existing, unrelated item surfaced while regenerating these 4 windows: their committed `apiPrediction.actions` were stale relative to already-published core behavior (a `field` key dropped in favor of richer `name`/`actionType`/`parameters`/etc. metadata) — confirmed to reproduce with the plain published `@etendosoftware/schema-forge-cli@0.3.9` too, unrelated to this change; worth a coordinator-scheduled `make regen` sweep across the repo.
+**Resolved (ETP-4529, generator support in `schema_forge_core`):** the "coordinator decision" and the "no equivalent override mechanism" gap called out above are both closed — not by adding a lines-tab override point, but by extending the generator itself. `generate-frontend.js`'s `generateTableComponent` now emits the synthetic `dimensionsPanel` column directly from a new `decisions.json` field flag (`dimensionsPanel: true`, read independently of `grid` — see `docs/decisions-reference.md`), for ANY pipeline-generated lines table. This sidesteps the `InvoiceLinesTable.jsx` reachability gap entirely for sales-invoice/purchase-invoice (that component stays dead code; the fix lives in the ACTUALLY-rendered generated `LinesTable.jsx`) and gives goods-shipment/goods-receipt the column for the first time. All four windows now set `lines.project.dimensionsPanel`/`lines.costcenter.dimensionsPanel` to `true` (grid stays `false`) and were regenerated. Verified additive: `generateTableComponent` on an entity with zero `dimensionsPanel: true` fields (e.g. `physical-inventory`) produces a byte-identical `contract.json`/generated output (same checksum, only `updatedAt` differs). Full generator design + verification: see the ETP-4529 developer delivery report (or `git log` on `cli/src/generate-frontend.js`/`resolve-curated.js`/`generate-contract.js` in `schema_forge_core` for "ETP-4529"). One pre-existing, unrelated item surfaced while regenerating these 4 windows: their committed `apiPrediction.actions` were stale relative to already-published core behavior (a `field` key dropped in favor of richer `name`/`actionType`/`parameters`/etc. metadata) — confirmed to reproduce with the plain published `@etendo-ai/schema-forge-cli@0.3.9` too, unrelated to this change; worth a coordinator-scheduled `make regen` sweep across the repo.
 
 **Dead code deleted (ETP-5133).** `InvoiceLinesTable.jsx`, `SalesInvoiceLinesTable.jsx`, and `InvoiceLineTableCustom.jsx` — flagged as unreachable above and again by the ETP-4529 generator-support resolution — have now been deleted outright, along with their own test files. A live-browser check during ETP-5133 found that a fix (the new `noTruncate` column flag) had been mistakenly applied to this dead `InvoiceLinesTable.jsx` file instead of the actually-rendered generated `LinesTable.jsx`, which is what finally prompted removing the files rather than continuing to carry them as documented dead weight. Nothing outside their own tests ever imported them (confirmed via a repo-wide reference search before deletion); `sales-invoice`/`purchase-invoice`'s lines grid has rendered exclusively through the pipeline-generated `LinesTable.jsx` (via `InlineLinesPanel`/`DataTable`'s shared `inlineEditable` rendering) since before this fix, so the deletion changes no runtime behavior. A future reader hitting this entry or the ETP-4529 one above should treat the "not currently reachable" language as historical — the files themselves no longer exist. See `docs/generated-custom-windows/purchase-invoice.md` and `sales-invoice.md` for the corrected doc sections, and `docs/ui-customization.md` §14b for the `noTruncate`/`dimensionsPanel` mechanics on the surviving generated component.
 ---
@@ -484,9 +484,9 @@ may be exactly the design the ticket is asking you to move away from.
 
 Found while working ETP-4156, which changes only `decisions.json` (adds `entities.contact.javaQualifier`) and therefore needs a contract regeneration but no DB data.
 
-**Three separate defects, all in the published `@etendosoftware/schema-forge-cli` (and its `schema_forge_core` source):**
+**Three separate defects, all in the published `@etendo-ai/schema-forge-cli` (and its `schema_forge_core` source):**
 
-1. **`resolve-curated.js` ignores `SF_ROOT`.** Line 22 is `const ROOT = join(__dirname, '..', '..')`, while every sibling module (`extract-fields.js`, `extract-from-db.js`, `check-version.js`, …) uses `process.env.SF_ROOT || join(__dirname, '..', '..')`. Consequence: the single-phase command documented in `CLAUDE.md` ("`resolve-curated.js --window <name> --write` — single phase, no extract, no push") cannot work from published packages — it looks for `node_modules/@etendosoftware/artifacts/<window>/schema-raw.json`. `LOCAL_CORE=1` does not help either: `cli/sf-local` correctly keeps the cwd on the functional repo, but `__dirname` then resolves to the core repo, so it looks for `schema_forge_core/artifacts/<window>/rules-raw.json`. **One-line fix**, and it restores the only DB-free path to a contract regeneration.
+1. **`resolve-curated.js` ignores `SF_ROOT`.** Line 22 is `const ROOT = join(__dirname, '..', '..')`, while every sibling module (`extract-fields.js`, `extract-from-db.js`, `check-version.js`, …) uses `process.env.SF_ROOT || join(__dirname, '..', '..')`. Consequence: the single-phase command documented in `CLAUDE.md` ("`resolve-curated.js --window <name> --write` — single phase, no extract, no push") cannot work from published packages — it looks for `node_modules/@etendo-ai/artifacts/<window>/schema-raw.json`. `LOCAL_CORE=1` does not help either: `cli/sf-local` correctly keeps the cwd on the functional repo, but `__dirname` then resolves to the core repo, so it looks for `schema_forge_core/artifacts/<window>/rules-raw.json`. **One-line fix**, and it restores the only DB-free path to a contract regeneration.
 2. **`node_modules/.bin/sf-resolve-curated` is not an executable script.** It is the raw ESM source with no shebang, so the shell tries to interpret it (`/Applications: is a directory`, `AGENTS.md: command not found`, then a syntax error on the JSDoc). Other bins in the same map work, so this is a per-entry packaging problem.
 3. **`sf-regen-all --skip-extract` still hits the database, and swallows the error.** `Skip extract: YES` is printed, then `[F1a] Extracting fields...` runs `extract-fields.js` (a DB reader) and fails. `--skip-extract` apparently only skips `[F0] extract-from-db`. Worse, the failure is reported as a bare `✗ FAILED:` with an empty message, so there is nothing to diagnose — the actual cause (no DB reachable) only becomes visible by running a full `make regen` and watching it die at `[F0]` instead.
 
@@ -517,7 +517,7 @@ Same-shaped file, same generated-`HeaderPage.jsx` import site, same unreachable-
 
 **Follow-up to ETP-4529/ETP-4543.** Scope: move the "+ Añadir dimensiones" trigger out of the `dimensionsPanel` grid column and into `InlineLinesPanel`'s per-row hover-action strip (next to Pencil/Trash), and hide the "Dimensiones contables" column entirely. See `docs/ui-customization.md` §14b/§14c for the resulting UX and the new generic `rowActions` extension slot this introduced.
 
-**No `schema_forge_core` change was needed.** `InlineLinesPanel.jsx`, `DimensionsPanel.jsx`, and `useAccountingDimensionFields` all live only in this functional repo's `tools/app-shell/src/` — none of them are part of `@etendosoftware/app-shell-core` (verified: `diff` against `../schema_forge_core/packages/app-shell-core/src/components/contract-ui/` shows `InlineLinesPanel.jsx`/`DimensionsPanel.jsx` don't exist there at all, and the `@` vite alias always resolves `@/components/contract-ui/*` to this repo's own `./src`, never the core package, even in `LOCAL_CORE=1` mode). `generate-frontend.js`'s `buildDimensionsPanelColumn` still emits the exact same `type: 'dimensionsPanel'` column literal as before — the generator's job (declaring the metadata) didn't change, only how the generic consumer renders it.
+**No `schema_forge_core` change was needed.** `InlineLinesPanel.jsx`, `DimensionsPanel.jsx`, and `useAccountingDimensionFields` all live only in this functional repo's `tools/app-shell/src/` — none of them are part of `@etendo-ai/app-shell-core` (verified: `diff` against `../schema_forge_core/packages/app-shell-core/src/components/contract-ui/` shows `InlineLinesPanel.jsx`/`DimensionsPanel.jsx` don't exist there at all, and the `@` vite alias always resolves `@/components/contract-ui/*` to this repo's own `./src`, never the core package, even in `LOCAL_CORE=1` mode). `generate-frontend.js`'s `buildDimensionsPanelColumn` still emits the exact same `type: 'dimensionsPanel'` column literal as before — the generator's job (declaring the metadata) didn't change, only how the generic consumer renders it.
 
 **Regen-gap discovered and closed while validating:** `goods-receipt` and `manual-journals`'s generated `<Window>LineTable.jsx` had NOT actually picked up their `decisions.json` `dimensionsPanel: true` flags — `contract.json` for both had zero `dimensionsPanel` references despite the flags being present and committed (likely lost across the `epic/ETP-3504` merges preceding this branch — the earlier ETP-4529 feedback entry above claims all four original windows, including goods-receipt/goods-shipment, were already regenerated). Regenerated both via `make regen ONLY=<window> SKIP_EXTRACT=1 LOCAL_CORE=1`; confirmed clean (`sf-validate-pipeline`, 0 violations) and additive version bumps in both `contract-changelog.json`s.
 
@@ -708,7 +708,7 @@ removed, and it produced a form with neither defaults nor callouts at all.
 
 ## [2026-07-31] ETP-4565 — Follow-up: pre-push offline drift check flagged `contacts` checksum-only drift, unrelated to the es_ES label bug above
 
-**Component:** none confirmed as a schema_forge bug — most likely the published `@etendosoftware/schema-forge-cli` (`generate-contract.js`) checksum computation, out of scope to fix in this repo.
+**Component:** none confirmed as a schema_forge bug — most likely the published `@etendo-ai/schema-forge-cli` (`generate-contract.js`) checksum computation, out of scope to fix in this repo.
 
 **Symptom:** `git push` on this branch failed the pre-push hook's offline drift check (mirrors CI's `offline-regen-check.yml`: `make regen-check FROM_CACHE=1` against the pinned published core package + `com.etendoerp.go`'s committed `ETGO_SF_*.xml`, then `git status`). It reported drift on `artifacts/contacts/contract.json`/`contract.mcp.json`: only `checksum` (`e477fa97a11d75f1` → `fc8d658a3248b85d`) and a new `updatedAt` timestamp changed — **zero** structural/content diff anywhere else in either file (confirmed with a full `git diff`, not just a sampled excerpt).
 
@@ -716,7 +716,7 @@ removed, and it produced a form with neither defaults nor callouts at all.
 1. `make regen ONLY=contacts` (live sandbox DB) — DID reproduce the es_ES label-stripping bug again (dropped the 3 `oBTIKVIESStatus` labels, same `AD_Ref_List_Trl` STALE warning). Reverted via `git checkout --`, not committed. This confirms the sandbox's `AD_Ref_List_Trl` gap for this reference list is still present and anyone re-running a live-DB regen on `contacts` will hit it again.
 2. `make regen-check ONLY=contacts FROM_CACHE=1` (the exact command the offline drift check/CI runs — reads the committed AD cache snapshot, not the live sandbox DB) — did **NOT** strip the es_ES labels (the cached snapshot has correct translations) and produced the same isolated checksum/updatedAt-only diff described above. Confirmed **deterministic**: ran twice, got `fc8d658a3248b85d` both times.
 
-**Root cause (partial):** `generate-contract.js`'s `checksumFor()` hashes `JSON.stringify({frontendContract, backendContract, apiPrediction, formState, agentProfile, testManifest})` in whatever key/array insertion order the generator produced that run, but the file actually written to disk goes through a separate canonicalization pass (`reorderKeys`/similar) before serialization. If the generator's internal insertion order for some part of that payload isn't perfectly stable run-to-run (while the *canonicalized* on-disk shape is), two runs can produce byte-identical `contract.json` bodies but different checksums — exactly what was observed here (the currently-committed `contract.json` already had the es_ES labels correctly hand-restored per the entry above; a fresh cached-snapshot regen reproduces that exact body but with a different checksum). Did not chase this further into the checksum algorithm itself since it lives in the published `schema-forge-cli` package (`node_modules/@etendosoftware/schema-forge-cli/src/generate-contract.js`), not this repo — **candidate follow-up for `schema_forge_core`:** make `checksumFor()` hash the same canonicalized/reordered structure that gets written to disk, so the checksum is stable whenever the actual file content is.
+**Root cause (partial):** `generate-contract.js`'s `checksumFor()` hashes `JSON.stringify({frontendContract, backendContract, apiPrediction, formState, agentProfile, testManifest})` in whatever key/array insertion order the generator produced that run, but the file actually written to disk goes through a separate canonicalization pass (`reorderKeys`/similar) before serialization. If the generator's internal insertion order for some part of that payload isn't perfectly stable run-to-run (while the *canonicalized* on-disk shape is), two runs can produce byte-identical `contract.json` bodies but different checksums — exactly what was observed here (the currently-committed `contract.json` already had the es_ES labels correctly hand-restored per the entry above; a fresh cached-snapshot regen reproduces that exact body but with a different checksum). Did not chase this further into the checksum algorithm itself since it lives in the published `schema-forge-cli` package (`node_modules/@etendo-ai/schema-forge-cli/src/generate-contract.js`), not this repo — **candidate follow-up for `schema_forge_core`:** make `checksumFor()` hash the same canonicalized/reordered structure that gets written to disk, so the checksum is stable whenever the actual file content is.
 
 **Fix applied:** accepted `make regen-check ONLY=contacts FROM_CACHE=1`'s output wholesale (this is what CI's offline check itself computes, so it is the authoritative "correct" checksum for the currently-committed content) — committed the checksum/`updatedAt` bump on `contract.json` and `contract.mcp.json`. `npx sf-validate-pipeline --scope=contacts`: OK. A subsequent `make regen-check ONLY=contacts FROM_CACHE=1` run produces zero diff, confirming the branch is drift-free.
 
@@ -1296,10 +1296,10 @@ named in the ticket's acceptance criteria.
 
 **Symptom:** SSO login on the invitation page authenticated the user but never resumed the invitation acceptance flow — the login form stayed on screen and the token was never consumed. The whole test suite was green.
 
-**Root cause:** the page test replaced the entire `@etendosoftware/etendo-go-core/onboarding` barrel — including `LoginStep`, the component whose contract the page depends on — with hand-written stub forms:
+**Root cause:** the page test replaced the entire `@etendo-ai/etendo-go-core/onboarding` barrel — including `LoginStep`, the component whose contract the page depends on — with hand-written stub forms:
 
 ```js
-vi.mock('@etendosoftware/etendo-go-core/onboarding', () => ({
+vi.mock('@etendo-ai/etendo-go-core/onboarding', () => ({
   LoginStep: ({ initialEmail, onAuthenticated }) => (
     <form onSubmit={…}>{/* always calls onAuthenticated(data) */}</form>
   ),
@@ -1544,7 +1544,7 @@ manages its own transaction boundaries is not composable with a wrapper that man
 ## [2026-09-03] ETP-5111 (pre-existing environment debt) — three gaps that block *verification*, not functionality
 
 **Component:** the repo's own test/dev harness — `tools/app-shell` vitest resolution, the installed
-`@etendosoftware/app-shell-core` package, and `make dev`
+`@etendo-ai/app-shell-core` package, and `make dev`
 
 **None of these were introduced by ETP-5111.** All three reproduce on `origin/develop` with no
 ETP-5111 change applied. They are recorded here because this ticket is what surfaced them: the
@@ -1562,7 +1562,7 @@ both:
 
 | Profile | Failure |
 |---|---|
-| Published packages (default) | `Failed to resolve import "@etendosoftware/app-shell-core/lib/import/importFormats.js"` from `components/contract-ui/ListExportButton.jsx:8`. Reproduced: `npx vitest run src/components/contract-ui/__tests__/ListView.bulkDelete.vitest.jsx` → *1 failed, no tests*. |
+| Published packages (default) | `Failed to resolve import "@etendo-ai/app-shell-core/lib/import/importFormats.js"` from `components/contract-ui/ListExportButton.jsx:8`. Reproduced: `npx vitest run src/components/contract-ui/__tests__/ListView.bulkDelete.vitest.jsx` → *1 failed, no tests*. |
 | `LOCAL_CORE=1` | `Failed to resolve import "read-excel-file/universal"` from `schema_forge_core/packages/app-shell-core/src/lib/import/parseXlsx.js`. |
 
 The `LOCAL_CORE` half is an **uninstalled declared dependency**, not a missing declaration:
@@ -1579,7 +1579,7 @@ guarantee therefore has no running vitest coverage today.
 ### Gap 2 — a vitest run without `LOCAL_CORE=1` produces a number that means nothing
 
 With the default published-package profile, **333 of 975 suites fail to load**, because the
-installed `@etendosoftware/app-shell-core@0.3.40` does not serve three paths the source imports:
+installed `@etendo-ai/app-shell-core@0.3.40` does not serve three paths the source imports:
 
 - `./auth/api` — the file *exists* (`src/auth/api.js`) but is not an `exports` key; the package maps
   only `./auth` → `./src/auth/index.js`, so Node/Vite answer `ERR_PACKAGE_PATH_NOT_EXPORTED`. An
@@ -1604,7 +1604,7 @@ failure by adding `LOCAL_CORE=1`; it will not change.
 ### Gap 3 — `make dev` does not boot in either profile, so nothing serves `localhost:3100`
 
 `tools/app-shell/vite-plugins/report-api.js:19` imports
-`@etendosoftware/schema-forge-cli/src/report-filters.js`, which is **absent from the installed
+`@etendo-ai/schema-forge-cli/src/report-filters.js`, which is **absent from the installed
 package** (`require.resolve` → `MODULE_NOT_FOUND`). `vite.config.js` imports that plugin at its line
 8, so the config itself never evaluates and the dev server never starts.
 
@@ -2355,7 +2355,7 @@ fails open and silent, and a sibling handler working in the same window proves n
 
 ## [2026-09-10] ETP-5245 — Entity-level `orderBy` in decisions.json is a dead key
 
-**Component:** `decisions.json` (entity level) / `@etendosoftware/schema-forge-cli`
+**Component:** `decisions.json` (entity level) / `@etendo-ai/schema-forge-cli`
 
 **Symptom:** Four windows declare an entity-level `"orderBy"` in `decisions.json`
 (`chart-of-accounts`, `cost-center`, `matched-purchase-invoices`, `service-project`) and none of
@@ -3240,7 +3240,7 @@ extraction step (reuse existing schema-raw.json)". Already noticed, and not chas
 
 **Root cause:** not specific to `LOCAL_CORE`. `--skip-extract` only guards step F0 (the raw CSV dump
 into `raw-query-results/`). F1a (`extract-fields.js`) and F1b (`extract-rules.js`) always open a DB
-pool. The published `@etendosoftware/schema-forge-cli` (0.3.84) has the same code.
+pool. The published `@etendo-ai/schema-forge-cli` (0.3.84) has the same code.
 
 **Workaround (not fixed):** to keep the DB out of the run, use `FROM_CACHE=1`, which reads the
 cached AD snapshot the same way CI's offline check does. Otherwise review the `schema-raw.json` /
@@ -3274,7 +3274,7 @@ Production builds are not affected.
 
 **Root cause:** `@radix-ui/react-dialog` is pre-bundled by Vite (something in `src/` imports it
 directly, e.g. via `FileLightbox`), while `@radix-ui/react-dropdown-menu` is served raw through
-`@etendosoftware/app-shell-core`, which `tools/app-shell/vite.config.js` excludes from
+`@etendo-ai/app-shell-core`, which `tools/app-shell/vite.config.js` excludes from
 `optimizeDeps`. The two therefore load separate copies of `@radix-ui/react-dismissable-layer`, each
 with its own layer stack. The modal menu locked the body, the dialog saved that lock as the
 "original" value and restored it on close.
@@ -3357,7 +3357,7 @@ Nuevo extracto (header and line): the picked day was not applied. The popper wra
 `pointer-events: none`, `elementFromPoint` over a day returned the dialog body, and Escape did not
 dismiss layer by layer. Production builds are not affected (Rollup bundles one copy).
 
-**Root cause:** `@etendosoftware/app-shell-core` is in `optimizeDeps.exclude`, so Vite never discovers
+**Root cause:** `@etendo-ai/app-shell-core` is in `optimizeDeps.exclude`, so Vite never discovers
 its Radix dependencies. A direct `@radix-ui/react-dialog` import in app code
 (`tools/app-shell/src/windows/custom/shared/FileLightbox.jsx`, ETP-5518) made Vite pre-bundle only the
 Dialog, while the Popover was served raw from `node_modules`. That leaves two instances of
@@ -3399,3 +3399,26 @@ had to be inserted by SQL.
 `modules/org.openbravo.module.aeat303.es/doc/aeat-303-electronic-submission.md` ("AEAT protocol
 summary") and `modules/com.etendoerp.go/docs/aeat-390-endpoints.md` ("Manual test against a
 stub"). The fix is to register both properties in the property list of the aeat303 module.
+
+## [2026-11-25] ETP-6179 — Confirm + create invoice is still two steps outside the customer return
+
+**Component:** `ConfirmInOutModal` (`validateInvoiceFirst`) and the confirm popups that create an
+invoice after `documentAction`.
+
+**Observation (QA CP-12):** confirming the document and creating its invoice are two requests, and
+the first cannot be undone; a refused invoice (contact without payment terms/method, no price list,
+unpriced product) leaves the document completed without it. ETP-6179 closes this only for the
+customer return: `createReturnInvoice` accepts `validateOnly:true` on the draft, and both its
+form Confirmar (`ConfirmWithCreditButton`) and its row-hover Confirmar
+(`ReturnMaterialReceiptRowConfirmModal`) send it first.
+
+**Still two-step (not fixed, outside the localization team's scope):**
+- return to vendor (`return-to-vendor-shipment`): its `createReturnInvoice` does not declare
+  `validateOnly` (`ReturnInvoiceKind.acceptsValidateOnly` is false);
+- goods shipment and goods receipt confirm-and-invoice popups (`GoodsShipmentConfirmModal`,
+  `ConfirmGoodsReceiptModal`).
+
+**Fix path:** add a `validateOnly` dry run to the invoice action (backend), then pass
+`validateInvoiceFirst` to its `ConfirmInOutModal`. Never pass the prop to an action without the dry
+run: it would be refused on the draft. Reference: `docs/ui-customization.md` → *Dry run before
+completing*, `modules/com.etendoerp.go/docs/neo-headless.md` → ETP-6179.

@@ -267,7 +267,7 @@ computation in `documentTotals.js` was deliberately NOT touched by this fix — 
 Two unrelated, pre-existing failures were observed while running the full suite (present before
 this change, confirmed by reproducing them in isolation on this worktree): `chart-of-accounts/
 __tests__/newSubAccountModal.test.js` (reads a generated file from
-`node_modules/@etendosoftware/schema-forge-cli/`, not present in a non-`LOCAL_CORE` worktree) and
+`node_modules/@etendo-ai/schema-forge-cli/`, not present in a non-`LOCAL_CORE` worktree) and
 `tools/app-shell/test/pwa.test.js` / `auth-header-policy.test.js`'s `Accept-Language` case
 (require a local `vite build` / network access unavailable in this environment). Neither touches
 any file changed by this fix.

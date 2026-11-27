@@ -1,9 +1,13 @@
 // @covers tools/app-shell/src/components/contract-ui/ListFilterBar.jsx
+// @covers tools/app-shell/src/components/contract-ui/listToolbarStyles.js
 import { render, screen, act, within, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 // Not mocked: the real fixed-order catalog, so the expected order is derived
 // from the same source the component sorts with (ETP-4913).
 import { STATUS_ORDER } from '@/lib/statusBadge.js';
+// The toolbar look shared with the customer portal's filters (PortalListFilters.vitest.jsx
+// asserts the portal side against the same tokens).
+import { TOOLBAR_SELECT_CLASS } from '../listToolbarStyles.js';
 
 // Mock i18n hooks
 vi.mock('@/i18n', () => ({
@@ -17,8 +21,8 @@ vi.mock('@/i18n', () => ({
 // Mock dependencies
 // ListFilterBar reads its dictionary from the core package: pass the real one through unless a
 // test installs a dictionary (e.g. translated status labels with accents).
-vi.mock('@etendosoftware/app-shell-core', async () => {
-  const actual = await vi.importActual('@etendosoftware/app-shell-core');
+vi.mock('@etendo-ai/app-shell-core', async () => {
+  const actual = await vi.importActual('@etendo-ai/app-shell-core');
   return { ...actual, useLocale: () => localeOverride.current ?? actual.useLocale() };
 });
 
@@ -1285,6 +1289,15 @@ describe('ListFilterBar status and type menus (real list)', () => {
       render(<ListFilterBar columns={[...STATUS_COLS, TYPE_COLS[1]]} columnFilters={{}} onFilterChange={vi.fn()} />);
       expect(screen.getByTestId('filter-status')).toHaveAttribute('aria-haspopup', 'listbox');
       expect(screen.getByTestId('filter-type')).toHaveAttribute('aria-haspopup', 'listbox');
+    });
+
+    it('renders the status and type triggers with every token of the shared toolbar class', () => {
+      render(<ListFilterBar columns={[...STATUS_COLS, TYPE_COLS[1]]} columnFilters={{}} onFilterChange={vi.fn()} />);
+      const expected = TOOLBAR_SELECT_CLASS.split(/\s+/);
+      for (const testId of ['filter-status', 'filter-type']) {
+        const tokens = new Set(screen.getByTestId(testId).className.split(/\s+/));
+        expect(expected.filter((token) => !tokens.has(token))).toEqual([]);
+      }
     });
 
     it('reflects the open state on the trigger (dark border while open, closed afterwards)', async () => {

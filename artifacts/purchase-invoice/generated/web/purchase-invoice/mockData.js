@@ -59,7 +59,9 @@ export const header = [
     "etvfacQRURL": "Sample etvfacQRURL",
     "etvfacSentToVerifac": "Sample etvfacSentToVerifac",
     "eTGODeliveryStatus": "DR",
-    "eTGODueDate": "2026-01-15"
+    "eTGODueDate": "2026-01-15",
+    "etgoRemittedAmt": 38907,
+    "etgoImportDua": "Sample etgoImportDua"
   },
   {
     "id": "mock-header-002",
@@ -119,7 +121,9 @@ export const header = [
     "etvfacQRURL": "Sample etvfacQRURL",
     "etvfacSentToVerifac": "Sample etvfacSentToVerifac",
     "eTGODeliveryStatus": "CO",
-    "eTGODueDate": "2026-01-16"
+    "eTGODueDate": "2026-01-16",
+    "etgoRemittedAmt": 9306,
+    "etgoImportDua": "Sample etgoImportDua"
   },
   {
     "id": "mock-header-003",
@@ -179,7 +183,9 @@ export const header = [
     "etvfacQRURL": "Sample etvfacQRURL",
     "etvfacSentToVerifac": "Sample etvfacSentToVerifac",
     "eTGODeliveryStatus": "VO",
-    "eTGODueDate": "2026-01-17"
+    "eTGODueDate": "2026-01-17",
+    "etgoRemittedAmt": 11544,
+    "etgoImportDua": "Sample etgoImportDua"
   },
   {
     "id": "mock-header-004",
@@ -239,7 +245,9 @@ export const header = [
     "etvfacQRURL": "Sample etvfacQRURL",
     "etvfacSentToVerifac": "Sample etvfacSentToVerifac",
     "eTGODeliveryStatus": "IP",
-    "eTGODueDate": "2026-01-18"
+    "eTGODueDate": "2026-01-18",
+    "etgoRemittedAmt": 11872,
+    "etgoImportDua": "Sample etgoImportDua"
   },
   {
     "id": "mock-header-005",
@@ -299,7 +307,9 @@ export const header = [
     "etvfacQRURL": "Sample etvfacQRURL",
     "etvfacSentToVerifac": "Sample etvfacSentToVerifac",
     "eTGODeliveryStatus": "DR",
-    "eTGODueDate": "2026-01-19"
+    "eTGODueDate": "2026-01-19",
+    "etgoRemittedAmt": 48460,
+    "etgoImportDua": "Sample etgoImportDua"
   },
   {
     "id": "mock-header-006",
@@ -359,7 +369,9 @@ export const header = [
     "etvfacQRURL": "Sample etvfacQRURL",
     "etvfacSentToVerifac": "Sample etvfacSentToVerifac",
     "eTGODeliveryStatus": "CO",
-    "eTGODueDate": "2026-01-20"
+    "eTGODueDate": "2026-01-20",
+    "etgoRemittedAmt": 45418,
+    "etgoImportDua": "Sample etgoImportDua"
   },
   {
     "id": "mock-header-007",
@@ -419,7 +431,9 @@ export const header = [
     "etvfacQRURL": "Sample etvfacQRURL",
     "etvfacSentToVerifac": "Sample etvfacSentToVerifac",
     "eTGODeliveryStatus": "VO",
-    "eTGODueDate": "2026-01-21"
+    "eTGODueDate": "2026-01-21",
+    "etgoRemittedAmt": 33840,
+    "etgoImportDua": "Sample etgoImportDua"
   },
   {
     "id": "mock-header-008",
@@ -479,7 +493,9 @@ export const header = [
     "etvfacQRURL": "Sample etvfacQRURL",
     "etvfacSentToVerifac": "Sample etvfacSentToVerifac",
     "eTGODeliveryStatus": "IP",
-    "eTGODueDate": "2026-01-22"
+    "eTGODueDate": "2026-01-22",
+    "etgoRemittedAmt": 25716,
+    "etgoImportDua": "Sample etgoImportDua"
   },
   {
     "id": "mock-header-009",
@@ -539,7 +555,9 @@ export const header = [
     "etvfacQRURL": "Sample etvfacQRURL",
     "etvfacSentToVerifac": "Sample etvfacSentToVerifac",
     "eTGODeliveryStatus": "DR",
-    "eTGODueDate": "2026-01-23"
+    "eTGODueDate": "2026-01-23",
+    "etgoRemittedAmt": 44780,
+    "etgoImportDua": "Sample etgoImportDua"
   },
   {
     "id": "mock-header-010",
@@ -599,7 +617,9 @@ export const header = [
     "etvfacQRURL": "Sample etvfacQRURL",
     "etvfacSentToVerifac": "Sample etvfacSentToVerifac",
     "eTGODeliveryStatus": "CO",
-    "eTGODueDate": "2026-01-24"
+    "eTGODueDate": "2026-01-24",
+    "etgoRemittedAmt": 12483,
+    "etgoImportDua": "Sample etgoImportDua"
   },
   {
     "id": "mock-header-011",
@@ -659,7 +679,9 @@ export const header = [
     "etvfacQRURL": "Sample etvfacQRURL",
     "etvfacSentToVerifac": "Sample etvfacSentToVerifac",
     "eTGODeliveryStatus": "VO",
-    "eTGODueDate": "2026-01-25"
+    "eTGODueDate": "2026-01-25",
+    "etgoRemittedAmt": 46022,
+    "etgoImportDua": "Sample etgoImportDua"
   },
   {
     "id": "mock-header-012",
@@ -719,7 +741,9 @@ export const header = [
     "etvfacQRURL": "Sample etvfacQRURL",
     "etvfacSentToVerifac": "Sample etvfacSentToVerifac",
     "eTGODeliveryStatus": "IP",
-    "eTGODueDate": "2026-01-26"
+    "eTGODueDate": "2026-01-26",
+    "etgoRemittedAmt": 38634,
+    "etgoImportDua": "Sample etgoImportDua"
   }
 ];
 

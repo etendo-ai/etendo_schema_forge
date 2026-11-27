@@ -299,6 +299,16 @@ A computed column that reads a table from **another module** needs that module d
 
 **Every user-visible string MUST be translated.** The app is primarily used in Spanish by real clients. Hardcoded English strings are treated as bugs. See `docs/i18n-guide.md` for the full reference (hooks, locale JSON structure, rules for adding keys). Key hooks: `useUI()` for generic labels, `useLabel()` for AD fields, `useMenuLabel()` for menus/tabs. All new keys must be added to BOTH `en_US.json` and `es_ES.json`.
 
+**A Classic `AD_MESSAGE` that reads wrong in GO** (it names a Classic tab, process or field label) is reworded in `com.etendoerp.go`, never by editing the Classic row (shared with Classic) and never in `backendErrors.js`: add it to `ClassicMessageRemap` and both `neo_hints_{es,en}.properties`, only if a GO user can trigger it. Full rule: `{etendo_root}/modules/com.etendoerp.go/docs/neo-headless.md` §4.17.
+
+## Document Status (docStatus) Checks
+
+**Never compare a document status against a raw literal (`documentStatus === 'DR'`, `status !== 'CO'`).** The lifecycle (DR draft -> CO completed -> VO voided, plus UE) and the rule "editable only in draft" live in one place: `tools/app-shell/src/lib/docStatus.js` (`isDraftStatus`, `isCompletedStatus`, `isVoidedStatus`, `isEditableStatus`, `docStatusCode`, `DOC_STATUS`). A new edge status (VO, UE, IP) must change behaviour there, not in dozens of files.
+
+- Guardrail: `tools/app-shell/test/no-raw-doc-status.test.js` fails on new raw comparisons. Opt out only with a visible `doc-status-ok: <reason>` comment on or above the line.
+- "Editable only in draft" lives only in `isEditableStatus`: use it wherever the question is "can the user edit"; use `isDraftStatus` for lifecycle checks (print exclusion, PDF caching). Modules loaded by plain `node --test` must import the helper by relative path, not `@/`.
+- Filter payloads (`value: 'CO'`) and action codes (`docAction: 'CO'`) are not comparisons and are unaffected.
+
 ## Currency & Amount Formatting
 
 **Every monetary value MUST be formatted through the canonical currency utilities — never a hand-rolled `Intl.NumberFormat`/`toLocaleString` call.** A hardcoded locale (`'en-US'`, unpinned `undefined`) or a missing `useGrouping: true` silently drops the thousands separator or renders the wrong decimal comma — this exact bug shipped repeatedly across the codebase before ETP-4314 centralized it. Treat any new ad-hoc money formatter as a bug, not a style nit.
@@ -322,7 +332,7 @@ A computed column that reads a table from **another module** needs that module d
 
 **Every CSV cell MUST go through the canonical neutralization policy — never a hand-rolled escape.** A value starting with `=`, `+`, `-`, `@`, TAB, CR, LF or a full-width variant is executed as a **formula** when the file is opened in Excel, Calc or Sheets (CWE-1236). The victim is not the user who exports, it is whoever opens the file — so this is an output-encoding problem, and quoting alone does not fix it. This shipped repeatedly (ETP-4559/4560 fixed two paths, then ETP-5032 found four more, including the list Print → CSV, which had no escaping at all, and nine accounting reports that had each hand-copied a quoting-only `csvField`). Treat any new ad-hoc CSV escaper as a bug, not a style nit.
 
-- **React component / plain module:** `csvField(value)` from `@etendosoftware/app-shell-core/lib/csv/csvSerializer.js` — neutralize plus RFC 4180 quoting, in that order.
+- **React component / plain module:** `csvField(value)` from `@etendo-ai/app-shell-core/lib/csv/csvSerializer.js` — neutralize plus RFC 4180 quoting, in that order.
 - **A builder that must keep its own quoting style** (e.g. fiscal-monitor's always-quote `buildCsvAndDownload`): use `neutralizeSpreadsheetCell(value)` from the same module — the policy without the quoting. Do NOT write a second policy.
 - **Handlebars / jsreport templates** (`template-csv.hbs`, `ReportDrawer.CSV_TEMPLATE`): the `csvField` helper from `templates/reports/helpers/report-html-helpers.js` is shipped automatically by `buildJsreportHelpersString()`. **Always TRIPLE-stash it** — `{{{csvField x}}}`, never `{{ }}`: double-stash HTML-escapes the helper's own `""` into `&quot;&quot;` and corrupts the file. Never declare a `csvField` in a per-report `helpers.js`; it is canonical, so a local copy is silently stripped and becomes dead code.
 - **xlsx / Excel exports are deliberately EXEMPT.** A workbook string cell is inert (a formula is a different cell type), so an apostrophe there is visible garbage, not a defence. See `NeoXlsxExportWriter.java` and `buildTemplateXlsx.js`.
@@ -342,9 +352,9 @@ Full reference: `docs/ui-customization.md` (inline edit → "The same reopen con
 **Every request to the backend MUST go through the shared helper — never a bare `fetch`.** A raw `fetch` re-decides the headers, the base URL, `credentials`, the `FormData` boundary and what an expired session does, and getting the headers wrong is SILENT: a missing `Accept-Language` makes the backend resolve reference data (`*_Trl` names: countries, UoMs, `AD_Ref_List`) in the user's AD language instead of the UI locale, with no error anywhere. That shipped three times (ETP-4685, then ETP-5022 across País / UOM / UOM for Weight) before ETP-5022 migrated all 293 raw calls across 121 files.
 
 - **Component or hook:** `const apiFetch = useApiFetch(apiBaseUrl)` from `@/auth/useApiFetch.js`. Put `apiFetch` in the dependency array of any callback/effect that uses it.
-- **Plain module:** `import { apiFetch } from '@etendosoftware/app-shell-core/auth/api'` — the core subpath, NEVER the `@/auth/api.js` barrel (it re-exports `.jsx`, which plain `node --test` cannot load).
+- **Plain module:** `import { apiFetch } from '@etendo-ai/app-shell-core/auth/api'` — the core subpath, NEVER the `@/auth/api.js` barrel (it re-exports `.jsx`, which plain `node --test` cannot load).
 - Options beyond `fetch`'s own: `on401: 'ignore'` (the 401 is a domain answer, not an expired session), `baseUrl: ''` (the URL is already complete or points outside the base), `token` (a plain module was handed one), `credentials`.
-- A test that needs a token supplies a **session**, not a `token` prop — mock `useAuthOptional` from `@etendosoftware/app-shell-core/auth`, spreading the original, and return a stable object.
+- A test that needs a token supplies a **session**, not a `token` prop — mock `useAuthOptional` from `@etendo-ai/app-shell-core/auth`, spreading the original, and return a stable object.
 - A request with no HTTP answer rejects with a `NetworkError` whose `message` is already translated (`networkErrorRetry`) — show `err.message`, detect it with `isNetworkError(err)`, never match `'Failed to fetch'`. `timeout` defaults to 60 s on `GET`/`HEAD`/`OPTIONS` only (writes wait, so a cut-off write cannot become a double submit); pass `timeout: 0` for a long read (a server-side export, a walk over thousands of rows, an on-demand archive). See `docs/request-policy.md` → *Network failures and the timeout* (ETP-5424).
 - Two guardrails fail the build on regression: `tools/app-shell/test/auth-header-policy.test.js` (hand-rolled `Authorization`) and `tools/app-shell/test/no-raw-fetch.test.js` (bare `fetch`). Genuine non-API calls (`blob:` URLs, the `/jsreport/*` container proxy) opt out with a `raw-fetch-ok: <reason>` comment; unauthenticated-by-design files are listed in the second test.
 
@@ -376,7 +386,7 @@ Before writing or asking `tester-functional` to write a Playwright spec, the age
 
 ## Pipeline Validation
 
-`sf-validate-pipeline` (the `@etendosoftware/schema-forge-cli` bin, published from `schema_forge_core` — see `docs/repo-topology.md`) enforces consistency across the artifact pipeline (decisions → contract → generated → registry). Runs without DB access. Defined rules: F1–F10, full table in `docs/pipeline-validator-reference.md`. The validator's source no longer lives in this repo post-split; this repo only consumes the published bin (or the `LOCAL_CORE` dispatcher, per the two dev profiles).
+`sf-validate-pipeline` (the `@etendo-ai/schema-forge-cli` bin, published from `schema_forge_core` — see `docs/repo-topology.md`) enforces consistency across the artifact pipeline (decisions → contract → generated → registry). Runs without DB access. Defined rules: F1–F10, full table in `docs/pipeline-validator-reference.md`. The validator's source no longer lives in this repo post-split; this repo only consumes the published bin (or the `LOCAL_CORE` dispatcher, per the two dev profiles).
 
 **Three integration points:**
 - **Manual:** `make validate-pipeline` (whole repo, published bin) or `npx sf-validate-pipeline --scope=<window>` (single window). Core developers running from local source (`LOCAL_CORE=1`, see `docs/repo-topology.md`) use `./cli/sf-local sf-validate-pipeline --scope=<window>` instead.

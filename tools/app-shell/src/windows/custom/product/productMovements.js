@@ -1,4 +1,4 @@
-import { resolveBackendSort } from '@/lib/gridQuery.js';
+import { resolveBackendSort } from '@etendo-ai/app-shell-core/lib/gridQuery.js';
 import { getDateBounds, toDateParam } from '@/lib/dateRangeBounds.js';
 
 // ETP-5889 — pure helpers behind the Product "Movements" tab: how a view (direction, period, warehouse,
@@ -17,6 +17,13 @@ export const DEFAULT_MOVEMENTS_PERIOD = Object.freeze({ presetId: 'last7' });
 // this: when that room is smaller the whole form column scrolls and the table keeps this height. Shared by
 // the tab (inline minHeight) and the `useRemainingHeight` default so the two cannot drift apart.
 export const MOVEMENTS_TABLE_MIN_HEIGHT = 340;
+// Floor of the table box once its rows are loaded: the box fills the room left (so the Total stays at the card bottom)
+// and, with less room, shrinks down to this (or to its content when shorter) and scrolls inside, instead of making the
+// form column scroll as well. The skeleton, error, empty and pre-measure states keep MOVEMENTS_TABLE_MIN_HEIGHT.
+export const MOVEMENTS_TABLE_COMPACT_MIN_HEIGHT = 200;
+// A table box whose content is at most this many px taller than the box shows no vertical scrollbar (it would only
+// clip the last row's border/padding), unless more pages can still be loaded by scrolling.
+export const MOVEMENTS_TABLE_SCROLL_TOLERANCE_PX = 4;
 
 // Opt-in query parameter: the backend answers `response.totals` ({ netQuantity, count }) over ALL the records
 // matching the filters. Only the first page of a view asks for it.
@@ -26,7 +33,8 @@ export const TOTALS_PARAM = 'etgoTotals';
 // not by its id; every other key is a physical column of M_Transaction, so the backend can order by it.
 // `etgoWarehouse` and `etgoDocKind` are stored computed columns (EM_Etgo_*), for that reason.
 const SORT_COLUMNS = Object.freeze({
-  date: { key: 'movementDate' },
+  // The date of the feature is M_Transaction.TrxProcessDate (date and time), not MovementDate (ETP-5908).
+  date: { key: 'transactionProcessDate' },
   type: { key: 'etgoDocKind' },
   warehouse: { key: 'etgoWarehouse', sortMode: 'identifier' },
   quantity: { key: 'movementQuantity' },
@@ -65,22 +73,38 @@ export function buildMovementsCriteria({ direction = 'all', dateRange = null, wa
   const { from, to } = getDateBounds(dateRange);
   const fromParam = toDateParam(from);
   const toParam = toDateParam(to);
-  if (fromParam) criteria.push({ fieldName: 'movementDate', operator: 'greaterOrEqual', value: fromParam });
-  if (toParam) criteria.push({ fieldName: 'movementDate', operator: 'lessOrEqual', value: toParam });
+  // TrxProcessDate carries a time. A date-only value is read by the backend as the whole day: `greaterOrEqual`
+  // from its start, `lessOrEqual` up to its end, so the last day of the range is included in full.
+  if (fromParam) criteria.push({ fieldName: MOVEMENT_DATE_FIELD, operator: 'greaterOrEqual', value: fromParam });
+  if (toParam) criteria.push({ fieldName: MOVEMENT_DATE_FIELD, operator: 'lessOrEqual', value: toParam });
 
   if (warehouseId) criteria.push({ fieldName: 'etgoWarehouse', operator: 'equals', value: warehouseId });
   return criteria;
 }
 
-// Several movements of a product share a movement date (it carries no time), so the date alone leaves their
-// order to the database. The stock after each movement is summed by (movement date, processing time, id);
-// ordering by the same keys keeps the list reading in the order the stock was computed, and keeps the
-// pages stable. Another column leaves its ties to the most recent movement first.
+// The DAL property of M_Transaction.TrxProcessDate: the one date the tab filters, sorts and displays by.
+const MOVEMENT_DATE_FIELD = 'transactionProcessDate';
+
+// Two movements can share a process timestamp, so the date alone leaves their order to the database. The
+// stock after each movement is summed by (process date, id); ordering by the same keys keeps the list
+// reading in the order the stock was computed, and keeps the pages stable. Another column leaves its ties
+// to the most recent movement first.
 function tieBreakers(sortKey, direction) {
   const dir = sortKey === 'date' && direction === 'asc' ? '' : '-';
-  const keys = ['transactionProcessDate', 'id'].map((key) => `${dir}${key}`);
-  return sortKey === 'date' ? keys : ['-movementDate', ...keys];
+  return sortKey === 'date' ? [`${dir}id`] : [`-${MOVEMENT_DATE_FIELD}`, '-id'];
 }
+
+/**
+ * The movement's date and time, `yyyy-MM-ddTHH:mm:ss`, as the wall clock the database stores (the backend's
+ * `etgoProcessTime`, no zone conversion). Falls back to the bare `movementDate` (`yyyy-MM-dd`, midnight, no
+ * time) when the backend sent none, e.g. an account the tab flag is off for. Null when neither is present.
+ */
+export function movementDateTime(row) {
+  const processTime = row?.etgoProcessTime;
+  return typeof processTime === 'string' && DATE_PREFIX.test(processTime) ? processTime : (row?.movementDate ?? null);
+}
+
+const DATE_PREFIX = /^\d{4}-\d{2}-\d{2}/;
 
 // A list of sort criteria is read with one convention: a `-` prefix for descending, none for ascending.
 // `resolveBackendSort` answers `<column> <direction>` for a plain column, so it is put in that convention
@@ -269,7 +293,7 @@ export function signedQuantity(value, formatNumber) {
 const PROCESS_TIME = /^\d{4}-\d{2}-\d{2}T([01]\d|2[0-3]):([0-5]\d)/;
 
 /**
- * `HH:mm` of the movement's `etgoProcessTime` (`YYYY-MM-DDTHH:mm:ss`, already the wall clock, no zone).
+ * `HH:mm` of the movement's date-time (`etgoProcessTime`, `YYYY-MM-DDTHH:mm:ss`, already the wall clock, no zone).
  * Read straight from the string: no `Date`, no `Intl`, no zone math, so a `Z`/offset suffix is ignored,
  * never applied. Null when the value is absent or malformed, so the cell shows no second line.
  */

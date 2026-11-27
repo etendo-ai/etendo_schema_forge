@@ -23,12 +23,12 @@ Schema Forge is now **two sibling repos + one runtime module**. Always know whic
 
 | Where | Location / remote | Holds | You touch it to… |
 |-------|-------------------|-------|------------------|
-| **etendo_schema_forge** (functional) | this repo · `etendosoftware/etendo_schema_forge` | `tools/app-shell/**` (windows + custom + generic React components), `artifacts/**`, `docs/generated-custom-windows/**`, `e2e/**`, per-window `decisions.json` | **USE** the tooling: process windows, edit decisions, regenerate UI |
-| **schema_forge_core** (platform/tooling) | sibling `../schema_forge_core` · `etendosoftware/schema_forge_core` | `packages/**`, the pipeline CLI (`cli/src/generate-*`, `extract-*`, `pipeline.js`, `push-to-neo.js`, `resolve-curated.js`, migrations), `templates/`, `schemas/` | **CHANGE** the tooling: generators, extractors, pipeline |
+| **etendo_schema_forge** (functional) | this repo · `etendo-ai/etendo_schema_forge` | `tools/app-shell/**` (windows + custom + generic React components), `artifacts/**`, `docs/generated-custom-windows/**`, `e2e/**`, per-window `decisions.json` | **USE** the tooling: process windows, edit decisions, regenerate UI |
+| **schema_forge_core** (platform/tooling) | sibling `../schema_forge_core` · `etendo-ai/schema_forge_core` | `packages/**`, the pipeline CLI (`cli/src/generate-*`, `extract-*`, `pipeline.js`, `push-to-neo.js`, `resolve-curated.js`, migrations), `templates/`, `schemas/` | **CHANGE** the tooling: generators, extractors, pipeline |
 | **com.etendoerp.go** (runtime) | `{etendo_root}/modules/com.etendoerp.go` | NEO Headless engine (Java), NeoHandler beans, ETGO_SF_* tables | extend runtime API behavior |
 | shared bucket | duplicated in **both** SF repos | `cli/src/data-fixes/**`, `cli/src/db.js`, `cli/src/lib/**` | tenant data-fixes / DB access from either side |
 
-**The functional repo consumes the tooling as published npm packages** (`@etendosoftware/schema-forge-cli`, `@etendosoftware/schema-forge-core`, `@etendosoftware/app-shell-core`) resolved from `node_modules`. Here you drive the pipeline through **`make` targets** (`make regen`, `make validate-pipeline`, …) — the old `node cli/src/generate-*.js` / `pipeline.js` / `push-to-neo.js` **no longer exist in this repo**; that source now lives in `schema_forge_core`.
+**The functional repo consumes the tooling as published npm packages** (`@etendo-ai/schema-forge-cli`, `@etendo-ai/schema-forge-core`, `@etendo-ai/app-shell-core`) resolved from `node_modules`. Here you drive the pipeline through **`make` targets** (`make regen`, `make validate-pipeline`, …) — the old `node cli/src/generate-*.js` / `pipeline.js` / `push-to-neo.js` **no longer exist in this repo**; that source now lives in `schema_forge_core`.
 
 **As the tool-builder you straddle both repos:**
 - The generators, extractors, pipeline and `resolve-curated`/`generate-*` you extend now live in **`schema_forge_core`** (`cli/src/`, `packages/`). Build + test them there, then **publish and bump the version** in the functional repo.

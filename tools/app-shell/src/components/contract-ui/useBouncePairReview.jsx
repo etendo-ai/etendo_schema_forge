@@ -1,28 +1,33 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { isNetworkError } from '@etendosoftware/app-shell-core/auth';
+import { isNetworkError } from '@etendo-ai/app-shell-core/auth';
 import { useUI } from '@/i18n';
 import { translateBackendErrorBody } from '@/lib/backendErrors.js';
 import {
-  useDiscardPair, useDismissPair, usePendingLineCounts, useRestorePair,
+  useDiscardPair, useDismissPair, usePendingLineCounts, useRestoreBounceSuggestion, useRestorePair,
 } from '@/hooks/useBouncePairActions.js';
 import {
-  BOUNCE_STATE, DISCARDED_STATE, bouncePanelModel, countsWithDismissedPairs, dismissPairPayload,
-  pendingLinesStatusParam,
-  withDismissedPairs,
+  BOUNCE_STATE, DISCARDED_STATE, bouncePanelModel, buildBounceOutflows, buildBouncePairRows,
+  buildDiscardedPairRows, countBouncePairs, countsWithDismissedPairs,
+  dismissPairPayload, pairChoiceSource, pendingLinesStatusParam, rowAsGroup, withDismissedPairs,
 } from './bouncePairs.js';
+import { isAiStaleError } from './bounceAi.js';
 import { visibleStatusCodes } from './reconciliationStatusFilter.js';
-import { BouncePairPanel } from './BouncePairPanel.jsx';
+import { BounceDismissedNotice, BouncePairPanel } from './BouncePairPanel.jsx';
 
 /*
  * ── Bounce pairs in the reconciliation split panel (ETP-5581) ──────────────────────────────────
  * Two hooks, called by ReconciliationSplitPanel at the two points it needs them: the lines (before
  * the selection is resolved) and the right panel (once a line is selected). With the backend flag
  * `bank-bounce-suggestions` off and no discarded line, both are pass-throughs: the lines, counts and
- * filter codes come out exactly as they went in, and no panel is ever returned.
+ * filter codes come out exactly as they went in, and no panel is ever returned. A third hook
+ * (`usePairTableViews`, ETP-6359) builds the one-row-per-pair lists of the "Posibles rechazos" and
+ * "Descartadas" filters.
  */
 
 const EMPTY_COUNTS = {};
+/** i18n key of the stale-AI-suggestion toast, when the refusal carries no translatable text. */
+const AI_STALE_I18N_KEY = 'financeReconcileBounceAiStale';
 
 /**
  * The toast text of a failed discard / restore: the coded refusal translated (its `AD_MESSAGE` key
@@ -33,6 +38,20 @@ function failureText(err, ui, fallbackKey) {
   return translateBackendErrorBody(err?.body, ui, null)
     || (isNetworkError(err) ? err.message : null)
     || ui(fallbackKey);
+}
+
+/**
+ * The `choiceSource` of a discard (ETP-6359): the automatch modal's own rule (`pairChoiceSource`,
+ * bouncePairs.js) applied to the rejection's pair and the outflow the panel discards it with: 'user'
+ * for an outflow the user picked here, even the AI-recommended one or with no AI data; 'ai' when it
+ * is the AI recommendation; with AI data, 'user' for any other one (e.g. the outflow preselected
+ * from the modal row on "Revisar en el panel"); null (the field is left out) without AI data and
+ * without a pick. Only the rejection's panel chooses an outflow: from an original / candidate line
+ * nothing travels, as before.
+ */
+function discardChoiceSource(model, line, assessments) {
+  if (model.role !== 'bounce') return null;
+  return pairChoiceSource(rowAsGroup(line), model.other, assessments, model.explicitPick ? model.other : null);
 }
 
 /**
@@ -49,6 +68,22 @@ function sameCounts(a, b) {
   const y = b ?? EMPTY_COUNTS;
   const keys = Object.keys(x);
   return keys.length === Object.keys(y).length && keys.every((k) => x[k] === y[k]);
+}
+
+/** The default answer's counts with the figures of a `status=discarded` answer on top. */
+function withDiscardedCounts(defaultCounts, discardedCounts) {
+  const out = { ...defaultCounts, discarded: discardedCounts.discarded };
+  if (discardedCounts.discardedPairs != null) out.discardedPairs = discardedCounts.discardedPairs;
+  return out;
+}
+
+/**
+ * The outflow a rejection opens on from "Revisar en el panel" (`focusDefault`, ETP-6359): its id
+ * when `line` is the rejection that request landed on, else null.
+ */
+function focusDefaultFor(focusDefault, line) {
+  if (!focusDefault || focusDefault.lineId !== line?.id) return null;
+  return focusDefault.outflowId;
 }
 
 /** The id of the left-panel row of a line, as `StatementLinesPanel` renders it. */
@@ -68,7 +103,9 @@ function scrollLineIntoView(lineId) {
 
 /**
  * The lines, counts and filter codes of the left panel, with the bounce pairs applied:
- * - the pairs the user dismissed ("No es un rechazo") read as plain pending lines again;
+ * - the pairs the user dismissed ("No es un rechazo") read as plain pending lines again. The backend
+ *   persists the dismissal (ETP-6359) and stops proposing the pair, so this is only the optimistic
+ *   hide until the reload that follows lands;
  * - while the `discarded` filter is active the panel's request asks for `status=discarded`
  *   (`pendingLinesStatusParam`, bouncePairs.js), whose counts carry only `discarded`: the other filters keep
  *   the counts of the last default answer;
@@ -79,7 +116,8 @@ function scrollLineIntoView(lineId) {
  *
  * `refreshDefaultCounts()` re-reads the default answer's counts while "Descartadas" is shown (a
  * restore there moves lines back to the other filters); `accountId`, `dateFrom` and `dateTo` are
- * the panel's own request filters, for that read.
+ * the panel's own request filters, for that read. `clearDismissed()` forgets the pairs hidden with
+ * "No es un rechazo" (after "Volver a considerar como posible rechazo" the pair may come back).
  *
  * @param {{ lines: Array<object>, counts: object, status: string|null,
  *   review?: object|null, accountId?: string, dateFrom?: string, dateTo?: string }} args
@@ -96,8 +134,12 @@ export function useBounceLines({
       return next;
     });
   }, []);
+  const ownClearDismissed = useCallback(() => {
+    setOwnDismissed((prev) => (prev.size === 0 ? prev : new Set()));
+  }, []);
   const dismissedKeys = review?.dismissedKeys ?? ownDismissed;
   const dismiss = review?.onDismiss ?? ownDismiss;
+  const clearDismissed = review?.onClearDismissed ?? ownClearDismissed;
 
   // The counts of the last default answer, for the filters the discarded answer does not count.
   // Taken from each default answer (in an effect, not during render), so they hold still while the
@@ -110,8 +152,10 @@ export function useBounceLines({
     // changed, or this effect would re-render forever.
     setDefaultCounts((prev) => (sameCounts(prev, counts) ? prev : (counts ?? EMPTY_COUNTS)));
   }, [counts, discardedAnswer]);
+  // ETP-6359 — `discardedPairs` (the "Descartadas" figure) follows the discarded answer too when
+  // it carries one; else the default answer's holds.
   const baseCounts = useMemo(
-    () => (discardedAnswer ? { ...defaultCounts, discarded: counts.discarded } : counts),
+    () => (discardedAnswer ? withDiscardedCounts(defaultCounts, counts) : counts),
     [counts, discardedAnswer, defaultCounts],
   );
 
@@ -138,7 +182,13 @@ export function useBounceLines({
   );
 
   return {
-    lines: shownLines, counts: shownCounts, statusCodes, discardedLines, dismiss, refreshDefaultCounts,
+    lines: shownLines,
+    counts: shownCounts,
+    statusCodes,
+    discardedLines,
+    dismiss,
+    clearDismissed,
+    refreshDefaultCounts,
   };
 }
 
@@ -153,10 +203,13 @@ export function useBounceLines({
  * active filter is one with its own request (`Descartadas`, `status=discarded`): leaving it reloads
  * the lines, and the discarded ones on screen cannot hold the bounce line, so the search waits for
  * that reload.
+ *
+ * `onLanded(line, request)` is told once the line is selected (ETP-6359: the request may carry the
+ * `outflow` the modal row showed).
  */
 function useFocusRequest({
   focus, onFocusConsumed, lines, loading, status, setStatus, setSearch, dateRange, setDateRange,
-  selectLine,
+  selectLine, onLanded,
 }) {
   const pendingRef = useRef(null);
   // `widened`: the date range was already opened once for this request. `reloaded`: a reload was
@@ -190,6 +243,7 @@ function useFocusRequest({
     if (line) {
       pendingRef.current = null;
       selectLine(line);
+      onLanded?.(line, pending);
       scrollLineIntoView(line.id);
       onFocusConsumed?.();
       return;
@@ -202,7 +256,7 @@ function useFocusRequest({
     }
     pendingRef.current = null;
     onFocusConsumed?.();
-  }, [focus, lines, loading, dateRange, setDateRange, selectLine, onFocusConsumed]);
+  }, [focus, lines, loading, dateRange, setDateRange, selectLine, onFocusConsumed, onLanded]);
 }
 
 /**
@@ -212,7 +266,7 @@ function useFocusRequest({
  * toasts, and the "Revisar en el panel" focus request.
  *
  * @param {object} args
- * @returns {{ panel: JSX.Element|null }}
+ * @returns {{ panel: JSX.Element|null, parts: object|null }}
  */
 export function useBouncePairPanel({
   accountId, currency, bcpLocale, selectedLine, lines, loading, discardedLines,
@@ -222,57 +276,161 @@ export function useBouncePairPanel({
   const ui = useUI();
   const { discardPair, loading: discarding } = useDiscardPair();
   const { restorePair, loading: restoring } = useRestorePair();
-  const { dismissPair } = useDismissPair();
-  // The original chosen for an ambiguous pair, remembered per bounce line.
-  const [chosen, setChosen] = useState({ lineId: null, originalId: null });
+  const { dismissPair, loading: dismissing } = useDismissPair();
+  // ETP-6359 — what the last automatch brought: the AI's percentage per candidate (null without AI).
+  const freshAssessments = review?.aiAssessments ?? null;
+  // BUG-1 — bounce lines whose AI recommendation the backend refused as stale (409): their default
+  // is ignored locally (no preselection, badge or AI notice; the percentages stay) until a fresh
+  // automatch brings new assessments. Without it the radio would stay pre-checked and every retry
+  // would send choiceSource 'ai' and get the same 409.
+  const [aiInvalidated, setAiInvalidated] = useState(() => new Set());
+  // ETP-6359 — the outflow the modal row showed when the user chose "Revisar en el panel" (the
+  // request's `outflow`): that rejection opens on it unless a pick or the AI's recommendation says
+  // otherwise (`defaultOriginalId` of bouncePanelModel). Only for that visit: dropped when the
+  // selection leaves that rejection, on a fresh automatch answer, after a discard and after a stale
+  // AI refusal, so a rejection selected directly later opens as always.
+  const [focusDefault, setFocusDefault] = useState(null);
+  useEffect(() => {
+    setAiInvalidated((prev) => (prev.size === 0 ? prev : new Set()));
+    setFocusDefault(null);
+  }, [freshAssessments]);
+  const aiAssessments = useMemo(() => {
+    if (!freshAssessments || aiInvalidated.size === 0) return freshAssessments;
+    const out = { ...freshAssessments };
+    for (const id of aiInvalidated) {
+      if (out[id]) out[id] = { ...out[id], recommendedLineId: null };
+    }
+    return out;
+  }, [freshAssessments, aiInvalidated]);
+  // The original chosen for an ambiguous pair. With the host's shared review state (ETP-6359) it is
+  // kept there, per bounce line, so the automatch modal shows and excludes the same outflow;
+  // without it the panel remembers the last one itself.
+  const [ownChosen, setOwnChosen] = useState({ lineId: null, originalId: null, original: null });
+  const sharedPicks = review?.onPick ? (review.picks ?? null) : null;
+  const onPick = review?.onPick ?? null;
+  const chosen = useMemo(() => {
+    if (!onPick) return ownChosen;
+    const lineId = selectedLine?.id ?? null;
+    const original = lineId == null ? null : (sharedPicks?.get?.(lineId) ?? null);
+    return { lineId, originalId: original?.id ?? null, original };
+  }, [onPick, ownChosen, sharedPicks, selectedLine?.id]);
 
+  const onLanded = useCallback((line, request) => {
+    setFocusDefault({ lineId: line.id, outflowId: request?.outflow?.id ?? null });
+  }, []);
   useFocusRequest({
     focus: review?.focus ?? null,
     onFocusConsumed: review?.onFocusConsumed,
-    lines, loading, status, setStatus, setSearch, dateRange, setDateRange, selectLine,
+    lines, loading, status, setStatus, setSearch, dateRange, setDateRange, selectLine, onLanded,
   });
+  const selectedId = selectedLine?.id ?? null;
+  useEffect(() => {
+    if (focusDefault && focusDefault.lineId !== selectedId) setFocusDefault(null);
+  }, [focusDefault, selectedId]);
 
   const model = useMemo(() => bouncePanelModel(selectedLine, {
     discardedLines,
     chosenOriginalId: chosen.lineId === selectedLine?.id ? chosen.originalId : null,
-  }), [selectedLine, discardedLines, chosen]);
+    chosenOriginalLine: chosen.lineId === selectedLine?.id ? chosen.original : null,
+    aiAssessments,
+    defaultOriginalId: focusDefaultFor(focusDefault, selectedLine),
+  }), [selectedLine, discardedLines, chosen, aiAssessments, focusDefault]);
 
   const refresh = useCallback(() => {
     reloadLines?.();
     onChanged?.();
   }, [reloadLines, onChanged]);
 
-  const choose = useCallback((originalId) => {
-    setChosen({ lineId: selectedLine?.id ?? null, originalId });
-  }, [selectedLine?.id]);
-
-  const onDismiss = useCallback(() => {
-    const groupKey = selectedLine?.bouncePair?.groupKey;
-    if (!groupKey) return;
-    dismiss(groupKey);
-    toast.success(ui('financeReconcileBounceToastDismissed'));
-    // ETP-5581 — tell the backend, for its KPI event; nothing is persisted. Fire-and-forget: the
-    // hide above is the whole user-visible effect, so a failure is silent. Read-only skips it.
-    if (windowReadOnly) return;
-    const body = dismissPairPayload(accountId, selectedLine, model);
-    if (!body) return;
-    try {
-      Promise.resolve(dismissPair(body)).catch(() => {});
-    } catch {
-      // Never let the report break the dismissal.
+  // `pick` is an outflow id (the single-line panel's radios) or the outflow line itself (the
+  // two-table view, where it may be any outflow of the same amount, not only a detected candidate).
+  const choose = useCallback((pick) => {
+    const original = pick != null && typeof pick === 'object' ? pick : null;
+    const lineId = selectedLine?.id ?? null;
+    if (onPick) {
+      // The shared store keeps the line itself: the modal row renders it.
+      const line = original ?? model?.rows?.find((r) => r.id === pick) ?? null;
+      if (lineId != null && line) onPick(lineId, line);
+      return;
     }
-  }, [selectedLine, dismiss, ui, windowReadOnly, accountId, model, dismissPair]);
+    setOwnChosen({ lineId, originalId: original ? original.id : pick, original });
+  }, [selectedLine?.id, onPick, model]);
+
+  // "No es un rechazo" (ETP-6359: persisted). The backend marks the pair's rejection line and stops
+  // proposing it; the pair is hidden at once (`dismiss`, shared with the automatch modal) and the
+  // lines and the suggestions reload, which drop it for good. A write: closed under read-only.
+  const onDismiss = useCallback(async () => {
+    const groupKey = selectedLine?.bouncePair?.groupKey;
+    const body = dismissPairPayload(accountId, selectedLine, model);
+    if (windowReadOnly || !groupKey || !body) return;
+    let result;
+    try {
+      result = await dismissPair(body);
+    } catch (err) {
+      toast.error(failureText(err, ui, 'financeReconcileBounceToastDismissError'));
+      return;
+    }
+    dismiss(groupKey);
+    // No `dismissedLineId`: nothing was stored (the backend's column is not mapped yet, or the lines
+    // are no longer a detected pair), so the pair is only hidden for now and may come back.
+    toast.success(ui(result?.dismissedLineId == null
+      ? 'financeReconcileBounceToastDismissedSession'
+      : 'financeReconcileBounceToastDismissed'));
+    refresh();
+  }, [selectedLine, dismiss, ui, windowReadOnly, accountId, model, dismissPair, refresh]);
+
+  // ETP-6359 — "Deshacer" on the success notice of a discard that followed the AI's preselection:
+  // restores the pair through the same call as "Restaurar par".
+  const undoDiscard = useCallback(async (lineId) => {
+    try {
+      await restorePair({ financialAccountId: accountId, lineId });
+      toast.success(ui('financeReconcileBounceToastRestored'));
+      refresh();
+    } catch (err) {
+      toast.error(failureText(err, ui, 'financeReconcileBounceToastRestoreError'));
+    }
+  }, [restorePair, accountId, ui, refresh]);
 
   const onDiscard = useCallback(async () => {
     if (windowReadOnly || !model?.discard) return;
+    // One rule with the automatch modal (`discardChoiceSource` → `pairChoiceSource`).
+    const choiceSource = discardChoiceSource(model, selectedLine, aiAssessments);
+    const aiDiscard = model.aiPreselected;
+    const bounceLineId = model.discard.counterpartLineId;
     try {
-      await discardPair({ financialAccountId: accountId, ...model.discard });
-      toast.success(ui('financeReconcileBounceToastDiscarded'));
+      await discardPair({
+        financialAccountId: accountId,
+        ...model.discard,
+        ...(choiceSource ? { choiceSource } : {}),
+      });
+      if (aiDiscard) {
+        toast.success(ui('financeReconcileBounceToastDiscarded'), {
+          action: {
+            label: ui('financeReconcileBounceAiUndo'),
+            onClick: () => { undoDiscard(bounceLineId); },
+          },
+        });
+      } else {
+        toast.success(ui('financeReconcileBounceToastDiscarded'));
+      }
+      setFocusDefault(null);
       refresh();
     } catch (err) {
+      if (isAiStaleError(err)) {
+        // The suggestion no longer holds (the statement changed since it was shown): say so and
+        // reload, so the panel shows the current proposal, and the AI default of this rejection
+        // is dropped for good (until a fresh automatch).
+        setAiInvalidated((prev) => new Set(prev).add(bounceLineId));
+        // The outflow the modal row showed came from the same stale suggestion: drop it too, so the
+        // user chooses again.
+        setFocusDefault(null);
+        toast.error(translateBackendErrorBody(err?.body, ui, null) || ui(AI_STALE_I18N_KEY));
+        refresh();
+        return;
+      }
       toast.error(failureText(err, ui, 'financeReconcileBounceToastDiscardError'));
     }
-  }, [windowReadOnly, model, discardPair, accountId, ui, refresh]);
+  }, [windowReadOnly, model, discardPair, accountId, ui, refresh, undoDiscard, selectedLine,
+    aiAssessments]);
 
   const onRestore = useCallback(async () => {
     if (windowReadOnly || !selectedLine?.id) return;
@@ -302,10 +460,219 @@ export function useBouncePairPanel({
       onDismiss={onDismiss}
       onDiscard={onDiscard}
       onRestore={onRestore}
-      busy={discarding || restoring}
+      busy={discarding || restoring || dismissing}
       windowReadOnly={windowReadOnly}
       data-testid="BouncePairPanel__d0f4d5" />
   ) : null;
 
-  return { panel };
+  // ETP-6359 — the pieces of the same panel for the two-table "Posibles rechazos" view, which lays
+  // them out itself: the model, the selected line and the handlers (null without a model).
+  const parts = model
+    ? {
+      model, line: selectedLine, onChoose: choose, onDismiss, onDiscard, onRestore,
+      busy: discarding || restoring || dismissing, windowReadOnly,
+    }
+    : null;
+
+  return { panel, parts };
+}
+
+/**
+ * The "Posibles rechazos" view of the split panel's left list (ETP-6359): ONE ROW PER PAIR instead
+ * of one row per line, the outflows a pair's original can be picked from, and the pair count the
+ * status filter shows for that entry.
+ *
+ * - `pairMode` is whether the "Posibles rechazos" filter is the active one; outside it the rows are
+ *   `null` and the outflows empty, so the host lists its lines as always.
+ * - `bouncePairCount` is `null` while the backend reports no bounce count (which keeps the entry out
+ *   of the filter anyway). While "Descartadas" is shown, or the lines are still loading, `lines`
+ *   does not hold the default answer: the last settled figure is kept (like the counts, see
+ *   {@link useBounceLines}), so the filter never flashes 0 meanwhile.
+ * - A pair's original / candidate line selected under another filter reads as its pair here: the
+ *   selection moves (through `selectLine`) to the pair's bounce row, the anchor the pair panel's
+ *   model keys on.
+ *
+ * @param {{ lines: Array<object>, search: string, status: string|null, loading: boolean,
+ *   statusCounts: object|null|undefined, selectedLine: object|null,
+ *   selectLine: (line: object) => void }} args
+ * @returns {{ pairMode: boolean, bouncePairRows: Array<object>|null, bounceOutflows: Array<object>,
+ *   bouncePairCount: number|null }}
+ */
+export function useBouncePairRows({
+  lines, search, status, loading, statusCounts, selectedLine, selectLine,
+}) {
+  const pairMode = status === BOUNCE_STATE;
+  const bouncePairRows = useMemo(
+    () => (pairMode ? buildBouncePairRows(lines, { query: search }) : null),
+    [pairMode, lines, search],
+  );
+  const bounceOutflows = useMemo(
+    () => (pairMode ? buildBounceOutflows(lines, { query: search }) : []),
+    [pairMode, lines, search],
+  );
+  const currentPairCount = useMemo(() => countBouncePairs(lines), [lines]);
+  const pairCountSettled = !loading && status !== DISCARDED_STATE && statusCounts?.bounce != null;
+  const settledPairCount = useSettledValue(currentPairCount, pairCountSettled);
+  const bouncePairCount = statusCounts?.bounce == null ? null : settledPairCount;
+
+  useLandOnAnchor(pairMode, bouncePairRows, selectedLine, selectLine, bounceAnchorOf);
+
+  return { pairMode, bouncePairRows, bounceOutflows, bouncePairCount };
+}
+
+/**
+ * `value` while `settled`; otherwise the last value taken while it was (null before the first).
+ * The no-flash rule of the pair counts: a count read off lines that are not the answer it is
+ * computed from (another filter's, or a stale one while loading) keeps its last real figure.
+ */
+function useSettledValue(value, settled) {
+  const [last, setLast] = useState(null);
+  useEffect(() => {
+    if (settled) setLast(value);
+  }, [settled, value]);
+  return settled ? value : last;
+}
+
+/**
+ * While `active`, moves the selection to the anchor of the pair row that holds the selected line
+ * (`anchorOf(rows, line)`: that anchor, or null when the line belongs to no row). The pair views
+ * key their selection on one line per pair, so another line of the pair, selected elsewhere, lands
+ * on its row. `anchorOf` must be stable (a module-level function).
+ */
+function useLandOnAnchor(active, rows, selectedLine, selectLine, anchorOf) {
+  useEffect(() => {
+    if (!active || !rows || !selectedLine) return;
+    const anchor = anchorOf(rows, selectedLine);
+    if (anchor && anchor.id !== selectedLine.id) selectLine(anchor);
+  }, [active, rows, selectedLine, selectLine, anchorOf]);
+}
+
+/** "Posibles rechazos": an original / candidate line lands on its pair's bounce row. */
+function bounceAnchorOf(rows, line) {
+  const pair = line.bouncePair;
+  if (!pair || pair.role === 'bounce') return null;
+  const entry = rows.find((e) => e.groupKey === pair.groupKey);
+  return entry?.anchor.bouncePair.role === 'bounce' ? entry.anchor : null;
+}
+
+/** "Descartadas": the rejection of a discarded pair lands on the pair's outflow row. */
+function discardedAnchorOf(rows, line) {
+  return rows.find((e) => e.counterpart?.id === line.id)?.anchor ?? null;
+}
+
+/**
+ * The figure of "Descartadas" in the status filter (ETP-6359): the number of discarded PAIRS, which
+ * the backend sends as `counts.discardedPairs` with the flag on (`counts.discarded` stays the line
+ * count). The counts already hold still while "Descartadas" or a reload is shown (`useBounceLines`);
+ * on top of that the last figure is kept if a later answer leaves the field out (no flash). Null
+ * while none has come, the filter then shows the backend's line count, and with the flag off.
+ */
+function useDiscardedPairCount(statusCounts) {
+  const flagOn = statusCounts?.bounce != null;
+  const raw = statusCounts?.discardedPairs;
+  const pairs = raw == null ? null : Number(raw) || 0;
+  const count = useSettledValue(pairs, pairs != null);
+  return flagOn ? count : null;
+}
+
+/**
+ * The "Descartadas" view of the split panel's left list (ETP-6359), the twin of
+ * {@link useBouncePairRows}: ONE ROW PER DISCARDED PAIR, keyed on its outflow
+ * ({@link buildDiscardedPairRows}), and the pair count the status filter shows for that entry.
+ *
+ * - `discardedMode` is whether "Descartadas" is the active filter with the backend flag on (read,
+ *   as everywhere, off `counts.bounce`); outside it the rows are `null` and the host lists the
+ *   lines as always, so with the flag off the filter behaves as it did.
+ * - The rejection of a pair, selected elsewhere, lands on the pair's outflow row.
+ *
+ * @returns {{ discardedMode: boolean, discardedPairRows: Array<object>|null,
+ *   discardedPairCount: number|null }}
+ */
+export function useDiscardedPairRows({
+  lines, search, status, statusCounts, selectedLine, selectLine,
+}) {
+  const discardedMode = status === DISCARDED_STATE && statusCounts?.bounce != null;
+  const discardedPairRows = useMemo(
+    () => (discardedMode ? buildDiscardedPairRows(lines, { query: search }) : null),
+    [discardedMode, lines, search],
+  );
+  useLandOnAnchor(discardedMode, discardedPairRows, selectedLine, selectLine, discardedAnchorOf);
+  const discardedPairCount = useDiscardedPairCount(statusCounts);
+  return { discardedMode, discardedPairRows, discardedPairCount };
+}
+
+/**
+ * The two pair views of the split panel's left list (ETP-6359), in one call for the host:
+ * "Posibles rechazos" ({@link useBouncePairRows}) and "Descartadas" ({@link useDiscardedPairRows}).
+ * `tableView` is whether either is the active one (the host then hides its own right panel), and
+ * `pairCounts` the figures the status filter shows for their entries (null = the backend's count).
+ *
+ * @returns {{ tableView: boolean, bouncePairRows: Array<object>|null, bounceOutflows: Array<object>,
+ *   discardedPairRows: Array<object>|null,
+ *   pairCounts: { bounce: number|null, discarded: number|null } }}
+ */
+export function usePairTableViews(args) {
+  const {
+    pairMode, bouncePairRows, bounceOutflows, bouncePairCount,
+  } = useBouncePairRows(args);
+  const { discardedMode, discardedPairRows, discardedPairCount } = useDiscardedPairRows(args);
+  const pairCounts = useMemo(
+    () => ({ bounce: bouncePairCount, discarded: discardedPairCount }),
+    [bouncePairCount, discardedPairCount],
+  );
+  return {
+    tableView: pairMode || discardedMode,
+    bouncePairRows,
+    bounceOutflows,
+    discardedPairRows,
+    pairCounts,
+  };
+}
+
+/**
+ * The right panel's notice for a line the user marked "No es un rechazo" (ETP-6359): the backend
+ * persists the mark on the pair's rejection line (`bounceDismissedAt` on its `pendingLines` row) and
+ * never proposes it as a rejection again. The notice says when, and "Volver a considerar como
+ * posible rechazo" clears the mark (`restoreBounceSuggestion`), then the pairs hidden in this
+ * session are forgotten (the line may form one again) and the lines and the automatch suggestions
+ * reload. Null for any other line and with the flag off (no `counts.bounce`). The undo is a write:
+ * disabled under the read-only tier. It reports no KPI event.
+ *
+ * @param {{ accountId: string, line: object|null, statusCounts: object|null, bcpLocale: string,
+ *   windowReadOnly?: boolean, reloadLines?: () => void, onChanged?: () => void,
+ *   clearDismissed?: () => void }} args
+ * @returns {JSX.Element|null}
+ */
+export function useDismissedSuggestionNotice({
+  accountId, line, statusCounts, bcpLocale, windowReadOnly = false, reloadLines, onChanged,
+  clearDismissed,
+}) {
+  const ui = useUI();
+  const { restoreBounceSuggestion, loading } = useRestoreBounceSuggestion();
+  const dismissedAt = statusCounts?.bounce == null ? null : (line?.bounceDismissedAt ?? null);
+  const lineId = line?.id ?? null;
+  const onRestore = useCallback(async () => {
+    if (windowReadOnly || !lineId) return;
+    try {
+      await restoreBounceSuggestion({ financialAccountId: accountId, statementLineId: lineId });
+    } catch (err) {
+      toast.error(failureText(err, ui, 'financeReconcileBounceToastSuggestionRestoreError'));
+      return;
+    }
+    toast.success(ui('financeReconcileBounceToastSuggestionRestored'));
+    clearDismissed?.();
+    reloadLines?.();
+    onChanged?.();
+  }, [windowReadOnly, lineId, restoreBounceSuggestion, accountId, ui, clearDismissed, reloadLines,
+    onChanged]);
+  if (!dismissedAt) return null;
+  return (
+    <BounceDismissedNotice
+      dismissedAt={dismissedAt}
+      bcpLocale={bcpLocale}
+      onRestore={onRestore}
+      busy={loading}
+      windowReadOnly={windowReadOnly}
+      data-testid="BounceDismissedNotice__d0f4d5" />
+  );
 }

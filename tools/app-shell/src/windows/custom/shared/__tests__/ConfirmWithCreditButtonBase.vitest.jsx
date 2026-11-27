@@ -7,13 +7,19 @@
 // (jsdom render + @testing-library/react against the real component tree).
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 
-// Keys echo back, except the plan-quota sentence (ETP-5051): an echoed key reads as "not
-// translated", so the translator would fall back and the quota path could not be observed.
-vi.mock('@/i18n', () => ({
-  useUI: () => (key, params = {}) => (key === 'backendError.quotaExceeded'
-    ? `Límite del plan alcanzado: ${params.resource}`
-    : key),
-}));
+// Keys echo back, except the plan-quota sentence (ETP-5051) and the payment-terms refusal
+// (ETP-6179): an echoed key reads as "not translated", so the translator would fall back and
+// neither path could be observed. The payment-terms sentence is the real es_ES one.
+vi.mock('@/i18n', async () => {
+  const es = (await import('@/locales/es_ES.json')).default;
+  return {
+    useUI: () => (key, params = {}) => {
+      if (key === 'backendError.quotaExceeded') return `Límite del plan alcanzado: ${params.resource}`;
+      if (key === 'backendError.bpMissingPaymentTermsOrMethod') return es.genericLabels[key];
+      return key;
+    },
+  };
+});
 
 const mockNavigate = vi.fn();
 // ETP-5333 follow-up — onRefresh is what DetailView's renderSlotAction actually
@@ -37,9 +43,10 @@ vi.mock('@/components/contract-ui/ConfirmInOutModal', () => ({
   // invoiceAction/defaultCreateInvoice are exposed as data-attributes (ETP-4848)
   // so tests can assert what ConfirmWithCreditButtonBase computed and passed down,
   // without needing to render the real modal's internals.
-  default: ({ onConfirmed, onClose, invoiceAction, defaultCreateInvoice, title, base, specName, entityName, recordId }) => (
+  default: ({ onConfirmed, onClose, invoiceAction, defaultCreateInvoice, title, base, specName, entityName, recordId, validateInvoiceFirst }) => (
     <div
       data-testid="confirm-inout-modal"
+      data-validate-invoice-first={String(validateInvoiceFirst)}
       data-invoice-action={invoiceAction ?? ''}
       data-default-create-invoice={String(defaultCreateInvoice)}
       data-title={title ?? ''}
@@ -642,6 +649,23 @@ describe('ConfirmWithCreditButtonBase — CreateInvoiceConfirmModal stays open d
     expect(toast.error).toHaveBeenCalledWith('Business partner on hold');
   });
 
+  // ETP-6179 CP-12 — a handler refusal carries its sentence in `error.message`; it toasted
+  // "Error (400)". The known English sentence is translated, not shown raw.
+  it('on a handler refusal: toasts the translated error.message, not "Error (<status>)" nor the raw English', async () => {
+    toast.error.mockClear();
+    await refuseWith(400, { error: { status: 400,
+      message: 'Business Partner is missing mandatory Payment Terms or Payment Method' } });
+    expect(toast.error).toHaveBeenCalledWith(
+      'El contacto no tiene Condiciones de pago o Método de pago. Complétalos en la ficha del contacto y vuelve a intentarlo.');
+    expect(screen.queryByTestId('confirm-result-modal')).not.toBeInTheDocument();
+  });
+
+  it('on a handler refusal with an unknown sentence: toasts it as is', async () => {
+    toast.error.mockClear();
+    await refuseWith(400, { error: { status: 400, message: 'Some unmapped handler refusal' } });
+    expect(toast.error).toHaveBeenCalledWith('Some unmapped handler refusal');
+  });
+
   it('on a refusal with no message: toasts "Error (<status>)"', async () => {
     toast.error.mockClear();
     await refuseWith(403, { error: { status: 403 } });
@@ -669,6 +693,23 @@ describe('ConfirmWithCreditButtonBase — CreateInvoiceConfirmModal stays open d
 // whenever the document is not yet fully invoiced (isFullyInvoiced = parseFloat
 // (data?.invoiceStatus ?? 0) >= 100), and must hide the invoice option entirely
 // (invoiceAction=undefined) once it is fully invoiced.
+// ETP-6179 CP-12 — the dry run of the invoice before completing is opt-in per window.
+describe('ConfirmWithCreditButtonBase — validateInvoiceBeforeConfirm passthrough (ETP-6179)', () => {
+  it('hands validateInvoiceFirst=true to ConfirmInOutModal when the window opts in', async () => {
+    render(<ConfirmWithCreditButtonBase {...BASE_PROPS} validateInvoiceBeforeConfirm data={{ documentStatus: 'DR', linesCount: 2 }} />);
+    fireConfirm();
+    const modal = await waitFor(() => screen.getByTestId('confirm-inout-modal'));
+    expect(modal).toHaveAttribute('data-validate-invoice-first', 'true');
+  });
+
+  it('hands validateInvoiceFirst=false by default', async () => {
+    render(<ConfirmWithCreditButtonBase {...BASE_PROPS} data={{ documentStatus: 'DR', linesCount: 2 }} />);
+    fireConfirm();
+    const modal = await waitFor(() => screen.getByTestId('confirm-inout-modal'));
+    expect(modal).toHaveAttribute('data-validate-invoice-first', 'false');
+  });
+});
+
 describe('ConfirmWithCreditButtonBase — DR confirm modal invoice gating by invoiceStatus (ETP-4848)', () => {
   it('passes invoiceAction="createReturnInvoice" and defaultCreateInvoice=true when invoiceStatus is partial (40)', async () => {
     render(

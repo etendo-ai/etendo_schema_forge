@@ -1,8 +1,18 @@
+import { NetworkError } from '@etendo-ai/app-shell-core/auth';
+
 // Real Etendo Go documentation, fetched from the published MkDocs Material search
 // index. No mocked/hardcoded articles — always reflects the current published site.
 const DOCS_BASE_URL = 'https://help.etendo.ai';
 const SEARCH_INDEX_URL = `${DOCS_BASE_URL}/search/search_index.json`;
 const MKDOCS_YML_URL = 'https://raw.githubusercontent.com/etendosoftware/etendo-docs/main/mkdocs.yml';
+
+// ETP-6441 — a truncated gzip/brotli body makes the read of the body reject with a TypeError the
+// browser reports unhandled; it becomes the same NetworkError apiFetch throws.
+function readBody(res, read) {
+  return read(res).catch((err) => {
+    throw err instanceof TypeError ? new NetworkError({ reason: 'offline', cause: err }) : err;
+  });
+}
 
 let cachedDocs = null;
 let pendingFetch = null;
@@ -22,7 +32,7 @@ function fetchCanonicalLocations() {
   return fetch(MKDOCS_YML_URL)
     .then((res) => {
       if (!res.ok) throw new Error(`mkdocs.yml: ${res.status}`);
-      return res.text();
+      return readBody(res, (r) => r.text());
     })
     .then((text) => {
       // Tokenize on whitespace/colons instead of matching a quantified regex
@@ -43,7 +53,7 @@ export function fetchHelpDocs() {
   pendingFetch = Promise.all([
     fetch(SEARCH_INDEX_URL).then((res) => {
       if (!res.ok) throw new Error(`search_index.json: ${res.status}`);
-      return res.json();
+      return readBody(res, (r) => r.json());
     }),
     fetchCanonicalLocations(),
   ])

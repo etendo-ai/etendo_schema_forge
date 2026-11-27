@@ -28,9 +28,9 @@ for cmd in gh jq; do
 done
 
 REPOS=(
-  "etendosoftware/etendo_schema_forge"
-  "etendosoftware/schema_forge_core"
-  "etendosoftware/com.etendoerp.go"
+  "etendo-ai/etendo_schema_forge"
+  "etendo-ai/schema_forge_core"
+  "etendo-ai/com.etendoerp.go"
 )
 
 # Local checkout paths, index-aligned with REPOS. Resolved relative to this
@@ -85,7 +85,7 @@ for KEY in "$@"; do
   MERGE_CMDS=""
   i=0
   for REPO in "${REPOS[@]}"; do
-    SHORT="${REPO#etendosoftware/}"
+    SHORT="${REPO#etendo-ai/}"
     REPO_PATH="${PATHS[$i]}"
     F="${TMPDIR_RUN}/${i}.json"
     i=$((i + 1))

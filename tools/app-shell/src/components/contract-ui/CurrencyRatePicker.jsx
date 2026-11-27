@@ -138,6 +138,8 @@ function pinnedCurrencyRows({ search, value, loading, displayValue }) {
  * @param {boolean}  isReadOnly    - When true renders a plain read-only display
  * @param {number}   [precision=4] - Decimal places for rate display. Pass org currency's
  *                                   Standard Precision when available; defaults to 4.
+ * @param {boolean}  [allowRateEdit=true] - When false the pencil is hidden: the user can only choose
+ *                                   among the options (a window where no custom rate is allowed).
  */
 export function CurrencyRatePicker({
   field,
@@ -152,6 +154,7 @@ export function CurrencyRatePicker({
   rateDateField = null,
   isReadOnly,
   precision = 4,
+  allowRateEdit = true,
 }) {
   const apiFetch = useApiFetch(apiBaseUrl);
   const ui = useUI();
@@ -452,7 +455,7 @@ export function CurrencyRatePicker({
               header currency IS the org currency, so the pencil has no effect there —
               hide it rather than let the user "edit" a rate that never applies to
               anything (ETP-4029). */}
-          {value && !isOrgCurrency && (
+          {allowRateEdit && value && !isOrgCurrency && (
             <button
               data-testid="currency-rate-pencil"
               type="button"

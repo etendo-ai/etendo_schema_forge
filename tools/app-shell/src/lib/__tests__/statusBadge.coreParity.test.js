@@ -22,7 +22,7 @@ import { STATUS_ORDER as LOCAL_ORDER, compareStatusCodes as localCompare } from 
 // copies has to fail the build rather than ship a visibly inconsistent UI.
 //
 // `node --test` does not honour the LOCAL_CORE Vite alias, so this always
-// resolves the PUBLISHED @etendosoftware/app-shell-core — which is also the
+// resolves the PUBLISHED @etendo-ai/app-shell-core — which is also the
 // point: it verifies the published artifact really carries the fix, not just
 // the local core source.
 //
@@ -32,7 +32,7 @@ import { STATUS_ORDER as LOCAL_ORDER, compareStatusCodes as localCompare } from 
 // bump lands, CI resolves the exports and the parity assertions start running.
 let core = null;
 try {
-  const mod = await import('@etendosoftware/app-shell-core/lib/statusBadge.js');
+  const mod = await import('@etendo-ai/app-shell-core/lib/statusBadge.js');
   if (mod.STATUS_ORDER && mod.compareStatusCodes) core = mod;
 } catch {
   // Subpath not resolvable at all (pre-publish); suite is skipped below.
@@ -40,7 +40,7 @@ try {
 
 const skip = core
   ? false
-  : '@etendosoftware/app-shell-core/lib/statusBadge.js does not export STATUS_ORDER yet (pre-publish)';
+  : '@etendo-ai/app-shell-core/lib/statusBadge.js does not export STATUS_ORDER yet (pre-publish)';
 
 /** A deliberately scrambled sample spanning every bucket of the catalog. */
 const SAMPLE = [
@@ -48,7 +48,7 @@ const SAMPLE = [
   'WP', 'CA', 'TMP', 'NC', 'AE', 'ZZZ_UNKNOWN', 'true', 'false',
 ];
 
-describe('statusBadge STATUS_ORDER parity with @etendosoftware/app-shell-core', { skip }, () => {
+describe('statusBadge STATUS_ORDER parity with @etendo-ai/app-shell-core', { skip }, () => {
   const CORE_ORDER = core?.STATUS_ORDER;
   const coreCompare = core?.compareStatusCodes;
 

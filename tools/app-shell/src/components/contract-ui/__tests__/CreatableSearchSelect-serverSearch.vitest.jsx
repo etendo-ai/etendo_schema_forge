@@ -41,8 +41,8 @@ vi.mock('@/auth/useApiFetch.js', async (importOriginal) => {
   };
 });
 
-import { AuthProvider, createMemoryAuthStorage } from '@etendosoftware/app-shell-core/auth';
-import { DataProvider, createQueryCache } from '@etendosoftware/app-shell-core/data';
+import { AuthProvider, createMemoryAuthStorage } from '@etendo-ai/app-shell-core/auth';
+import { DataProvider, createQueryCache } from '@etendo-ai/app-shell-core/data';
 import { appFetchCalls } from '@/test/appFetchCalls.js';
 import { SELECTOR_REVALIDATE_AFTER_MS } from '@/lib/selectorRevalidation.js';
 import { CreatableSearchSelect } from '../CreatableSearchSelect.jsx';

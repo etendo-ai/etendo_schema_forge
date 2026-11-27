@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import Handlebars from 'handlebars';
-import { buildContractLabels } from '@etendosoftware/schema-forge-cli/src/report-i18n.js';
+import { buildContractLabels } from '@etendo-ai/schema-forge-cli/src/report-i18n.js';
 import {
   registerReportHelpers,
   buildJsreportHelpersString,

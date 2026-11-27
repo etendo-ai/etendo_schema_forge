@@ -7,11 +7,12 @@ import {
 import { RowExpandToggle } from '@/components/contract-ui/RowExpandToggle.jsx';
 import { ListModalRowActions } from '@/components/contract-ui/ListModalRowActions.jsx';
 import { ListProgressBar } from '@/components/contract-ui/ListProgressBar.jsx';
-import { ROW_LIFT_SHADOW, ROW_LIFT_HOVER_NO_BORDERS } from '@/components/contract-ui/rowVisuals.js';
+import { ROW_LIFT_SHADOW, ROW_LIFT_HOVER_BORDERS } from '@/components/contract-ui/rowVisuals.js';
 import { OriginBadge, RateStatusBadge, CurrencySymbolChip } from './ConversionRateBadges.jsx';
 import { formatRate } from './conversionRatesFormat.js';
 import {
-  displayValidTo, formatWallClock, formatWallClockDate, isEditableRate, nowWallClock, wallClockDate, wallClockTime,
+  NO_ZONE, displayValidTo, formatInZone, formatWallClock, formatWallClockDate, isEditableRate, nowWallClock,
+  wallClockDate, wallClockTime, withZone,
 } from './conversionRatesModel.js';
 
 /** Expand toggle + the five data columns + actions. */
@@ -34,21 +35,25 @@ function currencyRowClassName(expanded) {
   ].join(' ');
 }
 
-/** Second line of a currency header: last download (automatic) or start of the rate in force (manual). */
-export function currencySubtitle(entry, ui, today = wallClockDate(nowWallClock())) {
+/**
+ * Second line of a currency header: last download (automatic) or start of the rate in force
+ * (manual), in the viewer's zone (`zone`, named after the time); "today" is the viewer's day.
+ */
+export function currencySubtitle(entry, ui, today = wallClockDate(nowWallClock()), zone = NO_ZONE) {
   if (entry.automatic) {
     if (!entry.lastDownloadAt) return '';
-    const time = wallClockTime(entry.lastDownloadAt);
-    return wallClockDate(entry.lastDownloadAt) === today
+    const shown = zone.show(entry.lastDownloadAt);
+    const time = withZone(wallClockTime(shown), zone.labelAt(shown), ui);
+    return wallClockDate(shown) === today
       ? ui('convRateDownloadedToday', { time })
-      : ui('convRateDownloadedOn', { date: formatWallClockDate(entry.lastDownloadAt), time });
+      : ui('convRateDownloadedOn', { date: formatWallClockDate(shown), time });
   }
-  return entry.validFrom ? ui('convRateSince', { date: formatWallClock(entry.validFrom) }) : '';
+  return entry.validFrom ? ui('convRateSince', { date: formatInZone(entry.validFrom, zone, ui) }) : '';
 }
 
-function CurrencyRow({ entry, orgIso, expanded, onToggle, onNewRate, ui }) {
+function CurrencyRow({ entry, orgIso, expanded, onToggle, onNewRate, zone, ui }) {
   const iso = entry.isoCode;
-  const subtitle = currencySubtitle(entry, ui);
+  const subtitle = currencySubtitle(entry, ui, undefined, zone);
   return (
     <TableRow
       className={currencyRowClassName(expanded)}
@@ -104,12 +109,12 @@ function CurrencyRow({ entry, orgIso, expanded, onToggle, onNewRate, ui }) {
   );
 }
 
-function RatesHeader({ entry, orgIso, ui }) {
+function RatesHeader({ entry, orgIso, zone, ui }) {
   return (
     <TableRow className={SUB_HEADER_ROW} data-testid={`convrate-rates-header-${entry.isoCode}`}>
       <TableHead className="w-10" data-testid="TableHead__convrate-toggle" />
-      <TableHead data-testid="TableHead__convrate-from">{ui('convRateValidFromDateTime')}</TableHead>
-      <TableHead data-testid="TableHead__convrate-to">{ui('convRateValidToDateTime')}</TableHead>
+      <TableHead data-testid="TableHead__convrate-from">{withZone(ui('convRateValidFromDateTime'), zone.label, ui)}</TableHead>
+      <TableHead data-testid="TableHead__convrate-to">{withZone(ui('convRateValidToDateTime'), zone.label, ui)}</TableHead>
       <TableHead className="text-right" data-testid="TableHead__convrate-rate">{ui('convRateOneOrg', { currency: orgIso })}</TableHead>
       <TableHead className="text-right" data-testid="TableHead__convrate-inverse">{ui('convRateInverseOf', { currency: entry.isoCode, org: orgIso })}</TableHead>
       <TableHead data-testid="TableHead__convrate-status">{ui('convRateStatus')}</TableHead>
@@ -123,21 +128,22 @@ function RatesHeader({ entry, orgIso, ui }) {
 /**
  * A rate row: the shared "Fila" lift of the app's lists (DataTable `lift-always`, the document
  * lines) — transparent at rest; on hover an opaque card background, Shadows/lg raised over the
- * next row and no separators — on every row, automatic or manual. Only a manual row adds the
+ * next row, its own bottom line hidden and the grey line above it kept — on every row, automatic
+ * or manual. Only a manual row adds the
  * hover Modificar / Eliminar of `ListModalRowActions` (the Condiciones de pago row actions).
  */
 const RATE_ROW = [
   'group/row relative transition-none hover:z-10 hover:bg-card [--row-hover-bg:hsl(var(--card))]',
   ROW_LIFT_SHADOW,
-  ROW_LIFT_HOVER_NO_BORDERS,
+  ROW_LIFT_HOVER_BORDERS,
 ].join(' ');
 
-function RateRow({ row, symbol, orgSymbol, onEdit, onDelete, deleting, ui }) {
-  const validTo = displayValidTo(row);
+function RateRow({ row, symbol, orgSymbol, onEdit, onDelete, deleting, zone, ui }) {
+  const validTo = displayValidTo(row, zone);
   return (
     <TableRow className={RATE_ROW} data-testid={`convrate-row-${row.id}`}>
       <TableCell className="w-10" data-testid="TableCell__convrate-indent" />
-      <TableCell data-testid="TableCell__convrate-from">{formatWallClock(row.validFromDate)}</TableCell>
+      <TableCell data-testid="TableCell__convrate-from">{formatWallClock(zone.show(row.validFromDate))}</TableCell>
       <TableCell className={validTo ? undefined : 'text-muted-foreground'} data-testid="TableCell__convrate-to">{validTo ?? '—'}</TableCell>
       <TableCell className="text-right tabular-nums" data-testid="TableCell__convrate-rate">
         {formatRate(row.multipleRateBy)}
@@ -182,10 +188,13 @@ function RateRow({ row, symbol, orgSymbol, onEdit, onDelete, deleting, ui }) {
  * `TableCell` primitives (`@/components/ui/table`) and the shared `RowExpandToggle` (vertical,
  * the orientation of MovementsTable / StatementsTable) in a leading 40px column; sub-rows are
  * plain `TableRow`s under the parent, inside the shared `Card` (rounded bordered container).
+ *
+ * Datetimes are shown in the viewer's zone (`zone`, a `createZoneView`; the zone is named in the
+ * Válido desde / Válido hasta headers and after the time of a currency's subtitle).
  */
 export function CurrencyRatesList({
   entries, orgIso, orgSymbol, expanded, onToggle, loading, loaded, error,
-  onNewRate, onEdit, onDelete, deletingId, ui,
+  onNewRate, onEdit, onDelete, deletingId, ui, zone = NO_ZONE,
 }) {
   const dimWhileRefreshing = loading && loaded ? 'opacity-70 transition-opacity duration-200' : 'transition-opacity duration-200';
   return (
@@ -205,9 +214,10 @@ export function CurrencyRatesList({
                     expanded={isOpen}
                     onToggle={() => onToggle(entry.currencyId)}
                     onNewRate={onNewRate}
+                    zone={zone}
                     ui={ui}
                     data-testid="CurrencyRow__c0495c" />
-                  {isOpen && <RatesHeader entry={entry} orgIso={orgIso} ui={ui} data-testid="RatesHeader__c0495c" />}
+                  {isOpen && <RatesHeader entry={entry} orgIso={orgIso} zone={zone} ui={ui} data-testid="RatesHeader__c0495c" />}
                   {isOpen && entry.rows.map((row) => (
                     <RateRow
                       key={row.id}
@@ -217,6 +227,7 @@ export function CurrencyRatesList({
                       onEdit={onEdit}
                       onDelete={onDelete}
                       deleting={deletingId === row.id}
+                      zone={zone}
                       ui={ui}
                       data-testid="RateRow__c0495c" />
                   ))}

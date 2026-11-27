@@ -297,12 +297,191 @@ describe('financeReconcileBounce* — the footer and reference keys', () => {
       'financeReconcileAutomatchBounceTitle', 'financeReconcileAutomatchBounceColBounce',
       'financeReconcileAutomatchKpiBouncePairs', 'financeReconcileBounceTotalBounce',
       'financeReconcileBounceSelectedBounce', 'financeReconcileBounceDismiss',
-      'financeReconcileBounceNoticeReview',
+      'financeReconcileBounceNoticeLowConfidence',
     ];
     for (const key of HEADLINES) {
       expect(esES.genericLabels[key], `es_ES.${key}`).toMatch(/rechazo/i);
       expect(esAR.genericLabels[key], `es_AR.${key}`).toMatch(/rechazo/i);
       expect(enUS.genericLabels[key], `en_US.${key}`).toMatch(/rejection/i);
+    }
+  });
+});
+
+// ETP-6359 — the automatch modal redesign: two cards, each with its own action, and no global
+// footer. The superset rules above already require parity for any key es_ES has; these pin the new
+// keys by name (so a rename cannot slip through unnoticed), their placeholders and wording, and
+// the removal of the keys the old footer / combined apply used.
+describe('financeReconcileAutomatch* — the two-card redesign', () => {
+  const NEW_KEYS = [
+    'financeReconcileAutomatchActionGoManual',
+    'financeReconcileAutomatchBounceColOriginal',
+    'financeReconcileAutomatchBounceInfo',
+    'financeReconcileAutomatchBounceExclude',
+    'financeReconcileAutomatchBounceToastExcluded',
+    'financeReconcileAutomatchBounceToastSomeFailed',
+    'financeReconcileAutomatchStatementsTitle',
+    'financeReconcileAutomatchStatementsHint',
+    'financeReconcileAutomatchStatementsInfo',
+    'financeReconcileAutomatchActionReconcile',
+    'financeReconcileAutomatchCloseTitle',
+    'financeReconcileAutomatchCloseBody',
+    'financeReconcileAutomatchCloseKeep',
+    'financeReconcileAutomatchCloseConfirm',
+    'financeReconcileBounceTagReviewPlain',
+  ];
+
+  // The footer, the combined "reconcile and discard" apply and the old toast no longer exist.
+  const REMOVED_KEYS = [
+    'financeReconcileAutomatchActionOpen',
+    'financeReconcileAutomatchFooterLink',
+    'financeReconcileAutomatchFooterCreate',
+    'financeReconcileAutomatchFooterNone',
+    'financeReconcileAutomatchActionApply',
+    'financeReconcileAutomatchFooterDiscard',
+    'financeReconcileAutomatchFooterLinkAndDiscard',
+    'financeReconcileAutomatchFooterNoneSelected',
+    'financeReconcileAutomatchActionApplyAndDiscard',
+    'financeReconcileAutomatchActionDiscardPairs',
+    'financeReconcileAutomatchToastPairsDiscarded',
+    'financeReconcileAutomatchToastSomeFailed',
+    'financeReconcileBounceTagReview',
+  ];
+
+  const LOCALES = { en_US: enUS, es_ES: esES, es_AR: esAR };
+
+  it.each(NEW_KEYS)('provides %s, non-blank, in every locale', (key) => {
+    for (const [name, dictionary] of Object.entries(LOCALES)) {
+      const value = dictionary.genericLabels?.[key];
+      expect(typeof value, `${name}.${key}`).toBe('string');
+      expect(value.trim(), `${name}.${key}`).not.toBe('');
+    }
+  });
+
+  it('ships none of the keys the removed footer and combined apply used, in any locale', () => {
+    for (const [name, dictionary] of Object.entries(LOCALES)) {
+      for (const key of REMOVED_KEYS) {
+        expect(dictionary.genericLabels, `${name}.${key}`).not.toHaveProperty(key);
+      }
+    }
+  });
+
+  it('keeps the {count} placeholder of the counted buttons and toasts in every locale', () => {
+    for (const key of [
+      'financeReconcileAutomatchBounceExclude',
+      'financeReconcileAutomatchBounceToastExcluded',
+      'financeReconcileAutomatchBounceToastSomeFailed',
+      'financeReconcileAutomatchActionReconcile',
+    ]) {
+      for (const [name, dictionary] of Object.entries(LOCALES)) {
+        expect(dictionary.genericLabels[key], `${name}.${key}`).toContain('{count}');
+      }
+    }
+  });
+
+  it('says "rechazo" (never "rebote" nor "devolución") on the new Spanish exclusion copy', () => {
+    for (const [name, dictionary] of Object.entries({ es_ES: esES, es_AR: esAR })) {
+      for (const key of [
+        'financeReconcileAutomatchBounceToastExcluded',
+        'financeReconcileAutomatchBounceToastSomeFailed',
+        'financeReconcileAutomatchBounceTitle',
+      ]) {
+        expect(dictionary.genericLabels[key], `${name}.${key}`).toMatch(/rechazo/i);
+      }
+      for (const key of NEW_KEYS) {
+        expect(dictionary.genericLabels[key], `${name}.${key}`).not.toMatch(/rebote|devoluci/i);
+      }
+    }
+  });
+
+  it('every Spanish string of the redesign is localized, not a copy of the English source', () => {
+    for (const [name, dictionary] of Object.entries({ es_ES: esES, es_AR: esAR })) {
+      for (const key of NEW_KEYS) {
+        expect(dictionary.genericLabels[key], `${name}.${key}`).not.toBe(enUS.genericLabels[key]);
+      }
+    }
+  });
+
+  it('names the two cards and the KPI as asked by the design', () => {
+    expect(esES.genericLabels.financeReconcileAutomatchBounceTitle).toBe('Posibles rechazos bancarios');
+    expect(esES.genericLabels.financeReconcileAutomatchStatementsTitle).toBe('Líneas del extracto bancario');
+    expect(esES.genericLabels.financeReconcileAutomatchKpiBouncePairs).toBe('Posibles rechazos');
+    expect(esES.genericLabels.financeReconcileAutomatchCloseTitle).toBe('¿Deseas cerrar la ventana?');
+    expect(esES.genericLabels.financeReconcileAutomatchCloseKeep).toBe('Seguir trabajando');
+  });
+});
+
+
+// ETP-6359 — the AI second layer of the bank-rejection suggestions: five new keys.
+describe('locale parity — AI suggestion of the bank-rejection review', () => {
+  const AI_KEYS = [
+    'financeReconcileBounceNoticeAi',
+    'financeReconcileBounceAiProbability',
+    'financeReconcileBounceAiUndo',
+    'financeReconcileBounceAiStale',
+    'backendError.bounceAiSuggestionStale',
+  ];
+  const LOCALE_SET = { en_US: enUS, es_ES: esES, es_AR: esAR };
+  const placeholders = (text) => (text.match(/\{[A-Za-z]+\}/g) ?? []).sort();
+
+  it('ships every key, non-blank, in en_US, es_ES and es_AR', () => {
+    for (const key of AI_KEYS) {
+      for (const [name, dictionary] of Object.entries(LOCALE_SET)) {
+        const value = dictionary.genericLabels?.[key];
+        expect(typeof value, `${name}.${key}`).toBe('string');
+        expect(value.trim(), `${name}.${key}`).not.toBe('');
+      }
+    }
+  });
+
+  it('keeps the same placeholders in every locale', () => {
+    for (const key of AI_KEYS) {
+      const expected = placeholders(enUS.genericLabels[key]);
+      for (const [name, dictionary] of Object.entries(LOCALE_SET)) {
+        expect(placeholders(dictionary.genericLabels[key]), `${name}.${key}`).toEqual(expected);
+      }
+    }
+  });
+
+  it('the sentences that show a percentage take {pct} and carry the "%" sign', () => {
+    for (const key of [
+        'financeReconcileBounceNoticeAi',
+      'financeReconcileBounceAiProbability',
+      ]) {
+      for (const [name, dictionary] of Object.entries(LOCALE_SET)) {
+        const value = dictionary.genericLabels[key];
+        expect(value, `${name}.${key}`).toContain('{pct}');
+        expect(value, `${name}.${key}`).toContain('%');
+      }
+    }
+  });
+
+  it('writes the percent sign as each language does: "85 %" in Spanish, "85%" in English', () => {
+    const render = (dictionary, key) => dictionary.genericLabels[key].replace('{pct}', '85');
+    for (const key of ['financeReconcileBounceAiProbability',
+      'financeReconcileBounceNoticeAi']) {
+      expect(render(enUS, key), `en_US.${key}`).toMatch(/85%/);
+      expect(render(enUS, key), `en_US.${key}`).not.toMatch(/85 %/);
+      for (const [name, dictionary] of Object.entries({ es_ES: esES, es_AR: esAR })) {
+        expect(render(dictionary, key), `${name}.${key}`).toMatch(/85 %/);
+      }
+    }
+  });
+
+  it('Spanish says "rechazo" where it names the rejection and never "rebote" nor "devolución"', () => {
+    for (const [name, dictionary] of Object.entries({ es_ES: esES, es_AR: esAR })) {
+      expect(dictionary.genericLabels.financeReconcileBounceAiStale, `${name} stale`).toMatch(/rechazo/i);
+      expect(dictionary.genericLabels['backendError.bounceAiSuggestionStale'], `${name} backend`).toMatch(/rechazo/i);
+      for (const key of AI_KEYS) {
+        expect(dictionary.genericLabels[key], `${name}.${key}`).not.toMatch(/rebote|devoluci/i);
+      }
+    }
+  });
+
+  it('every Spanish string is localized, not a copy of the English source (except the bare "{pct} %")', () => {
+    for (const [name, dictionary] of Object.entries({ es_ES: esES, es_AR: esAR })) {
+      for (const key of AI_KEYS.filter((k) => k !== 'financeReconcileBounceAiProbability')) {
+        expect(dictionary.genericLabels[key], `${name}.${key}`).not.toBe(enUS.genericLabels[key]);
+      }
     }
   });
 });

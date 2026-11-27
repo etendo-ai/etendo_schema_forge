@@ -1,7 +1,7 @@
 // @covers tools/app-shell/src/lib/supportSession.js
 // @covers tools/app-shell/src/lib/observability.js
 import { declareCookieSession } from '@/test/sessionContract.js';
-import { registerApiSession, resetApiSessionForTests } from '@etendosoftware/app-shell-core/auth/api';
+import { registerApiSession, resetApiSessionForTests } from '@etendo-ai/app-shell-core/auth/api';
 import { isAnalyticsSuppressed } from '../observability.js';
 import {
   ACCOUNT_ENDPOINT,

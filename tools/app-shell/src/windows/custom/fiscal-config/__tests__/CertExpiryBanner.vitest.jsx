@@ -187,7 +187,8 @@ describe('CertExpiryBanner — expired, today and singular copy (es_ES, ETP-6053
   it.each(['prominent', 'subtle'])('shows the expired copy for daysLeft = -12, not dismissable (%s)', (variant) => {
     render(<CertExpiryBanner daysLeft={-12} variant={variant} />);
     expect(screen.getByText('El certificado digital ha caducado')).toBeInTheDocument();
-    expect(screen.getByText(/Sube un certificado vigente desde Configuración fiscal\./)).toBeInTheDocument();
+    // ETP-6380 — the location hint names the menu section: "Impuestos → Configuración Fiscal".
+    expect(screen.getByText(/Sube un certificado vigente desde Impuestos → Configuración Fiscal\./)).toBeInTheDocument();
     expect(screen.queryByText(/-12/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Cerrar' })).not.toBeInTheDocument();
   });

@@ -34,9 +34,9 @@ name: Full Pipeline
 #   public-api-e2e                 the public API suite's JUnit, the gateway log and the env logs
 #
 # Secrets: SONAR_TOKEN/SONAR_HOST_URL publish the analysis and SONAR_READ_TOKEN reads the coverage and
-# the quality gate; ETENDOBOT_TOKEN reads etendo_core, com.etendoerp.go, etendo-localenv, the GitHub modules
-# and the npm packages; BITBUCKET_SSH_KEY clones the Bitbucket modules and
-# com.etendoerp.jenkins.pipelines; LOCALENV_CACHE_RO_KEY/SECRET read the snapshot cache; DD_API_KEY
+# the quality gate; ETENDOBOT_TOKEN reads etendo_core, com.etendoerp.go, etendo-localenv, the GitHub modules,
+# com.etendoerp.jenkins.pipelines and the npm packages; BITBUCKET_SSH_KEY clones the Bitbucket modules;
+# LOCALENV_CACHE_RO_KEY/SECRET read the snapshot cache; DD_API_KEY
 # (optional, EU site) sends the metrics. No Nexus credentials: building the environment does not
 # need them (ETP-6367).
 # The public API job also uses PUBLIC_API_E2E_EMAIL/PASSWORD (GOAdmin of the GOClient sample data)
@@ -63,7 +63,7 @@ concurrency:
 env:
   CORE_BRANCH: epic/ETP-3504
   MODULE_BRANCH: ${{ github.head_ref || github.ref_name }}
-  PIPELINES_REPO: git@ssh.bitbucket.org:koodu_software/com.etendoerp.jenkins.pipelines.git
+  PIPELINES_REPO: https://github.com/etendo-ai/com.etendoerp.jenkins.pipelines.git
   RETENTION_DAYS: 30
 
 jobs:
@@ -256,13 +256,12 @@ jobs:
       - name: Clone the cell report scripts
         id: cell-scripts
         env:
-          BITBUCKET_SSH_KEY: ${{ secrets.BITBUCKET_SSH_KEY }}
+          ETENDOBOT_TOKEN: ${{ secrets.ETENDOBOT_TOKEN }}
         run: |
-          mkdir -p ~/.ssh
-          printf '%s\n' "$BITBUCKET_SSH_KEY" | tr -d '\r' > ~/.ssh/pipelines
-          chmod 600 ~/.ssh/pipelines
-          if GIT_SSH_COMMAND="ssh -i $HOME/.ssh/pipelines -o StrictHostKeyChecking=no" \
-              git clone -q --depth 1 --branch develop "$PIPELINES_REPO" "$RUNNER_TEMP/pipelines"; then
+          AUTH="$(printf 'x-access-token:%s' "$ETENDOBOT_TOKEN" | base64 -w0)"
+          echo "::add-mask::$AUTH"
+          if git -c http.extraHeader="Authorization: Basic $AUTH" \
+              clone -q --depth 1 --branch develop "$PIPELINES_REPO" "$RUNNER_TEMP/pipelines"; then
             echo "dir=$RUNNER_TEMP/pipelines/etendo-go/utils/cell-report" >> "$GITHUB_OUTPUT"
           else
             echo "::warning::com.etendoerp.jenkins.pipelines could not be cloned: no per-cell mocked results."
@@ -443,13 +442,12 @@ jobs:
       - name: Clone the cell report scripts
         id: cell-scripts
         env:
-          BITBUCKET_SSH_KEY: ${{ secrets.BITBUCKET_SSH_KEY }}
+          ETENDOBOT_TOKEN: ${{ secrets.ETENDOBOT_TOKEN }}
         run: |
-          mkdir -p ~/.ssh
-          printf '%s\n' "$BITBUCKET_SSH_KEY" | tr -d '\r' > ~/.ssh/pipelines
-          chmod 600 ~/.ssh/pipelines
-          if GIT_SSH_COMMAND="ssh -i $HOME/.ssh/pipelines -o StrictHostKeyChecking=no" \
-              git clone -q --depth 1 --branch develop "$PIPELINES_REPO" "$RUNNER_TEMP/pipelines"; then
+          AUTH="$(printf 'x-access-token:%s' "$ETENDOBOT_TOKEN" | base64 -w0)"
+          echo "::add-mask::$AUTH"
+          if git -c http.extraHeader="Authorization: Basic $AUTH" \
+              clone -q --depth 1 --branch develop "$PIPELINES_REPO" "$RUNNER_TEMP/pipelines"; then
             echo "dir=$RUNNER_TEMP/pipelines/etendo-go/utils/cell-report" >> "$GITHUB_OUTPUT"
           else
             echo "::warning::com.etendoerp.jenkins.pipelines could not be cloned: no per-cell E2E results."
@@ -672,9 +670,9 @@ jobs:
         working-directory: sf
         # The pin sits in devDependencies; scripts/public-api-e2e-ci.mjs reads it from either.
         run: |
-          v="$(node -p "const p = require('./package.json'); (p.dependencies || {})['@etendosoftware/schema-forge-core'] || (p.devDependencies || {})['@etendosoftware/schema-forge-core'] || ''")"
+          v="$(node -p "const p = require('./package.json'); (p.dependencies || {})['@etendo-ai/schema-forge-core'] || (p.devDependencies || {})['@etendo-ai/schema-forge-core'] || ''")"
           if ! printf '%s' "$v" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-            echo "::error::@etendosoftware/schema-forge-core is pinned to '$v' in package.json, expected an exact x.y.z (the core's tag)."
+            echo "::error::@etendo-ai/schema-forge-core is pinned to '$v' in package.json, expected an exact x.y.z (the core's tag)."
             exit 1
           fi
           echo "schema_forge_core: $v"
@@ -802,13 +800,12 @@ jobs:
         id: cell-scripts
         continue-on-error: true
         env:
-          BITBUCKET_SSH_KEY: ${{ secrets.BITBUCKET_SSH_KEY }}
+          ETENDOBOT_TOKEN: ${{ secrets.ETENDOBOT_TOKEN }}
         run: |
-          mkdir -p ~/.ssh
-          printf '%s\n' "$BITBUCKET_SSH_KEY" | tr -d '\r' > ~/.ssh/pipelines
-          chmod 600 ~/.ssh/pipelines
-          GIT_SSH_COMMAND="ssh -i $HOME/.ssh/pipelines -o StrictHostKeyChecking=no" \
-            git clone -q --depth 1 --branch develop "$PIPELINES_REPO" "$RUNNER_TEMP/pipelines"
+          AUTH="$(printf 'x-access-token:%s' "$ETENDOBOT_TOKEN" | base64 -w0)"
+          echo "::add-mask::$AUTH"
+          git -c http.extraHeader="Authorization: Basic $AUTH" \
+            clone -q --depth 1 --branch develop "$PIPELINES_REPO" "$RUNNER_TEMP/pipelines"
           echo "dir=$RUNNER_TEMP/pipelines/etendo-go/utils/cell-report" >> "$GITHUB_OUTPUT"
 
       # As cellReport.generate(env, [goTests: false]) in Jenkins: go=pipeline, this pipeline runs no

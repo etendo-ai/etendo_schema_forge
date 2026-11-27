@@ -720,7 +720,8 @@ describe('FiscalConfigPage — profile: tbai', () => {
 });
 
 // ETP-6053 — after "Añadir SII" the page title and the "Estado" panel kept saying TicketBAI until
-// a reload. Here the REAL useFiscalConfig drives the page (only apiFetch is mocked), from a
+// a reload. Since ETP-6380 the title is the plain window name (no system in it), so the "Estado"
+// panel is what must switch to the combined configuration; the title must simply stay put. Here the REAL useFiscalConfig drives the page (only apiFetch is mocked), from a
 // TicketBAI-only Gipuzkoa organization: the action creates the SII record, the read-back returns
 // it, and the page must show the combined configuration at once.
 describe('FiscalConfigPage — "Añadir SII" with the real useFiscalConfig', () => {
@@ -778,7 +779,7 @@ describe('FiscalConfigPage — "Añadir SII" with the real useFiscalConfig', () 
   async function renderTbaiOnly() {
     renderPage();
     await screen.findByTestId('tbai-section');
-    expect(lastPageTitle()).toBe('fiscal.title TBAI');
+    expect(lastPageTitle()).toBe('fiscal.title');
     expect(screen.getByTestId('FiscalStatusSummary__title')).toHaveTextContent('fiscal.status.active TicketBAI');
     expect(screen.getByTestId('FiscalStatusSummary__row-national')).toHaveTextContent('fiscal.onboarding.applied.national.na');
   }
@@ -788,14 +789,14 @@ describe('FiscalConfigPage — "Añadir SII" with the real useFiscalConfig', () 
     fireEvent.click(screen.getByTestId('FiscalConfigPage__addComplementary'));
   }
 
-  it('shows SII + TicketBAI in the title and the "Estado" panel as soon as the call resolves', async () => {
+  it('shows SII + TicketBAI in the "Estado" panel as soon as the call resolves, title unchanged', async () => {
     await renderTbaiOnly();
     const readsBefore = listReads();
 
     clickAddSii();
 
-    await waitFor(() => expect(lastPageTitle()).toBe('fiscal.title SII + TBAI'));
-    expect(screen.getByTestId('FiscalStatusSummary__title')).toHaveTextContent('fiscal.status.active SII + TicketBAI');
+    await waitFor(() => expect(screen.getByTestId('FiscalStatusSummary__title')).toHaveTextContent('fiscal.status.active SII + TicketBAI'));
+    expect(lastPageTitle()).toBe('fiscal.title');
     expect(screen.getByTestId('FiscalStatusSummary__row-national')).toHaveTextContent('fiscal.onboarding.applied.national.active');
     // No reload: the lists were not read again and no loading skeleton replaced the form.
     expect(listReads()).toBe(readsBefore);
@@ -808,13 +809,13 @@ describe('FiscalConfigPage — "Añadir SII" with the real useFiscalConfig', () 
 
     clickAddSii();
 
-    await waitFor(() => expect(lastPageTitle()).toBe('fiscal.title SII + TBAI'));
+    await waitFor(() => expect(screen.getByTestId('FiscalStatusSummary__title')).toHaveTextContent('fiscal.status.active SII + TicketBAI'));
     const menu = screen.queryByTestId('FiscalConfigPage__actionsMenu');
     if (menu) fireEvent.click(menu);
     expect(screen.queryByTestId('FiscalConfigPage__addComplementary')).not.toBeInTheDocument();
   });
 
-  it('keeps the TicketBAI title and panel when the action refuses', async () => {
+  it('keeps the TicketBAI panel (and the plain title) when the action refuses', async () => {
     actionAnswer = () => jsonResponse(
       { error: { message: 'Ya hay un SIF activo', status: 409 } },
       { ok: false, status: 409 },
@@ -824,7 +825,7 @@ describe('FiscalConfigPage — "Añadir SII" with the real useFiscalConfig', () 
     clickAddSii();
 
     await screen.findByText('fiscal.addComplementary.err.createFailed Ya hay un SIF activo');
-    expect(lastPageTitle()).toBe('fiscal.title TBAI');
+    expect(lastPageTitle()).toBe('fiscal.title');
     expect(screen.getByTestId('FiscalStatusSummary__title')).toHaveTextContent('fiscal.status.active TicketBAI');
     expect(screen.getByTestId('FiscalStatusSummary__row-national')).toHaveTextContent('fiscal.onboarding.applied.national.na');
     expect(screen.queryByTestId('sii-section')).not.toBeInTheDocument();
@@ -1903,8 +1904,20 @@ describe('FiscalStatusSummary — deriveConfiguredStatus / buildConfiguredStatus
 
 // The TopBar breadcrumb is "Impuestos / <title>" (en: "Taxes / <title>"): the page belongs to the
 // Impuestos menu group, so it carries no Configuración / Settings level and no "Monitor fiscal" one.
+// ETP-6380 CP-17 — the title is the plain window name, as in the menu: the active system ("SII",
+// "SII + TBAI", ...) is shown in the page body, never in the title or the breadcrumb.
 describe('FiscalConfigPage — TopBar breadcrumb', () => {
   const lastMeta = () => vi.mocked(useSetPageMeta).mock.calls.at(-1)[0];
+  const mockProfile = (profile, records = {}) => vi.mocked(useFiscalConfig).mockReturnValue({
+    loading: false,
+    error: null,
+    profile,
+    siiRecord: null,
+    tbaiRecord: null,
+    verifactuRecord: null,
+    refetch: vi.fn(),
+    ...records,
+  });
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -1913,33 +1926,34 @@ describe('FiscalConfigPage — TopBar breadcrumb', () => {
       selectedRole: { orgList: [{ id: 'org-1', name: 'Test Org' }] },
       selectOrg: vi.fn(),
     });
-    vi.mocked(useFiscalConfig).mockReturnValue({
-      loading: false,
-      error: null,
-      profile: 'sii',
-      siiRecord: { id: 'sii-1' },
-      tbaiRecord: null,
-      verifactuRecord: null,
-      refetch: vi.fn(),
-    });
+    mockProfile('sii', { siiRecord: { id: 'sii-1' } });
   });
 
-  it('es_ES: "Impuestos / Configuración Fiscal SII", two levels only', () => {
+  it('es_ES: "Impuestos / Configuración Fiscal", two levels only, no system in it', () => {
     i18nMode.ui = makeRealUI(loadLocaleDictionary('es_ES'));
     renderPage();
     const { title, breadcrumb } = lastMeta();
-    expect(title).toBe('Configuración Fiscal SII');
-    expect(breadcrumb).toBe('Impuestos / Configuración Fiscal SII');
+    expect(title).toBe('Configuración Fiscal');
+    expect(breadcrumb).toBe('Impuestos / Configuración Fiscal');
     expect(breadcrumb.split(' / ')).toHaveLength(2);
-    expect(breadcrumb).not.toMatch(/Monitor fiscal/i);
+    expect(breadcrumb).not.toMatch(/Monitor fiscal|SII/i);
   });
 
-  it('en_US: "Taxes / Fiscal Configuration SII", with no Settings level', () => {
+  it('en_US: "Taxes / Fiscal Configuration", with no Settings level', () => {
     i18nMode.ui = makeRealUI(loadLocaleDictionary('en_US'));
     renderPage();
     const { title, breadcrumb } = lastMeta();
-    expect(title).toBe('Fiscal Configuration SII');
-    expect(breadcrumb).toBe('Taxes / Fiscal Configuration SII');
+    expect(title).toBe('Fiscal Configuration');
+    expect(breadcrumb).toBe('Taxes / Fiscal Configuration');
     expect(breadcrumb).not.toMatch(/Settings|Fiscal Monitor/i);
+  });
+
+  it('keeps the plain title for a combined SII + TBAI profile', () => {
+    i18nMode.ui = makeRealUI(loadLocaleDictionary('es_ES'));
+    mockProfile('sii+tbai', { siiRecord: { id: 'sii-1' }, tbaiRecord: { id: 'tbai-1' } });
+    renderPage();
+    const { title, breadcrumb } = lastMeta();
+    expect(title).toBe('Configuración Fiscal');
+    expect(breadcrumb).toBe('Impuestos / Configuración Fiscal');
   });
 });

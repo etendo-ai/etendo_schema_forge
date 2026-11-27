@@ -16,14 +16,14 @@
  * server-side concurrency check pass instead of answering 400 `missing_updated`.
  */
 import { beforeEach } from 'vitest';
-import { createApiFetch } from '@etendosoftware/app-shell-core/auth';
+import { createApiFetch } from '@etendo-ai/app-shell-core/auth';
 // The `auth/api` subpath, not the `auth` barrel: the barrel does not re-export the write-chain
 // test seam (it only forwards the public helpers), and it also pulls in `AuthContext.jsx`.
-import { resetRecordWriteChainsForTests } from '@etendosoftware/app-shell-core/auth/api';
+import { resetRecordWriteChainsForTests } from '@etendo-ai/app-shell-core/auth/api';
 import {
   resetRecordVersionsForTests as resetCoreRecordVersions,
   rememberRecordVersion as rememberCoreRecordVersion,
-} from '@etendosoftware/app-shell-core/lib/recordVersions.js';
+} from '@etendo-ai/app-shell-core/lib/recordVersions.js';
 
 // `rememberRecordVersion` is re-exported for the panels that never read at all: they get
 // `data` through props from `useEntity`, which remembers the token under the `null` bucket.

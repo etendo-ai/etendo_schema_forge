@@ -1,4 +1,5 @@
-import { docUrl, getHelpPages, groupHelpCollections, searchHelpDocs } from '../helpDocs.js';
+import { NetworkError } from '@etendo-ai/app-shell-core/auth';
+import { docUrl, fetchHelpDocs, getHelpPages, groupHelpCollections, searchHelpDocs } from '../helpDocs.js';
 
 describe('helpDocs', () => {
   describe('docUrl', () => {
@@ -181,6 +182,22 @@ describe('helpDocs', () => {
       });
       const { fetchHelpDocs } = await import('../helpDocs.js');
       await expect(fetchHelpDocs()).rejects.toThrow('mkdocs.yml: 404');
+    });
+  });
+
+  describe('fetchHelpDocs', () => {
+    afterEach(() => vi.unstubAllGlobals());
+
+    it('turns a truncated body into a NetworkError and clears the pending fetch', async () => {
+      const fetchMock = vi.fn(() => Promise.resolve({
+        ok: true,
+        json: () => Promise.reject(new TypeError('network error')),
+        text: () => Promise.resolve('index.md'),
+      }));
+      vi.stubGlobal('fetch', fetchMock);
+      await expect(fetchHelpDocs()).rejects.toBeInstanceOf(NetworkError);
+      await expect(fetchHelpDocs()).rejects.toBeInstanceOf(NetworkError);
+      expect(fetchMock).toHaveBeenCalledTimes(4);
     });
   });
 });

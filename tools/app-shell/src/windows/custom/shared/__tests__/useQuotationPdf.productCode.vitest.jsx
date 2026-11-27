@@ -75,7 +75,11 @@ describe('useQuotationPdf — end-to-end productCode wiring (ETP-4941)', () => {
     });
 
     const { result } = renderHook(() => useQuotationPdf('q-1', API_BASE, TOKEN));
-    await waitFor(() => expect(result.current.loading).toBe(false));
+    // `loading` is also false before generation starts: wait for the jsreport call itself.
+    await waitFor(() => {
+      expect(jsreportCalls).toHaveLength(1);
+      expect(result.current.loading).toBe(false);
+    });
 
     expect(result.current.error).toBeNull();
     expect(jsreportCalls).toHaveLength(1);
@@ -97,7 +101,11 @@ describe('useQuotationPdf — end-to-end productCode wiring (ETP-4941)', () => {
     });
 
     const { result } = renderHook(() => useQuotationPdf('q-2', API_BASE, TOKEN));
-    await waitFor(() => expect(result.current.loading).toBe(false));
+    // `loading` is also false before generation starts: wait for the jsreport call itself.
+    await waitFor(() => {
+      expect(jsreportCalls).toHaveLength(1);
+      expect(result.current.loading).toBe(false);
+    });
 
     const { lines: renderedLines } = jsreportCalls[0].data;
     expect(renderedLines[0].productCode).toBe('SKU-X');

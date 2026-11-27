@@ -34,6 +34,7 @@ import { useBankConnectionFlow } from '@/hooks/useBankConnectionFlow';
 import { AutoMatchSuggestionModal } from '@/components/contract-ui/AutoMatchSuggestionModal';
 import { useAutoMatch } from '@/hooks/useReconciliation';
 import { useAutoMatchReview } from '@/hooks/useAutoMatchReview.js';
+import { splitAutoMatchGroups } from '@/components/contract-ui/bouncePairs.js';
 import { SyncStatusInline } from '@/components/financial-accounts/SyncStatusInline';
 import { RefreshButton } from '@/components/financial-accounts';
 import { ACCOUNT_TYPE } from '@/components/financial-accounts/tokens';
@@ -369,13 +370,30 @@ export function FinancialAccountDetail({ recordId }) {
   // the Reconciliation tab is active (not just while the modal is open) so the ETP-4922 "armed"
   // effect below can decide whether to open it as soon as a fresh response lands.
   const {
-    groups: autoMatchGroups, kpis: autoMatchKpis, loading: autoMatchLoading, reload: reloadAutoMatch,
+    groups: autoMatchGroups, kpis: autoMatchKpis, bounceAiAssessments: autoMatchAi,
+    loading: autoMatchLoading, reload: reloadAutoMatch,
   } = useAutoMatch(activeTab === 'reconciliation' && !isCashAccount ? recordId : null);
   // ETP-4922: opens the modal only once a FRESH autoMatch response (not last visit's stale data —
   // `useNeoResource` doesn't clear `data` when `path` goes back to null) confirms there is at least
   // one suggestion. `autoMatchFetchedRef` tracks whether the in-flight/last-seen load happened while
   // armed, so a request that resolves after the user left the tab is ignored.
+  // ETP-5581 — the state the modal and the reconciliation panel share around a bounce pair: the
+  // modal's checks, the line "Revisar en el panel" asked to show, and the pairs dismissed with
+  // "No es un rechazo". Inert while the backend sends no bounce pair.
+  const autoMatchReview = useAutoMatchReview(autoMatchGroups, {
+    active: activeTab === 'reconciliation' && !isCashAccount,
+    bounceAiAssessments: autoMatchAi,
+  });
   const autoMatchFetchedRef = useRef(false);
+  // The modal is worth opening by itself when the run found something to act on: a transaction
+  // group, or at least ONE possible bank rejection (bounce pair) that the user has not already
+  // dismissed ("No es un rechazo"), even with no transaction group at all (ETP-6359).
+  const dismissedPairKeys = autoMatchReview.dismissedKeys;
+  const hasAutoMatchSuggestions = useMemo(() => {
+    const { transactionGroups, bouncePairs } = splitAutoMatchGroups(autoMatchGroups);
+    return transactionGroups.length > 0
+      || bouncePairs.some((pair) => !dismissedPairKeys?.has(pair.groupKey));
+  }, [autoMatchGroups, dismissedPairKeys]);
   useEffect(() => {
     if (!autoMatchArmed) {
       autoMatchFetchedRef.current = false;
@@ -387,17 +405,11 @@ export function FinancialAccountDetail({ recordId }) {
     }
     if (!autoMatchFetchedRef.current) return;
     setAutoMatchArmed(false);
-    if (autoMatchGroups.length > 0) {
+    if (hasAutoMatchSuggestions) {
       setAutoMatchAutoOpened(true);
       setAutoMatchOpen(true);
     }
-  }, [autoMatchArmed, autoMatchLoading, autoMatchGroups]);
-  // ETP-5581 — the state the modal and the reconciliation panel share around a bounce pair: the
-  // modal's checks, the line "Revisar en el panel" asked to show, and the pairs dismissed with
-  // "No es un rechazo". Inert while the backend sends no bounce pair.
-  const autoMatchReview = useAutoMatchReview(autoMatchGroups, {
-    active: activeTab === 'reconciliation' && !isCashAccount,
-  });
+  }, [autoMatchArmed, autoMatchLoading, hasAutoMatchSuggestions]);
   // "Revisar en el panel": close the modal and show the pair's bounce line. There is no return
   // path: the Automatch button reopens the modal, on the same suggestions (and so the same checks)
   // unless a discard or restore in the panel reloaded them. Disarming means the automatch never
@@ -432,6 +444,18 @@ export function FinancialAccountDetail({ recordId }) {
     reloadMovements();
     setReconciliationRefreshKey((k) => k + 1);
   }, [reloadAccountAndList, reloadAutoMatch, reloadMovements]);
+  // ETP-6359 — "Excluir de la conciliación" in the automatch modal discards bounce pairs at once. The
+  // account, its list and the movements change and the panel must show the pairs as discarded, but
+  // the cached suggestions are NOT reloaded: the modal hides the excluded pairs itself and keeps the
+  // checks of the rest (a reload would reset them). The exception is a pair refused with 409
+  // LINE_NOT_PENDING (`reloadSuggestions`): its line is gone, the suggestions are stale, and keeping
+  // them would leave a row that fails on every retry, so they are reloaded.
+  const handleAutoMatchPairsExcluded = useCallback(({ reloadSuggestions = false } = {}) => {
+    reloadAccountAndList();
+    reloadMovements();
+    if (reloadSuggestions) reloadAutoMatch();
+    setReconciliationRefreshKey((k) => k + 1);
+  }, [reloadAccountAndList, reloadMovements, reloadAutoMatch]);
   // ETP-6151 — the same unfiltered headers feed the CSV-export fallback and (flag on) the
   // Statements tab badge. The tab owns its own copy and tells us through `onStatementsChanged`.
   const importSettingsEnabled = usePsd2ImportSettingsFlag();
@@ -455,7 +479,9 @@ export function FinancialAccountDetail({ recordId }) {
     reloadAutoMatch();
     reloadMovements();
     reloadReconciliations();
-    // A fresh automatch run proposes again the bounce pairs dismissed with "No es un rechazo".
+    // Forget the pairs hidden locally with "No es un rechazo": a stored dismissal (ETP-6359) is
+    // never proposed again, so this only lets a pair whose dismissal was NOT stored (the answer had
+    // no `dismissedLineId`, e.g. before the backend column exists) come back with the fresh run.
     clearDismissed();
     setReconciliationRefreshKey((k) => k + 1);
   }, [reloadAccountAndList, reloadAutoMatch, reloadMovements, reloadReconciliations, clearDismissed]);
@@ -688,10 +714,12 @@ export function FinancialAccountDetail({ recordId }) {
         accountName={account?.name ?? ''}
         groups={autoMatchGroups}
         kpis={autoMatchKpis}
+        bounceAiAssessments={autoMatchAi}
         currency={account?.currencyIso ?? 'EUR'}
         open={autoMatchOpen && !isCashAccount && !windowReadOnly}
         onClose={closeAutoMatch}
         onSuccess={handleAutoMatchSuccess}
+        onChanged={handleAutoMatchPairsExcluded}
         // ETP-5581 — the checks live in the host, so closing the modal for "Revisar en el panel"
         // and reopening it with the Automatch button keeps them while the suggestions do not reload.
         selection={autoMatchReview.selection}

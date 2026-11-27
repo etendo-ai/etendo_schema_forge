@@ -5,7 +5,7 @@ import {
   CREDENTIAL_MODES,
   resetSessionCredentials,
   setSessionCredentials,
-} from '@etendosoftware/app-shell-core/auth/sessionCredentials.js';
+} from '@etendo-ai/app-shell-core/auth/sessionCredentials.js';
 import * as upgradeApi from '../upgrade/api.js';
 import {
   UPGRADE_ERROR_CODES,

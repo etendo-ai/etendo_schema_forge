@@ -6,7 +6,7 @@
 // Mock import.meta.env before the module loads
 vi.stubGlobal('crypto', { randomUUID: () => 'test-uuid-1234' });
 
-import { registerApiSession, resetApiSessionForTests } from '@etendosoftware/app-shell-core/auth/api';
+import { registerApiSession, resetApiSessionForTests } from '@etendo-ai/app-shell-core/auth/api';
 import {
   detectBaseUrl,
   buildCopilotUrl,

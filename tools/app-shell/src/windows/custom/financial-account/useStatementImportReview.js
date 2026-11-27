@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
-import { ImportParseError } from '@etendosoftware/app-shell-core/lib/import/parseDelimited.js';
+import { ImportParseError } from '@etendo-ai/app-shell-core/lib/import/parseDelimited.js';
 import {
   applyStatementMapping,
   buildStatementEntries,

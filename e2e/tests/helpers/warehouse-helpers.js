@@ -226,7 +226,7 @@ function toId(value) {
  *
  * `useCriteria: true` sends the exact-match AdvancedCriteria filter the
  * ListView's own filter bar sends (`buildBackendFilter()` in
- * tools/app-shell/src/lib/gridQuery.js, merged by `mergeFilterCriteria()` in
+ * @etendo-ai/app-shell-core/lib/gridQuery.js, merged by `mergeFilterCriteria()` in
  * useEntity.js). `useCriteria: false` fetches an unfiltered bounded page — see
  * `findWarehouseFixture()` for why that second mode exists, and
  * `resolveReferenceLocationId()` for the other caller that needs it.

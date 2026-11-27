@@ -1,6 +1,6 @@
 import React from 'react';
-import { OnboardingFlow } from '@etendosoftware/etendo-go-core/onboarding';
-import { useUI } from '@etendosoftware/app-shell-core/i18n';
+import { OnboardingFlow } from '@etendo-ai/etendo-go-core/onboarding';
+import { useUI } from '@etendo-ai/app-shell-core/i18n';
 import { checkSalesInvoiceReadiness } from './onboarding/onboardingReadiness.js';
 import { OnboardingDashboardBackdrop } from './onboarding/OnboardingDashboardBackdrop.jsx';
 import { onboardingSteps } from './onboarding/onboardingSteps.jsx';

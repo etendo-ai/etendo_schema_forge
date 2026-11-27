@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { isNetworkError } from '@etendosoftware/app-shell-core/auth';
+import { isNetworkError } from '@etendo-ai/app-shell-core/auth';
+import { canPromptOnUnload } from '@/lib/unsavedChanges.js';
 import { useRecordWriteQueue } from '@/hooks/useRecordWriteQueue.js';
 import { applyOperations, confirmInboxDocument, markReviewed } from './invoiceInboxApi.js';
 import { applyPendingToReview, canConfirm, canMarkReviewed, isReloadCode, saveErrorKey } from './invoiceInboxReviewModel.js';
@@ -368,7 +369,12 @@ export function useInvoiceInboxReviewEditor(apiFetch, id) {
   // A reload or close while a write is open would lose it: ask the browser to confirm.
   useEffect(() => {
     if (!saving) return undefined;
-    const guard = (event) => { event.preventDefault(); event.returnValue = ''; };
+    const guard = (event) => {
+      // No user activation: the browser blocks the dialog and reports BeforeUnloadNoGesture.
+      if (!canPromptOnUnload()) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
     window.addEventListener('beforeunload', guard);
     return () => window.removeEventListener('beforeunload', guard);
   }, [saving]);
