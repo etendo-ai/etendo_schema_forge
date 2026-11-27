@@ -1,8 +1,8 @@
 {
   "version": "0.20.0",
   "generatedAt": "2026-09-11T00:36:11.322Z",
-  "updatedAt": "2026-10-29T17:30:54.688Z",
-  "contractChecksum": "ccb9ad084a49bc4f",
+  "updatedAt": "2026-11-27T13:14:10.761Z",
+  "contractChecksum": "5f9166774e5df943",
   "apiPrediction": {
     "specName": "product",
     "baseUrl": "/sws/neo/product",
@@ -612,7 +612,8 @@
         "M_Product_Category_ID": "Category",
         "ProductType": "Type",
         "DateFrom": "Start Date",
-        "DateTo": "Expiry Date"
+        "DateTo": "Expiry Date",
+        "AD_Image_ID": "Product image"
       },
       "es_ES": {
         "M_Product_Category_ID": "Categoría",
@@ -620,12 +621,14 @@
         "Value": "Código",
         "IsStocked": "Almacenable",
         "DateFrom": "Fecha de inicio",
-        "DateTo": "Fecha de expiración"
+        "DateTo": "Fecha de expiración",
+        "AD_Image_ID": "Imagen del producto"
       },
       "es_AR": {
         "IsStocked": "Almacenable",
         "DateFrom": "Fecha de inicio",
-        "DateTo": "Fecha de expiración"
+        "DateTo": "Fecha de expiración",
+        "AD_Image_ID": "Imagen del producto"
       }
     }
   },
@@ -1088,5 +1091,5 @@
     "knownLimitations": [],
     "dangerousOperations": []
   },
-  "checksum": "8c61953176884fc1"
+  "checksum": "25049dbf6c836110"
 }

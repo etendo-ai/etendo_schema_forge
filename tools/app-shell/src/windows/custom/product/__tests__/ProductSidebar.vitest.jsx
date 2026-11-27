@@ -1,6 +1,8 @@
 // @covers tools/app-shell/src/windows/custom/product/ProductSidebar.jsx
 // @covers tools/app-shell/src/windows/custom/product/stockChartAxis.js
 // @covers tools/app-shell/src/windows/custom/product/stockSeries.js
+// @covers tools/app-shell/src/windows/custom/product/stockQuantityFormat.js
+// @covers tools/app-shell/src/windows/custom/product/StockWarehouseList.jsx
 // --- Mocks (before imports) ---
 
 vi.mock('@/i18n', () => ({
@@ -44,6 +46,7 @@ vi.mock('@phosphor-icons/react', () => ({
   CubeIcon: (props) => <span {...props} data-testid="icon-box" />,
   CalendarBlankIcon: (props) => <span {...props} data-testid="icon-calendar" />,
   CaretDownIcon: (props) => <span {...props} data-testid="icon-chevron" />,
+  CheckIcon: (props) => <span {...props} />,
   ArrowLineRightIcon: (props) => <span {...props} data-testid="icon-arrow-to-line" />,
   ArrowsLeftRightIcon: (props) => <span {...props} data-testid="icon-arrow-lr" />,
   PackageIcon: (props) => <span {...props} data-testid="icon-package" />,
@@ -54,6 +57,7 @@ vi.mock('@phosphor-icons/react', () => ({
 
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { formatStockQuantityWithUnit, stockUnitSymbol } from '../stockQuantityFormat';
 import ProductSidebar from '../ProductSidebar.jsx';
 import { SIDEBAR_COLLAPSED_KEY } from '../useSidebarCollapsed';
 import { chartSeriesColor } from '@/lib/chartPalette';
@@ -62,7 +66,7 @@ import { chartSeriesColor } from '@/lib/chartPalette';
 
 const defaultProps = {
   recordId: 'prod-1',
-  data: {},
+  data: { id: 'prod-1' },
   token: 'test-token',
   apiBaseUrl: '/sws/neo/product',
 };
@@ -245,8 +249,8 @@ describe('ProductSidebar', () => {
   // ETP-5908 RF-06: "N ubicaciones" is a link to the Warehouses tab.
   it('renders the locations count as a non-interactive pill with the info tokens; the whole card opens the Warehouses tab', async () => {
     const stockRows = [
-      { storageBin: 'LOC1', 'warehouse$_identifier': 'WH-Alpha', quantityOnHand: 30, reservedQty: 5 },
-      { storageBin: 'LOC2', 'warehouse$_identifier': 'WH-Beta', quantityOnHand: 20, reservedQty: 2 },
+      { etgoUomSymbol: 'kg', storageBin: 'LOC1', 'warehouse$_identifier': 'WH-Alpha', quantityOnHand: 30, reservedQty: 5 },
+      { etgoUomSymbol: 'kg', storageBin: 'LOC2', 'warehouse$_identifier': 'WH-Beta', quantityOnHand: 20, reservedQty: 2 },
     ];
     const transactions = [{ movementDate: '2025-03-01', movementQuantity: 20, storageBin: 'LOC1' }];
     mockFetchResponses({ stockRows, transactions });
@@ -268,7 +272,7 @@ describe('ProductSidebar', () => {
 
     expect((await screen.findAllByText('WH-Alpha')).length).toBeGreaterThan(0);
     const cards = screen.getAllByTestId('WarehouseCardAvailability');
-    expect(cards[0].textContent).toContain('30 u');
+    expect(cards[0].textContent).toContain('30 kg');
   });
 
   const LONG = 'Almac\u00e9n Central de Distribuci\u00f3n Regional Norte';
@@ -321,25 +325,127 @@ describe('ProductSidebar', () => {
   it('keeps up to 2 decimals on fractional stock (card, summary, modal) and no decimals on integers', async () => {
     mockFetchResponses({
       stockRows: [
-        { storageBin: 'LOC1', 'warehouse$_identifier': 'WH-Alpha', quantityOnHand: 12.5 },
-        { storageBin: 'LOC2', 'warehouse$_identifier': 'WH-Beta', quantityOnHand: 1080 },
+        { etgoUomSymbol: 'kg', storageBin: 'LOC1', 'warehouse$_identifier': 'WH-Alpha', quantityOnHand: 12.5 },
+        { etgoUomSymbol: 'kg', storageBin: 'LOC2', 'warehouse$_identifier': 'WH-Beta', quantityOnHand: 1080 },
       ],
       transactions: [{ movementDate: '2025-03-01', movementQuantity: 20, storageBin: 'LOC1' }],
     });
     render(<ProductSidebar {...defaultProps} />);
-    expect(await screen.findByText('1.092,5')).toBeInTheDocument();
+    expect(await screen.findByText('1.092,5 kg')).toBeInTheDocument();
     fireEvent.click(await screen.findByTestId('AvailabilityCardButton'));
     await screen.findAllByText('WH-Alpha');
     const cards = screen.getAllByTestId('WarehouseCardAvailability');
     const cardText = cards.map(c => c.textContent).join('|');
-    expect(cardText).toContain('12,5 u');
-    expect(cardText).not.toContain('13 u');
-    expect(cardText).toContain('1.080 u');
+    expect(cardText).toContain('12,5 kg');
+    expect(cardText).not.toContain('13 kg');
+    expect(cardText).toContain('1.080 kg');
     expect(cardText).not.toContain('1.080,');
     fireEvent.click((await screen.findAllByRole('button', { name: 'expand' }))[0]);
     const dialog = await screen.findByTestId('dialog');
     expect(dialog.textContent).toContain('12,5');
     expect(dialog.textContent).toContain('total: 1.092,5');
+  });
+
+  // Resumen total carries the unit symbol like the Almacenes cards (QA deviation from Figma).
+  it.each([
+    ['kg', 2.5, '2,5 kg'],
+    ['Ud', 2680, '2.680 Ud'],
+    [undefined, 2680, '2.680'],
+  ])('Summary total shows the unit symbol %s -> %s', async (symbol, qty, expected) => {
+    mockFetchResponses({
+      stockRows: [{ ...(symbol ? { etgoUomSymbol: symbol } : {}), storageBin: 'LOC1', 'warehouse$_identifier': 'WH-A', quantityOnHand: qty }],
+      transactions: [{ movementDate: '2025-03-01', movementQuantity: qty, storageBin: 'LOC1' }],
+    });
+    render(<ProductSidebar {...defaultProps} />);
+    const card = await screen.findByTestId('AvailabilityCardButton');
+    await waitFor(() => expect(card.textContent).toContain(expected));
+    // no symbol: the number alone, never a made-up unit
+    if (!symbol) expect(card.textContent.endsWith(expected)).toBe(true);
+  });
+
+  // PS-69: the unit printed after a quantity is the SYMBOL of the product's UOM, never a hard-coded "u".
+  // DetailView mounts the panel first with an empty record, then again once it arrives: reading on the first mount
+  // fired the stock and history requests twice (the first pair aborted).
+  describe('reads wait for the loaded record', () => {
+    const neoCalls = () => globalThis.fetch.mock.calls.map(c => String(c[0])).filter(u => /\/(stock|transactions)\?/.test(u));
+
+    it('does not read while the record is still empty, and reads once when it arrives', async () => {
+      mockFetchResponses({ stockRows: [{ storageBin: 'LOC1', 'warehouse$_identifier': 'WH-Alpha', quantityOnHand: 5 }], transactions: [{ movementDate: '2025-03-01', movementQuantity: 5, storageBin: 'LOC1' }] });
+      const { rerender } = render(<ProductSidebar {...defaultProps} data={{}} />);
+      await new Promise(r => setTimeout(r, 50));
+      expect(neoCalls()).toHaveLength(0);
+      rerender(<ProductSidebar {...defaultProps} data={{ id: 'prod-1', name: 'Agua' }} />);
+      await waitFor(() => expect(neoCalls().length).toBeGreaterThan(0));
+      await screen.findByTestId('AvailabilityCardButton');
+      expect(neoCalls().filter(u => u.includes('/stock?'))).toHaveLength(1);
+      expect(neoCalls().filter(u => u.includes('/transactions?'))).toHaveLength(1);
+    });
+  });
+
+  describe('unit of measure symbol', () => {
+    const withUnit = (symbol) => ({
+      stockRows: [
+        { ...(symbol ? { etgoUomSymbol: symbol } : {}), storageBin: 'LOC1', 'warehouse$_identifier': 'WH-Alpha', quantityOnHand: 2.5 },
+      ],
+      transactions: [{ movementDate: '2026-05-10', movementQuantity: 2.5, storageBin: 'LOC1' }],
+    });
+    const openCardsAndModal = async () => {
+      fireEvent.click(await screen.findByTestId('AvailabilityCardButton'));
+      await screen.findAllByText('WH-Alpha');
+      const card = screen.getAllByTestId('WarehouseCardAvailability')[0].textContent;
+      fireEvent.click((await screen.findAllByRole('button', { name: 'expand' }))[0]);
+      await screen.findByTestId('dialog');
+      return { card, row: screen.getByTestId('StockWarehouseRow').textContent, total: screen.getByTestId('StockWarehouseTotal').textContent };
+    };
+
+    it('prints the kg symbol after the quantity in the card, the modal row and the modal total', async () => {
+      mockFetchResponses(withUnit('kg'));
+      render(<ProductSidebar {...defaultProps} />);
+      const { card, row, total } = await openCardsAndModal();
+      expect(card).toBe('stockAvailableLabel2,5 kg');
+      expect(row).toBe('WH-Alpha2,5 kg');
+      expect(total).toBe('total: 2,5 kg');
+    });
+
+    it('prints the symbol of a unit product ("Ud"), not a generic "u"', async () => {
+      mockFetchResponses(withUnit('Ud'));
+      render(<ProductSidebar {...defaultProps} />);
+      const { card, total } = await openCardsAndModal();
+      expect(card).toBe('stockAvailableLabel2,5 Ud');
+      expect(total).toBe('total: 2,5 Ud');
+    });
+
+    it('shows the quantity alone, with no invented unit, when the backend sent no symbol', async () => {
+      mockFetchResponses(withUnit(null));
+      render(<ProductSidebar {...defaultProps} />);
+      const { card, row, total } = await openCardsAndModal();
+      expect(card).toBe('stockAvailableLabel2,5');
+      expect(row).toBe('WH-Alpha2,5');
+      expect(total).toBe('total: 2,5');
+    });
+
+    it('keeps a long symbol on the card row without wrapping the label', async () => {
+      mockFetchResponses(withUnit('m\u00b3/h'));
+      render(<ProductSidebar {...defaultProps} />);
+      fireEvent.click(await screen.findByTestId('AvailabilityCardButton'));
+      const row = (await screen.findAllByTestId('WarehouseCardAvailability'))[0];
+      expect(row.className).toContain('justify-between');
+      expect(row.children[1].textContent).toBe('2,5 m\u00b3/h');
+    });
+  });
+
+  describe('unit helpers', () => {
+    it('formats the quantity then the symbol, or the quantity alone without one', () => {
+      expect(formatStockQuantityWithUnit(2.5, 'kg')).toBe('2,5 kg');
+      expect(formatStockQuantityWithUnit(2.5, null)).toBe('2,5');
+      expect(formatStockQuantityWithUnit(2.5, '')).toBe('2,5');
+    });
+
+    it('takes the symbol from the first stock row that has one, trimmed', () => {
+      expect(stockUnitSymbol([{ quantityOnHand: 1 }, { etgoUomSymbol: ' Ud ' }])).toBe('Ud');
+      expect(stockUnitSymbol([{ etgoUomSymbol: '  ' }])).toBeNull();
+      expect(stockUnitSymbol(null)).toBeNull();
+    });
   });
 
   describe('availability card (whole-card button)', () => {
@@ -442,8 +548,8 @@ describe('ProductSidebar', () => {
   describe('stock chart axis, tooltip and legend', () => {
     const twoWarehouses = {
       stockRows: [
-        { storageBin: 'LOC1', 'warehouse$_identifier': 'WH-Alpha', quantityOnHand: 30 },
-        { storageBin: 'LOC2', 'warehouse$_identifier': 'WH-Beta', quantityOnHand: 20 },
+        { etgoUomSymbol: 'kg', storageBin: 'LOC1', 'warehouse$_identifier': 'WH-Alpha', quantityOnHand: 30 },
+        { etgoUomSymbol: 'kg', storageBin: 'LOC2', 'warehouse$_identifier': 'WH-Beta', quantityOnHand: 20 },
       ],
       transactions: [
         { movementDate: '2026-05-10', movementQuantity: 30, storageBin: 'LOC1' },
@@ -569,9 +675,9 @@ describe('ProductSidebar', () => {
       const totalText = screen.getByTestId('StockChartTooltipTotal').querySelector('text');
       expect(Number(totalText.getAttribute('y'))).toBeLessThan(bottom);
       expect(screen.getAllByTestId('StockChartTooltipRow').map(r => r.textContent)).toEqual([
-        'WH-Alpha30 stockUnitAbbr', 'WH-Beta20 stockUnitAbbr',
+        'WH-Alpha30 kg', 'WH-Beta20 kg',
       ]);
-      expect(screen.getByTestId('StockChartTooltipTotal').textContent).toBe('total50 stockUnitAbbr');
+      expect(screen.getByTestId('StockChartTooltipTotal').textContent).toBe('total50 kg');
     });
   });
 
@@ -668,11 +774,11 @@ describe('ProductSidebar', () => {
   });
 
   // ETP-5908 RF-08 / RF-09: warehouse cards.
-  it('shows no reserved data and the "Available · N u" text with a series-coloured dot per warehouse', async () => {
+  it('shows no reserved data and the "Available · N kg" text with a series-coloured dot per warehouse', async () => {
     mockFetchResponses({
       stockRows: [
-        { storageBin: 'LOC1', 'warehouse$_identifier': 'WH-Alpha', quantityOnHand: 30, reservedQty: 5 },
-        { storageBin: 'LOC2', 'warehouse$_identifier': 'WH-Beta', quantityOnHand: 20, reservedQty: 2 },
+        { etgoUomSymbol: 'kg', storageBin: 'LOC1', 'warehouse$_identifier': 'WH-Alpha', quantityOnHand: 30, reservedQty: 5 },
+        { etgoUomSymbol: 'kg', storageBin: 'LOC2', 'warehouse$_identifier': 'WH-Beta', quantityOnHand: 20, reservedQty: 2 },
       ],
       transactions: [],
     });
@@ -690,7 +796,7 @@ describe('ProductSidebar', () => {
       expect(c.className).toContain('bg-[var(--surface-subtle)]');
       expect(c.className).not.toContain('border');
     });
-    expect(rows.map(r => r.children[1].textContent)).toEqual(['30 u', '20 u']);
+    expect(rows.map(r => r.children[1].textContent)).toEqual(['30 kg', '20 kg']);
     expect(rows[1].children[1].className).toContain('font-semibold');
     const dots = screen.getAllByTestId('WarehouseCardDot');
     expect(dots.map(d => d.style.backgroundColor)).toEqual([chartSeriesColor(0).fill, chartSeriesColor(1).fill]);
@@ -760,13 +866,67 @@ describe('ProductSidebar period range', () => {
   });
 });
 
+// ETP-5908 PS-72.2 / PS-72.3 / PS-72.4 / PS-03: look of the period selector and of the panel chart title.
+describe('ProductSidebar period selector and chart title', () => {
+  const rowsData = {
+    stockRows: [{ storageBin: 'LOC1', 'warehouse$_identifier': 'WH-A', quantityOnHand: 100 }],
+    transactions: [{ movementDate: '2026-05-10', movementQuantity: 100, storageBin: 'LOC1' }],
+  };
+  // The selector remounts when the stock arrives, which would close an open dropdown: wait for the chart first.
+  const renderLoaded = async () => {
+    mockFetchResponses(rowsData);
+    render(<ProductSidebar {...defaultProps} />);
+    await screen.findByTestId('StockChartLegend');
+  };
+
+  it('hugs its content, sits 8px above the range, and the title uses the main text colour at weight 500', async () => {
+    await renderLoaded();
+    const range = await screen.findByTestId('SidebarPeriodRange');
+    expect(range.parentElement.className).toContain('gap-2');
+    const trigger = (await screen.findByText('last12Months')).closest('button');
+    expect(trigger.parentElement.className).toContain('self-start');
+    expect(trigger.className).toContain('h-10');
+    const title = await screen.findByTestId('StockChartPanelTitle');
+    expect(title.className).toMatch(/text-foreground.*font-medium|font-medium.*text-foreground/);
+    expect(title.className).not.toContain('text-muted-foreground');
+  });
+
+  it('marks only the active option: aria-selected, brand-blue text on the info background and a check', async () => {
+    await renderLoaded();
+    fireEvent.click((await screen.findByText('last12Months')).closest('button'));
+
+    const options = screen.getAllByTestId('SidebarPeriodOption');
+    expect(options).toHaveLength(3);
+    const [o3, o6, o12] = options;
+    expect(o12).toHaveAttribute('aria-selected', 'true');
+    expect(o12.className).toContain('text-primary');
+    expect(o12.className).toContain('bg-[var(--info-label-bg)]');
+    expect(o12.querySelector('[data-testid="SidebarPeriodOptionCheck"]')).not.toBeNull();
+    [o3, o6].forEach((o) => {
+      expect(o).toHaveAttribute('aria-selected', 'false');
+      expect(o.className).not.toContain('text-primary');
+      expect(o.querySelector('[data-testid="SidebarPeriodOptionCheck"]')).toBeNull();
+    });
+    expect(screen.getAllByTestId('SidebarPeriodOptionCheck')).toHaveLength(1);
+  });
+
+  it('moves the mark to the option picked', async () => {
+    await renderLoaded();
+    fireEvent.click((await screen.findByText('last12Months')).closest('button'));
+    fireEvent.click(screen.getAllByTestId('SidebarPeriodOption')[0]);
+    fireEvent.click(screen.getByText('last3Months').closest('button'));
+
+    expect(screen.getAllByTestId('SidebarPeriodOption').map((o) => o.getAttribute('aria-selected'))).toEqual(['true', 'false', 'false']);
+  });
+});
+
 // ETP-5908 RF-14 / RF-15: interactive legend (panel toggles, modal isolates).
 describe('ProductSidebar — interactive stock legend', () => {
   const rows = (extra = {}) => ({
     stockRows: [
-      { storageBin: 'LOC1', 'warehouse$_identifier': 'WH-A', quantityOnHand: 100 },
-      { storageBin: 'LOC2', 'warehouse$_identifier': 'WH-B', quantityOnHand: 30 },
-      { storageBin: 'LOC3', 'warehouse$_identifier': 'WH-C', quantityOnHand: 10 },
+      { etgoUomSymbol: 'kg', storageBin: 'LOC1', 'warehouse$_identifier': 'WH-A', quantityOnHand: 100 },
+      { etgoUomSymbol: 'kg', storageBin: 'LOC2', 'warehouse$_identifier': 'WH-B', quantityOnHand: 30 },
+      { etgoUomSymbol: 'kg', storageBin: 'LOC3', 'warehouse$_identifier': 'WH-C', quantityOnHand: 10 },
     ],
     transactions: [
       { movementDate: '2026-05-10', movementQuantity: 100, storageBin: 'LOC1' },
@@ -822,8 +982,8 @@ describe('ProductSidebar — interactive stock legend', () => {
     const { container } = await renderPanel();
     fireEvent.click(panelEntry('WH-A'));
     fireEvent.mouseMove(container.querySelector('svg'), { clientX: 340, clientY: 50 });
-    expect(screen.getAllByTestId('StockChartTooltipRow').map(r => r.textContent)).toEqual(['WH-B30 stockUnitAbbr', 'WH-C10 stockUnitAbbr']);
-    expect(screen.getByTestId('StockChartTooltipTotal').textContent).toBe('total40 stockUnitAbbr');
+    expect(screen.getAllByTestId('StockChartTooltipRow').map(r => r.textContent)).toEqual(['WH-B30 kg', 'WH-C10 kg']);
+    expect(screen.getByTestId('StockChartTooltipTotal').textContent).toBe('total40 kg');
     fireEvent.click(panelEntry('WH-B'));
     expect(screen.queryByTestId('StockChartTooltipTotal')).toBeNull();
   });
@@ -930,9 +1090,9 @@ describe('ProductSidebar — interactive stock legend', () => {
     it('the footer total is always the sum of ALL warehouses, whatever is isolated', async () => {
       await renderPanel();
       const dialog = await openModal();
-      expect(screen.getByTestId('StockWarehouseTotal').textContent).toBe('total: 140 units');
+      expect(screen.getByTestId('StockWarehouseTotal').textContent).toBe('total: 140 kg');
       fireEvent.click(modalEntry(dialog, 'WH-C'));
-      expect(screen.getByTestId('StockWarehouseTotal').textContent).toBe('total: 140 units');
+      expect(screen.getByTestId('StockWarehouseTotal').textContent).toBe('total: 140 kg');
     });
 
     it('modal changes never touch the panel, and reopening re-syncs from the panel', async () => {
@@ -986,6 +1146,18 @@ describe('ProductSidebar — Etendo AI chart palette', () => {
     await screen.findByTestId('StockChartLegend');
     const dots = screen.getAllByTestId('StockChartLegendDot');
     expect(dots.map(d => d.style.backgroundColor)).toEqual([chartSeriesColor(0).fill, chartSeriesColor(1).fill]);
+  });
+
+  it('draws the legend markers as rounded squares, 12px / radius 2 (PS-72.5)', async () => {
+    mockFetchResponses(twoRows);
+    render(<ProductSidebar {...defaultProps} />);
+    await screen.findByTestId('StockChartLegend');
+    screen.getAllByTestId('StockChartLegendDot').forEach((d) => {
+      expect(d.className).toContain('w-3');
+      expect(d.className).toContain('h-3');
+      expect(d.className).toContain('rounded-[2px]');
+      expect(d.className).not.toContain('rounded-full');
+    });
   });
 });
 

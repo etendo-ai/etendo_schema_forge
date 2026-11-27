@@ -1,9 +1,12 @@
-// Warehouse legend of the stock chart (ETP-5908 RF-13..RF-15): horizontal row, left-aligned, wrapping onto more rows when it does not fit (never clipped), coloured dot
+// Warehouse legend of the stock chart (ETP-5908 RF-13..RF-15): horizontal row, left-aligned, wrapping onto more rows when it does not fit (never clipped), coloured rounded square
 // + name, 16 px between entries. Controlled and shared by the side panel (toggle) and the expand modal (isolate): the parent
 // owns `visible` and the click handler. Each entry is a real toggle button (aria-pressed = visible).
 // `items` = [{ name, color }]; `visible` = Set of names (omitted: all visible); `highlight` = hovered visible name or null.
 import { useUI } from '@/i18n';
 import { dimmedOpacity, DIMMED_OPACITY } from './stockSeriesVisibility';
+
+// Rounded square, Figma 12x12 / radius 2. ETP-5908 PS-72.5.
+const LEGEND_MARKER_CLASS = 'w-3 h-3 rounded-[2px]';
 
 function LegendEntry({ item, shown, highlight, onToggle, onHover, ui }) {
   return (
@@ -21,7 +24,7 @@ function LegendEntry({ item, shown, highlight, onToggle, onHover, ui }) {
       data-testid="StockChartLegendItem"
     >
       <span
-        className="w-2 h-2 rounded-full shrink-0 transition-opacity"
+        className={`${LEGEND_MARKER_CLASS} shrink-0 transition-opacity`}
         style={{ backgroundColor: item.color, opacity: shown ? dimmedOpacity(item.name, highlight) : DIMMED_OPACITY }}
         data-testid="StockChartLegendDot"
       />

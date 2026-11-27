@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { SortableHeaderLabel } from '@/components/financial-accounts/SortableHeaderLabel.jsx';
-import { useProductMovementsTabTracking } from './useProductMovementsTabTracking';
+import { useProductMovementsChangeTracking, useProductMovementsTabTracking } from './useProductMovementsTabTracking';
 import { useMovementsPeriodRequest } from './useMovementsPeriodRequest';
 import { useRemainingHeight } from './useRemainingHeight';
 import {
@@ -56,6 +56,9 @@ const MOVEMENTS_EXTRA_PRESETS = ['last3m', 'last6m'];
 // The cost column is 170, not 150: its sortable header (label 136 + arrow 12 + gap 2 = 150) overflowed a 150
 // column by a sub-pixel fraction and `truncate` showed an ellipsis.
 const GRID = 'grid shrink-0 min-w-[1014px] grid-cols-[150px_minmax(220px,1.6fr)_minmax(140px,1fr)_100px_170px_130px] items-center gap-x-4';
+// Column titles (ETP-5908 PS-72.1), Figma: Inter 600 / 12px / -0.5% tracking / #1B1A1F (= the foreground token).
+// One class string so the exact value is easy to change (500 if 600 ever clips a sortable title at 1014px).
+const HEADER_TEXT_CLASS = 'font-semibold tracking-[-0.005em] text-foreground';
 const NEAR_BOTTOM_PX = 80;
 const SKELETON_ROWS = 6;
 
@@ -79,6 +82,9 @@ const SEGMENT_IDLE = { color: 'hsl(var(--foreground))', fontWeight: 400 };
 const rowsOf = (json) => json?.response?.data ?? json?.data ?? [];
 const ARIA_SORT = { asc: 'ascending', desc: 'descending' };
 
+// The document link is the one that compacts when the Type cell is narrow (the type pill never does): it keeps at
+// least the file icon (14 px), the gap (4 px) and about two letters of the name (the Tailwind `min-w-[40px]` below).
+// Its full name is in `title`.
 function DocumentLink({ row, label, openInNewTab }) {
   const open = () => {
     window.open(`${window.location.origin}${getRouterBase()}/${row.etgoDocWindow}/${row.etgoDocHeaderId}`, '_blank', 'noopener,noreferrer');
@@ -88,13 +94,14 @@ function DocumentLink({ row, label, openInNewTab }) {
       type="button"
       onClick={open}
       data-testid="product-movements-doc-link"
-      className="inline-flex shrink-0 items-center gap-1 rounded-sm text-xs text-[hsl(var(--foreground))] underline underline-offset-2 transition-colors hover:text-primary"
+      title={label}
+      className="inline-flex min-w-[40px] max-w-full items-center gap-1 rounded-sm text-xs text-[hsl(var(--foreground))] underline underline-offset-2 transition-colors hover:text-primary"
     >
       <FileTextIcon
-        className="h-3.5 w-3.5 text-muted-foreground"
+        className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
         aria-hidden="true"
         data-testid="FileText__763719" />
-      <span>{label}</span>
+      <span className="min-w-0 truncate">{label}</span>
       <span className="sr-only">{openInNewTab}</span>
     </button>
   );
@@ -112,8 +119,8 @@ function MovementRow({ row, ui, currency }) {
         <span className="font-medium tabular-nums">{formatCalendarDate(movementDateTime(row))}</span>
         {time ? <span className="text-xs tabular-nums text-muted-foreground" data-testid="product-movements-time">{time}</span> : null}
       </div>
-      <div role="cell" className="flex min-w-0 flex-nowrap items-center gap-2 whitespace-nowrap">
-        <span className="min-w-0 truncate" title={typeLabel} data-testid="product-movements-type">
+      <div role="cell" className="flex min-w-0 flex-nowrap items-center gap-2 overflow-hidden whitespace-nowrap">
+        <span className="shrink-0" title={typeLabel} data-testid="product-movements-type">
           <Tag variant={TAG_VARIANT[tone]} data-testid="Tag__763719">{typeLabel}</Tag>
         </span>
         {hasDocument ? <DocumentLink
@@ -357,11 +364,6 @@ function nextMovementsSort(prev, key) {
   return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
 }
 
-/** Sorts by `key` unless it is not a sortable column. */
-function requestMovementsSort(setSort, key) {
-  if (isMovementsSortKey(key)) setSort((prev) => nextMovementsSort(prev, key));
-}
-
 /** `aria-sort` of a header cell: a direction on the sorted column, 'none' on the others. */
 function ariaSortFor(sort, key) {
   return sort.key === key ? ARIA_SORT[sort.direction] : 'none';
@@ -540,6 +542,11 @@ export default function ProductMovementsTab({ data, apiBaseUrl, isActive, onVisi
   // "Ver movimientos" (side panel): prefilters the period once, and tells the telemetry how the tab was opened.
   const source = useMovementsPeriodRequest({ enabled: storable, isActive: activeAndStorable, onPeriod: setDateRange });
   useProductMovementsTabTracking({ isActive: activeAndStorable, source });
+  // ETP-5889 (MV-59/60): one event per change the user makes (the handlers below), none for programmatic ones.
+  const trackChange = useProductMovementsChangeTracking({ current: { direction, dateRange, warehouseId } });
+  const changeDirection = (next) => { trackChange.direction(next); setDirection(next); };
+  const changePeriod = (next) => { trackChange.period(next); setDateRange(next); };
+  const changeWarehouse = (next) => { trackChange.warehouse(next); setWarehouseId(next); };
 
   // Warehouses of the filter: the ones the product has stock in (the same source as the side panel).
   useWarehouseFilterOptions({ productId, storable, everActive, apiFetch, setWarehouses });
@@ -610,7 +617,12 @@ export default function ProductMovementsTab({ data, apiBaseUrl, isActive, onVisi
     if (shouldLoadNextPage(el, state)) loadPage(state.rows.length);
   };
 
-  const toggleSort = (key) => requestMovementsSort(setSort, key);
+  const toggleSort = (key) => {
+    if (!isMovementsSortKey(key)) return;
+    const next = nextMovementsSort(sort, key);
+    trackChange.sorted(next.key, next.direction);
+    setSort(next);
+  };
 
   // Nothing to show while the product is unsaved (DetailView disables the tab, but a route state can
   // still open it) or not stocked.
@@ -638,11 +650,11 @@ export default function ProductMovementsTab({ data, apiBaseUrl, isActive, onVisi
       <MovementsFilterBar
         ui={ui}
         direction={direction}
-        onDirectionChange={setDirection}
+        onDirectionChange={changeDirection}
         dateRange={dateRange}
-        onDateRangeChange={setDateRange}
+        onDateRangeChange={changePeriod}
         warehouseId={warehouseId}
-        onWarehouseChange={setWarehouseId}
+        onWarehouseChange={changeWarehouse}
         warehouses={warehouses}
         data-testid="MovementsFilterBar__763719" />
 
@@ -667,7 +679,7 @@ export default function ProductMovementsTab({ data, apiBaseUrl, isActive, onVisi
         className="relative flex max-h-[calc(100vh-420px)] flex-col overflow-y-auto"
         onScroll={onScroll}
         data-testid="product-movements-scroll">
-        <div role="row" className={`${GRID} sticky top-0 z-30 border-b border-border bg-card px-3 py-2 text-xs font-medium text-muted-foreground`}>
+        <div role="row" className={`${GRID} sticky top-0 z-30 border-b border-border bg-card px-3 py-2 text-xs ${HEADER_TEXT_CLASS}`}>
           <span role="columnheader" aria-sort={ariaSort('date')}>{header('date', 'date')}</span>
           <span role="columnheader" aria-sort={ariaSort('type')}>{header('type', 'typeColumn')}</span>
           <span role="columnheader" aria-sort={ariaSort('warehouse')}>{header('warehouse', 'productMovementsWarehouse')}</span>

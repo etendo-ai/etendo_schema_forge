@@ -20718,7 +20718,6 @@
     "stockAvailableLabel": "Disponible",
     "productSidebarStockAvailable": "Stock disponible",
     "productSidebarPanelToggleLabel": "Panel del producto",
-    "stockUnitAbbr": "u",
     "stockUnavailable": "No disponible",
     "stockUnavailableDesc": "No se pudo cargar el stock.",
     "stockHistoryUnavailable": "No se pudo cargar el historial de movimientos.",

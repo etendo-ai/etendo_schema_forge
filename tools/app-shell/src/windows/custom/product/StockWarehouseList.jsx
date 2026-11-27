@@ -2,9 +2,9 @@
 // (same handler and visible set as the modal legend). Visible rows are highlighted, hidden ones dimmed.
 // The footer total is always the sum of ALL warehouses, whatever is visible.
 import { useUI } from '@/i18n';
-import { formatStockQuantity } from './stockQuantityFormat';
+import { formatStockQuantityWithUnit } from './stockQuantityFormat';
 
-export default function StockWarehouseList({ rows, colors, visible, onSelect, total }) {
+export default function StockWarehouseList({ rows, colors, visible, onSelect, total, unitSymbol = null }) {
   const ui = useUI();
   return (
     <div className="w-56 flex-shrink-0 flex flex-col gap-2" data-testid="StockWarehouseList">
@@ -24,12 +24,12 @@ export default function StockWarehouseList({ rows, colors, visible, onSelect, to
               <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: colors[i % colors.length], opacity: shown ? 1 : 0.25 }} />
               <span className={`text-sm truncate ${shown ? 'text-foreground' : 'text-muted-foreground'}`} title={b.binName}>{b.binName}</span>
             </div>
-            <span className={`text-sm flex-shrink-0 ${shown ? 'font-bold text-foreground' : 'font-semibold text-muted-foreground'}`}>{formatStockQuantity(b.quantityOnHand)}</span>
+            <span className={`text-sm flex-shrink-0 ${shown ? 'font-bold text-foreground' : 'font-semibold text-muted-foreground'}`}>{formatStockQuantityWithUnit(b.quantityOnHand, unitSymbol)}</span>
           </button>
         );
       })}
       <div className="text-xs text-disabled mt-auto pt-2" data-testid="StockWarehouseTotal">
-        {`${ui('total')}: ${total == null ? '' : formatStockQuantity(total)} ${ui('units')}`}
+        {`${ui('total')}: ${total == null ? '' : formatStockQuantityWithUnit(total, unitSymbol)}`}
       </div>
     </div>
   );
