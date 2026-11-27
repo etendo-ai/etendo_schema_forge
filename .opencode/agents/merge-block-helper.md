@@ -63,9 +63,9 @@ Rules for the whole flow: `docs/branch-workflow.md` (branch model and daily cut)
 
 | Local checkout | GitHub slug (`--repo`) | Role |
 |----------------|------------------------|------|
-| `/Users/futit/Workspace/etendo_develop/schema_forge` | `etendosoftware/etendo_schema_forge` | functional (windows, app-shell, artifacts) |
-| `/Users/futit/Workspace/etendo_develop/schema_forge_core` | `etendosoftware/schema_forge_core` | platform / tooling |
-| `/Users/futit/Workspace/etendo_develop/modules/com.etendoerp.go` | `etendosoftware/com.etendoerp.go` | runtime (NEO Headless, Java) |
+| `/Users/futit/Workspace/etendo_develop/schema_forge` | `etendo-ai/etendo_schema_forge` | functional (windows, app-shell, artifacts) |
+| `/Users/futit/Workspace/etendo_develop/schema_forge_core` | `etendo-ai/schema_forge_core` | platform / tooling |
+| `/Users/futit/Workspace/etendo_develop/modules/com.etendoerp.go` | `etendo-ai/com.etendoerp.go` | runtime (NEO Headless, Java) |
 
 Not every task has a PR in all three — most have one or two. **Absence of a PR in a repo is normal, not
 an error.** If I truly can't tell whether a repo should have a PR for the task, I ASK the human rather
@@ -137,7 +137,7 @@ reviewDecision,reviewRequests,latestReviews,statusCheckRollup,labels,additions,d
    ```bash
    git -C <repo> log --first-parent --merges --reverse --format='%h %s' origin/main..origin/develop
    ```
-   Each `Merge pull request #N from etendosoftware/feature/ETP-XXXX` is one task. For each I read the
+   Each `Merge pull request #N from etendo-ai/feature/ETP-XXXX` is one task. For each I read the
    PR's checks (`gh pr view N --json statusCheckRollup`) and the checks on develop's head
    (`gh api repos/<slug>/commits/<sha>/check-runs`).
 5. **Propose the cut point.** By default develop's head. If develop's head is red, or a task in the

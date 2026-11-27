@@ -98,6 +98,51 @@ Flags (ETP-5751)*.
 backend rolls back independently, by removing `DD_FEATURE_FLAGS_ENABLED` from its task definition
 (com.etendoerp.go `docs/feature-flags-and-tenant-upgrade.md` §1).
 
+### Flags panel CLI
+
+The rollout panel (`https://flags.jc.proxy.vpn.etendo.cloud`, VPN + Google login) manages each
+flag's stage (`off`/`alpha`/`beta`/`ga`), its alpha/beta rings (emails and `@groups`) and pushes
+them to Datadog. `cli/src/flags-panel.js` calls the same JSON API from the terminal:
+
+```bash
+make flags ARGS=login                        # once: browser sign-in, cookie in ~/.config/etendo-flags/
+make flags ARGS="list --mine"                # flags I own (GitHub login) or whose audience includes me
+make flags ARGS="show grid-column-views"
+make flags ARGS="ring grid-column-views alpha add someone@etendo.ai"
+make flags ARGS="stage grid-column-views beta"
+make flags ARGS="apply grid-column-views"    # dry run: prints the plan
+make flags ARGS="apply grid-column-views --yes"
+```
+
+`stage`, `ring` and `env` only change the panel's desired state; nothing reaches Datadog until
+`apply --yes`. `apply` refuses, unless `--force` is passed, when the plan removes someone's access
+or deletes a targeting rule the panel does not manage. `make flags ARGS=help` lists every command.
+
+`apply --yes` then verifies the result outside the panel: `check <key>` asks Datadog's flag CDN
+(`precompute-assignments`, the call the SPA makes, with the SPA's public client token read from
+the GitHub Actions variables) what each ring member gets, and exits 2 when someone the panel puts
+in the current stage does not get the flag. `extra rule` rows are people who get it through a rule
+the panel does not manage; `not applied` rows belong to a flag still pending in the panel. Flags the
+panel marks backend only (Datadog channel `SERVER`) are never served by that CDN, so `check` skips
+them instead of reporting a false mismatch.
+
+Tester communication uses the panel's Communication tab through the same API. A flag has
+versioned messages (`email` to the testers of its stage, or `release-notes` for Novedades at GA);
+the panel sends one email per tester from its Gmail and remembers who was notified:
+
+```bash
+make flags ARGS="comms grid-column-views"                     # versions, sends, testers not notified yet
+make flags ARGS="comms grid-column-views save --subject 'Prueba …' --body-file /tmp/mail.md"
+make flags ARGS="comms grid-column-views preview"             # HTML file, as testers will see it
+make flags ARGS="notify grid-column-views --test"             # a copy to you, like the panel's test button
+make flags ARGS="notify grid-column-views"                    # dry run: lists the recipients
+make flags ARGS="notify grid-column-views --yes"
+```
+
+`notify` refuses while the flag is pending in the panel (`--force` overrides it): testers would get
+an email for something they cannot open yet. The rollout process and the email templates live in
+the `feature-flag-rollout` skill.
+
 ### ConfigCat (fallback)
 
 The ConfigCat provider fetches assignments at initialization and polls for
@@ -225,7 +270,7 @@ its behaviour is documented in its topic doc and in `com.etendoerp.go`
 
 | Key | Registry entry | Topic doc |
 |---|---|---|
-| `bank-bounce-suggestions` | `bank-bounce-suggestions` | ETP-5581 (TTL placeholder 2026-12-31). Backend-only, per account: gates the automatic bounce-pair suggestions of the bank reconciliation for PSD2-synced accounts (the "Rechazos bancarios" section of the auto-match modal, the pair review in the reconciliation panel, accepting a pair). The SPA only renders what the auto-match answer carries. Honouring already-discarded lines is gated too: with the flag off they are plain pending lines, as before ETP-5581; only the stored account counter *Por conciliar* keeps leaving them out (known limitation in the registry entry). Registered on day one, before any code; backend: `com.etendoerp.go` `docs/feature-flags-and-tenant-upgrade.md` |
+| `bank-bounce-suggestions` | `bank-bounce-suggestions` | ETP-5581 (TTL placeholder 2026-12-31). Backend-only, per account: gates the automatic bounce-pair suggestions of the bank reconciliation for PSD2-synced accounts (the "Rechazos bancarios" section of the auto-match modal, the pair review in the reconciliation panel, accepting a pair). ETP-6359 adds an AI second layer under this same flag plus a configured Decisions API key — no flag of its own, by product decision (the ticket asked for a separate `bank-bounce-ai` flag; it was deliberately not created): the auto-match answer may carry `bounceAiAssessments`, rendered as percentages, an ordered and, when clear, preselected list of outflows in the panel, the outflow an ambiguous pair shows and excludes in the modal, and discards (panel and modal) that send `choiceSource`; absent, an ambiguous pair is resolved in the panel as in ETP-5581. The SPA only renders what the auto-match answer carries. Honouring already-discarded lines is gated too: with the flag off they are plain pending lines, as before ETP-5581; only the stored account counter *Por conciliar* keeps leaving them out (known limitation in the registry entry). Registered on day one, before any code; backend: `com.etendoerp.go` `docs/feature-flags-and-tenant-upgrade.md` |
 | `billing-reconciliation-schedule` | `billing-reconciliation-schedule` | Go-live (flag plus production Process Request): "2.10 Billing reconciliation go-live" in `com.etendoerp.go` `docs/open-and-notable-topics.md`; behaviour: "`billing-reconciliation-schedule` (ETP-5048)" in `com.etendoerp.go` `docs/feature-flags-and-tenant-upgrade.md` |
 | `bp-portal-link` | `bp-self-service-portal` | [BP self-service portal](plans/2026-09-10-bp-self-service-portal.md), extended to every sales document email with 48 h links and renewal by [ETP-6209](plans/2026-11-11-customer-portal-sales-documents.md) — with the flag on, the portal link replaces the email's download button; backend: `com.etendoerp.go` `docs/feature-flags-and-tenant-upgrade.md` |
 | `demo-data-transfer` | `demo-data-transfer` | Retired in `com.etendoerp.go` by ETP-5480 (`docs/feature-flags-and-tenant-upgrade.md`, "`demo-data-transfer` — retired"); the registry entry still awaits its retirement |

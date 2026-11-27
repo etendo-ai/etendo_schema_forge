@@ -191,7 +191,9 @@ export function useReconcileDifference() {
  * they come: the contract-ui helper `splitAutoMatchGroups` documents the shapes and splits them.
  *
  * @param {string|null} accountId
- * @returns {{ groups: Array<object>, kpis: object, loading: boolean, error: Error|null, reload: () => void }}
+ * @returns {{ groups: Array<object>, kpis: object, bounceAiAssessments: object|null, loading: boolean,
+ *   error: Error|null, reload: () => void }} `bounceAiAssessments` (ETP-6359) is the answer's AI layer,
+ *   null when absent
  */
 export function useAutoMatch(accountId) {
   const path = accountId
@@ -204,6 +206,11 @@ export function useAutoMatch(accountId) {
     () => (raw) => ({
       groups: Array.isArray(raw.groups) ? raw.groups : [],
       kpis: raw.kpis ?? defaultKpis,
+      // ETP-6359 — the AI second layer of the bounce suggestions: absent (null) when the backend
+      // sent none, so every consumer reads it as "no AI".
+      bounceAiAssessments: raw.bounceAiAssessments && typeof raw.bounceAiAssessments === 'object'
+        ? raw.bounceAiAssessments
+        : null,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
@@ -219,6 +226,7 @@ export function useAutoMatch(accountId) {
   return {
     groups: data?.groups ?? [],
     kpis: data?.kpis ?? defaultKpis,
+    bounceAiAssessments: data?.bounceAiAssessments ?? null,
     loading,
     error,
     reload,

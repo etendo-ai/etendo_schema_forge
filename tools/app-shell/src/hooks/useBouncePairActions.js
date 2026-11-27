@@ -39,18 +39,35 @@ export function useRestorePair() {
 }
 
 /**
- * Reports "No es un rechazo" (POST `dismissPair`, ETP-5581): the user said a suggested pair is not a
- * bounce. Nothing is persisted — the backend only emits the KPI event (`decision=unchecked`,
- * `surface=panel`); the pair stays hidden for the session on the client side alone. Callers fire it
- * and forget it: a failure must change nothing on screen.
+ * "No es un rechazo" (POST `dismissPair`, ETP-5581 / ETP-6359): the user said a suggested pair is not
+ * a bounce. The backend stores the mark on the pair's REJECTION line (it is never proposed as a
+ * rejection again, by the automatch, `pendingLines` or the AI) and emits the KPI event
+ * (`decision=unchecked`, `surface=panel`). Behind the flag like `discardPair`; a line that left the
+ * pending pool is refused with 409 `LINE_NOT_PENDING`.
  * Payload: `{ financialAccountId, statementLineId, counterpartLineId? }` (the selected line and, when
- * the card shows one, the other line of the pair).
+ * the card shows one, the other line of the pair) → `{ ok, dismissedLineId, bounceDismissedAt }`
+ * (both null when nothing could be marked).
  *
  * @returns {{ dismissPair: (payload: object) => Promise<object>, loading: boolean, error: Error|null }}
  */
 export function useDismissPair() {
   const { post, loading, error } = useReconciliationPost('dismissPair');
   return { dismissPair: post, loading, error };
+}
+
+/**
+ * The undo of "No es un rechazo" (POST `restoreBounceSuggestion`, ETP-6359): clears the mark on a
+ * line (`bounceDismissedAt` on its `pendingLines` row), so detection may propose it as a rejection
+ * again. Behind the flag (403 `BOUNCE_SUGGESTIONS_OFF`); 409 `LINE_NOT_PENDING` for a line no longer
+ * pending. Reports no KPI event.
+ * Payload: `{ financialAccountId, statementLineId }` → `{ restored, statementLineId }`.
+ *
+ * @returns {{ restoreBounceSuggestion: (payload: object) => Promise<object>, loading: boolean,
+ *   error: Error|null }}
+ */
+export function useRestoreBounceSuggestion() {
+  const { post, loading, error } = useReconciliationPost('restoreBounceSuggestion');
+  return { restoreBounceSuggestion: post, loading, error };
 }
 
 /**

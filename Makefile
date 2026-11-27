@@ -1181,6 +1181,10 @@ mcp-ui: ## Launch the optional Streamlit panel for the MCP harness (§9)
 flag-debt: ## Score per-flag technical debt from flags-registry.json (FLAG=<key>, JSON=1, HTML=1)
 	@$(SF) sf-flag-debt $(if $(FLAG),--flag $(FLAG)) $(if $(JSON),--json) $(if $(HTML),--html)
 
+.PHONY: flags
+flags: ## Read/edit the feature-flags panel (ARGS="list --mine", ARGS="show <key>", ARGS=help)
+	@node cli/src/flags-panel.js $(ARGS)
+
 # --- XML Regeneration Check ---
 
 ORIGINAL_DB_DIR ?=

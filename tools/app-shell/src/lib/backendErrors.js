@@ -683,6 +683,9 @@ const BACKEND_ERROR_KEY_MAP = {
   ETGO_BounceHasPayment: 'backendError.bounceHasPayment',
   ETGO_BounceLineNotPending: 'backendError.bounceLineNotPending',
   ETGO_BounceDiscardNotAllowed: 'backendError.bounceDiscardNotAllowed',
+  // ETP-6359 — discardPair with choiceSource "ai" (409 BOUNCE_AI_SUGGESTION_STALE): the AI's
+  // recommendation no longer holds (com.etendoerp.go docs/neo-headless.md §4.12.1.1).
+  ETGO_BounceAiSuggestionStale: 'backendError.bounceAiSuggestionStale',
 };
 
 // ETP-5360 — a message that IS still an untranslated `@Key@` token (or carries some) is its own
