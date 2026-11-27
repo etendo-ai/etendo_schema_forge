@@ -6,12 +6,13 @@
 // the file it stays open on the loading ring and nothing in it can be clicked again; afterwards
 // it shows the validator's answer (rejected / accepted with warnings / could not be validated)
 // or closes (a clean file, or a generation the page already explained).
-import { vi, describe, it, expect } from 'vitest';
+import { vi, describe, it, expect, afterEach } from 'vitest';
 import React from 'react';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import FileGenModal390 from '../FileGenModal390.jsx';
+import { isDialogEscape, initialFocusTarget, useModalFocus } from '../../../useModalFocus.js';
 
 /** A `t` that echoes the key and its params, so the tests see what was asked. */
 const t = (key, params) => (params && Object.keys(params).length ? `${key}|${JSON.stringify(params)}` : key);
@@ -320,5 +321,88 @@ describe('FileGenModal390 — keyboard (modal dialog)', () => {
     unmount();
     expect(document.activeElement).toBe(trigger);
     trigger.remove();
+  });
+});
+
+// The shared keyboard contract itself (`useModalFocus.js`), on hand-built dialogs: which Escape is
+// the dialog's own, which control it opens on, and the way back to a trigger that may be gone.
+describe('useModalFocus — isDialogEscape / initialFocusTarget', () => {
+  /** Builds `<div role="dialog">` with the given inner HTML, attached to the document. */
+  function dialogWith(html) {
+    const dialog = document.createElement('div');
+    dialog.setAttribute('role', 'dialog');
+    dialog.tabIndex = -1;
+    dialog.innerHTML = html;
+    document.body.appendChild(dialog);
+    return dialog;
+  }
+  const escape = (extra = {}) => ({ key: 'Escape', defaultPrevented: false, ...extra });
+
+  afterEach(() => { document.body.innerHTML = ''; });
+
+  it('ignores an Escape already handled by something inside (defaultPrevented), and any other key', () => {
+    const dialog = dialogWith('<button>ok</button>');
+    dialog.querySelector('button').focus();
+    expect(isDialogEscape(escape(), dialog)).toBe(true);
+    expect(isDialogEscape(escape({ defaultPrevented: true }), dialog)).toBe(false);
+    expect(isDialogEscape(escape({ key: 'Enter' }), dialog)).toBe(false);
+    expect(isDialogEscape(escape(), null)).toBe(false);
+  });
+
+  it('is the dialog\'s own with focus on body (nowhere), not with focus outside it', () => {
+    const dialog = dialogWith('<button>ok</button>');
+    document.activeElement?.blur?.();
+    expect(document.activeElement).toBe(document.body);
+    expect(isDialogEscape(escape(), dialog)).toBe(true);
+
+    const outside = document.createElement('button');
+    document.body.appendChild(outside);
+    outside.focus();
+    expect(isDialogEscape(escape(), dialog)).toBe(false);
+  });
+
+  it('belongs to a nested dialog when focus is inside it, not to the outer one', () => {
+    const outer = dialogWith('<button data-testid="outer-btn">a</button>'
+      + '<div role="dialog" data-testid="inner"><button data-testid="inner-btn">b</button></div>');
+    const inner = outer.querySelector('[data-testid="inner"]');
+    outer.querySelector('[data-testid="inner-btn"]').focus();
+    expect(isDialogEscape(escape(), outer)).toBe(false);
+    expect(isDialogEscape(escape(), inner)).toBe(true);
+    outer.querySelector('[data-testid="outer-btn"]').focus();
+    expect(isDialogEscape(escape(), outer)).toBe(true);
+  });
+
+  it('opens on [data-autofocus] over the first control', () => {
+    const dialog = dialogWith('<button data-testid="first">a</button><input data-testid="marked" data-autofocus />');
+    expect(initialFocusTarget(dialog)).toBe(dialog.querySelector('[data-testid="marked"]'));
+  });
+
+  it('skips the header close ✕, falls back to it when it is the only control, then to the dialog', () => {
+    const dialog = dialogWith('<button class="fm-config-modal__close" data-testid="x">x</button>'
+      + '<button disabled>off</button><button tabindex="-1">hidden</button><input data-testid="name" />');
+    expect(initialFocusTarget(dialog)).toBe(dialog.querySelector('[data-testid="name"]'));
+
+    const onlyClose = dialogWith('<button class="fm-config-modal__close" data-testid="x2">x</button>');
+    expect(initialFocusTarget(onlyClose)).toBe(onlyClose.querySelector('[data-testid="x2"]'));
+
+    const empty = dialogWith('<p>text</p>');
+    expect(initialFocusTarget(empty)).toBe(empty);
+    expect(initialFocusTarget(null)).toBeNull();
+  });
+
+  it('does not try to give focus back to a trigger detached while the dialog was open', () => {
+    function Dialog() {
+      const ref = useModalFocus(vi.fn());
+      return <div role="dialog" tabIndex={-1} ref={ref}><button>ok</button></div>;
+    }
+    const trigger = document.createElement('button');
+    document.body.appendChild(trigger);
+    trigger.focus();
+    const focusSpy = vi.spyOn(trigger, 'focus');
+    const { unmount } = render(<Dialog />);
+    expect(screen.getByRole('dialog').contains(document.activeElement)).toBe(true);
+    trigger.remove();
+    expect(() => unmount()).not.toThrow();
+    expect(focusSpy).not.toHaveBeenCalled();
   });
 });

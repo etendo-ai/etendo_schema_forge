@@ -1,5 +1,6 @@
 // @covers tools/app-shell/src/windows/custom/fiscal-models/models/303/FmModel303Page.jsx
 // @covers tools/app-shell/src/windows/custom/fiscal-models/models/303/fm303Layouts.js
+// @covers tools/app-shell/src/windows/custom/fiscal-models/usePendingEdits.js
 // Vitest tests for FmModel303Page's ETP-5187 required-field pre-flight gate:
 // blocks "Generar fichero 303" / "Marcar como Presentado" — including their
 // button-level pre-checks, which must stop the modal from even opening — when
@@ -349,6 +350,19 @@ describe('FmModel303Page — the zero-only rule auto-selects Resultado cero (ETP
     fireEvent.click(genBtn());
     expect(screen.getByTestId('FileGenModal303-mock')).toBeInTheDocument();
     expect(toast.error).not.toHaveBeenCalledWith('fm.ident.decl.disabled_zero_only');
+  });
+
+  // OBS-17 (ETP-5716) — the auto-set value is saved with the next save, but it is not the user's
+  // edit: leaving with only it pending raises no unsaved-changes prompt.
+  it('the auto-set Resultado cero does not register unsaved changes', async () => {
+    const { hasUnsavedChanges, resetUnsavedChangesForTests } = await import('@/lib/unsavedChanges.js');
+    resetUnsavedChangesForTests();
+    boxesMode.real = true;
+    const { container } = render(
+      <FmModel303Page decl={makeDecl({ tipo_declaracion: 'I' }, ZERO_ONLY_BOXES)} {...defaultProps} />,
+    );
+    expect(tipoSelect(container).value).toBe('N');
+    expect(hasUnsavedChanges()).toBe(false);
   });
 
   it('a submitted declaration keeps its stored tipo (never mutated) and shows no error', () => {
