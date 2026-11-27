@@ -312,7 +312,7 @@ async function refusalOf(res, data, ui, describe) {
   if (!res.ok) {
     const body = await res.clone().json().catch(() => null);
     const error = body?.error ?? body;
-    return { field: refusedField(error), message: describe(error) ?? await extractErrorMessage(res, ui) };
+    return { field: refusedField(error), message: describe(error) ?? (await extractErrorMessage(res, ui)) };
   }
   const message = typeof data?.error === 'string' ? data.error : ui('convRateSaveFailed');
   return { field: refusedField(data), message: describe(data) ?? message };
