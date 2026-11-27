@@ -2165,7 +2165,11 @@ wire-contract table in the `action=delete` section above for why that matters), 
 the rule was enforced in the frontend only, so it held for REST, MCP and the bulk-delete path only from then on. The PSD2 constant lives in a
 **third** module (`com.etendoerp.psd2.bank.integration`), reachable because
 `com.etendoerp.go` declares it as a **Gradle** dependency
-(`modules/com.etendoerp.go/build.gradle:72`, `implementation('com.etendoerp:psd2.bank.integration:[2.0.0,)')`).
+(`modules/com.etendoerp.go/build.gradle:83`, `implementation('com.etendoerp:psd2.bank.integration:[2.3.1,)')`).
+The floor is 2.3.1 since ETP-6463: it is the first PSD2 release whose `BankIntegrationUrlUtils.buildBaseUrl()`
+adds `context.name` only when `context.url` does not already end with it (PSD2 Issue #151), which
+`PisPaymentBridge` relies on for the PIS return URL fallback now that it no longer collapses a
+repeated `/etendo/etendo` itself (the ETP-4895 workaround was removed).
 Note it is **not** an AD module dependency: `com.etendoerp.go`'s own
 `src-db/database/sourcedata/AD_MODULE_DEPENDENCY.xml` declares only Core and "OpenAPI
 Implementation", so there is no AD-level dependency record to add or maintain for this.
