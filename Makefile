@@ -1185,6 +1185,10 @@ flag-debt: ## Score per-flag technical debt from flags-registry.json (FLAG=<key>
 flags: ## Read/edit the feature-flags panel (ARGS="list --mine", ARGS="show <key>", ARGS=help)
 	@node cli/src/flags-panel.js $(ARGS)
 
+.PHONY: bots
+bots: ## Read the bot monitor ("serruchín"): pre-tickets, task queue, development runs (ARGS="dev --mine", ARGS=help)
+	@node cli/src/bot-monitor.js $(ARGS)
+
 # --- XML Regeneration Check ---
 
 ORIGINAL_DB_DIR ?=

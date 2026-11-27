@@ -81,7 +81,8 @@ function loadSession() {
   return s;
 }
 
-async function request(base, method, url, data) {
+/** One call to any app behind the same Tinyauth (cookie domain .jc.proxy.vpn.etendo.cloud). */
+export async function request(base, method, url, data) {
   const s = loadSession();
   const res = await fetch(base + url, {
     method,
@@ -125,15 +126,21 @@ async function login() {
 
 // ---------- identity ----------
 
-async function me() {
+/** The Tinyauth user of the stored session: `{ email, name }`. */
+export async function signedInUser() {
   const user = await request(AUTH_BASE, 'GET', '/api/context/user');
+  return { email: (user.auth?.email || '').toLowerCase(), name: user.auth?.name || '' };
+}
+
+async function me() {
+  const user = await signedInUser();
   let owner = process.env.ETENDO_FLAGS_OWNER || '';
   if (!owner) {
     try {
       owner = execFileSync('gh', ['api', 'user', '-q', '.login'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
     } catch { /* gh missing or not logged in: --mine falls back to audience only */ }
   }
-  return { email: (user.auth?.email || '').toLowerCase(), name: user.auth?.name || '', owner };
+  return { ...user, owner };
 }
 
 // ---------- reading ----------
