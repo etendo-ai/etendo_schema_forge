@@ -21815,6 +21815,8 @@
     "invitePageLoading": "Verificando invitación...",
     "invitePageInvalidTitle": "Enlace inválido o vencido",
     "invitePageInvalidDescription": "Este enlace de invitación no es válido, ha vencido o ya fue utilizado.",
+    "invitePageAcceptFailed": "No pudimos aceptar la invitación. Intentá de nuevo.",
+    "invitePageAccountMismatch": "Esta invitación se envió a una cuenta distinta de la que tenés abierta. Cerrá la sesión y continuá con la cuenta invitada.",
     "invitePageExistingTitle": "Aceptar invitación a la empresa",
     "invitePageExistingDescription": "Has sido invitado a unirte a {companyName}.",
     "invitePageExistingAccountNotice": "Ya tenés una cuenta de Etendo ({email}). Iniciá sesión primero y después aceptá la invitación.",

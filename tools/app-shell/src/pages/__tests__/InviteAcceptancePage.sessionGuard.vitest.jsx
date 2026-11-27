@@ -1,3 +1,4 @@
+// @covers tools/app-shell/src/pages/InviteAcceptancePage.jsx
 import { render, screen, fireEvent, waitFor, configure } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -353,10 +354,14 @@ describe('InviteAcceptancePage — ETP-5202 session guard', () => {
       installFetch({
         resolve: jsonOk(existingBranch),
         session: () => jsonOk({ accountEmail: INVITED_EMAIL }),
+        // Real wire shape (EtendoGoJwtServlet.writeError): the code is nested under `error`.
         accept: () => jsonFail(403, {
-          error: true,
-          code: 'INVITATION_ACCOUNT_MISMATCH',
-          message: 'This invitation belongs to a different account',
+          error: {
+            code: 'INVITATION_ACCOUNT_MISMATCH',
+            message: 'This invitation belongs to a different account',
+            userMessage: 'This invitation belongs to a different account',
+            status: 403,
+          },
         }),
       });
       globalThis.localStorage.setItem('sf_auth_token', 'tenant-jwt');
@@ -367,7 +372,9 @@ describe('InviteAcceptancePage — ETP-5202 session guard', () => {
       fireEvent.click(await screen.findByTestId('action-accept-invitation'));
 
       const error = await screen.findByTestId('invite-action-error');
-      expect(error).toHaveTextContent('This invitation belongs to a different account');
+      // ETP-5385: translated by code; the backend's English text is never shown.
+      expect(error).toHaveTextContent(LABELS.invitePageAccountMismatch);
+      expect(error).not.toHaveTextContent('This invitation belongs to a different account');
       expect(screen.queryByTestId('invite-shared-login')).not.toBeInTheDocument();
       expect(screen.getByTestId('invite-authenticated-step')).toBeInTheDocument();
     });
