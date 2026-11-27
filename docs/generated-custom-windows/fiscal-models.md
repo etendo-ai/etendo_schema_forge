@@ -3081,7 +3081,9 @@ control, else the first control that is not the header ✕, else the overlay, wh
 `role="dialog"` element with `tabIndex={-1}`); Tab / Shift+Tab cycle inside it (the shared
 `useDialogFocusTrap` of `ActionChoiceModal`); Escape calls the popup's own close — so
 `FileGenModal390` while it generates and `AeatSubmitFlow` while it submits ignore it, as they ignore
-the ✕; on close, focus returns to the control that opened it. An Escape already consumed by an inner
+the ✕ (disabled), Cancelar (disabled) and an overlay click — every way out goes through the popup's
+guarded `close` (BUG-1, ETP-5716: `AeatSubmitFlow` used to guard only Escape, so closing mid-request
+let the result and attach callbacks land on an unmounted flow); on close, focus returns to the control that opened it. An Escape already consumed by an inner
 layer (a select) or pressed in a dialog nested inside the popup is not the popup's. `NewDeclModal`
 is not wired yet: its model/year menus have no Escape of their own, so Escape would close the whole
 popup.
@@ -4427,6 +4429,19 @@ error result titled "Declaración no presentada: la AEAT ha detectado errores al
 (server constant `PRESENT_WHEN_VALIDATOR_UNANSWERED`; when false, `VALIDATION_UNAVAILABLE`). While it
 runs the button reads "Validando y presentando en la AEAT…" (one request, so one text). The check
 "Validar sin presentar" itself is unchanged. No PDF is attached for this implicit validation.
+
+**Presented without that validation (ETP-5716).** When the validation got no verdict — no answer,
+or EV0 "No existe información del modelo" — and the presentation went ahead anyway, the server's
+answer carries `preValidation: "NOT_VALIDATED"` (success and failure alike; an accepted validation
+leaves it out). `AeatSubmitFlow` (303 and 390, the same component) then adds an info note under the
+result (`AeatResultBanner` tone `info`, `data-testid="Banner__aeatPreValidationSkipped"`):
+`fm.aeat.result.pre_validation_skipped.success` under "Declaración presentada correctamente" ("La AEAT
+no pudo validar el fichero antes de presentarlo (el servicio de validación no estaba disponible). La
+presentación se hizo igualmente y la AEAT la aceptó.") or `…failure` under the error result. A failed
+real presentation is now titled `fm.aeat.result.error.title` "La declaración no se ha presentado"
+(was "No se pudo completar la presentación"), so the error list reads as "not presented"; an
+unexpected `status` gets the neutral `fm.aeat.result.unknown.title` ("No se pudo confirmar el
+resultado de la presentación") instead, since nothing says it was not presented.
 
 **AEAT attempt log (ETP-5716).** Every attempt against the AEAT — a direct presentation, a
 "Validar sin presentar" and this pre-download validation, for 303 and 390 — leaves a row in the

@@ -4,7 +4,7 @@ import { useUI } from '@/i18n';
 import { useApiFetch } from '@/auth/useApiFetch.js';
 import { useAuth } from '@/auth/AuthContext.jsx';
 import { neoBase } from '@/components/related-documents/helpers.js';
-import { BankIcon, CheckCircleIcon, CircleNotchIcon, DownloadSimpleIcon, WarningIcon, WarningOctagonIcon } from '@phosphor-icons/react';
+import { BankIcon, CheckCircleIcon, CircleNotchIcon, DownloadSimpleIcon, InfoIcon, WarningIcon, WarningOctagonIcon } from '@phosphor-icons/react';
 import { AeatResultBanner as Banner } from './AeatResultBanner.jsx';
 import { formatAmount, formatPeriod, triggerBase64Download, applyIdentParams, applyBoxParams, isBankIbanRequired, withBox111NonZeroFlag, DECLARATION_TYPE_INGRESO, showIaeActivityReminder } from '../../fiscalModelsUtils.js';
 import { isLastPeriodOfYear } from './fm303Layouts.js';
@@ -162,7 +162,34 @@ export function submitErrorTitle(response, specificKey, t) {
   if (response?.testMode === true) {
     return t('fm.aeat.result.test_error.title') ?? 'The validation could not be completed';
   }
-  return t('fm.aeat.result.error.title') ?? 'The submission could not be completed';
+  // ETP-5716 — a real presentation that failed says so plainly: nothing was presented.
+  return t('fm.aeat.result.error.title') ?? 'The declaration was not submitted';
+}
+
+/**
+ * True when a real presentation went ahead without a verdict from the validation that precedes
+ * it (the server's `preValidation: "NOT_VALIDATED"` — no answer, or EV0 "model not available";
+ * ETP-5716). Never true in test mode: the field is only sent on a real presentation.
+ */
+export function wasPresentedWithoutValidation(response) {
+  return response?.preValidation === 'NOT_VALIDATED';
+}
+
+// The info note under a real presentation's result when the file was not validated first: the
+// presentation went ahead anyway (PRESENT_WHEN_VALIDATOR_UNANSWERED). `presented` picks the text:
+// accepted by the AEAT, or sent but not presented.
+function PreValidationNote({ response, t, presented }) {
+  if (!wasPresentedWithoutValidation(response)) return null;
+  const key = presented ? 'fm.aeat.result.pre_validation_skipped.success' : 'fm.aeat.result.pre_validation_skipped.failure';
+  return (
+    <div style={{ marginTop: 12 }}>
+      <Banner
+        tone="info"
+        icon={<InfoIcon size={18} data-testid="Info__aeatPreValidation" />}
+        title={t(key)}
+        data-testid="Banner__aeatPreValidationSkipped" />
+    </div>
+  );
 }
 
 // ── UI ──────────────────────────────────────────────────────────────────────
@@ -327,8 +354,12 @@ export default function AeatSubmitFlow({ decl, orgIdent, identChecks, liveBoxes,
 
   const [step, setStep] = useState('confirm'); // 'confirm' | 'result'
   const [submitting, setSubmitting] = useState(false);
+  // Every way out — Escape, the ✕, the overlay, Cancelar — is refused while the request is in
+  // flight (BUG-1, ETP-5716): closing mid-request let the result and attach callbacks land on an
+  // unmounted flow. Same rule as FileGenModal390's `close`.
+  const close = () => { if (!submitting) onClose?.(); };
   // GEN-03: focus in, Tab trapped, Escape closes (not mid-request), focus back on close.
-  const dialogRef = useModalFocus(() => { if (!submitting) onClose?.(); });
+  const dialogRef = useModalFocus(close);
   const [connError, setConnError] = useState(null);
   const [response, setResponse] = useState(null);
 
@@ -415,7 +446,7 @@ export default function AeatSubmitFlow({ decl, orgIdent, identChecks, liveBoxes,
   const submittingKey = testMode ? 'fm.aeat.action.submitting' : 'fm.aeat.action.validating_submitting';
 
   return (
-    <div className="fm-modal-overlay" role="dialog" aria-modal="true" onClick={onClose} ref={dialogRef} tabIndex={-1}>
+    <div className="fm-modal-overlay" role="dialog" aria-modal="true" aria-busy={submitting} onClick={close} ref={dialogRef} tabIndex={-1}>
       <div className="fm-config-modal fm-aeat-modal" onClick={e => e.stopPropagation()} data-testid="AeatSubmitFlow__dialog">
 
         {/* Header */}
@@ -428,7 +459,7 @@ export default function AeatSubmitFlow({ decl, orgIdent, identChecks, liveBoxes,
               </div>
             )}
           </div>
-          <button className="fm-config-modal__close" onClick={onClose} aria-label={t('fm.action.close')}>✕</button>
+          <button className="fm-config-modal__close" onClick={close} disabled={submitting} aria-label={t('fm.action.close')} data-testid="AeatSubmitFlow__closeX">✕</button>
         </div>
 
         {/* Body */}
@@ -569,6 +600,7 @@ export default function AeatSubmitFlow({ decl, orgIdent, identChecks, liveBoxes,
                 icon={<CheckCircleIcon size={18} data-testid="CircleCheck__aeatSuccess" />}
                 title={t('fm.aeat.result.success.title') ?? 'Declaration submitted successfully'}
                 data-testid="Banner__aeatSuccess" />
+              <PreValidationNote response={response} t={t} presented />
               <div style={{ marginTop: 16 }}>
                 <InfoRow
                   label={t('fm.aeat.result.success.csv') ?? 'CSV'}
@@ -672,6 +704,7 @@ export default function AeatSubmitFlow({ decl, orgIdent, identChecks, liveBoxes,
                   data-testid="Banner__aeatError">
                   {errorBody}
                 </Banner>
+                <PreValidationNote response={response} t={t} presented={false} />
                 {isNoCertificate && (
                   <button
                     type="button"
@@ -694,7 +727,7 @@ export default function AeatSubmitFlow({ decl, orgIdent, identChecks, liveBoxes,
             <Banner
               tone="danger"
               icon={<WarningOctagonIcon size={18} data-testid="OctagonAlert__aeatUnknown" />}
-              title={t('fm.aeat.result.error.title') ?? 'The submission could not be completed'}
+              title={t('fm.aeat.result.unknown.title') ?? 'The result of the submission could not be confirmed'}
               body={t('fm.aeat.error.generic') ?? 'Unknown error. Please try again.'}
               data-testid="Banner__aeatUnknown" />
           )}
@@ -702,7 +735,7 @@ export default function AeatSubmitFlow({ decl, orgIdent, identChecks, liveBoxes,
 
         {/* Footer */}
         <div className="fm-config-modal__footer">
-          <button className="fm-btn fm-btn--cancel-pill" onClick={onClose}>
+          <button className="fm-btn fm-btn--cancel-pill" onClick={close} disabled={submitting} data-testid="AeatSubmitFlow__cancel">
             {step === 'result' ? (t('fm.action.close') ?? 'Close') : (t('fm.action.cancel') ?? 'Cancel')}
           </button>
           {step === 'confirm' && (
