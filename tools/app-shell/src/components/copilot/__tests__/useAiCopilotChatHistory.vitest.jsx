@@ -8,7 +8,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Created at module level so a describe block can run on its own.
-globalThis.__chatApi ??= { sendMessage: vi.fn() };
+globalThis.__chatApi ??= { sendMessage: vi.fn(), regenerate: vi.fn() };
 
 vi.mock('@ai-sdk/react', async () => {
   const React = await import('react');
@@ -29,7 +29,7 @@ vi.mock('@ai-sdk/react', async () => {
         messages, status, error, setMessages,
         stop: vi.fn(() => setStatus('ready')),
         clearError: () => setError(undefined),
-        sendMessage: api.sendMessage, addToolOutput: vi.fn(), regenerate: vi.fn(),
+        sendMessage: api.sendMessage, addToolOutput: vi.fn(), regenerate: api.regenerate,
       };
     },
   };
@@ -313,7 +313,7 @@ describe('agent chat history', () => {
 });
 
 describe('agent chat file attachments', () => {
-  beforeEach(() => { globalThis.__chatApi.sendMessage.mockClear(); });
+  beforeEach(() => { globalThis.__chatApi.sendMessage.mockClear(); globalThis.__chatApi.regenerate.mockClear(); });
 
   const file = (name, size = 10, type = 'text/csv', content = 'a,b') => {
     const f = new File([content], name, { type });
@@ -368,6 +368,17 @@ describe('agent chat file attachments', () => {
     expect(result.current.error).toBeTruthy();
     await act(async () => { result.current.actions.dismissError(); });
     expect(result.current.error).toBeFalsy();
+  });
+
+  it('a file error is not retryable: retry clears it and never regenerates the last turn', async () => {
+    const { result } = setup();
+    await act(async () => { result.current.actions.uploadFile(file('a.pdf', 10, 'application/pdf')); });
+    expect(result.current.error).toBe('copilotFileUnsupported');
+    expect(result.current.errorRetryable).toBe(false);
+    await act(async () => { result.current.actions.retry(); });
+    expect(globalThis.__chatApi.regenerate).not.toHaveBeenCalled();
+    expect(result.current.error).toBeFalsy();
+    expect(result.current.errorRetryable).toBe(true);
   });
 
   it('keeps the queue and the text when a file cannot be read', async () => {

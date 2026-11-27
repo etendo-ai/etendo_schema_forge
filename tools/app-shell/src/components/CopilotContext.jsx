@@ -34,11 +34,12 @@ export function CopilotProvider({ children, menuGroups }) {
     files: ai.files,
     isSending: ai.isSending,
     error: ai.error,
+    errorRetryable: ai.errorRetryable,
     pageHelpSuggestion: ai.pageHelpSuggestion,
     pageHelpError: ai.pageHelpError,
     pageHelpActive: ai.pageHelpActive,
     pageHelpLoading: ai.pageHelpLoading,
-  }), [ai.archivedConversations, ai.conversationId, ai.conversations, ai.error, ai.files, ai.input, ai.isLoadingArchivedConversations, ai.isLoadingConversations, ai.isLoadingMessages, ai.isSending, ai.messages, ai.pageHelpActive, ai.pageHelpError, ai.pageHelpLoading, ai.pageHelpSuggestion, legacy.state]);
+  }), [ai.archivedConversations, ai.conversationId, ai.conversations, ai.error, ai.errorRetryable, ai.files, ai.input, ai.isLoadingArchivedConversations, ai.isLoadingConversations, ai.isLoadingMessages, ai.isSending, ai.messages, ai.pageHelpActive, ai.pageHelpError, ai.pageHelpLoading, ai.pageHelpSuggestion, legacy.state]);
   const actions = useMemo(() => ({
     ...legacy.actions,
     loadBootstrap: () => {},

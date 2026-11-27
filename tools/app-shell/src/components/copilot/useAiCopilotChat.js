@@ -656,6 +656,16 @@ export function useAiCopilotChat({ onOpenCopilot, menuGroups }) {
     clearHistoryError();
   }, [chat.clearError, clearHistoryError]);
 
+  // A file error is about the attachment the user picked, not about the last turn. Retrying it
+  // must not regenerate that turn: the agent would run its tools again and could repeat writes.
+  const retry = useCallback(() => {
+    if (fileError) {
+      setFileError('');
+      return;
+    }
+    chat.regenerate();
+  }, [fileError, chat.regenerate]);
+
   const pageHelpChat = useChat({
     id: 'etendo-go-page-help',
     transport,
@@ -806,13 +816,13 @@ export function useAiCopilotChat({ onOpenCopilot, menuGroups }) {
     deleteConversation: history.deleteConversation,
     restoreConversation: history.restoreConversation,
     permanentDelete: history.permanentDelete,
-    retry: chat.regenerate,
+    retry,
     dismissError,
     stop,
     addToolResult: chat.addToolOutput,
     requestPageHelp,
     showPageHelp,
-  }), [chat.addToolOutput, chat.regenerate, dismissError, history.deleteConversation, history.loadArchivedConversations, history.loadConversations, history.permanentDelete, history.renameConversation, history.restoreConversation, requestPageHelp, selectConversation, sendMessage, showPageHelp, startNewConversation, stop, uploadFile, removeFile]);
+  }), [chat.addToolOutput, dismissError, history.deleteConversation, history.loadArchivedConversations, history.loadConversations, history.permanentDelete, history.renameConversation, history.restoreConversation, requestPageHelp, retry, selectConversation, sendMessage, showPageHelp, startNewConversation, stop, uploadFile, removeFile]);
 
   return {
     messages,
@@ -820,6 +830,8 @@ export function useAiCopilotChat({ onOpenCopilot, menuGroups }) {
     files,
     isSending: chat.status === 'submitted' || chat.status === 'streaming',
     error: fileError || chat.error?.message || loadError || history.historyError,
+    // False while the shown error is a file error: there is no turn to retry for it.
+    errorRetryable: !fileError,
     conversationId,
     isLoadingMessages,
     conversations: history.conversations,

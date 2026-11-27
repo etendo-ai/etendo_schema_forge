@@ -84,14 +84,16 @@ export function ChatView({
             data-testid="ChatError__61b427">
             <p>{error}</p>
             <div className="mt-2 flex gap-2">
-              <Button
-                type="button"
-                size="sm"
-                onClick={onRetry}
-                disabled={isSending}
-                data-testid="Button__61b427">
-                Retry
-              </Button>
+              {onRetry && (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={onRetry}
+                  disabled={isSending}
+                  data-testid="Button__61b427">
+                  Retry
+                </Button>
+              )}
               <Button
                 type="button"
                 size="sm"
