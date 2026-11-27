@@ -305,6 +305,42 @@ test.describe('Product movements tab — column geometry', () => {
     expect(new URL(tabCalls(calls)[0]).searchParams.get('_sortBy')).toBe('-transactionProcessDate,-id');
   });
 
+  // The Type cell holds the pill and the document link; the pill has priority (never clipped), the link compacts.
+  for (const [width, height] of [[1280, 722], [1470, 836]]) {
+    test(`at ${width}x${height} the type pill is never clipped and the document link compacts inside its cell`, async ({ page }) => {
+      await page.setViewportSize({ width, height });
+      const INVENTORY_IN = {
+        ...MOVEMENT, id: 'mov-inv', movementQuantity: 12, etgoDocKind: 'physical-inventory', etgoDocWindow: 'physical-inventory',
+        etgoDocLabel: 'QA ETP-5908 inv Principal',
+      };
+      await openMovementsWith(page, () => [200, page_([INVENTORY_IN], { netQuantity: 12, count: 1 })]);
+      const row = page.getByTestId('product-movements-row').first();
+      await expect(row).toBeVisible({ timeout: 10_000 });
+      const g = await row.evaluate((el) => {
+        const cell = el.querySelectorAll('[role="cell"]')[1];
+        const pill = cell.querySelector('[data-testid="product-movements-type"]');
+        const link = cell.querySelector('[data-testid="product-movements-doc-link"]');
+        const label = [...link.querySelectorAll('span')].find((n) => !n.className.includes('sr-only'));
+        const c = cell.getBoundingClientRect();
+        const l = link.getBoundingClientRect();
+        return {
+          pillClipped: pill.scrollWidth > pill.clientWidth,
+          pillWidth: pill.getBoundingClientRect().width,
+          linkWidth: l.width,
+          linkRight: l.right,
+          cellRight: c.right,
+          labelClipped: label.scrollWidth > label.clientWidth,
+          title: link.getAttribute('title'),
+        };
+      });
+      expect(g.pillClipped, 'the pill must not be clipped').toBe(false);
+      expect(g.labelClipped, 'the document label compacts (ellipsis)').toBe(true);
+      expect(g.linkWidth).toBeGreaterThanOrEqual(40); // MIN: icon + gap + about two letters
+      expect(g.linkRight).toBeLessThanOrEqual(g.cellRight + 0.5); // never paints over the next column
+      expect(g.title).toBe('QA ETP-5908 inv Principal');
+    });
+  }
+
   test('the cost header is 170 px wide and never truncates its label, with no sort and in both sort directions', async ({ page }) => {
     await openMovementsWith(page, () => [200, page_([MOVEMENT, OUT_MOVEMENT], { netQuantity: -3, count: 2 })]);
     await expect(page.getByTestId('product-movements-row').first()).toBeVisible({ timeout: 10_000 });
@@ -884,6 +920,24 @@ test.describe('Product side panel — failed reads', () => {
     await expect(page.getByTestId('AvailabilityUnavailable')).toHaveCount(0);
     await expect(page.getByText('1.530').first()).toBeVisible();
     await expect(page.getByTestId('StockChartExpandButton')).toHaveCount(0);
+  });
+
+  test('loading the record reads stock and history once, and a first /stock failure is retried without the banner', async ({ page }) => {
+    let stockCalls = 0;
+    let txCalls = 0;
+    await login(page);
+    await installMocks(page, {
+      stock: () => { stockCalls += 1; return stockCalls === 1 ? [500, { error: { message: 'blip' } }] : [200, page_(STOCK_ROWS)]; },
+      transactions: () => { txCalls += 1; return [200, page_(HISTORY_ROWS)]; },
+    }, []);
+    await page.goto(`/product/${PRODUCT.id}`);
+    await expect(page.getByTestId('AvailabilityCardButton')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('1.530').first()).toBeVisible();
+    await expect(page.getByTestId('StockUnavailableNote')).toHaveCount(0);
+    await expect(page.getByTestId('AvailabilityUnavailable')).toHaveCount(0);
+    // One failed + one retried /stock; ONE history read (the panel mounts empty first and must not read then).
+    expect(stockCalls).toBe(2);
+    expect(txCalls).toBe(1);
   });
 
   test('while the stock loads the card is not clickable', async ({ page }) => {

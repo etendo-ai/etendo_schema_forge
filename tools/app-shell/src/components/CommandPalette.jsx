@@ -15,6 +15,7 @@ import {
 import { rankVectorMatches } from '@/lib/vectorSearchRanking.js';
 import { filterMenuGroups, isSearchableMenuItem, splitSearchHighlight } from '@/lib/globalSearchMenu.js';
 import { hasAccessibleReportInGroup } from '@/windows/registry.js';
+import { isHiddenByCapability } from '@/lib/capabilityVisibility.js';
 import {
   GlobalSearchDialog as CommandDialog,
   GlobalSearchEmpty as CommandEmpty,
@@ -398,7 +399,7 @@ export function CommandPalette({ reportAccess = null } = {}) {
       items: group.items.filter((i) => isSearchableMenuItem(i, searchableItemOptions)
         && (!i.requiresGroupReport || isAdminOrClientAdmin || hasAccessibleReportInGroup(group.group, reportAccess))
         && (!i.featureFlag || featureFlagValues[i.featureFlag] === true)
-        && (!i.capability || capabilities?.[i.capability] === true)
+        && !isHiddenByCapability(i, capabilities)
         && !(isSupportMode && isSupportRestrictedMenuItem(i))),
     }))
     .filter((group) => group.items.length > 0);

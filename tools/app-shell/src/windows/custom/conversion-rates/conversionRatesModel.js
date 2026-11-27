@@ -13,7 +13,9 @@
  *
  * What the user SEES and TYPES is the browser's wall clock: {@link createZoneView} converts a
  * server value for display and a typed value back before it is sent, from the server zone id
- * `serverClock` answers (see "Time zones" below).
+ * `serverClock` answers (see "Time zones" below). Every rate is converted, downloaded ones
+ * included: a downloader range stored at 00:00 of the server's day is the same instant as the
+ * viewer's previous evening west of the server, and is shown so (QA decision, ETP-6365).
  */
 
 /** A validity end at or after this year means "no end date" (the open range, `9999-12-31`). */
@@ -164,15 +166,6 @@ export function displayValidTo(row, zone) {
   return formatWallClock(zone ? zone.show(end) : end);
 }
 
-// ── Time zones ───────────────────────────────────────────────────────────────
-//
-// Storage and the server keep the wall clock of the SERVER's zone (`serverClock.timeZone`, e.g.
-// `UTC` in production). The window shows and takes every datetime in the BROWSER's zone: a
-// value is converted server → browser to be shown and browser → server before it is sent. The
-// conversion goes through `Intl` with both zone ids, so it is DST-correct (never a fixed offset).
-// With an unknown or invalid server zone nothing is converted and no zone is labelled (the
-// behaviour before the zone was known).
-
 const PARTS_FORMATS = new Map();
 
 function partsFormat(zone) {
@@ -254,7 +247,7 @@ export function convertWallClock(raw, fromZone, toZone) {
   }
 }
 
-/** Compact name of `zone`'s offset at `epoch`: `GMT-3`, `GMT+5:30`, `GMT` (UTC). */
+/** Compact name of `zone`'s offset at `epoch`: `GMT-3`, `GMT+5:30`, `GMT` (UTC). The fallback name. */
 export function zoneOffsetLabel(zone, epoch = Date.now()) {
   try {
     const part = new Intl.DateTimeFormat('en-US', { timeZone: zone, timeZoneName: 'shortOffset' })
@@ -266,34 +259,103 @@ export function zoneOffsetLabel(zone, epoch = Date.now()) {
   }
 }
 
+/** Zone ids that ARE Coordinated Universal Time: named `UTC`, never `GMT`. */
+const UTC_ZONES = new Set(['UTC', 'Etc/UTC', 'Etc/UCT', 'UCT', 'Etc/Universal', 'Universal', 'Etc/Zulu', 'Zulu', 'Etc/GMT', 'GMT', 'Etc/GMT0', 'GMT0', 'Etc/GMT+0', 'Etc/GMT-0', 'Etc/Greenwich', 'Greenwich']);
+
+/** `es_ES` → `es-ES`; anything unusable → undefined (the browser's locale). */
+function intlLocale(locale) {
+  return typeof locale === 'string' && locale ? locale.replace('_', '-') : undefined;
+}
+
+/** A readable region name, not an abbreviation or an offset (`CET`, `ART`, `GMT-3` are not). */
+function isReadableZoneName(name) {
+  return typeof name === 'string' && /\p{Ll}/u.test(name) && !/^(GMT|UTC)[+-]?/.test(name);
+}
+
+function intlZoneName(zone, epoch, locale, style) {
+  try {
+    const part = new Intl.DateTimeFormat(intlLocale(locale), { timeZone: zone, timeZoneName: style })
+      .formatToParts(epoch)
+      .find((p) => p.type === 'timeZoneName');
+    return part?.value ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The name of `zone` a person reads (QA CP-2/7/11), in the UI `locale` — never a `GMT±n` offset
+ * unless nothing better exists:
+ *
+ * 1. a UTC zone id → `UTC`;
+ * 2. `Intl` `longGeneric` when it is a readable name — *hora estándar de Argentina*, *hora de
+ *    Europa central*, *Argentina Standard Time*;
+ * 3. else `Intl` `long` when readable;
+ * 4. last resort, the offset ({@link zoneOffsetLabel}, `GMT-3`) — only when `Intl` gives no
+ *    readable name (an abbreviation such as `CET` / `ART`, an offset, or no support).
+ *
+ * Used for list headers, print columns, subtitles, sentences and the helper text under the dialog's
+ * date fields ({@link capitalizeZoneName}).
+ *
+ * @param {string} zone IANA zone id
+ * @param {{epoch?: number, locale?: string}} [options]
+ */
+export function zoneName(zone, { epoch = Date.now(), locale } = {}) {
+  if (UTC_ZONES.has(zone)) return 'UTC';
+  for (const style of ['longGeneric', 'long']) {
+    const name = intlZoneName(zone, epoch, locale, style);
+    if (isReadableZoneName(name)) return name;
+  }
+  return zoneOffsetLabel(zone, epoch);
+}
+
+/**
+ * A zone name as the helper text under a date field: first letter upper-cased in the UI locale
+ * (*Hora estándar de Argentina*); `null` for no name.
+ *
+ * @param {string|null} name a {@link zoneName}
+ * @param {string} [locale]
+ */
+export function capitalizeZoneName(name, locale) {
+  if (!name) return null;
+  return name.charAt(0).toLocaleUpperCase(intlLocale(locale)) + name.slice(1);
+}
+
 /**
  * The zone view of the window: how a server wall clock is shown and how a typed one is sent.
  *
  * - `show(raw)` server → browser wall clock; `send(raw)` browser → server wall clock;
- * - `label` the browser zone's offset now (`GMT-3`), for column headers and field labels;
- * - `labelAt(shown)` the browser zone's offset at a shown (browser) wall clock — the same as
- *   `label` except across a DST change — for a datetime inside a sentence.
+ * - `label` the browser zone's name now (*hora estándar de Argentina*, {@link zoneName}), for
+ *   column headers, subtitles and sentences; `fieldHint` the same name capitalised (*Hora estándar
+ *   de Argentina*), the helper text under the dialog's date fields;
+ * - `labelAt(shown)` the name at a shown (browser) wall clock — the same as `label` except when it
+ *   falls back to the offset across a DST change — for a datetime inside a sentence.
  *
  * Inactive (identity, no labels) when either zone is unknown, e.g. `serverClock` failed.
  *
  * @param {string|null} serverZone `serverClock.timeZone`
  * @param {string|null} [viewerZone] defaults to the browser's zone
  * @param {Date} [reference] "now", for `label`
+ * @param {string} [locale] the UI locale (`es_ES`), for the zone name
  */
-export function createZoneView(serverZone, viewerZone = browserTimeZone(), reference = new Date()) {
+export function createZoneView(serverZone, viewerZone = browserTimeZone(), reference = new Date(), locale = undefined) {
   const active = isKnownTimeZone(serverZone) && isKnownTimeZone(viewerZone);
   if (!active) {
-    return { active: false, show: (raw) => raw, send: (raw) => raw, label: null, labelAt: () => null };
+    return {
+      active: false, show: (raw) => raw, send: (raw) => raw, label: null, fieldHint: null, labelAt: () => null,
+    };
   }
-  const label = zoneOffsetLabel(viewerZone, reference.getTime());
+  const epoch = reference.getTime();
+  const label = zoneName(viewerZone, { epoch, locale });
   return {
     active: true,
     show: (raw) => convertWallClock(raw, serverZone, viewerZone),
     send: (raw) => convertWallClock(raw, viewerZone, serverZone),
     label,
+    fieldHint: capitalizeZoneName(label, locale),
     labelAt: (shown) => {
       const p = parseWallClock(shown);
-      return p ? zoneOffsetLabel(viewerZone, wallClockToEpoch(p, viewerZone)) : label;
+      return p ? zoneName(viewerZone, { epoch: wallClockToEpoch(p, viewerZone), locale }) : label;
     },
   };
 }
@@ -313,6 +375,37 @@ export function withZone(text, zoneLabel, ui) {
 export function formatInZone(raw, zone, ui) {
   const shown = zone.show(raw);
   return withZone(formatWallClock(shown), zone.labelAt(shown), ui);
+}
+
+/** `ETGO_ConvRateOverlap`, the server's refusal of an overlapping range. */
+export const OVERLAP_KEY = 'ETGO_ConvRateOverlap';
+
+/**
+ * The overlap refusal worded in the viewer's zone (QA CP-13). The server words it in ITS zone, so
+ * the times read wrong in another one; it also sends them structured (`error.details` of a write,
+ * `errorDetails` of `previewManualRate`): `{conflictFrom, conflictTo, conflictOpen, suggestedFrom,
+ * timeZone}`, server wall clock. They are converted like every other datetime of the window and the
+ * viewer's zone is named once, after the suggested start. Without an active zone view they stay
+ * server time and the server's zone id is named instead.
+ *
+ * @param {object|null} details the structured overlap
+ * @param {{fromIso: string, toIso: string}} isos the pair
+ * @param {ReturnType<typeof createZoneView>} zone
+ * @param {(key: string, params?: object) => string} ui
+ * @returns {string|null} null when there are no details (the caller keeps the server's text)
+ */
+export function overlapMessage(details, { fromIso, toIso }, zone, ui) {
+  if (!details || typeof details !== 'object' || !details.suggestedFrom) return null;
+  const shown = (raw) => (raw ? formatWallClock(zone.show(raw)) : '—');
+  const end = details.conflictOpen ? ui('convRateNoEndDate') : shown(details.conflictTo);
+  const zoneLabel = zone.active ? zone.labelAt(zone.show(details.suggestedFrom)) : details.timeZone;
+  return ui('convRateOverlapError', {
+    from: fromIso || '—',
+    to: toIso || '—',
+    start: shown(details.conflictFrom),
+    end,
+    suggested: withZone(shown(details.suggestedFrom), zoneLabel, ui),
+  });
 }
 
 function calendarISO(d) {

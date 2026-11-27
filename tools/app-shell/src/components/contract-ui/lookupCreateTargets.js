@@ -252,14 +252,14 @@ export const LOOKUP_CREATE_TARGETS = {
     labelOverrides: {
       en_US: {
         M_Product_Category_ID: 'Category', ProductType: 'Type',
-        DateFrom: 'Start Date', DateTo: 'Expiry Date',
+        DateFrom: 'Start Date', DateTo: 'Expiry Date', AD_Image_ID: 'Product image',
       },
       es_ES: {
         M_Product_Category_ID: 'Categoría', ProductType: 'Tipo', Value: 'Código',
         IsStocked: 'Almacenable',
-        DateFrom: 'Fecha de inicio', DateTo: 'Fecha de expiración',
+        DateFrom: 'Fecha de inicio', DateTo: 'Fecha de expiración', AD_Image_ID: 'Imagen del producto',
       },
-      es_AR: { IsStocked: 'Almacenable', DateFrom: 'Fecha de inicio', DateTo: 'Fecha de expiración' },
+      es_AR: { IsStocked: 'Almacenable', DateFrom: 'Fecha de inicio', DateTo: 'Fecha de expiración', AD_Image_ID: 'Imagen del producto' },
     },
     // ETP-5696: the Products window is a single unified sheet (no `window.primaryTabs`), so
     // the popup declares no `tabs` either — RecordCreateModal falls back to one `principal`

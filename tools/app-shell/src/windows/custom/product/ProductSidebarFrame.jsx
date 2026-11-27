@@ -7,7 +7,8 @@ import ProductSidebarDividerToggle from './ProductSidebarDividerToggle';
 //   clip layer (overflow-hidden) -> scroll layer (overflow-y-auto, FIXED width per state)
 // The fixed width keeps the panel content from reflowing while the column width animates; the clip layer just
 // reveals or hides it.
-const FULL_WIDTH = 'w-[319px] pt-2 pr-4 pb-5'; // 320 column - 1 px border
+// No right padding: every block of the content already has its own `px-4`, so both insets are 16 px (+1 px border on the left).
+const FULL_WIDTH = 'w-[319px] pt-2 pb-5'; // 320 column - 1 px border
 const STRIP_WIDTH = 'w-[47px] pt-2'; // 48 column - 1 px border
 
 export default function ProductSidebarFrame({ collapsed, onToggle, children }) {

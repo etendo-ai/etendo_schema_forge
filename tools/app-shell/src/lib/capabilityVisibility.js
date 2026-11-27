@@ -67,6 +67,37 @@ export const SEPA_REMITTANCES_CAPABILITY = 'sepaRemittances';
  */
 export const SII_IMPORT_DUA_CAPABILITY = 'siiImportDua';
 
+/**
+ * ETP-6365 — the capability that switches on the redesigned Currency Conversion window (manual
+ * rates, "Vigentes hoy", grouped history). Served by `SFWindowAccessMap` as
+ * `capabilities.currencyConversionV2`: the backend evaluates the per-account feature flag
+ * `currency-conversion-v2` (the same evaluator that gates the manual rate writes) and the browser
+ * never does. Fails closed: off, the `conversion-rates` route renders the generated read-only window.
+ */
+export const CURRENCY_CONVERSION_V2_CAPABILITY = 'currencyConversionV2';
+
+/**
+ * The capability axes of one menu.json item (ETP-4513 + ETP-6365):
+ * - `"capability": "<key>"` shows the item only when `capabilities[key] === true` (fails CLOSED:
+ *   a null / not-yet-loaded map hides it);
+ * - `"hideWhenCapability": "<key>"` is the negation: it HIDES the item when
+ *   `capabilities[key] === true`, and shows it while the map is null / loading or the key is off.
+ *
+ * A pair of entries — one with `capability: K`, its alternate with `hideWhenCapability: K` — is
+ * therefore exactly one visible at a time, and the alternate is the default until the map says
+ * otherwise (`conversion-rates` / `conversion-rates-legacy`, flag `currency-conversion-v2`). Every
+ * consumer that filters menu items by capability (`filterMenuGroupsByAccess` in windows/registry.js,
+ * CommandPalette, SideMenu's favorite labels) goes through this one function.
+ *
+ * @param {object} item a menu.json item
+ * @param {Record<string, boolean>|null|undefined} capabilities
+ * @returns {boolean} true when the capability axes hide the item
+ */
+export function isHiddenByCapability(item, capabilities) {
+  if (item?.capability && capabilities?.[item.capability] !== true) return true;
+  return Boolean(item?.hideWhenCapability) && capabilities?.[item.hideWhenCapability] === true;
+}
+
 // The generic posting actions served by `DocumentPostingService` for every
 // postable document. A structural contract, not an entity name.
 const POSTING_ACTIONS = new Set(['post', 'unpost']);

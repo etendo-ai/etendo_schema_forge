@@ -9,6 +9,8 @@ import { computePeriodRange, SIDEBAR_PERIOD_OPTIONS } from './productSidebarPeri
 
 export const HISTORY_PAGE_SIZE = 500;
 export const HISTORY_MAX_PAGES = 10;
+// A failed stock or history read is tried once more after this short pause before the panel says "unavailable".
+export const READ_RETRY_DELAY_MS = 600;
 
 const EMPTY_STATE = { stockRows: null, transactions: null, partial: false, stockFailed: false, historyFailed: false };
 const WIDEST_MONTHS = Math.max(...SIDEBAR_PERIOD_OPTIONS.map(o => o.months));
@@ -53,13 +55,40 @@ export async function loadMovementHistory(apiFetch, productId, start, signal) {
   return { rows, partial: true, failed: false };
 }
 
+function wait(ms, signal) {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener('abort', () => { clearTimeout(timer); resolve(); }, { once: true });
+  });
+}
+
+/**
+ * Runs `attempt` (resolves to a result, `isFailure(result)` says it failed; a rejection is a failure too) and,
+ * when it failed and the run is still current, once more after READ_RETRY_DELAY_MS. A transient blip on the first
+ * load of the panel (a request cut off while the session settles, a gateway hiccup) then never shows the
+ * unavailable state. The second answer is final; an aborted run is never retried.
+ */
+async function withOneRetry(attempt, isFailure, signal) {
+  const run = () => attempt().then(
+    (result) => ({ result, failed: isFailure(result) }),
+    (error) => ({ error, failed: true }),
+  );
+  let outcome = await run();
+  if (outcome.failed && !signal.aborted) {
+    await wait(READ_RETRY_DELAY_MS, signal);
+    if (!signal.aborted) outcome = await run();
+  }
+  if (outcome.error) throw outcome.error;
+  return outcome.result;
+}
+
 /**
  * Stock rows + movement history of a product, fetched once per product. `apiFetch` is read through a
  * ref: its identity changes whenever the session object does (token refresh, account restore), and an
  * effect keyed on it re-fired both requests with identical results. The ref always holds the latest
  * one, which reads the live token at request time. A stale run (product changed, unmount, StrictMode
  * replay) is aborted and its answer ignored.
- * A failed read is never collapsed into an empty one: a failed `/stock` leaves `stockRows` null and sets
+ * A failed read is retried once (READ_RETRY_DELAY_MS) before it counts as failed, and is never collapsed into an empty one: a failed `/stock` leaves `stockRows` null and sets
  * `stockFailed` (the panel shows "unavailable", not 0); a failed history sets `historyFailed` (with
  * `transactions: []`, so the read counts as finished). A legitimately empty product has `[]` and no flag.
  * @returns {{stockRows: object[]|null, transactions: object[]|null, partial: boolean, stockFailed: boolean, historyFailed: boolean}}
@@ -76,10 +105,10 @@ export function useStockHistory(recordId, apiFetch) {
     const { signal } = controller;
     const live = (patch) => { if (!signal.aborted) setState(prev => ({ ...prev, ...patch })); };
 
-    readRows(apiFetchRef.current, `/stock?parentId=${recordId}&_startRow=0&_endRow=200`, signal)
+    withOneRetry(() => readRows(apiFetchRef.current, `/stock?parentId=${recordId}&_startRow=0&_endRow=200`, signal), rows => !rows, signal)
       .then(rows => live(rows ? { stockRows: rows } : { stockRows: null, stockFailed: true }))
       .catch(() => live({ stockRows: null, stockFailed: true }));
-    loadMovementHistory(apiFetchRef.current, recordId, historyWindowStart(), signal)
+    withOneRetry(() => loadMovementHistory(apiFetchRef.current, recordId, historyWindowStart(), signal), res => res.failed, signal)
       .then(({ rows, partial, failed }) => live({ transactions: rows, partial, historyFailed: failed }))
       .catch(() => live({ transactions: [], partial: false, historyFailed: true }));
 

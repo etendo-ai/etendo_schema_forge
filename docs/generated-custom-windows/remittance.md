@@ -905,7 +905,14 @@ These need a new column, which the scope rules out, or a later task. None was in
   (`dependsOn.filterKey`). The account also travels in the selector context
   (`source: field, field: financialAccount`).
 - The Classic callout `REM_RemittanceType_FinAccount` runs when `REM_Remittance_Type_ID` changes.
-  Whether it overwrites the chosen account has to be checked; if it does, the handler overrides it.
+  It re-lists the accounts that carry the type's payment method (a combo result with entries and no
+  selected value), sets `isdiscount`, and then runs `RemittanceSepaDefaultsCallout` (see
+  *Regeneration* below). In GO it does not overwrite the chosen account.
+  In the Classic form it can: `FIN_Financial_Account_ID` is mandatory, so for a combo without a
+  selected value core picks the first entry (`SimpleCalloutInformationProvider.manageComboData`),
+  `FormInitializationComponent` treats it as changed and re-runs the account's callout, and the
+  list has no `ORDER BY`, so a type change may switch the account to any account carrying the
+  payment method (pre-existing, not changed by ETP-6463).
 
 ## Files
 
@@ -969,6 +976,20 @@ every header callout itself through `RemittanceNameCallout`, which returns nothi
 In GO the IBAN, creditor identifier and scheme come from `RemittanceHeaderWrites` instead (on
 create, and when the account changes or the type switches between collection and payment).
 A push creates `ETGO_SF_FIELD` rows that point to the `AD_COLUMN` rows of the spec's tables.
+
+The Classic callouts still run server-side on a NEO create: the post-create callout cascade
+(`NeoCrudHandler.executePostCalloutCascade`) fires `REM_RemittanceType_FinAccount` for
+`remittanceType`, which runs `RemittanceSepaDefaultsCallout` nested, and then the account's
+callout. Until ETP-6463 the nested call read the account through
+`CalloutInfo.getStringParameter`, which prefers the parent's result: the account combo the type
+callout had just rebuilt with no selected value. Core then logged
+`JSONException: JSONObject["classicValue"] not found` (from `RemittanceSepaDefaultsCallout.execute`)
+on every NEO remittance creation and on every type change in the Classic form, and the nested call
+proposed an empty IBAN and creditor identifier as an intermediate result. The final values were not
+empty: the account's callout runs afterwards in both (in GO through the cascade; in Classic because
+the re-selected account re-fires it) and fills IBAN and creditor identifier from the account, except
+for a payment method no account carries. The callout now reads the account from the request
+(`formAccountId`), so the error is gone and the intermediate proposal already uses the account.
 
 ## Manual verification
 

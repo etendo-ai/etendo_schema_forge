@@ -471,7 +471,8 @@ const BACKEND_ERROR_KEY_MAP = {
   // ETP-5714 — com.etendoerp DocumentPostingService/CostingStall: a post refused because costing is
   // stalled (an uncalculated transaction has waited for minutes, so the 30 s retry of
   // NotCalculatedCost would never succeed). AD_MESSAGE ETGO_CostCalculationStalled, English-only in
-  // the module; the answer is 422 with error "costCalculationStalled" and retryable false.
+  // the module. Since ETP-6406 the answer is the same 409 "costNotCalculated" as the plain wait,
+  // flagged stalled:true with retryable false (no automatic retry); only this key tells it apart.
   ETGO_CostCalculationStalled: 'backendError.costCalculationStalled',
   // ETP-5529 — core `OtherPostingProcessActive` ("This record is being posted by another
   // process"), the STATUS_DocumentLocked message DocumentPostingService names in `messageKeys`
@@ -683,6 +684,9 @@ const BACKEND_ERROR_KEY_MAP = {
   ETGO_BounceHasPayment: 'backendError.bounceHasPayment',
   ETGO_BounceLineNotPending: 'backendError.bounceLineNotPending',
   ETGO_BounceDiscardNotAllowed: 'backendError.bounceDiscardNotAllowed',
+  // ETP-6359 — discardPair with choiceSource "ai" (409 BOUNCE_AI_SUGGESTION_STALE): the AI's
+  // recommendation no longer holds (com.etendoerp.go docs/neo-headless.md §4.12.1.1).
+  ETGO_BounceAiSuggestionStale: 'backendError.bounceAiSuggestionStale',
 };
 
 // ETP-5360 — a message that IS still an untranslated `@Key@` token (or carries some) is its own

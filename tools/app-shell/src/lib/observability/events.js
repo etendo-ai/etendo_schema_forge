@@ -74,6 +74,11 @@ const OBSERVABILITY_PROPERTY_VALUES = Object.freeze({
   PAIRS_PRESELECTED: 'pairs_preselected',
   PAIRS_CHECKED_AT_CLOSE: 'pairs_checked_at_close',
   AUTO_OPENED: 'auto_opened',
+  // ETP-5889 — product Movements tab: which filter / sort the user changed and to what.
+  FILTER_TYPE: 'filter_type',
+  FILTER_VALUE: 'filter_value',
+  SORT_COLUMN: 'sort_column',
+  SORT_DIRECTION: 'sort_direction',
 });
 
 function defineEvent(name, { channels = [], properties = [] } = {}) {
@@ -330,6 +335,33 @@ export const OBSERVABILITY_EVENTS = Object.freeze({
       OBSERVABILITY_PROPERTY_KEYS.ENTITY,
       OBSERVABILITY_PROPERTY_KEYS.SOURCE,
       OBSERVABILITY_PROPERTY_KEYS.SPEC_NAME,
+    ],
+  }),
+  // ETP-5889 (MV-59) — one event per user-initiated change of a Movements filter. `filter_type` is
+  // 'direction' | 'period' | 'warehouse'; `filter_value` the new value (direction todos/entradas/salidas,
+  // a period key or 'custom', 'all' or 'specific' for the warehouse, never its id). Same tenant-only payload as the opened event.
+  PRODUCT_MOVEMENTS_FILTERED: defineEvent('product_movements_filtered', {
+    channels: [OBSERVABILITY_CHANNELS.MIXPANEL],
+    properties: [
+      OBSERVABILITY_PROPERTY_KEYS.ACCOUNT_ID,
+      OBSERVABILITY_PROPERTY_KEYS.CATEGORY,
+      OBSERVABILITY_PROPERTY_KEYS.ENTITY,
+      OBSERVABILITY_PROPERTY_KEYS.SPEC_NAME,
+      OBSERVABILITY_PROPERTY_KEYS.FILTER_TYPE,
+      OBSERVABILITY_PROPERTY_KEYS.FILTER_VALUE,
+    ],
+  }),
+  // ETP-5889 (MV-60) — one event per user-initiated change of the Movements sort: the column and the
+  // new direction ('asc' | 'desc').
+  PRODUCT_MOVEMENTS_SORTED: defineEvent('product_movements_sorted', {
+    channels: [OBSERVABILITY_CHANNELS.MIXPANEL],
+    properties: [
+      OBSERVABILITY_PROPERTY_KEYS.ACCOUNT_ID,
+      OBSERVABILITY_PROPERTY_KEYS.CATEGORY,
+      OBSERVABILITY_PROPERTY_KEYS.ENTITY,
+      OBSERVABILITY_PROPERTY_KEYS.SPEC_NAME,
+      OBSERVABILITY_PROPERTY_KEYS.SORT_COLUMN,
+      OBSERVABILITY_PROPERTY_KEYS.SORT_DIRECTION,
     ],
   }),
   // ETP-6050 — one event per time the Invoice Inbox page is shown. Makes the backend-only

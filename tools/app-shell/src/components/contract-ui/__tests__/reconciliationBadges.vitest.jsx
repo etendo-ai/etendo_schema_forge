@@ -130,4 +130,36 @@ describe('StatusBadge', () => {
     expect(discarded.firstChild.className).toBe(pending.firstChild.className);
     expect(bounce.firstChild.className).not.toBe(discarded.firstChild.className);
   });
+
+  // ETP-6359 — the automatch rows put a Sparkle before "Con sugerencia".
+  it('renders the icon node before the label text', () => {
+    render(
+      <StatusBadge
+        kind="suggested" icon={<svg data-testid="badge-icon" />} data-testid="recon-line-badge-L1" />,
+    );
+    const pill = screen.getByTestId('recon-line-badge-L1');
+    const icon = screen.getByTestId('badge-icon');
+    expect(pill).toContainElement(icon);
+    expect(pill).toHaveTextContent('financeReconcileBadgeSuggested');
+    expect(pill.firstChild).toBe(icon);
+  });
+
+  it('adds a gap to the pill only when it carries an icon, and keeps its palette', () => {
+    const { container: plain } = render(<StatusBadge kind="suggested" />);
+    const { container: withIcon } = render(<StatusBadge kind="suggested" icon={<svg />} />);
+    expect(plain.firstChild.className).not.toContain('gap-0.5');
+    expect(withIcon.firstChild.className).toContain('gap-0.5');
+    expect(withIcon.firstChild.className.replace('gap-0.5 ', '')).toBe(plain.firstChild.className);
+  });
+
+  it('renders no extra element when no icon is given (null icon too)', () => {
+    const { container } = render(<StatusBadge kind="suggested" icon={null} />);
+    expect(container.firstChild.children).toHaveLength(0);
+    expect(container.firstChild).toHaveTextContent('financeReconcileBadgeSuggested');
+  });
+
+  it('keeps the icon when the label is overridden', () => {
+    render(<StatusBadge kind="byRule" label="Por regla X" icon={<svg data-testid="badge-icon" />} />);
+    expect(screen.getByText('Por regla X')).toContainElement(screen.getByTestId('badge-icon'));
+  });
 });

@@ -278,8 +278,10 @@ describe('ManualRateDialog — times in the viewer zone', () => {
     const { onSaved } = renderDialog(DIALOG_MODES.NEW_RATE, { zone });
     const start = screen.getByTestId('convrate-dialog-valid-from-input');
     await waitFor(() => expect(start).toHaveValue('2026-11-20T07:00:00'));
-    // The zone sits inside the field, not in its label (which must fit one line).
-    expect(screen.getByTestId('convrate-dialog-valid-from-input-suffix')).toHaveTextContent('GMT-3');
+    // The field holds date and time only; the zone is named below it, never as a GMT offset.
+    expect(screen.queryByTestId('convrate-dialog-valid-from-input-suffix')).toBeNull();
+    expect(screen.getByTestId('convrate-dialog-valid-from-zone')).toHaveTextContent(zone.fieldHint);
+    expect(screen.getByTestId('convrate-dialog-valid-from-zone')).not.toHaveTextContent('GMT');
     expect(screen.getByText(/^convRateValidFromDateTime/, { selector: 'label' })).not.toHaveTextContent('GMT');
     await typeRate(user, '1,3');
     // The debounced preview asks the server with its own wall clock.
@@ -318,6 +320,53 @@ describe('ManualRateDialog — times in the viewer zone', () => {
 
     expect(await screen.findByTestId('convrate-dialog-date-error')).toHaveTextContent('convRateValidFromFuture');
     expect(screen.getByTestId('convrate-dialog-submit')).toBeDisabled();
+  });
+});
+
+describe('ManualRateDialog — the overlap refusal in the viewer zone (QA CP-13)', () => {
+  // Server in UTC, browser in Buenos Aires: the server's 12:00 is the viewer's 09:00.
+  const zone = createZoneView('UTC', 'America/Argentina/Buenos_Aires', new Date('2026-11-26T15:00:00Z'), 'es_ES');
+  const ui = (key, params) => {
+    if (key === 'convRateWithZone') return `${params.text} (${params.zone})`;
+    return params ? `${key}${JSON.stringify(params)}` : key;
+  };
+  const DETAILS = {
+    conflictFrom: '2026-11-26T12:00:00', conflictTo: null, conflictOpen: true,
+    suggestedFrom: '2026-11-26T12:00:00', timeZone: 'UTC',
+  };
+  const SERVER_TEXT = 'Ya existe … posterior al 26/11/2026 12:00. Las horas están en la zona horaria del servidor (UTC).';
+
+  it('a refused preview is worded from its instants, converted and with the viewer zone', async () => {
+    const user = userEvent.setup();
+    api.previewManualRate.mockResolvedValue({
+      creates: [], closes: [], error: SERVER_TEXT, errorKey: 'ETGO_ConvRateOverlap', errorField: 'validFromDate', errorDetails: DETAILS,
+    });
+    renderDialog(DIALOG_MODES.NEW_RATE, { zone, ui });
+    await waitFor(() => expect(screen.getByTestId('convrate-dialog-valid-from-input')).toHaveValue('2026-11-20T07:00:00'));
+    await typeRate(user, '1,3');
+
+    const box = await screen.findByTestId('convrate-dialog-error');
+    expect(box).toHaveTextContent('convRateOverlapError');
+    expect(box).toHaveTextContent(`26/11/2026 09:00 (${zone.label})`);
+    expect(box).not.toHaveTextContent('12:00');
+  });
+
+  it('a write refused with the overlap is worded the same way', async () => {
+    const user = userEvent.setup();
+    const body = { error: { message: SERVER_TEXT, messageKeys: ['ETGO_ConvRateOverlap'], field: 'validFromDate', details: DETAILS } };
+    api.createManualRate.mockResolvedValue({
+      res: { ok: false, status: 409, clone: () => ({ json: async () => body }) }, data: null,
+    });
+    renderDialog(DIALOG_MODES.NEW_RATE, { zone, ui });
+    await waitFor(() => expect(screen.getByTestId('convrate-dialog-valid-from-input')).toHaveValue('2026-11-20T07:00:00'));
+    await typeRate(user, '1,3');
+    await waitFor(() => expect(screen.getByTestId('convrate-dialog-submit')).toBeEnabled());
+
+    await user.click(screen.getByTestId('convrate-dialog-submit'));
+
+    const box = await screen.findByTestId('convrate-dialog-error');
+    expect(box).toHaveTextContent(`26/11/2026 09:00 (${zone.label})`);
+    expect(box).not.toHaveTextContent('12:00');
   });
 });
 
