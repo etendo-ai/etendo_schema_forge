@@ -1,7 +1,7 @@
 # Shared field validation (ETP-4557)
 
 Record forms (create and edit), inline grid add/edit and the CSV import review queue all decide
-validity with the same declarative engine, `@etendosoftware/app-shell-core/lib/validation`
+validity with the same declarative engine, `@etendo-ai/app-shell-core/lib/validation`
 (ETP-4556, documented in `schema_forge_core/docs/validation-engine.md`).
 
 ## Where each flow calls it

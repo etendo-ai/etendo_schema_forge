@@ -137,6 +137,7 @@
  *     locator can never match both.
  */
 
+import { expect } from '@playwright/test';
 import { apiAuthHeaders } from './auth.js';
 
 const FINANCIAL_ACCOUNT_SPEC = '/sws/neo/financial-account';
@@ -198,6 +199,44 @@ export async function openAccountRowMenu(page, accountId) {
   await row.getByTestId(`account-row-menu-trigger-${accountId}`).click();
 
   return row;
+}
+
+/**
+ * Closes the automatch suggestions modal (`automatch-suggestion-modal`) when it is open, and does
+ * nothing when it is not.
+ *
+ * ## Why this exists
+ * Entering the account's reconciliation tab can pop the modal by itself (ETP-4922: the tab arms the
+ * automatch check, and the modal opens as soon as a response carries at least one suggestion), and
+ * while it is open its overlay swallows every click on the panel behind it. A spec that only wants
+ * the panel calls this right after landing on the tab. Whether the modal is up by then is a race
+ * against the `autoMatch` request, which is why it acts only when the modal is visible.
+ *
+ * ## How the modal closes
+ * It has no Cancel button: it is closed from its header link "Ir a conciliación manual"
+ * (`automatch-modal-open-reconciliation`). With rows checked (a high-confidence group is checked by
+ * default) that link asks first through `automatch-close-confirm`, which "Cerrar"
+ * (`automatch-close-confirm-action`) confirms; with nothing checked it closes straight away. So the
+ * helper waits for either outcome and confirms only when asked.
+ *
+ * A spec that asserts on the close itself (that the confirmation MUST appear, what it says, "Seguir
+ * trabajando") drives those test ids directly instead — see
+ * `reconciliation-bounce-suggestions.mocked.spec.js`.
+ *
+ * @param {import('@playwright/test').Page} page
+ */
+export async function dismissAutoMatchModalIfOpen(page) {
+  const modal = page.getByTestId('automatch-suggestion-modal');
+  if (!(await modal.isVisible().catch(() => false))) return;
+
+  await page.getByTestId('automatch-modal-open-reconciliation').click();
+  const closeConfirm = page.getByTestId('automatch-close-confirm');
+  await expect.poll(async () => (await closeConfirm.isVisible()) || !(await modal.isVisible()))
+    .toBe(true);
+  if (await closeConfirm.isVisible()) {
+    await page.getByTestId('automatch-close-confirm-action').click();
+  }
+  await expect(modal).toHaveCount(0);
 }
 
 /**
@@ -333,7 +372,7 @@ export async function noteFinancialAccountPrecondition(page, testInfo) {
  *
  * `useCriteria: true` sends the same exact-match AdvancedCriteria filter the
  * ListView's own filter bar sends (`buildBackendFilter()` in
- * tools/app-shell/src/lib/gridQuery.js). `useCriteria: false` fetches an
+ * @etendo-ai/app-shell-core/lib/gridQuery.js). `useCriteria: false` fetches an
  * unfiltered bounded page and matches client-side — the same "never trust a
  * zero-row filtered result enough to justify a create" insurance
  * `findVendorFixture()` (purchase-helpers.js) carries, which matters more here

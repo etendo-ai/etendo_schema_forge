@@ -44,7 +44,7 @@ vi.mock('../DocumentPrintDrawer.jsx', () => ({ default: () => null, printDocumen
 vi.mock('../ListFilterBar.jsx', () => ({ ListFilterBar: () => <div data-testid="list-filter-bar" /> }));
 import { noOpExtractQueryParamConditions } from './testUtils/gridQueryMock.js';
 
-vi.mock('@/lib/gridQuery', () => ({
+vi.mock('@etendo-ai/app-shell-core/lib/gridQuery.js', () => ({
   buildAdvancedFilterCriteria: () => null,
   extractQueryParamConditions: noOpExtractQueryParamConditions,
 }));
@@ -67,7 +67,7 @@ vi.mock('@/lib/flags/useFeatureFlag.js', () => ({
 // ETP-5676: the batch poster the hook wraps; its body is guarded in useBatch.vitest.jsx.
 const runBatchMock = vi.hoisted(() => vi.fn(async () => ({ committed: true, operations: [] })));
 vi.mock('../../copilot/ocr/ingest/useBatch.js', () => ({ useBatch: () => ({ runBatch: runBatchMock }) }));
-vi.mock('@etendosoftware/app-shell-core/components/import/ImportDialog.jsx', () => ({
+vi.mock('@etendo-ai/app-shell-core/components/import/ImportDialog.jsx', () => ({
   ImportDialog: (props) => {
     captured.props = props;
     return props.open ? <div data-testid="ImportDialog__mock" /> : null;

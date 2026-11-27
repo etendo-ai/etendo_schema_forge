@@ -107,7 +107,7 @@ through the GO provider. It is a fallback, not an override — SMTP wins when pr
   passes `expiresAt` in the command and the copy interpolates the remaining minutes.
 - **Known debt:** the reset screen states the duration from a locale literal
   (`onboardingResetLinkDuration`), not from the server. It said 15 minutes for a 30-minute token
-  until ETP-5003 corrected it. The screen lives in `@etendosoftware/etendo-go-core`, so making it
+  until ETP-5003 corrected it. The screen lives in `@etendo-ai/etendo-go-core`, so making it
   read the real TTL needs an API change and a PR in that repo. **If you change
   `PASSWORD_RESET_TTL_SECONDS`, update that locale key too** — in `es_ES`, `es_AR` and `en_US`.
 
@@ -162,7 +162,10 @@ through the GO provider. It is a fallback, not an override — SMTP wins when pr
   (`POST /sws/portal/quotations/{id}/decision`). Only to the **first To of the original send** —
   never CC, never an address from the caller (re-derived from the link's root row). It carries a
   single-use, never-expiring confirmation link; the decision row is minted pending in `resolve` and
-  usable from `onDelivered`. Opening the link applies nothing; the landing's button confirms.
+  usable from `onDelivered`. The button is explicit per decision (`confirm.cta.ACCEPT` / `.REJECT`:
+  "Confirmar aceptación" / "Confirmar rechazo") and is the one step: the landing's script sends the
+  confirm POST on open (never a GET side effect, so a link scanner applies nothing) and shows the
+  result. A re-opened link answers "ya estaba aplicada" (`appliedNow: false`).
 - **notice**: to the user who sent the quotation, at their ETGO_ACCOUNT email (`AD_User.Email` is
   not filled by onboarding), after the confirmation's commit. No account: no notice, logged.
 - Both refuse any caller outside `PortalDecisionScope` (403) and file under the quotation's send

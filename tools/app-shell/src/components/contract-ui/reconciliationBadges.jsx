@@ -12,11 +12,12 @@ import { cn } from '@/lib/utils';
  *
  * @param {{ kind?: string, label?: string, 'data-testid'?: string }} props `kind` picks the palette
  *   and the default text; `label` overrides only the text, for the cases that need a value appended
- *   (the modal's "Por regla: {nombre}"). An unknown kind falls back to the neutral "pending"
+ *   (the modal's "Por regla: {nombre}"); `icon` (optional, ETP-6359) is a node rendered before the
+ *   text, for the badges of the automatch modal rows that carry one. An unknown kind falls back to the neutral "pending"
  *   styling. `data-testid` is forwarded to the pill: it used to be dropped, so the ids every caller
  *   passes never reached the DOM. Nothing else is spread, so the rendering is unchanged.
  */
-export function StatusBadge({ kind, label, 'data-testid': testId }) {
+export function StatusBadge({ kind, label, icon = null, 'data-testid': testId }) {
   const ui = useUI();
   // Figma badge palette: grey / blue / amber / red / green (all full pills).
   const map = {
@@ -37,8 +38,9 @@ export function StatusBadge({ kind, label, 'data-testid': testId }) {
   const cfg = map[kind] ?? map.pending;
   return (
     <span
-      className={cn('inline-flex h-6 items-center rounded-full px-2 py-0.5 text-xs font-normal', cfg.cls)}
+      className={cn('inline-flex h-6 items-center rounded-full px-2 py-0.5 text-xs font-normal', icon && 'gap-0.5', cfg.cls)}
       data-testid={testId}>
+      {icon}
       {label ?? ui(cfg.labelKey)}
     </span>
   );

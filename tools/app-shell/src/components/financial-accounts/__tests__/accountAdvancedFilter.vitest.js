@@ -1,3 +1,5 @@
+// @covers tools/app-shell/src/components/financial-accounts/accountAdvancedFilter.js
+// @covers tools/app-shell/src/windows/custom/financial-account/advancedFilterApply.js
 // Cuentas list — advanced ("by conditions") filter (ETP-5113).
 //
 // The module owns three things and each is covered below:
@@ -52,7 +54,7 @@ import {
   NUMBER_OPERATORS,
   OPERATORS,
 } from '@/windows/custom/financial-account/advancedFilterApply';
-import { resolveFilterMode } from '@/lib/gridQuery.js';
+import { resolveFilterMode } from '@etendo-ai/app-shell-core/lib/gridQuery.js';
 
 const ui = (key) => key; // identity translator
 
@@ -201,7 +203,7 @@ describe('buildAccountFilterColumns — offered columns', () => {
 /**
  * The two operator tables the core AdvancedFilterBuilder decides the dropdown from. Neither
  * is exported, so they are mirrored here — `OPERATORS_BY_MODE` and `NULLISH_OPS` in
- * `@etendosoftware/app-shell-core/src/components/contract-ui/AdvancedFilterBuilder.jsx`.
+ * `@etendo-ai/app-shell-core/src/components/contract-ui/AdvancedFilterBuilder.jsx`.
  *
  * Mirroring is the point rather than a compromise: this file's job is to pin what the USER
  * sees in the "Moneda …" dropdown, and replaying the two functions that produce it turns a

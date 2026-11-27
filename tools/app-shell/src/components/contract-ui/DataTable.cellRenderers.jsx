@@ -284,7 +284,11 @@ export function MultiFieldCell({ row, col, token, apiBaseUrl }) {
           : <span className="text-sm font-semibold text-[hsl(var(--foreground))] leading-5">{titleValue}</span>}
         {subtitleValue && (
           <span className="inline-flex max-w-full items-center px-2 py-0.5 bg-[hsl(var(--muted))] rounded-full text-xs text-[hsl(var(--muted-foreground))] leading-4 w-fit">
-            <span className="min-w-0 truncate">{subtitleValue}</span>
+            {/* ETP-5572 — a long identifier ellipsises inside the chip and, like the title,
+                reveals its full value in a tooltip. `w-auto` keeps the chip sized to its text. */}
+            {typeof subtitleValue === 'string'
+              ? <TruncatedText text={subtitleValue} className="w-auto min-w-0" data-testid="TruncatedText__mf5572" />
+              : <span className="min-w-0 truncate">{subtitleValue}</span>}
           </span>
         )}
       </div>

@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { HttpException } from '@nestjs/common';
-import type { PublicApiEntity } from '@etendosoftware/api-gateway-core';
+import type { PublicApiEntity } from '@etendo-ai/api-gateway-core';
 import { filterOperatorsFor, neoListParams, pagination, parseListQuery } from '../src/public-api/json-api-query.ts';
 
 const field = (internalPath: string, dataType: Record<string, string> | undefined, extra: Record<string, unknown> = {}) =>
@@ -48,7 +48,7 @@ test('an empty query reads the first page of 50 with no sort and no criteria', (
     { n: query.pageNumber, size: query.pageSize, start: query.startRow, end: query.endRow, sort: query.sortBy, criteria: query.criteria },
     { n: 1, size: 50, start: 0, end: 49, sort: undefined, criteria: undefined },
   );
-  assert.deepEqual(neoListParams(query), ['_startRow=0', '_endRow=49']);
+  assert.deepEqual(neoListParams(query), ['_startRow=0', '_endRow=49', '_noCount=false']);
 });
 
 test('page[number] and page[size] map to the inclusive NEO row window', () => {
@@ -216,7 +216,7 @@ test('a client value never reaches NEO as operator, property name or extra crite
   assert.equal(query.criteria?.[0].fieldName, 'name');
   const params = neoListParams(query);
   assert.equal(params.filter((p) => p.startsWith('criteria=')).length, 1);
-  assert.deepEqual(JSON.parse(decodeURIComponent(params[2].slice('criteria='.length))), query.criteria);
+  assert.deepEqual(JSON.parse(new URLSearchParams(params.join('&')).get('criteria')!), query.criteria);
 });
 
 test('filterOperatorsFor lists what a type accepts and nothing for a non-filterable field', () => {

@@ -8,7 +8,7 @@ const toastMocks = vi.hoisted(() => ({ error: vi.fn() }));
 
 // ETP-5022 — ImageField's requests come from `useApiFetch`, which reads the bearer token
 // from the session rather than from the `token` prop.
-vi.mock('@etendosoftware/app-shell-core/auth', async (importOriginal) => ({
+vi.mock('@etendo-ai/app-shell-core/auth', async (importOriginal) => ({
   ...(await importOriginal()),
   useAuthOptional: () => ({ token: 'tk' }),
 }));
@@ -21,7 +21,7 @@ vi.mock('@phosphor-icons/react', async (importOriginal) => ({
 }));
 
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
-import { setSessionCredentials, CREDENTIAL_MODES } from '@etendosoftware/app-shell-core/auth/sessionCredentials.js';
+import { setSessionCredentials, CREDENTIAL_MODES } from '@etendo-ai/app-shell-core/auth/sessionCredentials.js';
 import userEvent from '@testing-library/user-event';
 import { ImageField } from '../ImageField.jsx';
 

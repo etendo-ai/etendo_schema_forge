@@ -88,14 +88,14 @@ vi.mock('@/windows/custom/shared/pdfUtils.js', () => ({
 // The workbook writer is a heavy, async-only dependency and the one template branch that can
 // fail on its own — stubbed so both its outcomes are reachable.
 const buildTemplateXlsx = vi.fn();
-vi.mock('@etendosoftware/app-shell-core/lib/import/buildTemplateXlsx.js', () => ({
+vi.mock('@etendo-ai/app-shell-core/lib/import/buildTemplateXlsx.js', () => ({
   buildTemplateXlsx: (...a) => buildTemplateXlsx(...a),
 }));
 
 // The spreadsheet reader needs a real OOXML container, which a jsdom File cannot be. Stubbed
 // so the `.xlsx` branch is reachable; the CSV fixtures below exercise the real parser.
 const parseXlsx = vi.fn();
-vi.mock('@etendosoftware/app-shell-core/lib/import/parseXlsx.js', () => ({
+vi.mock('@etendo-ai/app-shell-core/lib/import/parseXlsx.js', () => ({
   parseXlsx: (...a) => parseXlsx(...a),
 }));
 

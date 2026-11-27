@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { LinkSimpleIcon, PlusIcon, PrinterIcon } from '@phosphor-icons/react';
-import { DistinctValuesFilter } from '@etendosoftware/app-shell-core/components/ui/distinct-values-filter.jsx';
+import { DistinctValuesFilter } from '@etendo-ai/app-shell-core/components/ui/distinct-values-filter.jsx';
 import { useUI, useLocaleSwitch } from '@/i18n';
 import { useSetPageMeta } from '@/components/layout/PageMetaContext';
 import { useApiFetch } from '@/auth/useApiFetch.js';
@@ -18,10 +18,13 @@ import { DeleteConfirmDialog } from '@/components/contract-ui/DeleteConfirmDialo
 import ReportDrawer from '@/components/contract-ui/ReportDrawer.jsx';
 import { CurrencyRatesList } from './CurrencyRatesList.jsx';
 import { ManualRateDialog, DIALOG_MODES } from './ManualRateDialog.jsx';
-import { fetchCurrentRates, fetchHistory, deleteManualRate } from './conversionRatesApi.js';
 import {
-  DEFAULT_PERIOD, PERIODS, STATUSES, RATE_STATUS,
+  fetchCurrentRates, fetchHistory, deleteManualRate, fetchServerClock, fetchManualCurrencyOptions,
+} from './conversionRatesApi.js';
+import {
+  DEFAULT_PERIOD, PERIODS, STATUSES, RATE_STATUS, NO_ZONE,
   buildHistoryCriteria, buildCurrencyList, periodBounds, displayValidTo, formatWallClock,
+  createZoneView, withZone, formatInZone,
 } from './conversionRatesModel.js';
 import { formatRate } from './conversionRatesFormat.js';
 
@@ -71,17 +74,18 @@ function currencyDisplayName(iso, locale) {
 
 /**
  * Print rows: every forward rate of the listed currencies, in list order, as display strings (the
- * drawer prints what it is given).
+ * drawer prints what it is given). Datetimes in the viewer's zone (`zone`, see `createZoneView`);
+ * the zone is named in the column headers.
  */
-export function buildPrintRows(entries, ui) {
+export function buildPrintRows(entries, ui, zone = NO_ZONE) {
   const out = [];
   for (const entry of entries) {
     for (const row of entry.rows) {
       out.push({
         currency: entry.isoCode,
         origin: ui(row.sMFCRSynced === true ? 'convRateOriginAuto' : 'convRateOriginManual'),
-        validFrom: formatWallClock(row.validFromDate),
-        validTo: displayValidTo(row) ?? '—',
+        validFrom: formatWallClock(zone.show(row.validFromDate)),
+        validTo: displayValidTo(row, zone) ?? '—',
         rate: formatRate(row.multipleRateBy),
         inverse: formatRate(row.divideRateBy),
         status: ui(STATUS_LABEL[row.etgoRateStatus] ?? 'convRateStatusHistoric'),
@@ -89,6 +93,76 @@ export function buildPrintRows(entries, ui) {
     }
   }
   return out;
+}
+
+/**
+ * The period's bounds, sent as the server's wall clock: the period's days are the viewer's days.
+ */
+export function serverPeriodBounds(filters, zone) {
+  const bounds = periodBounds(filters.period, { from: filters.customFrom, to: filters.customTo });
+  return {
+    from: bounds.from ? zone.send(bounds.from) : null,
+    to: bounds.to ? zone.send(bounds.to) : null,
+  };
+}
+
+/**
+ * What the list shows while the server zone is unknown: nothing, as loading — so the times never
+ * render unconverted first and then jump.
+ */
+function listStateOf(zoneReady, entries, loading, loaded) {
+  if (zoneReady) return { entries, loading, loaded };
+  return { entries: [], loading: true, loaded: false };
+}
+
+/**
+ * Server names and symbols of the manual currencies (`manualCurrencyOptions` with
+ * `withoutRates: false`, one request), by currency id: the name a currency with no rate in force
+ * shows — `currentRates` only names the ones that have one. The same translated name the GO
+ * currency selectors show; an empty map when the request fails.
+ */
+function useServerCurrencyNames(apiFetch) {
+  const [byId, setById] = useState(() => new Map());
+  useEffect(() => {
+    const ctrl = new AbortController();
+    Promise.resolve()
+      .then(() => fetchManualCurrencyOptions(apiFetch, ctrl.signal, { withoutRates: false }))
+      .then((list) => setById(new Map((list ?? []).map((c) => [c.id, c]))))
+      .catch(() => {});
+    return () => ctrl.abort();
+  }, [apiFetch]);
+  return byId;
+}
+
+/**
+ * A listed currency with its name and symbol: the server's (`currentRates`, else
+ * `manualCurrencyOptions`), `Intl` only when the server gives none.
+ */
+export function withCurrencyNames(entry, serverNames, locale) {
+  const server = serverNames.get(entry.currencyId);
+  return {
+    ...entry,
+    name: entry.name || server?.name || currencyDisplayName(entry.isoCode, locale),
+    symbol: entry.symbol || server?.symbol || getCurrencySymbol(entry.isoCode),
+  };
+}
+
+/**
+ * The server's time zone (`serverClock.timeZone`), read once: `{ready, zone}`. `ready` turns true
+ * when the answer arrives or fails — a failure (or an answer with no zone) leaves `zone` null, and
+ * the page then shows the server's wall clock unconverted, as before the zone was known.
+ */
+function useServerZone(apiFetch) {
+  const [state, setState] = useState({ ready: false, zone: null });
+  useEffect(() => {
+    const ctrl = new AbortController();
+    Promise.resolve()
+      .then(() => fetchServerClock(apiFetch, ctrl.signal))
+      .then((clock) => setState({ ready: true, zone: clock?.timeZone ?? null }))
+      .catch((e) => { if (e?.name !== 'AbortError') setState({ ready: true, zone: null }); });
+    return () => ctrl.abort();
+  }, [apiFetch]);
+  return state;
 }
 
 /**
@@ -102,6 +176,9 @@ export function buildPrintRows(entries, ui) {
  * tasa" (a new range for a manual currency), Modificar (the rate only) and Eliminar on any manual
  * row. Every rule (inverse rate, closing the previous range, overlap, no future start) is enforced
  * by the server; this page shows its preview and its messages.
+ *
+ * Every datetime is shown and typed in the BROWSER's zone (the server keeps its own wall clock):
+ * the server zone comes from `serverClock`, the list waits for it so the times never jump.
  */
 export default function ConversionRatesPage({ apiBaseUrl }) {
   const ui = useUI();
@@ -112,6 +189,9 @@ export default function ConversionRatesPage({ apiBaseUrl }) {
   const orgName = useMemo(() => currencyDisplayName(orgIso, locale), [orgIso, locale]);
   const orgSymbol = getCurrencySymbol(orgIso);
   const title = ui('convRateWindowTitle');
+  const serverZone = useServerZone(apiFetch);
+  const zone = useMemo(() => createZoneView(serverZone.zone), [serverZone.zone]);
+  const serverNames = useServerCurrencyNames(apiFetch);
 
   // ── Filters (URL) ───────────────────────────────────────────────────────────
   const [searchParams, setSearchParams] = useSearchParams();
@@ -141,12 +221,13 @@ export default function ConversionRatesPage({ apiBaseUrl }) {
     orgCurrencyId,
     currencyId: filters.currencyId,
     status: filters.status,
-    bounds: periodBounds(filters.period, { from: filters.customFrom, to: filters.customTo }),
-  }), [orgCurrencyId, filters]);
+    bounds: serverPeriodBounds(filters, zone),
+  }), [orgCurrencyId, filters, zone]);
   const historyAbort = useRef(null);
   const loadHistory = useCallback(async () => {
-    // Without the organization currency the inverse rows could not be told apart: wait for it.
-    if (!orgCurrencyId) return;
+    // Without the organization currency the inverse rows could not be told apart, and without the
+    // server zone the period bounds could not be converted: wait for both.
+    if (!orgCurrencyId || !serverZone.ready) return;
     historyAbort.current?.abort();
     const ctrl = new AbortController();
     historyAbort.current = ctrl;
@@ -166,7 +247,7 @@ export default function ConversionRatesPage({ apiBaseUrl }) {
         setLoaded(true);
       }
     }
-  }, [apiFetch, criteria, orgCurrencyId]);
+  }, [apiFetch, criteria, orgCurrencyId, serverZone.ready]);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -184,11 +265,7 @@ export default function ConversionRatesPage({ apiBaseUrl }) {
   // ── Currency list, sort, accordion ──────────────────────────────────────────
   const [sort, setSort] = useState(DEFAULT_SORT);
   const entries = useMemo(() => buildCurrencyList(currentRates, rows, { currencyId: filters.currencyId, sort })
-    .map((e) => ({
-      ...e,
-      name: e.name || currencyDisplayName(e.isoCode, locale),
-      symbol: e.symbol || getCurrencySymbol(e.isoCode),
-    })), [currentRates, rows, filters.currencyId, sort, locale]);
+    .map((e) => withCurrencyNames(e, serverNames, locale)), [currentRates, rows, filters.currencyId, sort, locale, serverNames]);
   const entryById = useMemo(() => new Map(entries.map((e) => [e.currencyId, e])), [entries]);
   // Divisa options: every currency known to the page, not narrowed by the Divisa filter itself.
   const currencyOptions = useMemo(
@@ -268,7 +345,7 @@ export default function ConversionRatesPage({ apiBaseUrl }) {
   // ── Page meta / toolbar ─────────────────────────────────────────────────────
   useSetPageMeta({
     title,
-    breadcrumb: `${ui('finance')} / ${title}`,
+    breadcrumb: `${ui('settings')} / ${title}`,
     recordCount: loaded ? entries.length : undefined,
   }, [title, entries.length, loaded]);
   const copyPageLink = useCopyPageLink();
@@ -278,13 +355,13 @@ export default function ConversionRatesPage({ apiBaseUrl }) {
   const printColumns = useMemo(() => [
     { key: 'currency', label: ui('convRateCurrency') },
     { key: 'origin', label: ui('convRateOrigin') },
-    { key: 'validFrom', label: ui('convRateValidFromDateTime') },
-    { key: 'validTo', label: ui('convRateValidToDateTime') },
+    { key: 'validFrom', label: withZone(ui('convRateValidFromDateTime'), zone.label, ui) },
+    { key: 'validTo', label: withZone(ui('convRateValidToDateTime'), zone.label, ui) },
     { key: 'rate', label: ui('convRateOneOrg', { currency: orgIso ?? '' }) },
     { key: 'inverse', label: ui('convRateInverseHeader', { currency: orgIso ?? '' }) },
     { key: 'status', label: ui('convRateStatus') },
-  ], [ui, orgIso]);
-  const printRows = useMemo(() => (printOpen ? buildPrintRows(entries, ui) : null), [printOpen, entries, ui]);
+  ], [ui, orgIso, zone]);
+  const printRows = useMemo(() => (printOpen ? buildPrintRows(entries, ui, zone) : null), [printOpen, entries, ui, zone]);
   const printFilters = useMemo(() => {
     const list = [];
     if (filters.currencyId) {
@@ -400,13 +477,12 @@ export default function ConversionRatesPage({ apiBaseUrl }) {
         </div>
 
         <CurrencyRatesList
-          entries={entries}
+          {...listStateOf(serverZone.ready, entries, loading, loaded)}
           orgIso={orgIso ?? ''}
           orgSymbol={orgSymbol}
           expanded={expanded}
           onToggle={toggleCurrency}
-          loading={loading}
-          loaded={loaded}
+          zone={zone}
           error={loadError}
           onNewRate={openNewRate}
           onEdit={openEdit}
@@ -425,6 +501,7 @@ export default function ConversionRatesPage({ apiBaseUrl }) {
           orgIso={orgIso ?? ''}
           orgName={orgName}
           apiFetch={apiFetch}
+          zone={zone}
           onClose={closeDialog}
           onSaved={onSaved}
           ui={ui}
@@ -440,7 +517,7 @@ export default function ConversionRatesPage({ apiBaseUrl }) {
         title={ui('convRateDeleteTitle')}
         message={pendingDelete ? ui('convRateDeleteMessage', {
           currency: entryById.get(pendingDelete.toCurrency)?.isoCode ?? pendingDelete['toCurrency$_identifier'] ?? '',
-          from: formatWallClock(pendingDelete.validFromDate),
+          from: formatInZone(pendingDelete.validFromDate, zone, ui),
         }) : null}
         notice={<p className="text-sm text-muted-foreground" data-testid="convrate-delete-notice">{ui('convRateDeleteNotice')}</p>}
         data-testid="DeleteConfirmDialog__86dbea" />

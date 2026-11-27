@@ -49,7 +49,7 @@ vi.mock('@/lib/productUsageTelemetry.js', async (importOriginal) => ({
 }));
 
 let mockAuth = null;
-vi.mock('@etendosoftware/app-shell-core/auth', async (importOriginal) => ({
+vi.mock('@etendo-ai/app-shell-core/auth', async (importOriginal) => ({
   ...(await importOriginal()),
   useAuthOptional: () => mockAuth,
 }));
@@ -419,7 +419,7 @@ describe('InvoiceInboxPage — discard', () => {
     mockApi.fetchNextPage.mockClear();
     mockApi.fetchCounts.mockClear();
     confirm();
-    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('invoiceInboxDiscardedMany:{"count":2}'));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('invoiceInboxDiscardedMany:{"count":2}', { duration: 6000, closeButton: true }));
     expect(mockApi.discardInboxDocument.mock.calls.map((c) => c[1]).sort()).toEqual(['r2', 'r3']);
     await waitFor(() => expect(screen.queryByTestId('invoice-inbox-discard-dialog')).toBeNull());
     expect(screen.queryByTestId('invoice-inbox-selection-bar')).toBeNull();
@@ -448,7 +448,7 @@ describe('InvoiceInboxPage — discard', () => {
     selectTwo();
     fireEvent.click(screen.getByTestId('invoice-inbox-bulk-discard'));
     confirm();
-    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('invoiceInboxDiscardFailed')));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('invoiceInboxDiscardFailed'), { duration: 10000, closeButton: true }));
   });
 
   it('a double click on Discard sends a single batch', async () => {
@@ -473,7 +473,7 @@ describe('InvoiceInboxPage — discard', () => {
     fireEvent.click(screen.getByTestId('invoice-inbox-row-discard-r4'));
     expect(screen.getByTestId('invoice-inbox-discard-dialog-title')).toHaveTextContent('invoiceInboxDiscardTitleOne');
     confirm();
-    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('invoiceInboxDiscardedOne:{}'));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('invoiceInboxDiscardedOne:{}', { duration: 6000, closeButton: true }));
     expect(mockApi.discardInboxDocument).toHaveBeenCalledTimes(1);
     expect(mockApi.discardInboxDocument.mock.calls[0][1]).toBe('r4');
   });
@@ -494,7 +494,7 @@ describe('InvoiceInboxPage — discard', () => {
     fireEvent.click(screen.getByTestId('check-r2'));
     fireEvent.click(screen.getByTestId('invoice-inbox-bulk-discard'));
     confirm();
-    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('invoiceInboxDiscardReasonFeatureDisabled')));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('invoiceInboxDiscardReasonFeatureDisabled'), { duration: 10000, closeButton: true }));
   });
 
   it('DISCARDED rows show "Descartada el {fecha}"', async () => {
@@ -702,7 +702,7 @@ describe('InvoiceInboxPage — review panel', () => {
     mockApi.fetchNextPage.mockClear();
     mockApi.fetchCounts.mockClear();
     fireEvent.click(screen.getByTestId('invoice-inbox-discard-confirm'));
-    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('invoiceInboxDiscardedOne:{}'));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('invoiceInboxDiscardedOne:{}', { duration: 6000, closeButton: true }));
     expect(mockApi.discardInboxDocument).toHaveBeenCalledTimes(1);
     expect(mockApi.discardInboxDocument.mock.calls[0][1]).toBe('r2');
     await waitFor(() => expect(drawer()).toBeNull());
@@ -836,6 +836,33 @@ describe('InvoiceInboxPage — batch confirm', () => {
     expect(toast.warning.mock.calls[0][0]).toContain('invoiceInboxConfirmPartialOne:{"failed":1,"reason":"invoiceInboxConfirmReasonDuplicate"}');
   });
 
+  it('a failed confirm whose answer carries a detail shows that detail in the warning, with the problem duration', async () => {
+    mockApi.confirmInboxDocument
+      .mockResolvedValueOnce(confirmedAnswer('r2', 'FC1'))
+      .mockResolvedValueOnce({ status: 'failed', code: 'confirm_failed', httpStatus: 422, detailInfo: { code: 'refused', params: { message: 'Period closed' } } });
+    await renderPage();
+    selectTwo();
+    openDialog();
+    runConfirm();
+    await waitFor(() => expect(toast.warning).toHaveBeenCalledTimes(1));
+    const [text, options] = toast.warning.mock.calls[0];
+    expect(text).toContain('invoiceInboxConfirmPartialOne');
+    expect(text).toContain('invoiceInboxConfirmDetailRefused');
+    expect(text).toContain('Period closed');
+    expect(text).not.toContain('invoiceInboxConfirmReasonFailed');
+    expect(options).toEqual({ duration: 10000, closeButton: true });
+  });
+
+  it('an all-failed confirm is an error toast with the problem duration and a close button', async () => {
+    mockApi.confirmInboxDocument.mockResolvedValue({ status: 'failed', code: 'duplicate_invoice', httpStatus: 409 });
+    await renderPage();
+    selectTwo();
+    openDialog();
+    runConfirm();
+    await waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1));
+    expect(toast.error.mock.calls[0][1]).toEqual({ duration: 10000, closeButton: true });
+  });
+
   it('a stopping code (feature flag off) stops the run and reports the unsent documents', async () => {
     mockApi.confirmInboxDocument.mockResolvedValueOnce({ status: 'failed', code: 'feature_disabled', httpStatus: 403 });
     await renderPage();
@@ -887,7 +914,7 @@ describe('InvoiceInboxPage — confirm from the review panel', () => {
     expect(mockApi.confirmInboxDocument).toHaveBeenCalledTimes(1);
     expect(mockApi.confirmInboxDocument.mock.calls[0][1]).toBe('r2');
     expect(mockApi.confirmInboxDocument.mock.calls[0][2]).toBeNull();
-    expect(toast.success).toHaveBeenCalledWith('invoiceInboxConfirmedToastOne · FC1');
+    expect(toast.success).toHaveBeenCalledWith('invoiceInboxConfirmedToastOne · FC1', { duration: 6000, closeButton: true });
     expect(drawer()).not.toBeNull();
   });
 

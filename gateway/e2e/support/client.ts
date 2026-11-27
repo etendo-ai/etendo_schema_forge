@@ -1,7 +1,8 @@
 // @covers gateway/src/public-api/public-api.controller.ts
 // HTTP client of the e2e suite: global fetch, Bearer key, JSON:API bodies,
 // 429 back-off (the gateway limits each key to 100 requests / 60 s by default),
-// OpenAPI conformance on every successful body, and cleanup of created records.
+// OpenAPI conformance on every successful body, and the registry of created records
+// (support/cleanup.ts removes them).
 import assert from 'node:assert/strict';
 import { MAIN_KEY, BASE_URL } from './env.ts';
 import { assertConformsToOpenApi } from './openapi.ts';
@@ -99,7 +100,7 @@ export function resource(type: string, attributes: Record<string, unknown>, rela
 // --- cleanup -------------------------------------------------------------
 
 /** Paths of every record a POST created, in creation order. Filled by api() itself. */
-const created: string[] = [];
+export const created: string[] = [];
 
 /** Creates a record (api() has already registered it for cleanup) and returns the resource object. */
 export async function createRecord(collectionPath: string, body: unknown, hint = ''): Promise<{ id: string; path: string; res: ApiResponse; data: any }> {
@@ -109,20 +110,6 @@ export async function createRecord(collectionPath: string, body: unknown, hint =
   assert.ok(id, `no data.id in ${describeResponse(res)}`);
   const path = `${collectionPath}/${id}`;
   return { id, path, res, data: res.json.data };
-}
-
-/** Deletes everything this process created, newest first (children before parents). Never throws. */
-export async function cleanupCreated(): Promise<void> {
-  const leftovers: string[] = [];
-  for (const path of created.splice(0).reverse()) {
-    try {
-      const res = await api('DELETE', path, { skipConformance: true });
-      if (res.status !== 204 && res.status !== 404) leftovers.push(`${path} (${res.status})`);
-    } catch (error) {
-      leftovers.push(`${path} (${(error as Error).message})`);
-    }
-  }
-  if (leftovers.length) console.error(`[public-api e2e] could not delete: ${leftovers.join(', ')}`);
 }
 
 export const MISSING_ID = '00000000000000000000000000000000';

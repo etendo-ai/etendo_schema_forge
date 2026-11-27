@@ -295,6 +295,24 @@ describe('CurrencyRatePicker', () => {
     expect(screen.getByTestId('currency-rate-pencil')).toBeInTheDocument();
   });
 
+  it('hides the pencil when allowRateEdit is false (options only, no custom rate)', () => {
+    render(
+      <CurrencyRatePicker
+        field={FIELD}
+        value="usd-id"
+        displayValue="USD"
+        formData={{ id: 'rec-1', eTGOCurrencyRate: '1.2345' }}
+        resolvedLabel="Currency"
+        token={TOKEN}
+        apiBaseUrl={BASE_URL}
+        allowRateEdit={false}
+        onChange={() => {}}
+      />,
+    );
+    expect(screen.queryByTestId('currency-rate-pencil')).not.toBeInTheDocument();
+    expect(screen.getByTestId('currency-rate-trigger')).toBeInTheDocument();
+  });
+
   it('hides the pencil when the selected currency is the org currency (isOrgCurrency)', async () => {
     // ETP-5840: the org currency is identified by the option's `isOrgCurrency` flag returned by
     // CurrencyOptionsHandler, not by the old rate === 1 sentinel — there is nothing to override.

@@ -10,7 +10,7 @@ vi.mock('@/i18n', () => ({
 // once inside the factory and reused: `useApiFetch` memoises on `auth.logout`'s identity, so
 // a fresh object per render would hand the effect a new `apiFetch` on every render and the
 // history request would loop forever.
-vi.mock('@etendosoftware/app-shell-core/auth', async (importOriginal) => {
+vi.mock('@etendo-ai/app-shell-core/auth', async (importOriginal) => {
   const session = { token: 'test-token', logout: () => {} };
   return {
     ...(await importOriginal()),

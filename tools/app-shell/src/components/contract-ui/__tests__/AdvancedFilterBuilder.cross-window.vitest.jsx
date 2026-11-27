@@ -1,3 +1,4 @@
+// @covers tools/app-shell/src/components/contract-ui/AdvancedFilterBuilder.jsx
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
@@ -31,17 +32,6 @@ vi.mock('@/components/ui/select.jsx', () => ({
   SelectItem: ({ children, value }) => <option value={value}>{children}</option>,
 }));
 
-vi.mock('@/lib/gridQuery', () => ({
-  resolveFilterMode: (col) => {
-    if (col.type === 'date') return 'date';
-    if (col.type === 'number' || col.type === 'amount') return 'numeric';
-    if (col.type === 'status') return 'enumLabel';
-    if (col.type === 'boolean') return 'booleanLabel';
-    return 'text';
-  },
-  getDisplayText: () => '',
-}));
-
 vi.mock('@/hooks/useDistinctValues.js', () => ({
   useDistinctValues: () => ({
     values: [],
@@ -62,7 +52,7 @@ vi.mock('../DistinctValuesList.jsx', () => ({
 // AdvancedFilterBuilder.vitest.jsx for the full rationale): the rendered
 // component's internal imports resolve through the core package's exports map,
 // so the '@/...' mocks above no longer bind. Mock the core subpath instead.
-vi.mock('@etendosoftware/app-shell-core/components/ui/select.jsx', () => ({
+vi.mock('@etendo-ai/app-shell-core/components/ui/select.jsx', () => ({
   Select: ({ children, value, onValueChange, disabled }) => (
     <select
       data-testid="select-control"
@@ -81,7 +71,7 @@ vi.mock('@etendosoftware/app-shell-core/components/ui/select.jsx', () => ({
   SelectItem: ({ children, value }) => <option value={value}>{children}</option>,
 }));
 
-vi.mock('@etendosoftware/app-shell-core/hooks/useDistinctValues.js', () => ({
+vi.mock('@etendo-ai/app-shell-core/hooks/useDistinctValues.js', () => ({
   useDistinctValues: () => ({
     values: [],
     loading: false,
@@ -93,7 +83,7 @@ vi.mock('@etendosoftware/app-shell-core/hooks/useDistinctValues.js', () => ({
   }),
 }));
 
-vi.mock('@etendosoftware/app-shell-core/components/contract-ui/DistinctValuesList.jsx', () => ({
+vi.mock('@etendo-ai/app-shell-core/components/contract-ui/DistinctValuesList.jsx', () => ({
   DistinctValuesList: () => null,
 }));
 

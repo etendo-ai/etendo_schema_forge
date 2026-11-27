@@ -617,7 +617,9 @@ import RowQuickActions from './RowQuickActions.jsx';
 import { trackSearchResultSelected } from '@/lib/productUsageTelemetry.js';
 import { LOOKUP_DRAWERS } from './lookupDrawers.js';
 import { committedItemFromRow } from './selectorSelection.js';
-import { ROW_LIFT_SHADOW, ROW_LIFT_HOVER_NO_BORDERS, ROW_CHECKED_BG, QUICK_ACTIONS_MIN_BAND_PX } from './rowVisuals.js';
+import {
+  ROW_CHECKED_BG, QUICK_ACTIONS_MIN_BAND_PX, listRowClassName, rowLifts,
+} from './rowVisuals.js';
 
 import { apiFetch } from '@/auth/api.js';
 /**
@@ -2135,27 +2137,10 @@ function isQuickActionsEnabled(rowQuickActions) {
 }
 
 // ETP-5600 — the shared row visuals (Shadows/lg, the checked colour, the lifted row's
-// hover border reset) live in rowVisuals.js, shared with InlineLinesPanel's line rows.
-// The two below are DataTable-only.
+// hover borders) and the row hover logic itself (`listRowClassName`, ETP-6209) live in
+// rowVisuals.js, shared with InlineLinesPanel's line rows and the portal's document table.
+// The selection colour below is DataTable-only.
 const ROW_ACTIVE_BG = 'bg-primary/10 hover:bg-primary/10 [--row-hover-bg:color-mix(in_srgb,hsl(var(--primary))_10%,hsl(var(--card)))]';
-// The composited `bg-muted/50` tint, for a row that tints on hover: a clickable row under
-// `rowHoverStyle="tint"`, or any non-clickable row (TableRow's own base `hover:bg-muted/50`).
-const ROW_TINT_HOVER_BG = '[--row-hover-bg:color-mix(in_srgb,hsl(var(--muted))_50%,hsl(var(--card)))]';
-
-/** `'tint'` is the only opt-out; `'elevated'` (pre-ETP-5600 name) and anything else lift. */
-function isLiftHover(rowHoverStyle) {
-  return rowHoverStyle !== 'tint';
-}
-
-/**
- * Whether a row raises on hover. Under `lift` only a clickable row does; `lift-always`
- * (ETP-5526) lifts every row, for a grid whose rows have no click target of their own but
- * expose hover actions (the attachments table), so it still reads like every other list.
- */
-function rowLifts(rowHoverStyle, clickable) {
-  if (rowHoverStyle === 'lift-always') return true;
-  return Boolean(clickable) && isLiftHover(rowHoverStyle);
-}
 
 function rowSelectionClass({ isChecked, selectedRowBg, selectedId, row, isSelectedLine }) {
   // Inline-lines focus keeps its own look: a muted fill plus the focus ring.
@@ -2166,14 +2151,15 @@ function rowSelectionClass({ isChecked, selectedRowBg, selectedId, row, isSelect
 }
 
 /**
- * `rowHoverStyle` picks how a clickable row reacts to hover:
+ * `rowHoverStyle` picks how a clickable row reacts to hover (`listRowClassName` in
+ * rowVisuals.js holds the classes):
  *   - `lift` (default, ETP-5600 — Figma "Fila"): transparent at rest; on hover an
  *     opaque white background plus Shadows/lg, raised with `z-10` so the shadow falls
  *     over the row below. Instant — no colour transition (a fading background made the
- *     chips inside the row flash). Figma's hover row has NO borders: the hovered row's
- *     own `border-b` and the previous row's `border-b` (its top line) turn transparent
- *     while hovered (ROW_LIFT_HOVER_NO_BORDERS); resting rows keep their separators.
- *     `elevated` is the former name of this style and stays an alias.
+ *     chips inside the row flash). The hovered row's own `border-b` turns transparent;
+ *     the line above it (the previous row's `border-b`) stays, so it keeps one grey top
+ *     line (ROW_LIFT_HOVER_BORDERS, restored by ETP-6209); resting rows keep their
+ *     separators. `elevated` is the former name of this style and stays an alias.
  *   - `tint`: the pre-ETP-5600 translucent `bg-muted/50` wash, kept as an explicit
  *     opt-out for a grid where a raised white row would read wrong.
  *   - `lift-always` (ETP-5526): the `lift` look on EVERY row, clickable or not — for a
@@ -2187,29 +2173,13 @@ function getRowClassName({
   onRowClick, onNavigate, isChecked, selectedRowBg, selectedId, row, isSelectedLine,
   rowHoverStyle = 'lift',
 }) {
-  const clickable = onRowClick || onNavigate;
-  // Only a clickable row lifts (non-clickable rows render as before ETP-5600), unless
-  // the caller opted into `lift-always`.
-  const liftRow = rowLifts(rowHoverStyle, clickable);
   const selectionClass = rowSelectionClass({ isChecked, selectedRowBg, selectedId, row, isSelectedLine });
-  let hoverClass = '';
-  if (liftRow && !isSelectedLine) {
-    hoverClass = [
-      'hover:z-10', ROW_LIFT_SHADOW, ROW_LIFT_HOVER_NO_BORDERS,
-      selectionClass ? '' : 'hover:bg-card [--row-hover-bg:hsl(var(--card))]',
-    ].filter(Boolean).join(' ');
-  } else if (!isSelectedLine && !selectionClass) {
-    // A non-clickable row still tints through TableRow's base `hover:bg-muted/50`, so it
-    // only needs the matching `--row-hover-bg` for the quick-actions fade to end on it.
-    hoverClass = clickable ? `hover:bg-muted/50 ${ROW_TINT_HOVER_BG}` : ROW_TINT_HOVER_BG;
-  }
-  return [
-    'h-12 group/row',
-    liftRow ? 'relative transition-none' : 'transition-colors',
-    clickable ? 'cursor-pointer' : 'cursor-default',
+  return `h-12 ${listRowClassName({
+    clickable: Boolean(onRowClick || onNavigate),
+    hoverStyle: rowHoverStyle,
     selectionClass,
-    hoverClass,
-  ].filter(Boolean).join(' ');
+    selectedLine: Boolean(isSelectedLine),
+  })}`;
 }
 
 // Sums the pixel widths reserved in the fixed-layout <colgroup> for the

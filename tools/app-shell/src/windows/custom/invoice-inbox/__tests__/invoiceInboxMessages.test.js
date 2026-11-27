@@ -69,6 +69,34 @@ describe('confirmReasonKey / CONFIRM_STOPPING_CODES', () => {
   });
 });
 
+describe('confirmFailedDetail step_refused_status (ETP-6051)', () => {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const l = (loc) => JSON.parse(readFileSync(join(here, '..', '..', '..', '..', 'locales', `${loc}.json`), 'utf8')).genericLabels;
+  const uiOf = (loc) => { const d = l(loc); return (key, params = {}) => String(d[key] ?? key).replace(/\{(\w+)\}/g, (_, k) => params[k] ?? ''); };
+  it('names the translated step and the HTTP status; an unknown step reads as creation', () => {
+    const info = { code: 'step_refused_status', params: { step: 'vendorAddress', status: 400 } };
+    assert.equal(confirmFailedDetail(uiOf('es_ES'), info), 'El servidor rechazó el paso «Dirección del nuevo proveedor» (código 400). Contacta con soporte.');
+    assert.match(confirmFailedDetail(uiOf('en_US'), info), /New vendor address.*400/);
+    assert.match(confirmFailedDetail(uiOf('es_AR'), { code: 'step_refused_status', params: { step: 'invoice', status: 500 } }), /«Creación» \(código 500\)/);
+  });
+});
+
+describe('confirmFailedDetail step_refused_status renders the step parameters (ETP-6051)', () => {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const labels = (loc) => JSON.parse(readFileSync(join(here, '..', '..', '..', '..', 'locales', `${loc}.json`), 'utf8')).genericLabels;
+  const uiOf = (loc) => { const d = labels(loc); return (key, params = {}) => String(d[key] ?? key).replace(/\{(\w+)\}/g, (_, k) => params[k] ?? ''); };
+  it('a line step carries its number and a product step its name', () => {
+    for (const loc of ['en_US', 'es_ES', 'es_AR']) {
+      const line = confirmFailedDetail(uiOf(loc), { code: 'step_refused_status', params: { step: 'line', n: 3, status: 400 } });
+      assert.match(line, /3/, loc);
+      assert.match(line, /400/, loc);
+      const product = confirmFailedDetail(uiOf(loc), { code: 'step_refused_status', params: { step: 'product', name: 'Cable', status: 500 } });
+      assert.match(product, /'Cable'/, loc);
+      assert.doesNotMatch(product, /''/, loc);
+    }
+  });
+});
+
 describe('confirmFailedDetail (the failure identifier, ETP-6051)', () => {
   const here = dirname(fileURLToPath(import.meta.url));
   const locales = Object.fromEntries(['en_US', 'es_ES', 'es_AR'].map((l) => [
@@ -79,7 +107,7 @@ describe('confirmFailedDetail (the failure identifier, ETP-6051)', () => {
 
   it('every code the backend writes and every step has a translation in the three locales', () => {
     const codes = ['no_lookups', 'completion_error', 'no_vendor_category', 'no_product_sequence', 'no_file', 'attach_failed',
-      'currency_mismatch', 'total_mismatch', 'step_failed', 'search_key_exists', 'refused'];
+      'currency_mismatch', 'total_mismatch', 'step_failed', 'search_key_exists', 'refused', 'step_refused_status'];
     assert.deepEqual(Object.keys(CONFIRM_FAILED_DETAIL_KEYS).sort(), [...codes].sort());
     assert.deepEqual(Object.keys(CONFIRM_STEP_KEYS).sort(), ['creation', 'header', 'line', 'product', 'vendor', 'vendorAddress']);
     for (const locale of Object.keys(locales)) {

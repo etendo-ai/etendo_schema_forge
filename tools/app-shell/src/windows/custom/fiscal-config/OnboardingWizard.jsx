@@ -263,17 +263,15 @@ function SkippedScreen({ orgName, selectedOrg, orgList, onSelectOrg, ui, onGoHom
 // `onApplied` / `onBack` hand over to the page (its `onComplete`, which re-reads the config): since
 // ETP-5831 there is no "Configuración aplicada" screen — the page's "Estado" panel replaces it, and
 // it only appears once the config is stored and re-read.
-function DetailScreen({ system, selectedTerritory, createdRecords, orgId, orgName, selectedOrg, orgList, onSelectOrg, apiBaseUrl, error, ui, SYSTEMS, siiRef, tbaiRef, verifactuRef, onBack, onApplied, locked }) {
-  const sys = SYSTEMS[system];
+function DetailScreen({ system, selectedTerritory, createdRecords, orgId, orgName, selectedOrg, orgList, onSelectOrg, apiBaseUrl, error, ui, siiRef, tbaiRef, verifactuRef, onBack, onApplied, locked }) {
   const [activeTab, setActiveTab] = useState(0);
   // Double-submit guard: the ref blocks a second click in the same tick, the state disables the
   // button for as long as the save runs.
   const [savingDetail, setSavingDetail] = useState(false);
   const savingRef = useRef(false);
 
-  const SYS_LABEL = { SII: 'SII', TBAI: 'TicketBAI', 'SII+TBAI': 'SII + TicketBAI', VERIFACTU: 'VERI*FACTU' };
-  const sysLabel = SYS_LABEL[system] ?? sys?.name ?? '';
-  const pageTitle = `${ui('fiscal.title')} ${sysLabel}`.trim();
+  // ETP-6380 — plain window name, as in the menu; the chosen system is shown in the screen body.
+  const pageTitle = ui('fiscal.title');
   useSetPageMeta({ title: pageTitle, breadcrumb: `${ui('taxes')} / ${pageTitle}` });
 
   async function handleSaveDetail() {

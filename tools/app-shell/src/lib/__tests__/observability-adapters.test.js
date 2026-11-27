@@ -16,7 +16,7 @@ import {
   resolveRumSessionSampleRate,
 } from '../rum.js';
 import { createDatadogProvider } from '../observability/providers/datadog.js';
-import { resolveTracingUrls } from '@etendosoftware/app-shell-core/observability/adapters/datadog';
+import { resolveTracingUrls } from '@etendo-ai/app-shell-core/observability/adapters/datadog';
 
 const datadogEnv = {
   VITE_DATADOG_ENABLED: 'true', VITE_DATADOG_APPLICATION_ID: 'test-app',
@@ -407,7 +407,9 @@ describe('browser observability config', () => {
     const enabledOf = (env) => Object.fromEntries(
       // A production host (ETP-5466), so only the switches and configuration decide.
       buildBrowserObservabilityConfig({ env, location: { hostname: 'app.etendo.software' }, logger: silent })
-        .providers.map((provider) => [provider.name, provider.enabled]),
+        .providers.map((provider) => [provider.name,
+          // ETP-6363 — a configured Mixpanel waits for the cookie banner on a production host.
+          typeof provider.enabled === 'function' ? 'after-consent' : provider.enabled]),
     );
     const RUM_IDS = { VITE_RUM_APP_MONITOR_ID: 'monitor-id', VITE_RUM_IDENTITY_POOL_ID: 'pool-id' };
     const MIXPANEL_TOKEN = { VITE_MIXPANEL_TOKEN: 'fake-project-token' };
@@ -428,7 +430,7 @@ describe('browser observability config', () => {
       assert.deepEqual(enabledOf({ VITE_MIXPANEL_ENABLED: 'true' }), NONE, 'Mixpanel switch without a token');
       assert.deepEqual(enabledOf(datadogEnv), { ...NONE, datadog: true });
       assert.deepEqual(enabledOf({ VITE_RUM_ENABLED: 'true', ...RUM_IDS }), { ...NONE, 'aws-rum': true });
-      assert.deepEqual(enabledOf({ VITE_MIXPANEL_ENABLED: 'true', ...MIXPANEL_TOKEN }), { ...NONE, mixpanel: true });
+      assert.deepEqual(enabledOf({ VITE_MIXPANEL_ENABLED: 'true', ...MIXPANEL_TOKEN }), { ...NONE, mixpanel: 'after-consent' });
     });
 
     it('takes only the literal "true" as opt-in', () => {

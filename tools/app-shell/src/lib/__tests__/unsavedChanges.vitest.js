@@ -1,10 +1,11 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   setUnsavedChanges,
   clearUnsavedChanges,
   hasUnsavedChanges,
   suppressNextUnloadPrompt,
   installUnloadGuard,
+  canPromptOnUnload,
   saveEmbeddedUnsavedChanges,
   resetUnsavedChangesForTests,
 } from '../unsavedChanges.js';
@@ -158,6 +159,33 @@ describe('beforeunload guard', () => {
     setUnsavedChanges('form-a', true);
     const event = fireBeforeUnload();
     expect(event.defaultPrevented).toBe(true);
+  });
+
+  describe('user activation', () => {
+    const setActivation = (value) => Object.defineProperty(window.navigator, 'userActivation', { value, configurable: true });
+    afterEach(() => { delete window.navigator.userActivation; });
+
+    it('does not ask for the dialog when the page never had a user gesture', () => {
+      setActivation({ hasBeenActive: false });
+      setUnsavedChanges('form-a', true);
+      const event = fireBeforeUnload();
+      expect(event.defaultPrevented).toBe(false);
+      expect(event.returnValue).not.toBe('unsaved');
+    });
+
+    it('still blocks a dirty unload once the user has interacted', () => {
+      setActivation({ hasBeenActive: true });
+      setUnsavedChanges('form-a', true);
+      expect(fireBeforeUnload().defaultPrevented).toBe(true);
+    });
+
+    it('canPromptOnUnload follows hasBeenActive and defaults to true without the API', () => {
+      expect(canPromptOnUnload()).toBe(true);
+      setActivation({ hasBeenActive: true });
+      expect(canPromptOnUnload()).toBe(true);
+      setActivation({ hasBeenActive: false });
+      expect(canPromptOnUnload()).toBe(false);
+    });
   });
 
   it('stays silent for a reload we perform ourselves after the user confirmed', () => {

@@ -7,8 +7,8 @@ const columns = [
   { key: 'name', column: 'Name', type: 'string', label: 'Name', required: true, maxLength: 60, grow: true },
   { key: 'remittanceType', column: 'REM_Remittance_Type_ID', type: 'selector', label: 'Remittance Type', required: true, minWidth: 260 },
   { key: 'financialAccount', column: 'FIN_Financial_Account_ID', type: 'selector', label: 'Financial Account', required: true, minWidth: 290 },
-  { key: 'transactionDate', column: 'Datetrx', type: 'date', label: 'Transaction Date', required: true },
-  { key: 'dueDate', column: 'Duedate', type: 'date', label: 'Expected Date', required: true },
+  { key: 'transactionDate', column: 'Datetrx', type: 'date', label: 'Transaction Date', required: true, dot: false },
+  { key: 'dueDate', column: 'Duedate', type: 'date', label: 'Expected Date', required: true, dot: false },
   { key: 'remittanceStatus', column: 'Remittance_Status', type: 'status', label: 'Status', enumLabels: { 'PE': 'remittanceStatusPe', 'PR': 'remittanceStatusPr', 'SB': 'remittanceStatusSb', 'CT': 'remittanceStatusCt', 'PT': 'remittanceStatusPt', 'CP': 'remittanceStatusCp', 'PP': 'remittanceStatusPp', 'AN': 'remittanceStatusAn' }, enumVariants: {"PE":"neutral","PR":"warning","SB":"info","CT":"success","PT":"success","CP":"warning","PP":"warning","AN":"destructive"}, required: true },
 ];
 // @sf-generated-end columns:remittance

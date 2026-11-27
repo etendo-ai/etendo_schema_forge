@@ -1,4 +1,4 @@
-import { getCredentialMode, setSessionCredentials } from '@etendosoftware/app-shell-core/auth';
+import { getCredentialMode, setSessionCredentials } from '@etendo-ai/app-shell-core/auth';
 
 /**
  * Shared `useAuth` mock for the cookie-session contract (ETP-4576).

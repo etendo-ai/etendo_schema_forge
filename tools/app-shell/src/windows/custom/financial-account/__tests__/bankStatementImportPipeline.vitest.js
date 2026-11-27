@@ -12,7 +12,7 @@ import {
   toPayloadLine,
   validateStatementRow,
 } from '../bankStatementImportPipeline.js';
-import { parseDelimited } from '@etendosoftware/app-shell-core/lib/import/parseDelimited.js';
+import { parseDelimited } from '@etendo-ai/app-shell-core/lib/import/parseDelimited.js';
 import { BANK_STATEMENT_IMPORT_FIELDS } from '../bankStatementImportFields.js';
 import { normalizeStatementDate as canonicalNormalizeStatementDate } from '../statementDate.js';
 

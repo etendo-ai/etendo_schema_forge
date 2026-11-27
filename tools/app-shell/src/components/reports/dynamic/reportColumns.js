@@ -1,5 +1,5 @@
 import { formatCalendarDate, formatCalendarMonthShort, formatCalendarQuarterShort } from '@/lib/dateOnly.js';
-import { buildPeriodValues, EXPORT_MAX_BUCKETS, SCREEN_PERIODS } from '@etendosoftware/schema-forge-cli/src/report-periods.js';
+import { buildPeriodValues, EXPORT_MAX_BUCKETS, SCREEN_PERIODS } from '@etendo-ai/schema-forge-cli/src/report-periods.js';
 import { comparedRanges, serializePeriods } from './dynamicDates.js';
 
 /**

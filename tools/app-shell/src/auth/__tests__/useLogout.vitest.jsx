@@ -7,7 +7,7 @@ import { renderHook, act } from '@testing-library/react';
 // what has to be mocked. `notifyAmbientUnauthorized` is the no-provider fallback and must be
 // present on the mock, though these tests never reach it.
 const coreLogout = vi.fn();
-vi.mock('@etendosoftware/app-shell-core/auth', () => ({
+vi.mock('@etendo-ai/app-shell-core/auth', () => ({
   useAuthOptional: () => ({ logout: coreLogout }),
   notifyAmbientUnauthorized: () => {},
 }));

@@ -14,7 +14,7 @@ import { forwardRef, useImperativeHandle } from 'react';
 const invalidateMock = vi.fn();
 // Stable object across renders — the hook memoizes on `cache`.
 const dataCacheValue = { cache: { invalidate: (...a) => invalidateMock(...a) } };
-vi.mock('@etendosoftware/app-shell-core/data', async (importOriginal) => ({
+vi.mock('@etendo-ai/app-shell-core/data', async (importOriginal) => ({
   ...(await importOriginal()),
   useOptionalDataCache: () => dataCacheValue,
 }));

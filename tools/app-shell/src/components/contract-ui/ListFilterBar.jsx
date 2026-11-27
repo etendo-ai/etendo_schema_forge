@@ -7,30 +7,20 @@ import {
   FunnelSimpleIcon,
   CircleNotchIcon,
 } from '@phosphor-icons/react';
-import { useLocale, useUI } from '@etendosoftware/app-shell-core';
+import { useLocale, useUI } from '@etendo-ai/app-shell-core';
 import { useDistinctValues } from '@/hooks/useDistinctValues.js';
 import { compareStatusCodes, statusLabel } from '@/lib/statusBadge.js';
 import { resolveStatusTone } from '@/lib/statusToneOverride.js';
 import { StatusTag } from '@/components/ui/status-tag';
 import { AdvancedFilterBuilder } from './AdvancedFilterBuilder.jsx';
 import { DistinctValuesList } from './DistinctValuesList.jsx';
+import { TOOLBAR_SELECT_CLASS } from './listToolbarStyles.js';
+import { normalizeSearchText } from '@/lib/searchText.js';
 import { DateRangePopoverContent } from '@/components/ui/date-range-popover.jsx';
 import { computePresetRange, toIsoDate } from './datePresetFilter.js';
 
-// Case- and accent-insensitive form of a string for client-side option search
-// ("borr" / "Borr" / "bórr" all match "Borrador"): NFD, strip combining marks, lowercase.
-const normalizeSearchText = (s) => String(s ?? '')
-  .normalize('NFD')
-  .replace(/[\u0300-\u036f]/g, '')
-  .toLowerCase();
 
-// ETP-5601 — Figma's toolbar type: text-sm/leading-6/font-medium in #121217 for every text
-// control, idle or active. An active filter is told apart by its border alone. `text-[#121217]`
-// already has a dark-mode remap in the core stylesheet. Icons are 20px in
-// #828FA3; `[&_svg]:` is needed because the core Button forces `[&_svg]:size-4` on its children.
-// The chevron is the exception: `!size-4` (16px box, ~8px glyph as in Figma) must beat the
-// parent `[&_svg]:size-5` selector, which outranks a plain class on the icon itself.
-const TOOLBAR_SELECT_CLASS = 'gap-1.5 text-sm leading-6 font-medium text-[#121217] h-10 px-3 rounded-lg bg-card data-[state=open]:border-[hsl(var(--foreground))] [&_svg]:size-5 [&_svg]:text-[#828FA3]';
+// The toolbar button look (ETP-5601) lives in listToolbarStyles.js, shared with the portal.
 
 /**
  * Quick-filter toolbar rendered above the list table.

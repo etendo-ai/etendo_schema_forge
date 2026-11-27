@@ -1,4 +1,5 @@
 // @covers tools/app-shell/src/windows/custom/shared/InvoicePreview.jsx
+// @covers artifacts/sales-invoice/custom/invoiceSubtype.js
 // Mocks must come before imports (Vitest hoisting).
 // Mirrors OrderPreview.vitest.jsx's isolated-mock approach so we can assert
 // directly on the dual-currency props passed to SummaryCard (ETP-4029).
@@ -1109,6 +1110,23 @@ describe('InvoicePreview — email history wiring (ETP-5069)', () => {
     fireEvent.click(screen.getByTestId('send-modal-close'));
 
     expect(lastEmailsCardProps().refreshSignal).toBe(before);
+  });
+
+  // A sales credit note is sent as «Factura rectificativa», like an MCP send; a regular sales
+  // invoice and every purchase invoice (even one whose subtype reads rectificative) keep the
+  // window label.
+  it.each([
+    ['a sales credit note', 'sales-invoice', { arInvoiceSubtype: 'RECTIFICATIVA' }, 'sendDocumentTypeCreditNote'],
+    ['a regular sales invoice', 'sales-invoice', { arInvoiceSubtype: 'FAC' }, 'Sales Invoice'],
+    ['a purchase invoice', 'purchase-invoice', { arInvoiceSubtype: 'RECTIFICATIVA' }, 'Purchase Invoice'],
+  ])('names %s in the send modal', (_label, specName, overrides, expected) => {
+    useInvoicePreview.mockReturnValue(baseInvoicePreviewHook({
+      isSalesInvoice: specName === 'sales-invoice',
+      showSendModal: true,
+      displayInvoice: { ...defaultInvoice, ...overrides },
+    }));
+    renderInvoicePreview({ specName, windowName: specName, apiBaseUrl: `/api/${specName}` });
+    expect(screen.getByTestId('send-modal')).toHaveAttribute('data-document-type', expected);
   });
 });
 

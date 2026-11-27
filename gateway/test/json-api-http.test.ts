@@ -14,7 +14,7 @@ import {
 } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { ThrottlerModule, ThrottlerStorageService } from '@nestjs/throttler';
-import { CachedTokenExchangeService, PUBLIC_API_SCHEMA, type PublicApiSchema } from '@etendosoftware/api-gateway-core';
+import { CachedTokenExchangeService, PUBLIC_API_SCHEMA, type PublicApiSchema } from '@etendo-ai/api-gateway-core';
 import { PublicApiController, versionFromIfMatch } from '../src/public-api/public-api.controller.ts';
 import { THROTTLER_NAME } from '../src/public-api/public-api-throttler.guard.ts';
 import {

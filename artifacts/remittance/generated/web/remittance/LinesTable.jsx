@@ -4,8 +4,8 @@ import { DataTable, InlineLinesPanel } from '@/components/contract-ui';
 // @sf-generated-start columns:lines
 const columns = [
   { key: 'invoiceDocumentNo', column: 'DocumentNo', type: 'string', labels: {"es_ES":"Factura","es_AR":"Factura","en_US":"Invoice"}, label: 'Invoice', grow: true, link: {"idField":"invoice","window":{"field":"invoiceSalesTransaction","values":{"true":"sales-invoice","false":"purchase-invoice"}}} },
-  { key: 'invoiceDate', column: 'DateInvoiced', type: 'date', labels: {"es_ES":"Fecha factura","es_AR":"Fecha factura","en_US":"Invoice date"}, label: 'Invoice Date' },
-  { key: 'dueDate', column: 'ExpectedDate', type: 'date', labels: {"es_ES":"Vencimiento","es_AR":"Vencimiento","en_US":"Due date"}, label: 'Due Date' },
+  { key: 'invoiceDate', column: 'DateInvoiced', type: 'date', labels: {"es_ES":"Fecha factura","es_AR":"Fecha factura","en_US":"Invoice date"}, label: 'Invoice Date', dot: false },
+  { key: 'dueDate', column: 'ExpectedDate', type: 'date', labels: {"es_ES":"Vencimiento","es_AR":"Vencimiento","en_US":"Due date"}, label: 'Due Date', dot: false },
   { key: 'businessPartner', column: 'C_BPartner_ID', type: 'selector', labels: {"es_ES":"Cliente","es_AR":"Cliente","en_US":"Customer"}, label: 'Customer' },
   { key: 'invoiceGrandTotal', column: 'GrandTotal', type: 'amount', labels: {"es_ES":"Total factura","es_AR":"Total factura","en_US":"Invoice total"}, label: 'Invoice Total', currencyField: 'currency' },
   { key: 'invoiceOutstanding', column: 'OutstandingAmt', type: 'amount', labels: {"es_ES":"Pendiente","es_AR":"Pendiente","en_US":"Outstanding"}, label: 'Outstanding', currencyField: 'currency' },

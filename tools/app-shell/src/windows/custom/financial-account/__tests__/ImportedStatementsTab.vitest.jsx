@@ -1454,7 +1454,8 @@ describe('ImportedStatementsTab — shared bank-sync state', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(BANK_SYNC_POLL_INTERVAL_MS); });
     expect(reloadFn).toHaveBeenCalledTimes(1);
     expect(onSynced).toHaveBeenCalledTimes(1);
-    expect(toastSuccess).toHaveBeenCalledWith('financeAccountsBankConnectionSyncDone');
+    // The sync collided with one running elsewhere and brought nothing of its own: no green toast.
+    expect(toastSuccess).not.toHaveBeenCalled();
     expect(screen.getByTestId('stub-toolbar')).toHaveAttribute('data-syncing', 'false');
   });
 

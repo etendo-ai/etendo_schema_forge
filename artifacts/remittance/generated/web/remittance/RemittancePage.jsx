@@ -15,7 +15,7 @@ import RemittanceProcessConfirmModal from '../../../custom/RemittanceProcessConf
 import catalogs from './mockCatalogs';
 
 
-const breadcrumb = 'Finance / Remittance';
+const breadcrumb = 'Treasury / Remittance';
 
 
 // @sf-generated-start summary:remittance

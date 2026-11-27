@@ -1,5 +1,5 @@
 // ETP-4557 — the single app-shell adapter over the declarative validation engine
-// (`@etendosoftware/app-shell-core/lib/validation`, ETP-4556). Form save, form blur,
+// (`@etendo-ai/app-shell-core/lib/validation`, ETP-4556). Form save, form blur,
 // inline-grid add/edit and the import review queue all decide validity HERE, so one
 // contract produces one error code for one value regardless of the flow.
 //
@@ -13,7 +13,7 @@
 // It never mutates data and contains no window-specific branch.
 import {
   validateRecord, ERROR_CODES, inferFormatConstraints, describeValidationError,
-} from '@etendosoftware/app-shell-core/lib/validation/index.js';
+} from '@etendo-ai/app-shell-core/lib/validation/index.js';
 
 export { ERROR_CODES };
 

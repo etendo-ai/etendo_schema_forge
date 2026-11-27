@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest';
 import {
   getFieldError, getFieldErrors, getFirstViolation, getNativeInputProps, mapBackendFieldErrors, structuredBackendError, safeBackendMessage, ERROR_CODES,
 } from '../coreValidation.js';
-import { validateRow } from '@etendosoftware/app-shell-core/lib/import/validateRows.js';
+import { validateRow } from '@etendo-ai/app-shell-core/lib/import/validateRows.js';
 
 const name = { key: 'name', type: 'text', maxLength: 5 };
 const email = { key: 'etgoEmail', column: 'EM_Etgo_Email', type: 'text' };

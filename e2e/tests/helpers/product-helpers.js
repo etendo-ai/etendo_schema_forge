@@ -191,7 +191,7 @@ async function fetchSelectorItems(page, { entity, column, headers, limit = 200 }
  *
  * `useCriteria: true` sends the exact-match AdvancedCriteria filter the
  * ListView's own filter bar sends (`buildBackendFilter()` in
- * tools/app-shell/src/lib/gridQuery.js, merged by `mergeFilterCriteria()` in
+ * @etendo-ai/app-shell-core/lib/gridQuery.js, merged by `mergeFilterCriteria()` in
  * useEntity.js). `useCriteria: false` fetches an unfiltered bounded page and
  * matches client-side — see `findProductFixture()` for why that second mode
  * exists.

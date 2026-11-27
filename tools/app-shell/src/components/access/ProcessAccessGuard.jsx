@@ -3,7 +3,7 @@ import { useRoleMenu } from '@/hooks/useRoleMenu.js';
 
 /**
  * ETP-5485 — the access-denied screen, with the exact markup, `data-testid` and i18n key of
- * `@etendosoftware/app-shell-core`'s `WindowAccessGuard`, so a page gated by something other
+ * `@etendo-ai/app-shell-core`'s `WindowAccessGuard`, so a page gated by something other
  * than an `AD_Window` looks the same as any other window the user cannot open. Core does not
  * export its inline markup, so this is a copy: keep it in sync with core's `WindowAccessGuard`
  * (move it to core the next time core's auth module is touched).

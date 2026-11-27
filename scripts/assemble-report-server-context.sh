@@ -125,12 +125,12 @@ cp -R "$REPO_ROOT/templates" "$OUT_DIR/templates"
 # 2b. Make the copied helper module resolvable in this tree.
 #
 # The canonical `templates/reports/helpers/report-html-helpers.js` imports the shared
-# report-i18n module from the PUBLISHED `@etendosoftware/schema-forge-cli` package, which
+# report-i18n module from the PUBLISHED `@etendo-ai/schema-forge-cli` package, which
 # this image does not install (`tools/report-server/package.json` has three deps). The
 # assembled tree is the hybrid the mirror form exists for: core's `cli/src` was copied
 # above, so the RELATIVE specifier — the one variant the cross-repo parity contract
 # allows — resolves here. Without this rewrite the container dies on startup with
-# `ERR_MODULE_NOT_FOUND: Cannot find package '@etendosoftware/schema-forge-cli'` before
+# `ERR_MODULE_NOT_FOUND: Cannot find package '@etendo-ai/schema-forge-cli'` before
 # answering a single request (ETP-4910: it had been unbootable since ETP-5013 switched
 # the canonical copy to the package specifier, unnoticed because this job's deploy steps
 # are skipped while the AWS variables are unset).
@@ -139,7 +139,7 @@ cp -R "$REPO_ROOT/templates" "$OUT_DIR/templates"
 # of the two forms (parity.json records both) — never re-implement it here.
 node "$REPO_ROOT/scripts/sync-report-helpers.mjs" --relativize-import "$OUT_DIR"
 
-if grep -rq --include="*.js" "@etendosoftware/schema-forge-cli" "$OUT_DIR/templates/reports/helpers/"; then
+if grep -rq --include="*.js" "@etendo-ai/schema-forge-cli" "$OUT_DIR/templates/reports/helpers/"; then
   echo "ERROR: the assembled helpers still import a package this image does not install." >&2
   echo "       templates/reports/helpers/report-html-helpers.js must carry the relative" >&2
   echo "       '../../../cli/src/report-i18n.js' specifier in the context (see step 2b)." >&2

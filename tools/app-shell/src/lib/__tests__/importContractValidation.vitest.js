@@ -2,8 +2,8 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { validateRow } from '@etendosoftware/app-shell-core/lib/import/validateRows.js';
-import { buildFieldConstraints, buildFieldIdentities } from '@etendosoftware/app-shell-core/lib/import/fieldConstraints.js';
+import { validateRow } from '@etendo-ai/app-shell-core/lib/import/validateRows.js';
+import { buildFieldConstraints, buildFieldIdentities } from '@etendo-ai/app-shell-core/lib/import/fieldConstraints.js';
 
 /**
  * ETP-4557 — the review queue (`ImportDialog.revalidate`) builds `fieldConstraints` /

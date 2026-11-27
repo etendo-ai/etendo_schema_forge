@@ -4,12 +4,53 @@ import { OBSERVABILITY_EVENTS } from './events.js';
 import { createMixpanelProvider } from './providers/mixpanel.js';
 import { createRumProvider } from '../rum.js';
 import { createDatadogProvider } from './providers/datadog.js';
+import { clearMixpanelCookies, onAnalyticsConsent } from '../marketing/consent.js';
+
+/**
+ * The providers of this page load.
+ *
+ * ETP-6209 — a customer-portal page (`portalPage`, decided once in `main.jsx` with `isPortalPath`)
+ * has no tracking. Its visitors are customers of our customers and never see a consent banner.
+ * - **Datadog Browser RUM is left out.** The core adapter always tracks user interactions (click
+ *   actions), it may record session replay, and it keeps its `_dd_s` session cookie. None of that
+ *   can be switched off from here, and there is no non-RUM Datadog logger to fall back to, so the
+ *   portal does not report its JS errors to Datadog.
+ * - **Mixpanel is left out** (product analytics).
+ * - **AWS CloudWatch RUM stays** when enabled: it records only performance, errors and HTTP calls
+ *   (`DEFAULT_RUM_TELEMETRIES`, no interactions), with cookies off by default
+ *   (`VITE_RUM_ALLOW_COOKIES`). It is the portal's error monitoring.
+ */
+function browserProviders({ env, logger, storage, hostname, portalPage }) {
+  const rum = createRumProvider({ env, logger });
+  if (portalPage) return [rum];
+  return [
+    createDatadogProvider({
+      env,
+      logger,
+    }),
+    rum,
+    createMixpanelProvider({
+      enabled: env.VITE_MIXPANEL_ENABLED,
+      token: env.VITE_MIXPANEL_TOKEN,
+      debug: env.VITE_MIXPANEL_DEBUG,
+      apiHost: env.VITE_MIXPANEL_API_HOST,
+      logger,
+      storage,
+      hostname,
+      allowLocal: env.VITE_MIXPANEL_ALLOW_LOCAL,
+      // ETP-6363 — only after the visitor accepts the Analytics cookies of marketing's banner.
+      consent: onAnalyticsConsent,
+      onConsentWithdrawn: () => clearMixpanelCookies(),
+    }),
+  ];
+}
 
 export function buildBrowserObservabilityConfig({
   env = import.meta.env,
   location = globalThis.window?.location,
   logger = console,
   storage = globalThis.localStorage,
+  portalPage = false,
 } = {}) {
   const hostname = location?.hostname;
   // Build default + whatever the flags say right now. A provider killed here is never started.
@@ -31,26 +72,7 @@ export function buildBrowserObservabilityConfig({
       hostname,
       mockMode: env.VITE_MOCK === 'true',
     },
-    providers: [
-      createDatadogProvider({
-        env,
-        logger,
-      }),
-      createRumProvider({
-        env,
-        logger,
-      }),
-      createMixpanelProvider({
-        enabled: env.VITE_MIXPANEL_ENABLED,
-        token: env.VITE_MIXPANEL_TOKEN,
-        debug: env.VITE_MIXPANEL_DEBUG,
-        apiHost: env.VITE_MIXPANEL_API_HOST,
-        logger,
-        storage,
-        hostname,
-        allowLocal: env.VITE_MIXPANEL_ALLOW_LOCAL,
-      }),
-    ],
+    providers: browserProviders({ env, logger, storage, hostname, portalPage }),
   };
 }
 

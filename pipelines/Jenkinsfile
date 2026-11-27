@@ -19,10 +19,10 @@ pipeline {
 
         // --- Repositories ---
         REPOSITORY_NAME     = 'etendo_schema_forge'
-        URL_REPO            = 'https://github.com/etendosoftware/etendo_schema_forge'
-        SCHEMA_FORGE_SSH    = 'git@github.com:etendosoftware/etendo_schema_forge.git'
-        CORE_URL_REPO       = 'https://github.com/etendosoftware/etendo_core'
-        GO_MODULE_SSH       = 'git@github.com:etendosoftware/com.etendoerp.go.git'
+        URL_REPO            = 'https://github.com/etendo-ai/etendo_schema_forge'
+        SCHEMA_FORGE_SSH    = 'git@github.com:etendo-ai/etendo_schema_forge.git'
+        CORE_URL_REPO       = 'https://github.com/etendo-ai/etendo_core'
+        GO_MODULE_SSH       = 'git@github.com:etendo-ai/com.etendoerp.go.git'
         GO_MODULE_NAME      = 'com.etendoerp.go'
         // Newline-separated list of extra module SSH URLs cloned into
         // ${CORE_DIR}/modules/ and aligned with the same branch strategy.

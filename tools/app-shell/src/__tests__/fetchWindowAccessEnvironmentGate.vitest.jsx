@@ -31,7 +31,7 @@ vi.mock('sonner', () => ({
   Toaster: () => null,
 }));
 
-vi.mock('@etendosoftware/app-shell-core/runtime', async () => {
+vi.mock('@etendo-ai/app-shell-core/runtime', async () => {
   const { MemoryRouter } = await import('react-router-dom');
   return {
     AppShellRuntime: ({ children, layout: Layout, menuGroups }) => (

@@ -11,7 +11,7 @@ import {
 import { useLocateCommittedValue } from './useLocateCommittedValue.js';
 import { LocatingNotice, locatingOverflowClass } from './LocatingNotice.jsx';
 import { FIELD_HEIGHT } from '@/components/ui/formDensity';
-import { createQueryKey, useOptionalDataCache } from '@etendosoftware/app-shell-core/data';
+import { createQueryKey, useOptionalDataCache } from '@etendo-ai/app-shell-core/data';
 import { needsSelectorRevalidation } from '@/lib/selectorRevalidation.js';
 
 import { useApiFetch } from '@/auth/useApiFetch.js';

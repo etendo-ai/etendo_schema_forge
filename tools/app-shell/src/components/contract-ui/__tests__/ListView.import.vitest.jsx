@@ -56,7 +56,7 @@ vi.mock('../ListFilterBar.jsx', () => ({
 }));
 import { noOpExtractQueryParamConditions } from './testUtils/gridQueryMock.js';
 
-vi.mock('@/lib/gridQuery', () => ({
+vi.mock('@etendo-ai/app-shell-core/lib/gridQuery.js', () => ({
   buildAdvancedFilterCriteria: () => null,
   extractQueryParamConditions: noOpExtractQueryParamConditions,
 }));
@@ -66,7 +66,7 @@ vi.mock('@/hooks/useWindowFilterPresets', () => ({
 
 // Mock ImportDialog — exposes onImported via a button so tests can simulate the real
 // component reporting { okCount, failedCount } without driving the full upload flow.
-vi.mock('@etendosoftware/app-shell-core/components/import/ImportDialog.jsx', () => ({
+vi.mock('@etendo-ai/app-shell-core/components/import/ImportDialog.jsx', () => ({
   ImportDialog: ({ open, onImported, onOpenChange, initialFile }) => open ? (
     <div data-testid="ImportDialog__mock">
       <span data-testid="ImportDialog__mock-initialFile">{initialFile?.name ?? ''}</span>

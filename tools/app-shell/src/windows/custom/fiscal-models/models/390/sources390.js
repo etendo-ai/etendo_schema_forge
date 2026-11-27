@@ -5,7 +5,7 @@
 // Contract: {etendo_root}/modules/com.etendoerp.go/docs/aeat-390-endpoints.md, "GET
 // /fiscal390/sources". Every row lists the boxes it feeds and, per box, the amount it
 // contributes (`boxAmounts`): for each box, the sum over its rows equals the box value.
-import { csvField } from '@etendosoftware/app-shell-core/lib/csv/csvSerializer.js';
+import { csvField } from '@etendo-ai/app-shell-core/lib/csv/csvSerializer.js';
 
 /** Rows per page of the tab. */
 export const SOURCES_PAGE_SIZE = 25;

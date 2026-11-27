@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDownIcon, ArrowUpIcon, MagnifyingGlassIcon } from '@phosphor-icons/react';
 import { useUI } from '@/i18n';
 import { Button } from '@/components/ui/button';
-import { DistinctValuesFilter } from '@etendosoftware/app-shell-core/components/ui/distinct-values-filter.jsx';
+import { DistinctValuesFilter } from '@etendo-ai/app-shell-core/components/ui/distinct-values-filter.jsx';
 import { ACCOUNT_TYPE_UI_KEYS } from './accountTypeLabels';
 import { useChartOfAccountsFilters } from './chartOfAccountsFilters';
 import {
