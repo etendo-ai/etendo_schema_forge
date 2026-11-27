@@ -11,6 +11,8 @@ import {
   isCompletionProcess,
   trackDocumentCompleted,
   trackInvoiceInboxOpened,
+  trackProductMovementsFiltered,
+  trackProductMovementsSorted,
   trackProductMovementsTabOpened,
   trackRecordCreated,
   trackRecordUpdated,
@@ -54,6 +56,49 @@ describe('productUsageTelemetry', () => {
       source: 'list_filter',
       specName: 'sales-order',
       type: 'filter',
+    });
+  });
+
+  describe('product movements filter and sort (ETP-5889 MV-59 / MV-60)', () => {
+    afterEach(() => {
+      clearSessionIdentity();
+    });
+
+    it('tracks a filter change with the tenant, the type and the new value', () => {
+      setSessionIdentity({ clientId: 'client-1' });
+
+      trackProductMovementsFiltered({ entity: 'product', specName: 'product', filterType: 'direction', filterValue: 'salidas' });
+
+      expect(observabilityMocks.track).toHaveBeenCalledWith('product_movements_filtered', {
+        account_id: 'client-1',
+        category: 'product_usage',
+        entity: 'product',
+        specName: 'product',
+        filter_type: 'direction',
+        filter_value: 'salidas',
+      });
+    });
+
+    it('tracks a sort change with the column and the direction', () => {
+      setSessionIdentity({ clientId: 'client-1' });
+
+      trackProductMovementsSorted({ entity: 'product', specName: 'product', sortColumn: 'cost', sortDirection: 'desc' });
+
+      expect(observabilityMocks.track).toHaveBeenCalledWith('product_movements_sorted', {
+        account_id: 'client-1',
+        category: 'product_usage',
+        entity: 'product',
+        specName: 'product',
+        sort_column: 'cost',
+        sort_direction: 'desc',
+      });
+    });
+
+    it('never lets a user, role or record identifier ride along', () => {
+      trackProductMovementsFiltered({ filterType: 'period', filterValue: 'custom', productId: 'ABC', userId: 'u1' });
+
+      const [, properties] = observabilityMocks.track.mock.calls[0];
+      expect(JSON.stringify(properties)).not.toMatch(/ABC|u1/);
     });
   });
 

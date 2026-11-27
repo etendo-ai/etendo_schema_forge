@@ -49,6 +49,36 @@ export function trackProductMovementsTabOpened(properties = {}) {
   });
 }
 
+// ETP-5889 (MV-59). One user-initiated change of a Movements filter: `filterType` is one of
+// PRODUCT_MOVEMENTS_FILTER_TYPES, `filterValue` the new value. Never fired for the initial load, the
+// side panel's "Ver movimientos" period or a value that did not change.
+export const PRODUCT_MOVEMENTS_FILTER_TYPES = Object.freeze({
+  DIRECTION: 'direction',
+  PERIOD: 'period',
+  WAREHOUSE: 'warehouse',
+});
+
+export function trackProductMovementsFiltered({ filterType, filterValue, ...properties } = {}) {
+  const { clientId } = getSessionIdentity();
+  send(OBSERVABILITY_EVENTS.PRODUCT_MOVEMENTS_FILTERED, {
+    account_id: clientId || undefined,
+    filter_type: filterType,
+    filter_value: filterValue,
+    ...properties,
+  });
+}
+
+// ETP-5889 (MV-60). One user-initiated change of the Movements sort (column + new direction).
+export function trackProductMovementsSorted({ sortColumn, sortDirection, ...properties } = {}) {
+  const { clientId } = getSessionIdentity();
+  send(OBSERVABILITY_EVENTS.PRODUCT_MOVEMENTS_SORTED, {
+    account_id: clientId || undefined,
+    sort_column: sortColumn,
+    sort_direction: sortDirection,
+    ...properties,
+  });
+}
+
 // ETP-6050. One opening of the Invoice Inbox page; the tenant from the session, never a person.
 export function trackInvoiceInboxOpened(properties = {}) {
   const { clientId } = getSessionIdentity();

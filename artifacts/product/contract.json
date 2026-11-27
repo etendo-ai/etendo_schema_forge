@@ -1,8 +1,8 @@
 {
   "version": "0.20.0",
   "generatedAt": "2026-09-11T00:36:11.322Z",
-  "updatedAt": "2026-11-25T17:00:35.182Z",
-  "checksum": "ccb9ad084a49bc4f",
+  "updatedAt": "2026-11-27T13:47:57.906Z",
+  "checksum": "5f9166774e5df943",
   "frontendContract": {
     "window": {
       "id": "140",
@@ -52,7 +52,8 @@
           "M_Product_Category_ID": "Category",
           "ProductType": "Type",
           "DateFrom": "Start Date",
-          "DateTo": "Expiry Date"
+          "DateTo": "Expiry Date",
+          "AD_Image_ID": "Product image"
         },
         "es_ES": {
           "M_Product_Category_ID": "Categoría",
@@ -60,12 +61,14 @@
           "Value": "Código",
           "IsStocked": "Almacenable",
           "DateFrom": "Fecha de inicio",
-          "DateTo": "Fecha de expiración"
+          "DateTo": "Fecha de expiración",
+          "AD_Image_ID": "Imagen del producto"
         },
         "es_AR": {
           "IsStocked": "Almacenable",
           "DateFrom": "Fecha de inicio",
-          "DateTo": "Fecha de expiración"
+          "DateTo": "Fecha de expiración",
+          "AD_Image_ID": "Imagen del producto"
         }
       },
       "noHeaderBorder": true,
@@ -2304,8 +2307,7 @@
               "source": "0"
             }
           }
-        ],
-        "javaQualifier": "productStockWarehouseHandler"
+        ]
       },
       "categoryPriceRuleVersion": {
         "tableName": "M_ServicePriceRule_Version",
@@ -2663,7 +2665,8 @@
           "M_Product_Category_ID": "Category",
           "ProductType": "Type",
           "DateFrom": "Start Date",
-          "DateTo": "Expiry Date"
+          "DateTo": "Expiry Date",
+          "AD_Image_ID": "Product image"
         },
         "es_ES": {
           "M_Product_Category_ID": "Categoría",
@@ -2671,12 +2674,14 @@
           "Value": "Código",
           "IsStocked": "Almacenable",
           "DateFrom": "Fecha de inicio",
-          "DateTo": "Fecha de expiración"
+          "DateTo": "Fecha de expiración",
+          "AD_Image_ID": "Imagen del producto"
         },
         "es_AR": {
           "IsStocked": "Almacenable",
           "DateFrom": "Fecha de inicio",
-          "DateTo": "Fecha de expiración"
+          "DateTo": "Fecha de expiración",
+          "AD_Image_ID": "Imagen del producto"
         }
       },
       "noHeaderBorder": true,
@@ -5481,8 +5486,7 @@
             "visibility": "system",
             "required": true
           }
-        ],
-        "javaQualifier": "productStockWarehouseHandler"
+        ]
       },
       "categoryPriceRuleVersion": {
         "tableName": "M_ServicePriceRule_Version",
@@ -6557,7 +6561,8 @@
         "M_Product_Category_ID": "Category",
         "ProductType": "Type",
         "DateFrom": "Start Date",
-        "DateTo": "Expiry Date"
+        "DateTo": "Expiry Date",
+        "AD_Image_ID": "Product image"
       },
       "es_ES": {
         "M_Product_Category_ID": "Categoría",
@@ -6565,12 +6570,14 @@
         "Value": "Código",
         "IsStocked": "Almacenable",
         "DateFrom": "Fecha de inicio",
-        "DateTo": "Fecha de expiración"
+        "DateTo": "Fecha de expiración",
+        "AD_Image_ID": "Imagen del producto"
       },
       "es_AR": {
         "IsStocked": "Almacenable",
         "DateFrom": "Fecha de inicio",
-        "DateTo": "Fecha de expiración"
+        "DateTo": "Fecha de expiración",
+        "AD_Image_ID": "Imagen del producto"
       }
     }
   },

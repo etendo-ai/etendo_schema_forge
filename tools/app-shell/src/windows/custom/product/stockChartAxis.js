@@ -1,5 +1,5 @@
 import { formatCalendarDate } from '@/lib/dateOnly';
-import { formatStockQuantity } from './stockQuantityFormat';
+import { formatStockQuantity, formatStockQuantityWithUnit } from './stockQuantityFormat';
 import { dateFromDay, dayNumber, dayFraction, valueAtDay } from './stockSeries';
 
 // Pure helpers for the product side-panel / modal stock chart (ETP-5908 RF-10..RF-12).
@@ -168,7 +168,7 @@ function anchorFirstLabelNearLeftEdge(first, range, plotWidth) {
  * day) sorted from largest to smallest, and a Total row only when more than one series is visible.
  */
 export function buildTooltipModel({ series, day, locale, totalLabel, unitLabel }) {
-  const withUnit = (v) => `${formatStockQuantity(v)} ${unitLabel}`;
+  const withUnit = (v) => formatStockQuantityWithUnit(v, unitLabel);
   const rows = series
     .map(s => ({ name: s.name ?? totalLabel, color: s.color, value: valueAtDay(s.points, day) }))
     .sort((a, b) => b.value - a.value)

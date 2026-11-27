@@ -56,6 +56,7 @@ vi.mock('@phosphor-icons/react', () => ({
   CubeIcon: (props) => <span {...props} data-testid="icon-box" />,
   CalendarBlankIcon: (props) => <span {...props} data-testid="icon-calendar" />,
   CaretDownIcon: (props) => <span {...props} data-testid="icon-chevron" />,
+  CheckIcon: (props) => <span {...props} />,
   ArrowLineRightIcon: (props) => <span {...props} data-testid="icon-arrow-to-line" />,
   PackageIcon: (props) => <span {...props} data-testid="icon-package" />,
   WarehouseIcon: (props) => <span {...props} data-testid="icon-warehouse" />,
@@ -70,7 +71,7 @@ import ProductSidebar from '../ProductSidebar.jsx';
 
 const defaultProps = {
   recordId: 'prod-1',
-  data: {},
+  data: { id: 'prod-1' },
   token: 'test-token',
   apiBaseUrl: '/sws/neo/product',
 };
@@ -120,7 +121,7 @@ describe('ProductSidebar — ETP-4850 date off-by-one bug', () => {
 
   it('places a transaction dated 2026-08-01 on 1 Aug, not on 31 Jul', async () => {
     const stockRows = [
-      { storageBin: 'BIN1', 'warehouse$_identifier': 'WH-A', quantityOnHand: 20, reservedQty: 0 },
+      { etgoUomSymbol: 'kg', storageBin: 'BIN1', 'warehouse$_identifier': 'WH-A', quantityOnHand: 20, reservedQty: 0 },
     ];
     const transactions = [
       { movementDate: '2026-08-01', movementQuantity: 20, storageBin: 'BIN1' },
@@ -149,11 +150,11 @@ describe('ProductSidebar — ETP-4850 date off-by-one bug', () => {
     expect(screen.getByText("31 Jul 2026")).toBeInTheDocument();
     const rowValue = () => container.querySelector('[data-testid="StockChartTooltipRow"] text:last-child').textContent;
     // NOTE: exact string equality: a substring match would also pass against the buggy "20".
-    expect(rowValue()).toBe('0 stockUnitAbbr');
+    expect(rowValue()).toBe('0 kg');
 
     // 1 Aug is offset 78: the movement lands on that very day.
     fireEvent.mouseMove(svg, { clientX: xOf(78), clientY: 50 });
     expect(screen.getByText('1 Ago 2026')).toBeInTheDocument();
-    expect(rowValue()).toBe('20 stockUnitAbbr');
+    expect(rowValue()).toBe('20 kg');
   });
 });

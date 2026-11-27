@@ -253,6 +253,34 @@ describe('product_movements_tab_opened event', () => {
   });
 });
 
+// ETP-5889 (MV-59 / MV-60) — the filter and sort events of the same tab.
+describe('product movements filtered / sorted events', () => {
+  it('registers both under their names on the Mixpanel channel', () => {
+    expect(OBSERVABILITY_EVENTS.PRODUCT_MOVEMENTS_FILTERED.name).toBe('product_movements_filtered');
+    expect(OBSERVABILITY_EVENTS.PRODUCT_MOVEMENTS_SORTED.name).toBe('product_movements_sorted');
+    expect(OBSERVABILITY_EVENTS.PRODUCT_MOVEMENTS_FILTERED.channels).toEqual([OBSERVABILITY_CHANNELS.MIXPANEL]);
+    expect(OBSERVABILITY_EVENTS.PRODUCT_MOVEMENTS_SORTED.channels).toEqual([OBSERVABILITY_CHANNELS.MIXPANEL]);
+  });
+
+  it('keeps the filter type and value and drops anything undeclared', () => {
+    const { properties } = buildObservabilityEvent(OBSERVABILITY_EVENTS.PRODUCT_MOVEMENTS_FILTERED, {
+      account_id: 'client-1', category: 'product_usage', entity: 'product', specName: 'product',
+      filter_type: 'warehouse', filter_value: 'all', productId: 'ABC', userId: 'u1',
+    });
+    expect(properties).toEqual({
+      account_id: 'client-1', category: 'product_usage', entity: 'product', specName: 'product',
+      filter_type: 'warehouse', filter_value: 'all',
+    });
+  });
+
+  it('keeps the sort column and direction', () => {
+    const { properties } = buildObservabilityEvent(OBSERVABILITY_EVENTS.PRODUCT_MOVEMENTS_SORTED, {
+      entity: 'product', sort_column: 'date', sort_direction: 'asc', recordId: 'XYZ',
+    });
+    expect(properties).toEqual({ entity: 'product', sort_column: 'date', sort_direction: 'asc' });
+  });
+});
+
 // ETP-6050 — the adoption event of the Invoice Inbox; counted by this exact name over `session_started`.
 describe('invoice_inbox_opened event', () => {
   const declared = { account_id: 'client-1', category: 'product_usage', specName: 'invoice-inbox' };

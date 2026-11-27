@@ -10,6 +10,8 @@ import userEvent from '@testing-library/user-event';
 const mocks = vi.hoisted(() => ({
   apiFetch: vi.fn(),
   tracking: vi.fn(),
+  trackFiltered: vi.fn(),
+  trackSorted: vi.fn(),
   // The per-account flag, published by the backend as `capabilities.productMovements`.
   capabilities: { productMovements: true },
   navigate: vi.fn(),
@@ -33,7 +35,17 @@ vi.mock('@/i18n', () => ({
 vi.mock('@/auth/useApiFetch.js', () => ({ useApiFetch: () => mocks.apiFetch }));
 vi.mock('@/hooks/useCapabilitiesSafe.js', () => ({ useCapabilitiesSafe: () => mocks.capabilities }));
 vi.mock('@/hooks/useCurrency', () => ({ useCurrency: () => 'EUR' }));
-vi.mock('../useProductMovementsTabTracking', () => ({ useProductMovementsTabTracking: (args) => mocks.tracking(args) }));
+// The opening hook is a spy; the change-tracking hook is the real one, over a mocked telemetry module.
+vi.mock('../useProductMovementsTabTracking', async (importOriginal) => ({
+  ...(await importOriginal()),
+  useProductMovementsTabTracking: (args) => mocks.tracking(args),
+}));
+vi.mock('@/lib/productUsageTelemetry.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  trackProductMovementsTabOpened: vi.fn(),
+  trackProductMovementsFiltered: (args) => mocks.trackFiltered(args),
+  trackProductMovementsSorted: (args) => mocks.trackSorted(args),
+}));
 vi.mock('@/components/ui/date-range-popover.jsx', () => ({
   DateRangePopover: ({ onChange, extraPresets }) => (
     <>
@@ -117,6 +129,8 @@ describe('ProductMovementsTab (ETP-5889)', () => {
   beforeEach(() => {
     mocks.apiFetch.mockReset();
     mocks.tracking.mockReset();
+    mocks.trackFiltered.mockReset();
+    mocks.trackSorted.mockReset();
     mocks.navigate.mockReset();
     mocks.location = { pathname: '/product/p1', search: '?a=1', hash: '', state: null };
     mocks.capabilities = { productMovements: true };
@@ -1754,6 +1768,99 @@ describe('ProductMovementsTab (ETP-5889)', () => {
       resolvers.pB();
       await waitFor(() => expect(screen.getByTestId('product-movements-total-value')).toHaveTextContent('+222'));
       expect(screen.queryByText('+111')).toBeNull();
+    });
+  });
+
+  // ETP-5889 (MV-59 / MV-60): one event per change the user makes, none for the load or the side panel link.
+  describe('filter and sort telemetry', () => {
+    const FILTER_BASE = { entity: 'product', specName: 'product' };
+
+    it('sends nothing on the initial load', async () => {
+      render(<ProductMovementsTab data={storable} isActive />);
+      await screen.findByTestId('product-movements-row');
+
+      expect(mocks.trackFiltered).not.toHaveBeenCalled();
+      expect(mocks.trackSorted).not.toHaveBeenCalled();
+    });
+
+    it('sends one filtered event per direction change, and none when the active value is picked again', async () => {
+      const user = userEvent.setup();
+      render(<ProductMovementsTab data={storable} isActive />);
+      await screen.findByTestId('product-movements-row');
+
+      await user.click(screen.getByRole('button', { name: 'productMovementsOut' }));
+      await user.click(screen.getByRole('button', { name: 'productMovementsOut' }));
+      await user.click(screen.getByRole('button', { name: 'productMovementsIn' }));
+      await user.click(screen.getByRole('button', { name: 'all' }));
+
+      expect(mocks.trackFiltered.mock.calls.map(([args]) => args)).toEqual([
+        { ...FILTER_BASE, filterType: 'direction', filterValue: 'salidas' },
+        { ...FILTER_BASE, filterType: 'direction', filterValue: 'entradas' },
+        { ...FILTER_BASE, filterType: 'direction', filterValue: 'todos' },
+      ]);
+    });
+
+    it('sends the period key, and none when the same period is chosen again', async () => {
+      const user = userEvent.setup();
+      render(<ProductMovementsTab data={storable} isActive />);
+      await screen.findByTestId('product-movements-row');
+
+      await user.click(screen.getByTestId('period'));
+      await user.click(screen.getByTestId('period'));
+
+      expect(mocks.trackFiltered).toHaveBeenCalledTimes(1);
+      expect(mocks.trackFiltered).toHaveBeenCalledWith({ ...FILTER_BASE, filterType: 'period', filterValue: 'last30' });
+    });
+
+    it('sends "specific" (never the warehouse id), and "all" when the filter is cleared', async () => {
+      route({ stock: [{ warehouse: 'wh-1', 'warehouse$_identifier': 'Norte' }] });
+      const user = userEvent.setup();
+      render(<ProductMovementsTab data={storable} isActive />);
+      await screen.findByTestId('product-movements-row');
+
+      await user.click(await screen.findByTestId('warehouse-wh-1'));
+      await user.click(screen.getByTestId('warehouse-all'));
+
+      expect(mocks.trackFiltered.mock.calls.map(([args]) => args)).toEqual([
+        { ...FILTER_BASE, filterType: 'warehouse', filterValue: 'specific' },
+        { ...FILTER_BASE, filterType: 'warehouse', filterValue: 'all' },
+      ]);
+    });
+
+    it('does not count the period applied by the side panel link', async () => {
+      const { rerender } = render(<ProductMovementsTab data={storable} isActive />);
+      await screen.findByTestId('product-movements-row');
+
+      mocks.location = { ...mocks.location, state: { openSecondaryTab: 'custom:movements', movementsPeriod: 'last6m' } };
+      rerender(<ProductMovementsTab data={storable} isActive />);
+
+      await waitFor(() => expect(mocks.navigate).toHaveBeenCalled());
+      expect(mocks.trackFiltered).not.toHaveBeenCalled();
+    });
+
+    it('sends one sorted event per click with the column and the new direction', async () => {
+      const user = userEvent.setup();
+      render(<ProductMovementsTab data={storable} isActive />);
+      await screen.findByTestId('product-movements-row');
+
+      await user.click(screen.getByText('productMovementsWarehouse'));
+      await user.click(screen.getByText('productMovementsWarehouse'));
+      await user.click(screen.getByText('date'));
+
+      expect(mocks.trackSorted.mock.calls.map(([args]) => args)).toEqual([
+        { ...FILTER_BASE, sortColumn: 'warehouse', sortDirection: 'asc' },
+        { ...FILTER_BASE, sortColumn: 'warehouse', sortDirection: 'desc' },
+        { ...FILTER_BASE, sortColumn: 'date', sortDirection: 'asc' },
+      ]);
+    });
+
+    it('does not send a sorted event for the non-sortable resulting-stock column', async () => {
+      render(<ProductMovementsTab data={storable} isActive />);
+      await screen.findByTestId('product-movements-row');
+
+      await userEvent.click(screen.getByText('productMovementsStockAfter'));
+
+      expect(mocks.trackSorted).not.toHaveBeenCalled();
     });
   });
 

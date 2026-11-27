@@ -922,6 +922,24 @@ test.describe('Product side panel — failed reads', () => {
     await expect(page.getByTestId('StockChartExpandButton')).toHaveCount(0);
   });
 
+  test('loading the record reads stock and history once, and a first /stock failure is retried without the banner', async ({ page }) => {
+    let stockCalls = 0;
+    let txCalls = 0;
+    await login(page);
+    await installMocks(page, {
+      stock: () => { stockCalls += 1; return stockCalls === 1 ? [500, { error: { message: 'blip' } }] : [200, page_(STOCK_ROWS)]; },
+      transactions: () => { txCalls += 1; return [200, page_(HISTORY_ROWS)]; },
+    }, []);
+    await page.goto(`/product/${PRODUCT.id}`);
+    await expect(page.getByTestId('AvailabilityCardButton')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('1.530').first()).toBeVisible();
+    await expect(page.getByTestId('StockUnavailableNote')).toHaveCount(0);
+    await expect(page.getByTestId('AvailabilityUnavailable')).toHaveCount(0);
+    // One failed + one retried /stock; ONE history read (the panel mounts empty first and must not read then).
+    expect(stockCalls).toBe(2);
+    expect(txCalls).toBe(1);
+  });
+
   test('while the stock loads the card is not clickable', async ({ page }) => {
     let release;
     const held = new Promise((resolve) => { release = resolve; });
