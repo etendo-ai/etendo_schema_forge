@@ -23279,6 +23279,7 @@
     "fm.m303.summary.previous": "Comp. anterior",
     "fm.m303.summary.previous_sub": "Pendiente de aplicar",
     "fm.box.prefix": "Casilla",
+    "fm.box.edit_aria": "Editar casilla [{box}]",
     "fm.box.1": "Operaciones sujetas tipo 21%",
     "fm.box.2": "Cuota tipo 21%",
     "fm.box.3": "Operaciones sujetas tipo 10%",

@@ -1537,6 +1537,10 @@
   overflow: hidden; text-overflow: ellipsis; justify-content: flex-start;
 }
 .fm-present-acuse-slot { height: calc(var(--fm-acuse-upload-h) + var(--fm-acuse-upload-gap)); }
+/* PresentModal options (GEN-03 retest): the radio is the card's choice part, so the card draws
+   its focus ring — the shared ring colour of the other fiscal-models focus styles. */
+.fm-present-option { outline: none; }
+.fm-present-card:has(.fm-present-option:focus-visible) { outline: 2px solid hsl(var(--ring, var(--primary))); outline-offset: 2px; }
 
 /* Presentación telemática AEAT (AeatSubmitFlow) — full-width stacked fields. */
 .fm-aeat-modal .fm-config-modal__body { min-height: 0; }
@@ -1630,11 +1634,13 @@
 /* The content is the size container of its cells (GEN-02 / OBS-12): the cell width follows the
    room the row really has — (content − ~300px kept for the concept and the gaps) / 2, the most
    columns a 390 block has (fm390Layouts.js) — between 150px (the shared compact width) and
-   220px, instead of a fixed 150px under 1440px. With the box number column at 40px and slimmer
-   icon buttons, a 220px cell shows "1.234.567,89 €" whole even with the pencil and the Restore
-   icons of a modified box. */
+   260px, instead of a fixed 150px under 1440px. With the box number column at 40px and slimmer
+   icon buttons, a 260px cell shows a 12-integer-digit amount ("123.456.789.012,34 €") whole even
+   with the pencil and the Restore icons of a modified box (the 220px cap cut a 9-digit one, OBS-12
+   retest). At 1280×720 the content is ~940px wide with the app sidebar open, so the cap is what
+   applies there too and the concept column keeps its ~296px. */
 .fm-390-boxes__content { flex: 1; min-width: 0; padding: 6px 24px 24px; container-type: inline-size; }
-.fm-390-boxes .fm-aeat-section--compact { --fm-aeat-cell-w: clamp(150px, calc((100cqw - 296px) / 2), 220px); }
+.fm-390-boxes .fm-aeat-section--compact { --fm-aeat-cell-w: clamp(150px, calc((100cqw - 296px) / 2), 260px); }
 .fm-390-boxes .fm-aeat-cell__num { width: 40px; }
 .fm-390-boxes .fm-aeat-cell__value { padding: 0 8px 0 10px; }
 .fm-390-boxes .fm-aeat-cell__edit-btn { padding: 0 4px; }

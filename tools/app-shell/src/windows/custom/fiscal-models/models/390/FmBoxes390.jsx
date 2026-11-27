@@ -164,7 +164,7 @@ function InputCell({ spec, inputs, preloaded, onInputChange, onRestore, readOnly
         />
       ) : (
         <>
-          <span className="fm-aeat-cell__value fm-390-cell__input" data-testid={`FmBoxes390__value_${key}`}>{shown}</span>
+          <span className="fm-aeat-cell__value fm-390-cell__input" title={shown || undefined} data-testid={`FmBoxes390__value_${key}`}>{shown}</span>
           {!locked && origin === 'modified' && (
             <button
               type="button"

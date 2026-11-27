@@ -23043,6 +23043,7 @@
     "fm.m303.summary.previous": "Prev. comp.",
     "fm.m303.summary.previous_sub": "Pending application",
     "fm.box.prefix": "Box",
+    "fm.box.edit_aria": "Edit box [{box}]",
     "fm.box.1": "Transactions subject to 21% VAT",
     "fm.box.2": "VAT at 21%",
     "fm.box.3": "Transactions subject to 10% VAT",

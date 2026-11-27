@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useId } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useUI } from '@/i18n';
@@ -23,6 +23,7 @@ import { ANNUAL_PERIOD, isAnnualPeriod, isAnnualOnlyModel } from './fiscalPeriod
 import { getConfigSection } from './modelRegistryConfig.js';
 import { CfgField, INPUT_ST } from './FmConfigFields.jsx';
 import { useModalFocus } from './useModalFocus.js';
+import { nextOptionId } from '@/components/contract-ui/ActionChoiceModal.jsx';
 import './fiscal-models.css';
 
 import { useApiFetch } from '@/auth/useApiFetch.js';
@@ -54,12 +55,26 @@ function parseCityLine(cityLine) {
 // columns of PresentModal. Extracted so the "Registrar presentación" and
 // "Presentar a la AEAT" columns render identical card visuals without duplicating
 // the inline-style block twice.
-function PresentOptionCard({ p, selected, onSelect, t, acuseFile, onPickFile, fileRef }) {
+//
+// Keyboard (ETP-5716, GEN-03 retest): the card's choice part is a `role="radio"` of the
+// modal's single radiogroup (roving tabindex — only the checked option, or the first one while
+// nothing is checked, is a Tab stop; arrows move AND select, Space / Enter select). The acuse
+// upload row sits OUTSIDE the radio, in the same bordered card, so it is its own Tab stop and
+// not a control nested inside another. The card shows the focus ring of its radio
+// (`.fm-present-card:has(.fm-present-option:focus-visible)`).
+function PresentOptionCard({ p, selected, tabbable, onSelect, t, acuseFile, onPickFile, fileRef }) {
+  const titleId = useId();
+  const descId = useId();
+  const onKeyDown = (e) => {
+    if (e.key !== ' ' && e.key !== 'Enter') return;
+    e.preventDefault();
+    onSelect();
+  };
   return (
     <div
+      className="fm-present-card"
       onClick={onSelect}
       style={{
-        display: 'flex', alignItems: 'flex-start', gap: 12,
         padding: '14px 16px', borderRadius: 12, cursor: 'pointer',
         border: `1px solid ${selected ? 'hsl(var(--primary))' : 'hsl(var(--border-subtle))'}`,
         background: selected ? 'hsl(var(--muted))' : 'hsl(var(--card))',
@@ -67,48 +82,61 @@ function PresentOptionCard({ p, selected, onSelect, t, acuseFile, onPickFile, fi
         transition: 'border-color .12s, background .12s, box-shadow .12s',
       }}
     >
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: 'hsl(var(--foreground))', lineHeight: '20px' }}>
-          {t(p.titleKey)}
-        </div>
-        <div style={{ fontSize: 13, fontWeight: 400, color: 'hsl(var(--text-disabled))', lineHeight: '18px', marginTop: 2 }}>
-          {t(p.descKey)}
-        </div>
-        {p.id === 'submitted_ack' && selected && (
-          // Fixed-height row (`.fm-present-acuse-upload`, ETP-5584 P6): its height is
-          // the exact amount PresentModalColumn reserves while it is hidden, so the
-          // modal keeps its size when "Con acuse de recibo" is picked.
-          <div className="fm-present-acuse-upload" data-testid="PresentModal__acuseUpload">
-            <button
-              type="button"
-              className="fm-btn fm-present-acuse-upload__btn"
-              title={acuseFile ? acuseFile.name : undefined}
-              onClick={(e) => { e.stopPropagation(); fileRef.current?.click(); }}
-            >
-              {acuseFile ? acuseFile.name : t('fm.present.upload_acuse', { types: buildTypesLabel(RECEIPT_ATTACHMENT_CONFIG, t) })}
-            </button>
-            {/* ETP-5584 P13 — label and `accept` derive from the same constant as the
-                "Justificante" tab, so the three can never disagree again. */}
-            <input
-              ref={fileRef}
-              type="file"
-              accept={buildAcceptAttribute(RECEIPT_ATTACHMENT_CONFIG)}
-              data-testid="PresentModal__acuseInput"
-              style={{ display: 'none' }}
-              onChange={onPickFile}
-            />
+      <div
+        role="radio"
+        aria-checked={selected}
+        aria-labelledby={titleId}
+        aria-describedby={descId}
+        tabIndex={tabbable ? 0 : -1}
+        className="fm-present-option"
+        data-path-id={p.id}
+        data-testid={`PresentModal__option_${p.id}`}
+        onKeyDown={onKeyDown}
+        style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}
+      >
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div id={titleId} style={{ fontSize: 14, fontWeight: 600, color: 'hsl(var(--foreground))', lineHeight: '20px' }}>
+            {t(p.titleKey)}
           </div>
-        )}
+          <div id={descId} style={{ fontSize: 13, fontWeight: 400, color: 'hsl(var(--text-disabled))', lineHeight: '18px', marginTop: 2 }}>
+            {t(p.descKey)}
+          </div>
+        </div>
+        <span aria-hidden="true" style={{
+          width: 18, height: 18, borderRadius: '50%', flexShrink: 0, marginTop: 1,
+          border: `2px solid ${selected ? 'hsl(var(--primary))' : 'hsl(var(--border-control))'}`,
+          background: selected ? 'hsl(var(--primary))' : 'transparent',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          transition: 'border-color .12s, background .12s',
+        }}>
+          {selected && <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'hsl(var(--card))', display: 'block' }} />}
+        </span>
       </div>
-      <span style={{
-        width: 18, height: 18, borderRadius: '50%', flexShrink: 0, marginTop: 1,
-        border: `2px solid ${selected ? 'hsl(var(--primary))' : 'hsl(var(--border-control))'}`,
-        background: selected ? 'hsl(var(--primary))' : 'transparent',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        transition: 'border-color .12s, background .12s',
-      }}>
-        {selected && <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'hsl(var(--card))', display: 'block' }} />}
-      </span>
+      {p.id === 'submitted_ack' && selected && (
+        // Fixed-height row (`.fm-present-acuse-upload`, ETP-5584 P6): its height is
+        // the exact amount PresentModalColumn reserves while it is hidden, so the
+        // modal keeps its size when "Con acuse de recibo" is picked.
+        <div className="fm-present-acuse-upload" data-testid="PresentModal__acuseUpload">
+          <button
+            type="button"
+            className="fm-btn fm-present-acuse-upload__btn"
+            title={acuseFile ? acuseFile.name : undefined}
+            onClick={(e) => { e.stopPropagation(); fileRef.current?.click(); }}
+          >
+            {acuseFile ? acuseFile.name : t('fm.present.upload_acuse', { types: buildTypesLabel(RECEIPT_ATTACHMENT_CONFIG, t) })}
+          </button>
+          {/* ETP-5584 P13 — label and `accept` derive from the same constant as the
+              "Justificante" tab, so the three can never disagree again. */}
+          <input
+            ref={fileRef}
+            type="file"
+            accept={buildAcceptAttribute(RECEIPT_ATTACHMENT_CONFIG)}
+            data-testid="PresentModal__acuseInput"
+            style={{ display: 'none' }}
+            onChange={onPickFile}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -127,7 +155,7 @@ function PresentOptionCard({ p, selected, onSelect, t, acuseFile, onPickFile, fi
 // `showHeading` (ETP-5584 P14): the single-column variant (349) is already titled
 // "Registrar presentación", so repeating it as the column heading is dropped there; the
 // column description stays.
-function PresentModalColumn({ icon, titleKey, descKey, paths, path, setPath, t, acuseFile, onPickFile, fileRef, showHeading = true }) {
+function PresentModalColumn({ icon, titleKey, descKey, paths, path, setPath, tabbableId, t, acuseFile, onPickFile, fileRef, showHeading = true }) {
   const reservesAcuseSlot = paths.some(p => p.id === 'submitted_ack') && path !== 'submitted_ack';
   return (
     <div style={{ flex: 1, minWidth: 0 }}>
@@ -146,6 +174,7 @@ function PresentModalColumn({ icon, titleKey, descKey, paths, path, setPath, t, 
             key={p.id}
             p={p}
             selected={path === p.id}
+            tabbable={tabbableId === p.id}
             onSelect={() => setPath(p.id)}
             t={t}
             acuseFile={acuseFile}
@@ -228,6 +257,18 @@ export function PresentModal({ decl, onConfirm, onClose, showAeatPath }) {
   const AEAT_PATHS = showAeatPath
     ? [{ id: 'aeat_telematic', titleKey: 'fm.present.path.aeat', descKey: 'fm.present.path.aeat_desc' }]
     : [];
+  // One radiogroup across both columns (GEN-03 retest): the checked option is the Tab stop, or
+  // the first one while nothing is checked; the arrows walk every option in reading order.
+  const allPaths = [...REGISTER_PATHS, ...AEAT_PATHS];
+  const tabbableId = path ?? allPaths[0].id;
+  function handleOptionKeyDown(e) {
+    if (e.target?.getAttribute?.('role') !== 'radio') return;
+    const nextId = nextOptionId(allPaths, path ?? allPaths[0].id, e.key);
+    if (!nextId) return;
+    e.preventDefault();
+    setPath(nextId);
+    e.currentTarget.querySelector(`[data-path-id="${nextId}"]`)?.focus();
+  }
 
   // Dynamic subtitle: "Modelo <model> · <period> <year>" (reuses the same
   // formatting key NewDeclModal's preview line already uses). Falls back to
@@ -267,7 +308,13 @@ export function PresentModal({ decl, onConfirm, onClose, showAeatPath }) {
         {/* Body — two columns divided by a vertical separator when the AEAT
             path is available; a single full-width column otherwise (349). */}
         <div className="fm-config-modal__body">
-          <div style={{ display: 'flex', gap: 20 }}>
+          <div
+            style={{ display: 'flex', gap: 20 }}
+            role="radiogroup"
+            aria-label={showAeatPath ? t('fm.present.title') : t('fm.present.title_register_only')}
+            onKeyDown={handleOptionKeyDown}
+            data-testid="PresentModal__options"
+          >
           <PresentModalColumn
             icon={<FileTextIcon size={16} data-testid="FileText__cda0bb" />}
             titleKey="fm.present.register_section.title"
@@ -275,6 +322,7 @@ export function PresentModal({ decl, onConfirm, onClose, showAeatPath }) {
             paths={REGISTER_PATHS}
             path={path}
             setPath={setPath}
+            tabbableId={tabbableId}
             t={t}
             acuseFile={acuseFile}
             onPickFile={onPickFile}
@@ -292,6 +340,7 @@ export function PresentModal({ decl, onConfirm, onClose, showAeatPath }) {
                 paths={AEAT_PATHS}
                 path={path}
                 setPath={setPath}
+                tabbableId={tabbableId}
                 t={t}
                 acuseFile={acuseFile}
                 onPickFile={onPickFile}
