@@ -8,6 +8,7 @@ import { PillToggle } from '@/components/PillToggle';
 import { ArrowUpRightIcon, CircleNotchIcon, MagnifyingGlassIcon } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { useLabel, useLocaleSwitch, useMenuLabel, useUI } from '@/i18n';
+import { getFieldError, getNativeInputProps } from '@/lib/coreValidation.js';
 import { clampNumericFieldMax, getNumericFieldError, numericFieldToastId, trackSaveBlockToast } from '@/lib/numericValidation.js';
 import { dateFieldToastId, getDateFieldError } from '@/lib/dateFieldValidation.js';
 import { MaskedAmountInput } from '@/components/forms/fields.jsx';
@@ -706,7 +707,7 @@ function getReadOnlyBgClass(isReadOnly) {
  * `committedValue` is the same `data?.[f.key] ?? ''` the default path reads, so the
  * value semantics are identical — only the commit TIMING differs.
  */
-function DeferredInput({ f, committedValue, onCommit, onFieldBlur, onValidateBlur, placeholder, className, required, disabled, maxLength }) {
+function DeferredInput({ f, committedValue, onCommit, onFieldBlur, onValidateBlur, placeholder, className, required, disabled, nativeProps }) {
   const [buffer, setBuffer] = useState(committedValue);
   const focusedRef = useRef(false);
   // The last value the USER actually committed (or that arrived externally while the field
@@ -801,7 +802,7 @@ function DeferredInput({ f, committedValue, onCommit, onFieldBlur, onValidateBlu
       className={className}
       required={required}
       disabled={disabled}
-      maxLength={maxLength}
+      {...nativeProps}
     />
   );
 }
@@ -852,7 +853,31 @@ function useLoadedMinDateValues(data, fields) {
   return ref.current.values;
 }
 
-export function EntityForm({ entity, windowName, fields = [], data, onChange, catalogs, layout, cols, section, excludeFields = [], displayLogic, api, token, apiBaseUrl, selectorContext = {}, readOnly: formReadOnly = false, onFieldBlur, savingField = null, labelOverrides, registerFields, fieldErrors, optionalSuffix = false, trailing, renderAsFragment = false, navigate, initialRows, documentDateField, variant = 'default', gap }) {
+// ETP-4557: the shared core validator decides length/max/enum/format on blur (the numeric min/integer
+// check keeps its own stable toast id), so blur, save, grid and import agree. Compatibility policy:
+// on an existing record an UNCHANGED value (equal to the loaded one) is not re-validated, so tabbing
+// through a legacy-invalid field does not flag it. Returns true when the value was flagged.
+function applyCoreBlurValidation(f, value, loadedData, ui, onFieldError, trackSaveBlockToast, data) {
+  // Without the loaded record the legacy baseline is unknown: for an existing record do not flag on blur
+  // (the save gate still validates), so an untouched legacy-invalid value never raises a toast.
+  if (!loadedData && data?.id) return false;
+  const hasPrevious = Boolean(loadedData?.id) && Object.prototype.hasOwnProperty.call(loadedData, f.key);
+  const coreErr = getFieldError(f, value, { hasPrevious, previous: loadedData?.[f.key] });
+  if (!coreErr) {
+    // A valid non-empty value clears the inline error a previous blur or save set for this input
+    // (an empty value keeps any `required` error: the engine does not evaluate required here).
+    if (String(value ?? '').trim() !== '') onFieldError?.(f.key, null);
+    return false;
+  }
+  const coreMessage = ui(coreErr.key, coreErr.params);
+  const coreToastId = `core-field-${f.key}`;
+  onFieldError?.(f.key, coreMessage);
+  toast.error(coreMessage, { id: coreToastId });
+  trackSaveBlockToast(coreToastId);
+  return true;
+}
+
+export function EntityForm({ entity, windowName, fields = [], data, onChange, catalogs, layout, cols, section, excludeFields = [], displayLogic, api, token, apiBaseUrl, selectorContext = {}, readOnly: formReadOnly = false, onFieldBlur, savingField = null, labelOverrides, registerFields, fieldErrors, onFieldError, loadedData, optionalSuffix = false, trailing, renderAsFragment = false, navigate, initialRows, documentDateField, variant = 'default', gap }) {
   const compact = variant === 'compact';
   const t = useLabel(labelOverrides ?? api?.labelOverrides);
   const tMenu = useMenuLabel();
@@ -1373,6 +1398,7 @@ export function EntityForm({ entity, windowName, fields = [], data, onChange, ca
       trackSaveBlockToast(toastId);
       return;
     }
+    if (applyCoreBlurValidation(f, value, loadedData, ui, onFieldError, trackSaveBlockToast, data)) return;
     // ETP-5031: Contacts-only text-field validation (length + unsafe chars). A
     // no-op for every other window — getContactsTextFieldError gates on
     // windowName === 'contacts' as its first check.
@@ -1465,7 +1491,7 @@ export function EntityForm({ entity, windowName, fields = [], data, onChange, ca
         className={inputClassName}
         required={f.required}
         disabled={savingField === f.key}
-        maxLength={f.maxLength}
+        nativeProps={getNativeInputProps(f, fieldErrors?.[f.key])}
         data-testid="DeferredInput__a8d626" />
       );
     } else if (f.stepper && !isReadOnly) {
@@ -1509,7 +1535,7 @@ export function EntityForm({ entity, windowName, fields = [], data, onChange, ca
         className={inputClassName}
         required={f.required && !isReadOnly}
         disabled={isReadOnly || savingField === f.key}
-        maxLength={f.maxLength}
+        {...getNativeInputProps(f, fieldErrors?.[f.key])}
       />
       );
     }
@@ -1556,7 +1582,7 @@ export function EntityForm({ entity, windowName, fields = [], data, onChange, ca
           onBlur={() => onFieldBlur?.(f.key)}
           placeholder={placeholder}
           disabled={isReadOnly}
-          maxLength={f.maxLength}
+          {...getNativeInputProps(f, fieldErrors?.[f.key])}
           className={[
             'flex w-full rounded-lg border border-[hsl(var(--border-control))] p-2 text-sm shadow-[0px_1px_2px_hsl(var(--foreground) / 0.05)]',
             `placeholder:text-muted-foreground resize-none${minHeightClass}`,
@@ -1853,7 +1879,7 @@ export function EntityForm({ entity, windowName, fields = [], data, onChange, ca
         existing,
         React.createElement(
           'p',
-          { key: '__err', role: 'alert', className: 'text-xs text-destructive mt-0.5', 'data-testid': `error-${f.key}` },
+          { key: '__err', id: `error-${f.key}-msg`, role: 'alert', className: 'text-xs text-destructive mt-0.5', 'data-testid': `error-${f.key}` },
           err
         )
       );

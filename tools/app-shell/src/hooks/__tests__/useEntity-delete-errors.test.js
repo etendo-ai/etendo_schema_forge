@@ -1,3 +1,4 @@
+// @covers tools/app-shell/src/hooks/useEntity.js
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
@@ -201,7 +202,8 @@ describe('extractErrorMessage — FK-constraint-violation detection (ETP-4656)',
         + '"fk_orderline_product" on table "m_product". Detail: Key (product_id)=(999) is not present in table "m_product".';
       const msg = await extractErrorMessage(fakeRes(raw), ui);
       assert.notEqual(msg, 'SHOULD_NOT_BE_USED');
-      assert.equal(msg, raw.replace(/\s+/g, ' ').trim());
+      // ETP-4557: raw SQL / constraint text is never shown; the generic localized message is.
+      assert.equal(msg, 'backendGenericError');
     });
   });
 
@@ -240,7 +242,8 @@ describe('extractErrorMessage — FK-constraint-violation detection (ETP-4656)',
         + 'Detail: La llave (product_id)=(999) no está presente en la tabla «producto».';
       const msg = await extractErrorMessage(fakeRes(raw), ui);
       assert.notEqual(msg, 'SHOULD_NOT_BE_USED');
-      assert.equal(msg, raw.replace(/\s+/g, ' ').trim());
+      // ETP-4557: raw SQL / constraint text is never shown; the generic localized message is.
+      assert.equal(msg, 'backendGenericError');
     });
 
     it('maps the "aún se hace referencia a la llave" DETAIL message', async () => {
