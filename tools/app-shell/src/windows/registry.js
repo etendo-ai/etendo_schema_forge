@@ -368,7 +368,8 @@ const customLoaders = {
   // (still the generated HeaderPage, rendered directly).
   'amortization': () => import('./custom/amortization/index.jsx'),
   // ETP-6365 — Currency Conversion: "Vigentes hoy" cards + grouped history + manual-rate dialogs
-  // over the `conversion-rates` spec; replaces the generated read-only list.
+  // over the `conversion-rates` spec, behind capabilities.currencyConversionV2 (the per-account
+  // currency-conversion-v2 flag); off, the route renders the generated read-only window.
   'conversion-rates': () => import('./custom/conversion-rates/index.jsx'),
 };
 

@@ -67,6 +67,15 @@ export const SEPA_REMITTANCES_CAPABILITY = 'sepaRemittances';
  */
 export const SII_IMPORT_DUA_CAPABILITY = 'siiImportDua';
 
+/**
+ * ETP-6365 — the capability that switches on the redesigned Currency Conversion window (manual
+ * rates, "Vigentes hoy", grouped history). Served by `SFWindowAccessMap` as
+ * `capabilities.currencyConversionV2`: the backend evaluates the per-account feature flag
+ * `currency-conversion-v2` (the same evaluator that gates the manual rate writes) and the browser
+ * never does. Fails closed: off, the `conversion-rates` route renders the generated read-only window.
+ */
+export const CURRENCY_CONVERSION_V2_CAPABILITY = 'currencyConversionV2';
+
 // The generic posting actions served by `DocumentPostingService` for every
 // postable document. A structural contract, not an entity name.
 const POSTING_ACTIONS = new Set(['post', 'unpost']);

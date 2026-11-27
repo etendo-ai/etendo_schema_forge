@@ -7,6 +7,27 @@ USD and GBP rates are downloaded daily by the conversion-rate downloader job (`c
 
 ETP-6365 renamed the window from *Conversion Rates* / *Rangos de conversión* to **Currency Conversion** / **Conversión de divisas** and replaced the generated read-only list with a hand-written page.
 
+## Feature flag `currency-conversion-v2`
+Everything below this section describes the redesign, which is **behind the per-account backend
+flag `currency-conversion-v2`** (registry entry `currency-conversion-v2` in `flags-registry.json`;
+backend: `com.etendoerp.go` `docs/feature-flags-and-tenant-upgrade.md`). The browser never evaluates
+the flag: `SFWindowAccessMap` publishes it as `capabilities.currencyConversionV2` and the route
+entry `custom/conversion-rates/index.jsx` → `CurrencyConversionRoute.jsx` chooses the page:
+- **On:** the redesigned Currency Conversion page described in this guide.
+- **Off** (the default, and also when an older backend does not publish the capability): the window
+  as it was before ETP-6365 — the generated list and form of `artifacts/conversion-rates/generated/`
+  rendered by `LegacyConversionRatesWindow.jsx` with `window.readOnly: true` (no Nuevo, no bulk
+  delete, no print, no row edit/delete, read-only form without Eliminar), titled with the old name
+  *Conversion Rates* / *Rangos de conversión* (breadcrumb *Finance / Conversion Rates*). The backend
+  refuses every manual rate write (`createManualCurrency`, `createManualRate`, `updateManualRate`,
+  `previewManualRate`, DELETE) with 403 `feature_disabled` on every channel, and the MCP only sees
+  the read actions.
+- **While the access map loads:** a progress bar, so a reload never flashes the other page.
+- **Not gated:** the menu entry. It keeps the post-ETP-6365 label *Currency Conversion* /
+  *Conversión de divisas* in System › Settings for both states, because `menu.json` can only show an
+  item when a flag or capability is true (no negated axis, no per-state label). Open item
+  `menu-entry-not-gated` in the registry lists the options.
+
 ## What this window should allow
 - list the conversion rates of each currency pair with their validity range (date and time)
 - review the multiply rate and the divide rate of a pair for a validity range
