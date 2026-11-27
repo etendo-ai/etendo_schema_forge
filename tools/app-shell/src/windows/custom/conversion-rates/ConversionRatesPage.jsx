@@ -190,7 +190,8 @@ export default function ConversionRatesPage({ apiBaseUrl }) {
   const orgSymbol = getCurrencySymbol(orgIso);
   const title = ui('convRateWindowTitle');
   const serverZone = useServerZone(apiFetch);
-  const zone = useMemo(() => createZoneView(serverZone.zone), [serverZone.zone]);
+  // The zone is named in the UI language (QA CP-2/7/11: «hora estándar de Argentina», not «GMT-3»).
+  const zone = useMemo(() => createZoneView(serverZone.zone, undefined, undefined, locale), [serverZone.zone, locale]);
   const serverNames = useServerCurrencyNames(apiFetch);
 
   // ── Filters (URL) ───────────────────────────────────────────────────────────

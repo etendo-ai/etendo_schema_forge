@@ -85,6 +85,7 @@ import {
   isProductiveEnvironment,
 } from '@/lib/environmentPresentation.js';
 import menuConfig from '@/menu.json';
+import { isHiddenByCapability } from '@/lib/capabilityVisibility.js';
 import { useFirstStepsProgressOptional } from '@/pages/first-steps/FirstStepsContext.jsx';
 
 // Thin-line stroke for every rail icon, active or not (Figma Navigation Rail).
@@ -123,6 +124,11 @@ const ICON_MAP = {
   FileJson:       FileCode,
   Store:          Storefront,
 };
+
+/** Capabilities some menu item is the `hideWhenCapability` alternate of (ETP-6365). */
+const ALTERNATE_CAPABILITIES = new Set(
+  menuConfig.menu.flatMap(group => group.items || []).map(item => item.hideWhenCapability).filter(Boolean),
+);
 
 /** `menu.json` group that carries the onboarding checklist. */
 const FIRST_STEPS_GROUP = 'First Steps';
@@ -663,7 +669,7 @@ export default function SideMenu({
   unreadCount = 0,
   logoSrc = '/logo-etendo-ai.png',
 }) {
-  const { selectedOrg } = useAuth();
+  const { selectedOrg, capabilities } = useAuth();
   const location = useLocation();
   const currentPath = location.pathname.replace(/^\//, '');
   const { favorites } = useFavorites();
@@ -683,16 +689,21 @@ export default function SideMenu({
   // hides the help entry point (see SideMenuFooter below).
   const { isSupportMode } = useSupportSession();
 
+  // ETP-6365 — two entries can share one route when they are alternates of a capability
+  // (`capability: K` / `hideWhenCapability: K`, e.g. Currency Conversion / Conversion Rates): a
+  // favorite of that route takes the label of the member visible now, never the other's.
   const favNameMap = useMemo(() => {
     const map = {};
     for (const g of menuConfig.menu) {
       if (g.group === 'Favorites') continue;
       for (const item of g.items || []) {
+        const alternate = item.hideWhenCapability || ALTERNATE_CAPABILITIES.has(item.capability);
+        if (alternate && isHiddenByCapability(item, capabilities)) continue;
         map[item.path || item.name] = item.favname || item.label;
       }
     }
     return map;
-  }, []);
+  }, [capabilities]);
 
   const featureFlagValues = useMemo(() => ({
     [PUBLIC_API_KEYS]: showPublicApiKeys,

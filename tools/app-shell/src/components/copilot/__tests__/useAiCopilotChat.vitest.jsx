@@ -103,6 +103,15 @@ describe('useAiCopilotChat client tool path policy', () => {
     expect(() => resolveWindowPath('Sales Order', restricted)).toThrow(UnknownWindowError);
   });
 
+  it('sends an entry whose name is not its route to the route its link opens (ETP-6365)', () => {
+    const index = buildWindowRouteIndex(
+      [{ group: 'Finance', items: [{ name: 'conversion-rates-legacy', label: 'Conversion Rates', favname: 'Conversion Rates', path: 'conversion-rates' }] }],
+      key => key
+    );
+    expect(resolveWindowPath('Conversion Rates', index)).toBe('/conversion-rates');
+    expect(resolveWindowPath('conversion-rates-legacy', index)).toBe('/conversion-rates');
+  });
+
   it('refuses to guess a label shared by several windows', () => {
     // The real menu labels Sales Order and Purchase Order both "Order"
     // ("Pedido" in Spanish) — 11 such clashes exist. Picking one silently

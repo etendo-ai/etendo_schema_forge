@@ -1,11 +1,13 @@
 // @covers tools/app-shell/src/windows/registry.js
 // @covers tools/app-shell/src/windows/RedirectWindow.jsx
 // @covers tools/app-shell/src/menu.json
+// @covers tools/app-shell/src/lib/capabilityVisibility.js
 // The remittance loader test below resolves the route guard, not the generated window behind it:
 // stubbing the generated module keeps that import light (the full window timed out under suite load).
 vi.mock('@generated/remittance/generated/web/remittance/index.jsx', () => ({ default: () => null }));
 import { buildMenuGroups, getAllWindowNames, apiOnlyWindows, buildWindowMap, filterMenuGroupsByAccess, hasAccessibleReportInGroup } from '../registry';
 import menuConfig from '../../menu.json';
+import { isHiddenByCapability } from '../../lib/capabilityVisibility.js';
 import { filterMenuGroups, isSearchableMenuItem } from '../../lib/globalSearchMenu.js';
 import { defaultNavigation, optionalNavigation, hiddenNavigation, navigationProfiles, expectedNavigation, navigationPermissions, expectNavigation } from './navigationExpectations.js';
 
@@ -701,7 +703,7 @@ describe('registry', () => {
 
     it('keeps permission namespaces and identities aligned with independent sources', () => {
       const items = menuConfig.menu.flatMap(group => group.items);
-      const keys = ['windowId', 'processId', 'obuiappProcessId', 'accessWindowId', 'capability'];
+      const keys = ['windowId', 'processId', 'obuiappProcessId', 'accessWindowId', 'capability', 'hideWhenCapability'];
       for (const expected of [...defaultNavigation, ...optionalNavigation.filter(entry => !entry.app)]) {
         const actual = items.find(item => item.name === expected.name);
         expect(actual, expected.name).toBeDefined();
@@ -797,6 +799,47 @@ describe('registry', () => {
       expectNavigation(filterMenuGroupsByAccess(buildMenuGroups(), null, {}, {}, NOT_DISMISSED), [
         ...defaultNavigation.filter(entry => !entry.accessWindowId && !entry.capability), ...proof,
       ]);
+    });
+  });
+
+  // ETP-6365 — `hideWhenCapability`, the negation of `capability`: the Currency Conversion
+  // redesign (Settings, `capability: currencyConversionV2`) and its legacy entry (Finance, the
+  // pre-ETP-6365 "Conversion Rates", `hideWhenCapability: currencyConversionV2`) share the
+  // `conversion-rates` route; exactly one is visible, the legacy one by default.
+  describe('capability alternates — conversion-rates (ETP-6365)', () => {
+    const entriesFor = (capabilities) => filterMenuGroupsByAccess(buildMenuGroups(), new Set(['116']), capabilities, {}, false)
+      .flatMap(group => group.items.map(item => ({ group: group.group, ...item })))
+      .filter(item => (item.path || item.name) === 'conversion-rates');
+
+    it('flag on: only the redesign, in Settings', () => {
+      expect(entriesFor({ currencyConversionV2: true })).toEqual([
+        expect.objectContaining({ name: 'conversion-rates', group: 'Settings', label: 'Currency Conversion' }),
+      ]);
+    });
+
+    it.each([
+      ['flag off', { currencyConversionV2: false }],
+      ['capability not published', {}],
+      ['capabilities still loading (null)', null],
+    ])('%s: only the legacy entry, in Finance with its old label', (_label, capabilities) => {
+      expect(entriesFor(capabilities)).toEqual([
+        expect.objectContaining({
+          name: 'conversion-rates-legacy', group: 'Finance', label: 'Conversion Rates', favname: 'Conversion Rates',
+          path: 'conversion-rates', windowId: '116',
+        }),
+      ]);
+    });
+
+    it('isHiddenByCapability: capability fails closed, hideWhenCapability fails open', () => {
+      const gated = { capability: 'k' };
+      const alternate = { hideWhenCapability: 'k' };
+      for (const capabilities of [null, undefined, {}, { k: false }]) {
+        expect(isHiddenByCapability(gated, capabilities)).toBe(true);
+        expect(isHiddenByCapability(alternate, capabilities)).toBe(false);
+      }
+      expect(isHiddenByCapability(gated, { k: true })).toBe(false);
+      expect(isHiddenByCapability(alternate, { k: true })).toBe(true);
+      expect(isHiddenByCapability({}, null)).toBe(false);
     });
   });
 

@@ -16504,6 +16504,8 @@
     "convRatePreviewOpenRange": "from {from}, no end date",
     "convRatePreviewClosedRange": "from {from} to {to}",
     "convRateWithZone": "{text} ({zone})",
+    "convRateOverlapError": "A conversion rate for {from} → {to} already exists in the given dates ({start} – {end}). Choose a start later than {suggested}.",
+    "convRateNoEndDate": "no end date",
     "convRateCreateCurrency": "Create currency",
     "convRateCreateRate": "Create rate",
     "convRateSaved": "Rate saved",

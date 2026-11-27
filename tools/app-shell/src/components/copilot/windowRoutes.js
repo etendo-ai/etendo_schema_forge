@@ -114,6 +114,16 @@ export class WindowRouteIndex {
 }
 
 /**
+ * The route segment an item opens. ETP-6365: an entry whose `name` is not its route declares a
+ * plain `path` (the legacy "Conversion Rates" entry, `conversion-rates-legacy` →
+ * `conversion-rates`), so the agent lands on the route the sidebar link opens. A `path` with a
+ * query string (the report categories) keeps resolving to its slug, as before.
+ */
+function routeOf(item) {
+  return item.path && !item.path.includes('?') ? item.path : item.name;
+}
+
+/**
  * Map every known reference of every reachable menu window to its slug.
  *
  * @param {Array<{items?: Array<object>}>} [menuGroups] — the access-filtered
@@ -130,12 +140,13 @@ export function buildWindowRouteIndex(menuGroups = [], translate = key => key) {
 
   // Slugs first and as one pass: a canonical key must already be claimed
   // before any other window's label can compete for it.
-  for (const item of items) index.add(item.name, item.name, { canonical: true });
+  for (const item of items) index.add(item.name, routeOf(item), { canonical: true });
   for (const item of items) {
-    index.add(item.label, item.name);
-    index.add(item.favname, item.name);
-    index.add(translate(item.favname || item.label || item.name), item.name);
-    index.add(translate(item.label || item.name), item.name);
+    const route = routeOf(item);
+    index.add(item.label, route);
+    index.add(item.favname, route);
+    index.add(translate(item.favname || item.label || item.name), route);
+    index.add(translate(item.label || item.name), route);
   }
 
   return index;

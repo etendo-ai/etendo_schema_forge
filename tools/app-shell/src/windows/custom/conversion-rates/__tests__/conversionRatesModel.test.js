@@ -1,8 +1,10 @@
 // @covers tools/app-shell/src/windows/custom/conversion-rates/conversionRatesModel.js
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+// @covers tools/app-shell/src/windows/custom/conversion-rates/conversionRatesModel.js
 import {
-  isOpenEnded, displayValidTo, formatWallClock, convertWallClock, createZoneView,
+  isOpenEnded, displayValidTo, formatWallClock, formatInZone, convertWallClock, createZoneView,
+  zoneName, overlapMessage, capitalizeZoneName,
 } from '../conversionRatesModel.js';
 
 describe('isOpenEnded', () => {
@@ -68,12 +70,16 @@ describe('convertWallClock (server zone ↔ viewer zone)', () => {
 });
 
 describe('createZoneView', () => {
-  const view = createZoneView('UTC', 'America/Argentina/Buenos_Aires', new Date('2026-11-25T12:00:00Z'));
+  const view = createZoneView('UTC', 'America/Argentina/Buenos_Aires', new Date('2026-11-25T12:00:00Z'), 'es_ES');
 
-  it('shows server wall clock in the viewer zone and sends it back, labelled GMT-3', () => {
+  it('shows server wall clock in the viewer zone and sends it back, named as a region (QA CP-2/7/11)', () => {
     assert.equal(view.show('2026-11-20T10:00:00'), '2026-11-20T07:00:00');
     assert.equal(view.send('2026-11-20T07:00:00'), '2026-11-20T10:00:00');
-    assert.equal(view.label, 'GMT-3');
+    assert.equal(view.label, zoneName('America/Argentina/Buenos_Aires', { locale: 'es_ES' }));
+    assert.match(view.label, /Argentina/);
+    // The helper text under the dialog's date fields: the same name, capitalised; never an offset.
+    assert.equal(view.fieldHint, view.label.charAt(0).toUpperCase() + view.label.slice(1));
+    assert.doesNotMatch(view.label, /GMT/);
   });
 
   it('an unknown server zone converts nothing and labels nothing', () => {
@@ -86,5 +92,61 @@ describe('createZoneView', () => {
   it('displayValidTo stretches a synced 00:00 end to 23:59 of the server day, then converts it', () => {
     const row = { validFromDate: '2026-11-17T00:00:00', validToDate: '2026-11-17T00:00:00', sMFCRSynced: true };
     assert.equal(displayValidTo(row, view), '17/11/2026 20:59');
+  });
+
+  it('a downloaded rate at 00:00 server time is converted like any other (same instant)', () => {
+    const madrid = createZoneView('Europe/Madrid', 'America/Argentina/Cordoba', new Date('2026-11-26T15:00:00Z'), 'es_ES');
+    assert.equal(formatWallClock(madrid.show('2026-11-26T00:00:00')), '25/11/2026 20:00');
+    assert.equal(formatInZone('2026-11-26T00:00:00', madrid, (k, p) => `${p.text} (${p.zone})`),
+      `25/11/2026 20:00 (${madrid.label})`);
+  });
+});
+
+describe('zoneName', () => {
+  const epoch = Date.UTC(2026, 10, 25, 12);
+  it('names UTC as UTC, never GMT', () => {
+    assert.equal(zoneName('UTC', { epoch, locale: 'es_ES' }), 'UTC');
+    assert.equal(zoneName('Etc/UTC', { epoch, locale: 'en_US' }), 'UTC');
+  });
+  it('never names a region by its offset when Intl has a readable name', () => {
+    for (const zone of ['Europe/Madrid', 'America/Argentina/Buenos_Aires', 'Atlantic/Canary', 'Asia/Kolkata']) {
+      for (const locale of ['es_ES', 'es_AR', 'en_US']) {
+        assert.doesNotMatch(zoneName(zone, { epoch, locale }), /^GMT/, `${zone} ${locale}`);
+      }
+    }
+  });
+  it('capitalizeZoneName upper-cases the first letter only', () => {
+    assert.equal(capitalizeZoneName('hora estándar de Argentina', 'es_ES'), 'Hora estándar de Argentina');
+    assert.equal(capitalizeZoneName(null), null);
+  });
+  it('is a readable region name in full form', () => {
+    assert.match(zoneName('Europe/Madrid', { epoch, locale: 'es_ES' }), /\p{Ll}/u);
+  });
+});
+
+describe('overlapMessage (QA CP-13)', () => {
+  const view = createZoneView('UTC', 'America/Argentina/Cordoba', new Date('2026-11-26T15:00:00Z'), 'es_ES');
+  const ui = (key, p) => (key === 'convRateWithZone' ? `${p.text} (${p.zone})` : `${key}${JSON.stringify(p ?? {})}`);
+  const details = {
+    conflictFrom: '2026-11-26T12:00:00', conflictTo: null, conflictOpen: true,
+    suggestedFrom: '2026-11-26T12:00:00', timeZone: 'UTC',
+  };
+
+  it('words the server instants in the viewer zone, naming it once', () => {
+    const text = overlapMessage(details, { fromIso: 'EUR', toIso: 'CHF' }, view, ui);
+    assert.match(text, /"start":"26\/11\/2026 09:00"/);
+    assert.match(text, /"end":"convRateNoEndDate\{\}"/);
+    assert.ok(text.includes(`"suggested":"26/11/2026 09:00 (${view.label})"`), text);
+    assert.ok(!text.includes('12:00'), text);
+  });
+
+  it('without a zone view it keeps server time and names the server zone', () => {
+    const off = createZoneView(null);
+    const text = overlapMessage(details, { fromIso: 'EUR', toIso: 'CHF' }, off, ui);
+    assert.ok(text.includes('"suggested":"26/11/2026 12:00 (UTC)"'), text);
+  });
+
+  it('answers null without details, so the server text is kept', () => {
+    assert.equal(overlapMessage(null, { fromIso: 'EUR', toIso: 'CHF' }, view, ui), null);
   });
 });

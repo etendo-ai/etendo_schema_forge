@@ -2182,6 +2182,93 @@
         ],
         "e2e": []
       }
+    },
+    {
+      "id": "currency-conversion-v2",
+      "description": "The redesigned Currency Conversion window (ETP-6365): manual conversion rates entered through a dialog (Nueva divisa / Nueva tasa / Modificar tasa, the server writing the inverse and closing the previous range), the 'Vigentes hoy' accordion, the grouped history with print, datetimes in the browser zone. Backend-only flag evaluated per account. On: the menu entry is 'Currency Conversion' in System > Settings and the conversion-rates route renders the hand-written ConversionRatesPage and the backend accepts the manual rate writes. Off (the default, and what an older backend that does not publish the capability means): the route renders a frozen copy of the PRE-task generated conversion-rates window (custom/conversion-rates/legacy/, from revision 0aa24ca6b^: Currency, To Currency, Valid From/To as dates, Multiple/Divide Rate By, Synced; no Status column; attachments tab) read-only under its old name 'Conversion Rates', reached from its old menu entry (Finance, 'Conversion Rates' / 'Rangos de conversión') (window.readOnly: no create, edit, delete or print), and createManualCurrency, createManualRate, updateManualRate, previewManualRate, DELETE and any generic create/update answer 403 feature_disabled (ETGO_CurrencyConversionV2Disabled) on every channel; the MCP is no longer told about those actions. NOT gated: the reads, serverClock, currentRates, manualCurrencyOptions, the etgoRateStatus column, the DateTime reference of ValidFrom/ValidTo, the shared DateTimeField / ListModalRowActions changes and every invoice-side ETP-6365 change (rate stored on invoices from shipments, header currency selectors).",
+      "owner": "IrinaUrri",
+      "jira": "ETP-6365",
+      "created": "2026-11-27",
+      "flag": {
+        "key": "currency-conversion-v2",
+        "scope": "backend",
+        "defaultValue": false,
+        "ttl": "2027-03-31",
+        "ttlNote": "PLACEHOLDER, not a commitment: end of Q1 2027, to be set by product once the redesign is validated with real clients. Retirement (ship it): in the SPA make CurrencyConversionRoute render ConversionRatesPage unconditionally (or point index.jsx at it), delete LegacyConversionRatesWindow.jsx, the legacy/ folder (frozen pre-task generated window) and CURRENCY_CONVERSION_V2_CAPABILITY, the conversion-rates-legacy entry of menu.json (Finance) and the capability key of the Settings conversion-rates entry (the generic hideWhenCapability axis stays, even with no user left); in com.etendoerp.go delete CurrencyConversionV2Flag and ConversionRateFlagGate with their featureEnabled() checks in ConversionRateHandler (handle, refusalForReadOnlyTarget, actionContracts returns CONTRACTS), FLAG_CURRENCY_CONVERSION_V2, the ETGO_CurrencyConversionV2Disabled texts, the currencyConversionV2 capability of SFWindowAccessMap and the docs sections; delete the hosted Datadog setting; delete the flag object, keep this entry.",
+        "symbols": [
+          "currency-conversion-v2",
+          "FLAG_CURRENCY_CONVERSION_V2",
+          "ETGO_FLAG_CURRENCY_CONVERSION_V2",
+          "etendo.go.flags.currency-conversion-v2",
+          "CurrencyConversionV2Flag",
+          "ConversionRateFlagGate",
+          "ETGO_CurrencyConversionV2Disabled",
+          "currencyConversionV2",
+          "CURRENCY_CONVERSION_V2_CAPABILITY",
+          "CurrencyConversionRoute",
+          "LegacyConversionRatesWindow",
+          "conversion-rates-legacy",
+          "hideWhenCapability",
+          "LegacyConversionRatesApp"
+        ],
+        "$symbolsComment": "Backend-only flag: no key in flag-keys.js, on purpose (docs/feature-flags.md, backend-only flags). The frontend trail is the capability: CurrencyConversionRoute reads capabilities.currencyConversionV2 (CURRENCY_CONVERSION_V2_CAPABILITY in lib/capabilityVisibility.js). The property and env-var spellings are listed because a grep for the bare key misses Openbravo.properties and the ECS task definition. Per-account enablement leaves no grep trail: it is a targeting rule on the hosted control plane.",
+        "capability": {
+          "field": "currencyConversionV2",
+          "sources": [
+            "com.etendoerp.go SFWindowAccessMap webhook response (capabilities.currencyConversionV2, ETP-6365) -- CurrencyConversionV2Flag.isEnabledFor(account email) evaluated per account, admins included"
+          ]
+        }
+      },
+      "$gatingComment": "ONE evaluator, the backend (CurrencyConversionV2Flag), evaluated at REQUEST ENTRY. Targeted PER ACCOUNT: FeatureFlagContext.forAccount(<ETGO_ACCOUNT email of the request user, via GoAccountResolver.currentAccountEmail()>); the targeting key, Email and lowercase email carry the account. Datadog/ConfigCat rules are written on the lowercase email attribute only. With no resolvable account the default stays off; never throws. Local: etendo.go.flags.currency-conversion-v2 / ETGO_FLAG_CURRENCY_CONVERSION_V2 (Tomcat restart). Hosted rollout: create the boolean setting currency-conversion-v2 (default false) BEFORE targeting anyone. Toggle points: (1) ConversionRateHandler (@NeoExtension(spec=conversion-rates, entity=conversionRate)) -- handle() answers 403 feature_disabled for every request ConversionRateFlagGate.isGated lists, before anything else, on every channel (REST single, batch, MCP); refusalForReadOnlyTarget answers the same 403 for the System-row delete; actionContracts() declares only the ungated actions; (2) SFWindowAccessMap publishes capabilities.currencyConversionV2; (3) menu.json: the Settings entry conversion-rates declares capability currencyConversionV2 and its alternate conversion-rates-legacy (Finance, 'Conversion Rates', path conversion-rates) declares hideWhenCapability currencyConversionV2, so the sidebar, the command palette and favorite labels show exactly one, the legacy one while the capability map is null/loading (isHiddenByCapability in lib/capabilityVisibility.js); (4) the SPA route CurrencyConversionRoute (index.jsx of conversion-rates) renders the redesigned page when it is true, a progress bar while the access map loads and LegacyConversionRatesWindow otherwise.",
+      "paths": [
+        "tools/app-shell/src/windows/custom/conversion-rates/CurrencyConversionRoute.jsx",
+        "tools/app-shell/src/windows/custom/conversion-rates/LegacyConversionRatesWindow.jsx",
+        "tools/app-shell/src/windows/custom/conversion-rates/legacy/"
+      ],
+      "$pathsComment": "Owned frontend code only; the com.etendoerp.go owned files (CurrencyConversionV2Flag.java, handlers/ConversionRateFlagGate.java) are listed in that repo's contribution. The redesigned page itself (ConversionRatesPage and its siblings in windows/custom/conversion-rates/, the ConversionRate* handlers) stays after retirement: it is the feature, not the flag. Shared toggle points, not listed (removal cost): windows/custom/conversion-rates/index.jsx (route), lib/capabilityVisibility.js (CURRENCY_CONVERSION_V2_CAPABILITY), windows/registry.js (comment), menu.json (the conversion-rates-legacy entry and the capability key of conversion-rates), ConversionRateHandler.java (three featureEnabled() checks), SFWindowAccessMap.java (capability), neo_hints_{en,es}.properties (ETGO_CurrencyConversionV2Disabled); GoFeatureFlags.java is framework.",
+      "testSpecs": {
+        "$testSpecsComment": "Frontend specs only (tester-functional). The JUnit specs of com.etendoerp.go (AccountTargetedFlagTest, ConversionRateHandlerTest, SFWindowAccessMapTest, ConversionRateFlagGateTest) live in that repo's contribution to this feature, in its own flags-registry.json.",
+        "unit": [
+          {
+            "path": "tools/app-shell/src/windows/custom/conversion-rates/__tests__/CurrencyConversionRoute.vitest.jsx",
+            "note": "Capability on renders the redesigned page; off and not published render the frozen pre-task window (legacy/) with window.readOnly, api readOnly, no delete, hideCreate, old label and breadcrumb; its table has the 7 pre-task columns, no Status, validity typed date; the detail keeps 'Conversion Rate' and the attachments tab; accessLoaded false shows the progress bar."
+          },
+          {
+            "path": "tools/app-shell/src/windows/__tests__/registry.vitest.jsx",
+            "note": "Capability alternates: flag on shows only the Settings entry; flag off, capability absent and capabilities null show only the legacy Finance entry with its old label; isHiddenByCapability truth table. The shipped-catalog profiles model the pair through navigationExpectations.withoutHiddenAlternates."
+          },
+          {
+            "path": "tools/app-shell/src/pages/roles/__tests__/etp5116-fiscal-config-menu-index.vitest.js",
+            "note": "The roles matrix indexes window 116 under the current Settings entry, never its legacy alternate."
+          },
+          {
+            "path": "tools/app-shell/src/components/copilot/__tests__/useAiCopilotChat.vitest.jsx",
+            "note": "The copilot resolves the legacy entry (name conversion-rates-legacy, path conversion-rates) to /conversion-rates."
+          },
+          {
+            "path": "tools/app-shell/src/components/layout/SideMenu/__tests__/SideMenu.vitest.jsx",
+            "expected": true,
+            "note": "Extension (tester-functional): a favorite of /conversion-rates is labelled 'Conversion Rates' with the capability off or null and 'Currency Conversion' with it on (favNameMap skips the hidden alternate); CommandPalette.vitest.jsx: the palette lists only the visible member of the pair."
+          }
+        ],
+        "e2e": [
+          {
+            "path": "e2e/tests/flows/finance/conversion-rates-flag.mocked.spec.js",
+            "expected": true,
+            "note": "Mocked (tester-functional): SFWindowAccessMap with currencyConversionV2 true shows the redesigned page (Nueva divisa visible); false shows the generated list titled with the old name, no Nuevo button, a row opens a read-only form without Eliminar."
+          }
+        ]
+      },
+      "deferredItems": [
+        {
+          "id": "mcp-delete-still-listed",
+          "kind": "cosmetic",
+          "note": "With the flag off the MCP still lists conversion-rates for etendo_delete, because the DELETE method comes from configuration (ETGO_SF_ENTITY.ISDELETE), which is not per account; the call is refused with the 403 feature_disabled, so nothing is deleted, but the surface is not fully honest. Hiding it would need a per-request method hook on NeoHandler (shared code), out of scope for this flag.",
+          "refs": [
+            "com.etendoerp.go docs/feature-flags-and-tenant-upgrade.md -- section 'currency-conversion-v2 (ETP-6365)'"
+          ]
+        }
+      ]
     }
   ]
 }

@@ -11,7 +11,8 @@ vi.mock('@/i18n', () => ({
 
 import { render, screen, within } from '@testing-library/react';
 import { ROW_LIFT_SHADOW, ROW_LIFT_HOVER_BORDERS } from '@/components/contract-ui/rowVisuals.js';
-import { CurrencyRatesList } from '../CurrencyRatesList.jsx';
+import { CurrencyRatesList, currencySubtitle } from '../CurrencyRatesList.jsx';
+import { createZoneView } from '../conversionRatesModel.js';
 
 const MANUAL_ROW = {
   id: 'manual-1',
@@ -83,5 +84,17 @@ describe('CurrencyRatesList — rate rows', () => {
     expect(within(row).getByTestId('TableCell__convrate-from')).toHaveTextContent(from);
     expect(within(row).getByTestId('TableCell__convrate-to')).toHaveTextContent(to);
     expect(within(row).getByTestId('TableCell__convrate-rate')).toHaveTextContent(`${rate} $`);
+  });
+});
+
+describe('currencySubtitle — Desde of the rate in force', () => {
+  // Server in UTC, viewer in Buenos Aires: 00:00 UTC of the 26th is 21:00 of the 25th there.
+  const zone = createZoneView('UTC', 'America/Argentina/Buenos_Aires', new Date('2026-11-26T15:00:00Z'), 'es_ES');
+  const ui = (key, p) => `${key}:${p?.date ?? ''}`;
+
+  it('the start of the rate in force is converted to the viewer zone and named', () => {
+    const entry = { automatic: false, validFrom: '2026-11-26T12:00:00', rows: [] };
+    expect(currencySubtitle(entry, (key, p) => (key === 'convRateWithZone' ? `${p.text} (${p.zone})` : `${key}:${p.date}`), '2026-11-26', zone))
+      .toBe(`convRateSince:26/11/2026 09:00 (${zone.label})`);
   });
 });
