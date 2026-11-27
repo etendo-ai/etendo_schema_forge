@@ -237,7 +237,15 @@ export function checkRetirementRecord(feature) {
   } else {
     for (const item of retirement.ticketItems) {
       const id = item?.id || '(no id)';
-      if (hasLink(item?.evidence)) continue;
+      if (hasLink(item?.evidence)) {
+        // Evidence counts only when it was taken in Production: a QA, staging or local run says
+        // nothing about what users get (ETP-6425).
+        if (item.env !== 'production') {
+          results.push(block('ticket-item-not-production', `ticket item ${id}: evidence is from "${item.env ?? 'unstated'}", not production`,
+            'repeat it in Production and link that, then set "env": "production" — QA, staging or local runs are not evidence'));
+        }
+        continue;
+      }
       if (item?.accepted) {
         const problems = acceptanceProblems(item.accepted);
         if (!problems.length) {
@@ -358,6 +366,57 @@ export function checkVerify(feature, contribution, { rootDirs, frameworkPaths, g
   return results;
 }
 
+// ── Production deployment ──────────────────────────────────────────────────
+
+/** True when `sha` is reachable from origin/main in `dir` (main is Production). */
+export function gitInMain(dir, sha) {
+  try {
+    execFileSync('git', ['-C', dir, 'fetch', '-q', 'origin', 'main'], { env: sanitizedGitEnv(), stdio: 'ignore' });
+  } catch { /* offline: fall back to the local origin/main */ }
+  try {
+    execFileSync('git', ['-C', dir, 'merge-base', '--is-ancestor', sha, 'origin/main'], { env: sanitizedGitEnv(), stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Closing needs the removal live in Production, not merged to develop: every removal commit
+ * reachable from main in its repo, the Production deploy run linked, and a live check of
+ * Production linked (what the served build or API shows). Without it nothing is evidence.
+ */
+export function checkProduction(feature, { dirs, inMain = gitInMain }) {
+  const production = feature.retirement?.production || {};
+  const results = [];
+  const commits = Array.isArray(production.removalCommits) ? production.removalCommits : [];
+  if (!commits.length) {
+    results.push(block('prod-commits-missing', 'retirement.production.removalCommits is empty',
+      'list every merge commit of the removal as { "repo": "schema_forge" | "com.etendoerp.go", "sha" }'));
+  }
+  for (const commit of commits) {
+    const dir = dirs[commit?.repo];
+    if (!dir) {
+      results.push(block('prod-commit-unverifiable', `${commit?.repo ?? '?'} ${commit?.sha ?? '?'}: no checkout to verify it`,
+        'set GO_MODULE=<path> or fix the repo name'));
+    } else if (!commit.sha || !inMain(dir, commit.sha)) {
+      results.push(block('prod-not-deployed', `${commit.repo} ${commit.sha}: not in main — not in Production yet`,
+        'wait for the daily cut to reach main and deploy; nothing is closed before that'));
+    } else {
+      results.push(info('prod-in-main', `${commit.repo} ${String(commit.sha).slice(0, 9)} is in main`));
+    }
+  }
+  if (!hasLink(production.deployRun)) {
+    results.push(block('prod-deploy-missing', 'no Production deploy linked (retirement.production.deployRun)',
+      'link the successful deploy run from main that contains the removal'));
+  }
+  if (!hasLink(production.liveCheck)) {
+    results.push(block('prod-live-check-missing', 'no live Production check linked (retirement.production.liveCheck)',
+      'check the served build/API in Production (flag gone, feature working) and link the record'));
+  }
+  return results;
+}
+
 // ── Orchestration ───────────────────────────────────────────────────────────
 
 /**
@@ -365,7 +424,7 @@ export function checkVerify(feature, contribution, { rootDirs, frameworkPaths, g
  * the filesystem reads and the injected grep, so tests drive it against temp directories.
  */
 export function runCheck({ name, verify = false, repoRoot = DEFAULT_REPO_ROOT, registryPath = null,
-  goModule = null, env = process.env, grep = gitGrep, now = new Date() }) {
+  goModule = null, env = process.env, grep = gitGrep, inMain = gitInMain, now = new Date() }) {
   const sfRegistryPath = registryPath || join(repoRoot, REGISTRY_FILENAME);
   const registry = loadJson(sfRegistryPath);
   const feature = findFeature(registry, name);
@@ -415,6 +474,7 @@ export function runCheck({ name, verify = false, repoRoot = DEFAULT_REPO_ROOT, r
   if (verify) {
     const frameworkPaths = [...(registry.conventions?.frameworkPaths || []), ...(goRegistry?.conventions?.frameworkPaths || [])];
     items.push(...checkVerify(feature, contribution, { rootDirs, frameworkPaths, grep }));
+    items.push(...checkProduction(feature, { dirs: { schema_forge: repoRoot, 'com.etendoerp.go': go.dir }, inMain }));
   }
 
   return {
@@ -472,7 +532,8 @@ export function parseArgs(argv) {
 const HELP = `flag-retire-check — pre-retirement gate for a feature flag (docs/flag-retirement.md)
 
 Usage: node scripts/flag-retire-check.js --flag <key|feature-id> [options]
-  --verify            Also run the post-removal checks (flag object gone, no declaration or evaluation left)
+  --verify            Also run the post-removal checks (flag object gone, no declaration or evaluation left,
+                      removal in main and live in Production) — required before closing the ticket
   --json              Print the result as JSON
   --go-module <path>  com.etendoerp.go checkout (default: ETENDO_GO_MODULE, then the usual sibling locations)
   --registry <path>   schema_forge registry (default: <root>/flags-registry.json)

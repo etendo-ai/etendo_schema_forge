@@ -108,10 +108,17 @@ Read every `WARN [remaining-reference]` line and confirm it is a feature name, n
 
 ## Step 5 — Close-out
 
-1. Deploy to Production first; then archive the flag in Datadog in **every** environment (and
-   ConfigCat if defined). Archiving before the deploy flips live clients to the default.
-2. Add the post-deploy evidence (smoke, archive) to `retirement.ticketItems`.
-3. Comment on the ticket: gate output before, `VERIFY=1` output after, PRs in both repos,
+**Not in Production, not evidence.** Merged to develop is not deployed. Close nothing until the
+removal, the registry and the docs are in `main` and deployed, and every ticket item was checked in
+Production (`"env": "production"`); a QA, staging or local run does not count.
+
+1. Wait for the cut to reach `main` and deploy. Record `retirement.production` (removal merge
+   commits, the deploy run from main, a live check of what Production serves).
+2. Archive the flag in Datadog in **every** environment (and ConfigCat if defined). Archiving
+   before the deploy flips live clients to the default.
+3. Add the Production evidence (smoke, archive) to `retirement.ticketItems`; rerun
+   `make flag-retire-check FLAG=<key> VERIFY=1` — it must print `RESULT: CLEAR`.
+4. Comment on the ticket: gate output before, `VERIFY=1` output after, PRs in both repos,
    Datadog archive evidence, docs link, every accepted item with its `ref`.
 
 ---
@@ -120,5 +127,7 @@ Read every `WARN [remaining-reference]` line and confirm it is a feature name, n
 
 - Start with the code. The gate comes first, every time, even when the ticket says "just remove".
 - Report a retirement done because tests and review are green — they check the code, not the debt.
+- Close the ticket, or count an item done, on evidence from QA, staging or local, or while any
+  part is merged to develop but not yet in Production.
 - Archive the flag in Datadog before the removal is in Production.
 - Delete the feature entry on the ship branch, or delete it before re-homing on the kill branch.

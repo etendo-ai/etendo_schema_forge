@@ -319,7 +319,7 @@
         {
           "id": "manual-trigger-runtime-verification",
           "kind": "open",
-          "note": "Partly observed, still open. OBSERVED on a live instance during ETP-5269 QA (two manual runs from the deployed build, on an instance with zero unposted documents): each manual run was scoped to the caller's client (AcctServerProcess logged one 'Starting background process' marker per manual run versus three for the System cadence), the recurring AD_PROCESS_REQUEST stayed byte-identical across all 47 columns, another tenant's run inside the returned window was absent from the response, the log column never crossed the wire, and the page converged without a manual refresh. NOT OBSERVED at runtime, so these still rest on SFAcctProcessMonitorTest and the mocked E2E spec only: (1) a run with pending documents in two companies, confirming that a manual run from company A posts A's documents while B's stay pending; (2) denial for a restricted role through every entry point — menu, Favorites, command palette, the direct URL /acct-process-monitor, and the webhook GET /sws/neo/acctprocessmonitor with and without Action=trigger (the instance held a single Etendo GO account, so no restricted session existed); (3) the systemClientNotScopable rejection from a System-context session, with nothing scheduled; (4) the alreadyRunning rejection for a concurrent run or an already-queued one-shot (runs finish in about 85 ms, so the race was not won by hand). Therefore the two claims that matter most — a manual run posts ONLY the caller's documents, and a non-admin is refused at runtime — are not yet proven against a deployed build; close this item only after QA records all four on a real instance.",
+          "note": "Partly observed, still open. OBSERVED on a live instance during ETP-5269 QA (two manual runs from the deployed build, on an instance with zero unposted documents): each manual run was scoped to the caller's client (AcctServerProcess logged one 'Starting background process' marker per manual run versus three for the System cadence), the recurring AD_PROCESS_REQUEST stayed byte-identical across all 47 columns, another tenant's run inside the returned window was absent from the response, the log column never crossed the wire, and the page converged without a manual refresh. NOT OBSERVED at runtime, so these still rest on SFAcctProcessMonitorTest and the mocked E2E spec only: (1) a run with pending documents in two companies, confirming that a manual run from company A posts A's documents while B's stay pending; (2) denial for a restricted role through every entry point — menu, Favorites, command palette, the direct URL /acct-process-monitor, and the webhook GET /sws/neo/acctprocessmonitor with and without Action=trigger (the instance held a single Etendo GO account, so no restricted session existed); (3) the systemClientNotScopable rejection from a System-context session, with nothing scheduled; (4) the alreadyRunning rejection for a concurrent run or an already-queued one-shot (runs finish in about 85 ms, so the race was not won by hand). Therefore the two claims that matter most — a manual run posts ONLY the caller's documents, and a non-admin is refused at runtime — are not yet proven against a deployed build; close this item only after all four are recorded in Production (ETP-6425: a QA, staging or local run is not evidence).",
           "refs": [
             "org.openbravo.scheduling.OBScheduler#schedule(ProcessBundle)",
             "org.openbravo.scheduling.trigger.TriggerProvider#getTimingOption",
@@ -369,7 +369,58 @@
       },
       "$scopeChangeComment": "2026-09-10, human decision: a manual run must post ONLY the triggering client's accounting, not the instance-wide System scope the automatic cadence uses. Implemented by building the one-shot bundle from the CALLING session's client instead of the recurring row's stored ob_context; AcctServerProcess.doExecute already branches to a single-client path when the context client is not '0', so no change to core was needed. This closed the system-scope-of-a-tenant-triggered-run item, which is why it no longer appears above.",
       "$defectFoundComment": "Reading AcctServerProcess for the scope change surfaced a defect in the first implementation: it used Channel.DIRECT, and AcctServerProcess sets isDirect from the channel and then loads its table/org/date parameters from AD_PINSTANCE_PARA. A scheduled one-shot has no pinstance, and those generated finders return \"\" rather than null, so strOrg would have been silently overwritten from \"0\" to \"\" and the run would have reported success while posting nothing. Now Channel.BACKGROUND, which keeps isDirect false and takes the same path as the automatic run. Trade-off accepted: a BACKGROUND one-shot interrupted between INSERT and firing is re-fired once after a restart (DIRECT rows are marked SYR and skipped) — harmless, since AcctServer only posts still-unposted documents.",
-      "$coverageComment": "The unit-and-e2e-coverage deferred item was CLOSED on 2026-09-10: it was written while DEV had shipped implementation only, and the branch now carries the frontend vitest specs and the two JUnit suites listed in testSpecs below. It was charging 3 pts of debt that no longer existed."
+      "$coverageComment": "The unit-and-e2e-coverage deferred item was CLOSED on 2026-09-10: it was written while DEV had shipped implementation only, and the branch now carries the frontend vitest specs and the two JUnit suites listed in testSpecs below. It was charging 3 pts of debt that no longer existed.",
+      "retirement": {
+        "branch": "ship",
+        "ticket": "ETP-6425",
+        "key": "acct-process-monitor",
+        "symbols": [
+          "ACCT_PROCESS_MONITOR"
+        ],
+        "evidence": {
+          "userDocs": "https://help.etendo.ai/sistema/configuracion/como-revisar-el-proceso-contable/como-revisar-el-proceso-contable/"
+        },
+        "production": {
+          "removalCommits": [
+            {
+              "repo": "schema_forge",
+              "sha": "696b8cbb528a27281e38bad4a4f23152e5bc5cb2"
+            },
+            {
+              "repo": "com.etendoerp.go",
+              "sha": "17c5027228da2947778a115240209def94772c41"
+            }
+          ],
+          "deployRun": "https://github.com/etendo-ai/etendo_schema_forge/actions/runs/45870296027",
+          "liveCheck": "https://etendoproject.atlassian.net/browse/ETP-6425?focusedCommentId=150838"
+        },
+        "ticketItems": [
+          {
+            "id": "datadog-activation",
+            "note": "Datadog evidence of the effective activation for the whole production audience, reviewed with Platform"
+          },
+          {
+            "id": "prod-manual-run-two-companies",
+            "note": "Manual run in Production with pending documents in two companies: A posted, B still pending, one AD_PROCESS_RUN for the caller's client, recurring request unchanged"
+          },
+          {
+            "id": "prod-denials",
+            "note": "Denials observed in Production: restricted role via menu, favorites, palette, direct URL and webhook (with and without trigger); System context; running or queued job"
+          },
+          {
+            "id": "docs-in-production",
+            "note": "etendo-docs#106 (features: [acct-process-monitor]) merged to main and published on help.etendo.ai"
+          },
+          {
+            "id": "registry-docs-in-production",
+            "note": "etendo_schema_forge#64 merged to main and deployed"
+          },
+          {
+            "id": "datadog-archive",
+            "note": "Flag archived in Datadog in every environment, after the removal is in Production"
+          }
+        ]
+      }
     },
     {
       "id": "bp-self-service-portal",
@@ -1142,7 +1193,11 @@
             "root": "frontend",
             "path": "tools/app-shell/src/components/contract-ui/__tests__/contactTypeRequirement.vitest.js"
           },
-          { "root": "frontend", "path": "tools/app-shell/src/windows/custom/contacts/__tests__/contactsImportDescriptor.vitest.js", "note": "Shared spec; must cover both flag states of the descriptor (Cliente/Proveedor + auto-create OFF, lookup-only ON)." },
+          {
+            "root": "frontend",
+            "path": "tools/app-shell/src/windows/custom/contacts/__tests__/contactsImportDescriptor.vitest.js",
+            "note": "Shared spec; must cover both flag states of the descriptor (Cliente/Proveedor + auto-create OFF, lookup-only ON)."
+          },
           {
             "root": "frontend",
             "path": "tools/app-shell/src/components/contract-ui/__tests__/RecordCreateModal.vitest.jsx",
@@ -1267,20 +1322,68 @@
       "testSpecs": {
         "$testSpecsComment": "Backend specs are tester-go's (not yet written). The frontend spec below was written 2026-10-26 by tester-functional, extending the existing LocationEditorModal suite rather than the placeholder path originally registered here -- see its own 'structured-address-for-sepa flag OFF' describe block. The CompanyStep.jsx/OnboardingFlow.jsx coverage added in the same pass lives in the sibling schema_forge_core repo, which this registry's `paths.frontend`/`backend` roots do not cover (see the entry's own $pathsComment) and is therefore not listed as a testSpec here.",
         "unit": [
-          { "root": "backend", "path": "src-test/src/com/etendoerp/go/schemaforge/ContactsLocationAddressHandlerTest.java" },
-          { "root": "backend", "path": "src-test/src/com/etendoerp/go/schemaforge/WarehouseLocationHandlerTest.java" },
-          { "root": "backend", "path": "src-test/src/com/etendoerp/go/schemaforge/BpLocationHandlerTest.java" },
-          { "root": "backend", "path": "src-test/src/com/etendoerp/go/schemaforge/util/StructuredAddressComposerTest.java" },
-          { "root": "backend", "path": "src-test/src/com/etendoerp/go/schemaforge/webhooks/SFWindowAccessMapTest.java" },
-          { "root": "backend", "path": "src-test/src/com/etendoerp/go/rest/EtendoGoJwtServletCoverageTest.java", "note": "Shared spec; covers validateStructuredAddressBlock/Length gating. Not EtendoGoJwtServletTest.java -- that file is unrelated to this flag." },
-          { "root": "backend", "path": "src-test/src/com/etendoerp/go/mcp/McpSchemaFieldBuilderTest.java" },
-          { "root": "backend", "path": "src-test/src/com/etendoerp/go/schemaforge/selector/policy/AddressVirtualSelectorPolicyTest.java" },
-          { "root": "backend", "path": "src-test/src/com/etendoerp/go/onboarding/OnboardingOrgInfoServiceTest.java", "note": "Covers the structured-address branch of ensureOrgInfoLocation/createLocation added for this flag (flag on/off, legacy-address fallback)." },
-          { "root": "backend", "path": "src-test/src/com/etendoerp/go/common/GoAccountResolverTest.java" },
-          { "root": "backend", "path": "src-test/src/com/etendoerp/go/mcp/McpHookExecutorTest.java", "note": "testRunReadHookInvokesAfterHandleOnAnAnnotationOnlyHandler/testRunReadHookWithNoResolvedHandlerKeepsTheOriginalBody cover the runReadHook dispatch-resolution regression fix." },
-          { "root": "frontend", "path": "tools/app-shell/src/windows/custom/shared/__tests__/LocationEditorModal.vitest.jsx", "note": "Extended with a 'structured-address-for-sepa flag OFF' describe block (legacy address lines, legacy save-gating, save payload) plus a flag-ON default via the useAuth() mock for every pre-existing case." },
-          { "root": "frontend", "path": "tools/app-shell/src/windows/custom/contacts/__tests__/contactsImportDescriptor.vitest.js", "note": "ETP-6206: the Contacts import's locationAddress payload and review-time address validation with the capability ON and OFF (Calle/Numero, s/n fallback, 60/70 length rules)." },
-          { "root": "frontend", "path": "tools/app-shell/src/components/contract-ui/__tests__/ListView.importLabels.vitest.jsx", "note": "ETP-6206: useWindowImportDialog publishes the AuthContext capabilities that the import descriptor reads through lib/importCapabilities.js." }
+          {
+            "root": "backend",
+            "path": "src-test/src/com/etendoerp/go/schemaforge/ContactsLocationAddressHandlerTest.java"
+          },
+          {
+            "root": "backend",
+            "path": "src-test/src/com/etendoerp/go/schemaforge/WarehouseLocationHandlerTest.java"
+          },
+          {
+            "root": "backend",
+            "path": "src-test/src/com/etendoerp/go/schemaforge/BpLocationHandlerTest.java"
+          },
+          {
+            "root": "backend",
+            "path": "src-test/src/com/etendoerp/go/schemaforge/util/StructuredAddressComposerTest.java"
+          },
+          {
+            "root": "backend",
+            "path": "src-test/src/com/etendoerp/go/schemaforge/webhooks/SFWindowAccessMapTest.java"
+          },
+          {
+            "root": "backend",
+            "path": "src-test/src/com/etendoerp/go/rest/EtendoGoJwtServletCoverageTest.java",
+            "note": "Shared spec; covers validateStructuredAddressBlock/Length gating. Not EtendoGoJwtServletTest.java -- that file is unrelated to this flag."
+          },
+          {
+            "root": "backend",
+            "path": "src-test/src/com/etendoerp/go/mcp/McpSchemaFieldBuilderTest.java"
+          },
+          {
+            "root": "backend",
+            "path": "src-test/src/com/etendoerp/go/schemaforge/selector/policy/AddressVirtualSelectorPolicyTest.java"
+          },
+          {
+            "root": "backend",
+            "path": "src-test/src/com/etendoerp/go/onboarding/OnboardingOrgInfoServiceTest.java",
+            "note": "Covers the structured-address branch of ensureOrgInfoLocation/createLocation added for this flag (flag on/off, legacy-address fallback)."
+          },
+          {
+            "root": "backend",
+            "path": "src-test/src/com/etendoerp/go/common/GoAccountResolverTest.java"
+          },
+          {
+            "root": "backend",
+            "path": "src-test/src/com/etendoerp/go/mcp/McpHookExecutorTest.java",
+            "note": "testRunReadHookInvokesAfterHandleOnAnAnnotationOnlyHandler/testRunReadHookWithNoResolvedHandlerKeepsTheOriginalBody cover the runReadHook dispatch-resolution regression fix."
+          },
+          {
+            "root": "frontend",
+            "path": "tools/app-shell/src/windows/custom/shared/__tests__/LocationEditorModal.vitest.jsx",
+            "note": "Extended with a 'structured-address-for-sepa flag OFF' describe block (legacy address lines, legacy save-gating, save payload) plus a flag-ON default via the useAuth() mock for every pre-existing case."
+          },
+          {
+            "root": "frontend",
+            "path": "tools/app-shell/src/windows/custom/contacts/__tests__/contactsImportDescriptor.vitest.js",
+            "note": "ETP-6206: the Contacts import's locationAddress payload and review-time address validation with the capability ON and OFF (Calle/Numero, s/n fallback, 60/70 length rules)."
+          },
+          {
+            "root": "frontend",
+            "path": "tools/app-shell/src/components/contract-ui/__tests__/ListView.importLabels.vitest.jsx",
+            "note": "ETP-6206: useWindowImportDialog publishes the AuthContext capabilities that the import descriptor reads through lib/importCapabilities.js."
+          }
         ]
       }
     },
@@ -2592,7 +2695,7 @@
           "kind": "precondition",
           "note": "The hosted control plane (Datadog Feature Flags, ConfigCat as the fallback) has no boolean setting psd2-statement-import-settings yet, in any environment, and an undefined key resolves to the false default. AND THEREFORE: nobody can be targeted and the new behaviour stays off for everyone until the setting is created (default false) and given per-account targeting rules in each environment, on the backend and on the SPA with the same key.",
           "refs": [
-            "com.etendoerp.go docs/feature-flags-and-tenant-upgrade.md \u2014 section '`psd2-statement-import-settings` (ETP-6151)'"
+            "com.etendoerp.go docs/feature-flags-and-tenant-upgrade.md — section '`psd2-statement-import-settings` (ETP-6151)'"
           ]
         }
       ]

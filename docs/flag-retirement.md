@@ -98,7 +98,7 @@ when the module cannot be found: its backend half would go unverified.
 | 1 | Deferred items | Any `deferredItems` entry on the feature, **any kind** (precondition, open, scope, cosmetic, a typo) | Closing it — the work is done; remove the item and record the closure in a `$deferredItemsClosedComment` with the evidence — or a human acceptance in `retirement.accepted` |
 | 2 | Test specs | A spec in either registry that is not on disk and is marked `expected: true` (agreed, unwritten) or carries no marker | Writing it, or a human acceptance (`item` = the spec path). Specs already marked `acceptedDebt: true` are a standing human decision and are reported, not blocked |
 | 3 | `ttlNote` | The flag has (or had, copied into `retirement.ttlNote`) a `ttlNote` and `retirement.evidence.ttlNote` has no link. Every note blocks, not only conditional ones: it is the team's own written terms for removal ("once…", "permanent, no retirement planned"), written to be read now | Linking evidence that what it states holds |
-| 4 | Ticket debt | `retirement.ticketItems` missing, or an item with neither an `evidence` link nor a human `accepted` record | Copying **every** pre-GA / debt / acceptance-criteria line of the ticket into `ticketItems`, each done with a link or accepted |
+| 4 | Ticket debt | `retirement.ticketItems` missing; an item with neither an `evidence` link nor a human `accepted` record; or an item whose evidence is not marked `"env": "production"` | Copying **every** pre-GA / debt / acceptance-criteria line of the ticket into `ticketItems`, each done **in Production** with a link (`"env": "production"`) or accepted. A QA, staging or local run is not evidence: it says nothing about what users get |
 | 5 | User docs | `retirement.evidence.userDocs` is neither a link nor `not-user-visible: <reason>` | Linking the help.etendo.ai page that documents the feature. Search `etendo-docs` first and reuse an existing article; never write a second page for the same screen. The page declares the feature in its front matter with `features: [<flag-key>]`, which is how the rollout panel links docs to flags. Or state why nobody outside the team sees the feature |
 | 6 | Datadog evidence | `retirement.evidence.datadog` has no link | Linking the allocation history that proves §2 |
 | 7 | Owner sign-off | `retirement.signOff` missing, malformed, or by an automated account | The owner (or whoever the ticket names) approves in writing; record `{ by, date, ref }` |
@@ -126,9 +126,15 @@ the retirement was authorised (the same reason the entry itself survives, playbo
     "userDocs": "https://help.etendo.ai/…",                 // or "not-user-visible: <reason>"
     "ttlNote": "https://…/ETP-6425?focusedCommentId=…"      // required whenever the flag had a ttlNote
   },
+  "production": {                           // checked by VERIFY=1, before closing
+    "removalCommits": [ { "repo": "schema_forge", "sha": "<merge sha>" },
+                        { "repo": "com.etendoerp.go", "sha": "<merge sha>" } ],   // must be in main
+    "deployRun": "https://github.com/…/actions/runs/…",     // the successful deploy from main
+    "liveCheck": "https://…/ETP-6425?focusedCommentId=…"    // what Production serves: flag gone, feature there
+  },
   "ticketItems": [
-    { "id": "qa-two-companies", "note": "QA manual run with pending docs in two companies",
-      "evidence": "https://…/ETP-6425?focusedCommentId=…" },
+    { "id": "prod-two-companies", "note": "Manual run in Production with pending docs in two companies",
+      "evidence": "https://…/ETP-6425?focusedCommentId=…", "env": "production" },
     { "id": "prod-smoke", "note": "Production smoke",
       "accepted": { "by": "<github user>", "date": "2026-11-26", "ref": "https://…" } }
   ],
@@ -233,6 +239,7 @@ make flag-debt FLAG=<feature-id>               # feature now scores as shipped: 
 | Backend registry | The contribution still has `flagKey`; ship: it lacks `contribution: true` |
 | Declarations and evaluations | `git grep` (code only; `*.md` and the registries excluded) in both repos finds the `UPPER_SNAKE` constant, `FLAG_` / `ETGO_FLAG_` forms, `etendo.go.flags.<key>`, the key inside a framework path, or the key on a line that mentions a flag API |
 | Kill only | Any owned path still on disk; any hit of any `symbol` |
+| In Production | A `retirement.production.removalCommits` sha not reachable from `origin/main` (main is Production; develop is only staging); no `deployRun` link; no `liveCheck` link |
 
 Other hits of the key on the ship branch (a menu item name, an e2e file named after the key) are
 reported as warnings to confirm by eye, because the feature's own names legitimately stay.
@@ -243,6 +250,11 @@ module's tests for the touched classes), and the e2e spec of the feature.
 ---
 
 ## 6. Close-out
+
+**Not in Production, not evidence.** The ticket is not closed while any part of the retirement
+(code, registry, docs) is only on `develop`, or while any item was checked only in QA, staging or
+locally. Merged is not deployed: wait for the daily cut to reach `main`, check the served build,
+then close. `VERIFY=1` must print `RESULT: CLEAR` after that deploy.
 
 Not done until each of these is linked from the ticket:
 
