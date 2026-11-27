@@ -43,8 +43,8 @@ export function toDescriptor(field) {
   const declared = (field?.validation && typeof field.validation === 'object') ? { ...field.validation } : {};
   delete declared.required;
   const validation = {};
-  if (field?.maxLength != null) validation.maxLength = Number(field.maxLength);
-  if (field?.min != null) validation.minimum = Number(field.min);
+  if (Number.isFinite(Number(field?.maxLength)) && field?.maxLength != null) validation.maxLength = Number(field.maxLength);
+  if (Number.isFinite(Number(field?.min)) && field?.min != null) validation.minimum = Number(field.min);
   const inferred = inferFormatConstraints(field);
   const merged = { ...validation, ...(inferred || {}), ...declared };
   return {
@@ -130,9 +130,9 @@ export function getNativeInputProps(field, error) {
   const v = (field?.validation && typeof field.validation === 'object') ? field.validation : {};
   const props = {};
   const maxLength = v.maxLength ?? field?.maxLength;
-  if (maxLength != null) props.maxLength = maxLength;
+  if (maxLength != null && Number.isFinite(Number(maxLength))) props.maxLength = maxLength;
   const min = v.minimum ?? field?.min;
-  if (min != null) props.min = min;
+  if (min != null && Number.isFinite(Number(min))) props.min = min;
   // Only a DECLARED maximum becomes a native `max`: the flat `max` is a silent clamp, and a native
   // attribute would let the browser's own constraint validation block or tooltip it.
   if (v.maximum != null) props.max = v.maximum;

@@ -40,7 +40,15 @@ describe('import review queue validation built from the Contacts contract (ETP-4
   it('flags an over-length phone with exactly one error (the phone check owns its length)', () => {
     const { valid, errors } = validateRow({ ...exampleRow, etgoPhone: '1234567890123456' }, options);
     expect(valid).toBe(false);
-    expect(errors.filter((e) => e.target === 'etgoPhone')).toHaveLength(1);
+    const phoneErrors = errors.filter((e) => e.target === 'etgoPhone');
+    expect(phoneErrors).toHaveLength(1);
+    // Same engine code and limit as the form and grid report for the same value.
+    expect(phoneErrors[0]).toMatchObject({ code: 'MAX_LENGTH', max: 15 });
+  });
+
+  it('flags a phone with disallowed characters as INVALID_FORMAT/phone', () => {
+    const { errors } = validateRow({ ...exampleRow, etgoPhone: '91abc' }, options);
+    expect(errors.find((e) => e.target === 'etgoPhone')).toMatchObject({ code: 'INVALID_FORMAT', format: 'phone' });
   });
 
   it('accepts a spaced phone longer than 15 raw characters whose normalised value fits', () => {
