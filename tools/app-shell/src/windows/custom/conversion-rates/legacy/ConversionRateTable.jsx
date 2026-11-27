@@ -4,6 +4,9 @@
 // it so the user sees the window exactly as before the redesign (read-only, date-only validity,
 // no Status column). Never regenerated and never edited to follow decisions.json; deleted with
 // the flag. The current generated window (regenerated from the new decisions.json) is not used.
+// The labels below are the generator's English fallbacks; at runtime each one is translated from its
+// AD column through useLabel, exactly as in the generated window this copies.
+// i18n-allowlist: ["Currency", "To Currency", "Valid From Date", "Valid To Date", "Multiple Rate By", "Divide Rate By", "Synced"]
 import { forwardRef } from 'react';
 import { DataTable, InlineLinesPanel } from '@/components/contract-ui';
 
