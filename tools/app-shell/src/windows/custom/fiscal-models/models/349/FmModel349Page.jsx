@@ -29,6 +29,7 @@ import { isRectificativeOp, sum349OperationsBase, rectifiedBaseByKey } from './o
 import { FORMER_STATEMENT_LENGTH, isValidFormerStatement, sanitizeFormerStatementInput } from '../../formerStatement.js';
 import { invalidateFiscalComputeCache, getCachedFiscalCompute, setCachedFiscalCompute } from '../../useFiscalAutoCompute.js';
 import { AttachmentsTab, useAttachments } from '@/components/attachments';
+import { usePendingEdits, useDeclarationLeaveGuard } from '../../usePendingEdits.js';
 import '../../fiscal-models.css';
 
 // AD table name backing the AEAT justificante attachments store — this is the
@@ -857,10 +858,11 @@ export function rectificationCountFor(snapshotServed, snapshot, rows) {
   return Array.isArray(rows) ? rows.length : 0;
 }
 
-// The "Facturas origen" tab badge: the snapshot's invoice count, else the live rows' length
-// (`null` while nothing is loaded).
+// The "Facturas origen" tab badge: the live rows' length (`null` while nothing is loaded). A
+// declaration served from its submission snapshot shows no counter (OBS-11, ETP-5716): the tab
+// only says the per-invoice detail is not kept, so a number there promised rows it cannot show.
 export function invoicesTabBadge(snapshotServed, snapshot, liveInvoices) {
-  if (snapshotServed) return Number(snapshot.invoiceCount) || 0;
+  if (snapshotServed) return null;
   return liveInvoices?.length ?? null;
 }
 
@@ -944,7 +946,9 @@ export default function FmModel349Page({ decl, onBack, onStatusChange, onManualD
     }
     return persisted;
   });
-  const hasPendingEditRef = useRef(false);
+  // OBS-17 (ETP-5716) — `usePendingEdits`: the same ref, plus whether the user edited (the leave
+  // guard's question).
+  const { ref: hasPendingEditRef, userEdited: hasUserEdits, mark: markEdit, clear: clearEdits } = usePendingEdits();
   // ETP-5597 (W4) — bumped on every edit. A save only clears `hasPendingEditRef` when no edit
   // happened after it started (same version on success), so an edit racing an in-flight save
   // is never silently marked as persisted.
@@ -1036,7 +1040,7 @@ export default function FmModel349Page({ decl, onBack, onStatusChange, onManualD
   // there is no need for 303's `useRecordWriteQueue`/`waitUntilManualDataIdle` machinery — a
   // single explicit PUT per click is enough.
   function handleIdentChange(id, value) {
-    hasPendingEditRef.current = true;
+    markEdit();
     editVersionRef.current += 1;
     setIdentChecks(prev => ({ ...prev, [id]: value }));
   }
@@ -1065,7 +1069,7 @@ export default function FmModel349Page({ decl, onBack, onStatusChange, onManualD
         const result = await persistManualData(decl.id, payload, { token, apiBaseUrl });
         if (result.ok) {
           // Only an edit-free save clears the pending flag — see editVersionRef.
-          if (editVersionRef.current === startVersion) hasPendingEditRef.current = false;
+          if (editVersionRef.current === startVersion) clearEdits();
           // ETP-5338 Bug A precedent (303) — push the just-saved manualData into FmListPage's own
           // cached `decls` entry so the "Tipo" column and a re-opened declaration both see it
           // without a full page reload. ETP-5597 (W4) — the payload actually SENT, never a
@@ -1101,12 +1105,12 @@ export default function FmModel349Page({ decl, onBack, onStatusChange, onManualD
     if (isSustitutivaChecked(identChecks) && !Boolean(decl._duplicatePeriodPresented) && !isSubmitted) {
       toast.error(t('fm.duplicate_period.requires_ordinaria')
         ?? 'No se puede guardar, generar el fichero ni presentar una declaración rectificativa/sustitutiva para este período hasta que exista una declaración ordinaria ya presentada.');
-      return;
+      return false;
     }
     if (!isSustitutivaChecked(identChecks) && Boolean(decl._duplicatePeriodPresented) && !isSubmitted) {
       toast.error(t('fm.duplicate_period.ordinaria_exists')
         ?? 'Ya existe una declaración ordinaria presentada para este período. Solo puede haber una ordinaria por período — marca esta como rectificativa/sustitutiva antes de guardar, generar el fichero o presentar.');
-      return;
+      return false;
     }
     const pending = persistIdentChecks();
     const { ok } = pending ? await pending : { ok: true };
@@ -1115,7 +1119,12 @@ export default function FmModel349Page({ decl, onBack, onStatusChange, onManualD
     } else {
       toast.error(t('fm.action.save_error') ?? 'No se pudo guardar. Inténtalo de nuevo.');
     }
+    return ok;
   }
+
+  // OBS-17 (ETP-5716) — leaving with the user's edits unsaved asks first (side menu, top bar,
+  // reload, the "Modelos Fiscales" crumb); "Guardar y salir" runs Guardar (resolves its `ok`).
+  const guardedBack = useDeclarationLeaveGuard(hasUserEdits && !isSubmitted, handleSave);
 
   // Manual "Presentación con Acuse de recibo" path: persist the uploaded
   // receipt to the same attachments store the "Justificante" tab reads
@@ -1479,8 +1488,10 @@ export default function FmModel349Page({ decl, onBack, onStatusChange, onManualD
   const TABS = [
     // P12 (ETP-5584) — every list tab shows its count, 0 included, with the same counter and
     // the same incident rule as 303 (FmDetailChrome's tabCount / incidentsTabBadge).
+    // OBS-11 (ETP-5716) — the two per-invoice tabs of a snapshot-served declaration only hold
+    // the "not kept" note, so they show no counter.
     { id:'operators', label: t('fm.m349.tab.operators'), badge: tabCount(operators.length), icon: <UsersIcon size={16} data-testid="Users__346dd5" /> },
-    { id:'rectif',    label: t('fm.m349.tab.rectif'),    badge: tabCount(rectifications),   icon: <PencilSimpleIcon size={16} data-testid="FileEdit__346dd5" /> },
+    { id:'rectif',    label: t('fm.m349.tab.rectif'),    badge: snapshotServed ? null : tabCount(rectifications), icon: <PencilSimpleIcon size={16} data-testid="FileEdit__346dd5" /> },
     { id:'invoices',  label: t('fm.m349.tab.invoices'),  badge: tabCount(invoicesTabBadge(snapshotServed, submittedSnapshot, liveInvoices)), icon: <ReceiptIcon size={16} data-testid="ReceiptText__346dd5" /> },
     { id:'incidents', label: t('fm.m349.tab.incidents'), ...incidentsTabBadge(blocking, warning), icon: <WarningIcon size={16} data-testid="TriangleAlert__346dd5" /> },
     { id:'receipt',   label: t('fm.tab.receipt') ?? 'Justificante', badge: tabCount(receiptCount), icon: <SealCheckIcon size={16} data-testid="FileCheck__346dd5" /> },
@@ -1499,7 +1510,7 @@ export default function FmModel349Page({ decl, onBack, onStatusChange, onManualD
     // it takes the same path as "Cancelar".
     breadcrumb: [
       ui('taxes'),
-      { label: ui('fm.breadcrumb.section'), onClick: onBack },
+      { label: ui('fm.breadcrumb.section'), onClick: guardedBack(onBack) },
       declTitle,
     ],
     favLabel: ui('fm.breadcrumb.section'),

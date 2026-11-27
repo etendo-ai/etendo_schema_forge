@@ -265,8 +265,11 @@ that already carries it is just as frozen as one presented through either curren
   resultado" distinction of a 0.00 result reads `sourceCount` when the snapshot has no `sources`.
   **Hidden for snapshot-served declarations:** the 303 detail's "Facturas" tab and the 349 detail's
   "Facturas origen"/"Rectificaciones" tabs show `fm.snapshot.invoice_detail_not_kept` ("El detalle
-  por factura no se conserva en las declaraciones presentadas.") instead of a list, with the kept
-  counts as tab badges; nothing recomputes to fill them. The 349 operators' "Origen" column reads
+  por factura no se conserva en las declaraciones presentadas.") instead of a list, and those
+  tabs show **no counter** (OBS-11, ETP-5716 — a number there promised rows the tab cannot show;
+  `sourcesTabBadge` / `invoicesTabBadge` return `null` when snapshot-served, as the 390's Facturas
+  tab already did); nothing recomputes to fill them. The kept counts still feed the figures that
+  use them (the "resultado cero" distinction, the 349 operators' "Origen"). The 349 operators' "Origen" column reads
   the folded `originPurchases`/`originSales` (`formatOrigin` falls back to them when the invoice
   rows are absent) and renders them as plain text, not the link to "Facturas origen"/"Rectificaciones"
   (which would only land on the note). Legacy submitted, draft and ready
@@ -595,7 +598,26 @@ crumb of a generated window's detail (e.g. *Facturas de compra* back to its list
 renders the **Modelos Fiscales** level as a link that returns to the declarations list. Its
 `onClick` is the page's own back path — 303's `handleCancel` (discards unsaved edits exactly like
 **Cancelar**), 349's and 390's `onBack` (390 joined this shape in ETP-6380) — because these detail pages are a view state of `FiscalModelsPage`,
-not a route. *Impuestos* (the menu group since ETP-6380, formerly *Finanzas*) and the current page stay plain text, and the visible text is unchanged
+not a route. Since OBS-17 (ETP-5716) that back path runs through the unsaved-changes prompt
+(`guardedBack`, see "Unsaved changes guard" below): with the user's edits unsaved, the crumb asks
+first. **Cancelar** stays an explicit discard and does not ask.
+
+### Unsaved changes guard (OBS-17, ETP-5716)
+
+Leaving a 303 / 349 / 390 declaration with unsaved edits used to drop them silently (side menu,
+top bar). Each page now tracks its edits with `usePendingEdits()` (`usePendingEdits.js`) and
+registers them with `useDeclarationLeaveGuard(dirty && !isSubmitted, handleSave)`, a thin wrapper
+over the app's `useUnsavedChangesGuard` — so the side menu (`GuardedNavLink`), the top bar and a
+reload ask first through the shared `UnsavedChangesNavigationDialog` ("Tienes cambios sin
+guardar": Cancelar / Descartar y salir / Guardar y salir). "Guardar y salir" runs the page's own
+**Guardar** (`handleSave` now resolves its `ok`; a refused or failed save keeps the user on the
+page). `guardedBack(onBack)` routes the "Modelos Fiscales" crumb through the same prompt.
+
+`usePendingEdits` keeps two answers apart: `ref` ("something must be saved", read by Guardar and
+by the save Generar / Presentar run first) is set by every change, while `userEdited` (what the
+guard asks) is set only by the user's. The page's automatic changes — the 390's 303 preload
+(`applyFreshPreload`) and the 303's layout-fixed `autoValueWhen` values — are still saved with the
+next save, but alone they raise no prompt. A successful save (or Registrar) clears both. *Impuestos* (the menu group since ETP-6380, formerly *Finanzas*) and the current page stay plain text, and the visible text is unchanged
 ("Impuestos / Modelos Fiscales / Modelo 303 - 2026/T4"). The list page keeps its plain
 *Impuestos / Modelos Fiscales* subtitle (it is already the list). (Before ETP-5584 moved the header
 into the TopBar, ETP-5597 had shipped an in-page `FmBreadcrumb` renderer for this; it was removed
@@ -1605,6 +1627,11 @@ so it is not silently reopened later:
   chain to `AEAT303Report2025` (see "Identification section" above, which already documents its
   bank-data visibility gating) — it does not feed into `recomputeDerivedBoxes`'s formula at all,
   by design, matching Classic's own handling. This is expected behavior, not a gap.
+
+**Pencil buttons are named (ETP-5716).** Every 303 edit pencil — grid cells and the infobox
+cells of the bicolumn rows — is a `type="button"` with `aria-label` `fm.box.edit_aria` ("Editar
+casilla [43]") and `data-testid="FmBoxes303__edit_<box>"`, as the 390 ones are (their label is
+"[box] concept"). The 349 has no editable boxes.
 
 ### Six bugs found during live QA of a corrective-invoice period (ETP-5393)
 
@@ -3055,6 +3082,20 @@ layer (a select) or pressed in a dialog nested inside the popup is not the popup
 is not wired yet: its model/year menus have no Escape of their own, so Escape would close the whole
 popup.
 
+**`PresentModal` options are a radiogroup (GEN-03 retest, ETP-5716).** The option cards (Con acuse
+de recibo, Sin acuse de recibo, Presentación directa AEAT) used to be plain clickable `div`s: Tab
+reached only ✕ and Cancelar, so a keyboard user could not pick a path. The two columns now form ONE
+`role="radiogroup"` (labelled with the modal title); each card's choice part is a `role="radio"`
+(`aria-checked`, named by its title, described by its description, `data-testid=
+"PresentModal__option_<path>"`) with a roving tabindex — the checked option is the Tab stop, or the
+first one while none is checked. Arrow keys move and select across both columns in reading order
+(wrapping; Home / End; the shared `nextOptionId` of `ActionChoiceModal`), Space / Enter select.
+The acuse upload row sits outside the radio, in the same bordered card, so it is its own Tab stop
+(no control nested in another). The card draws the focus ring
+(`.fm-present-card:has(.fm-present-option:focus-visible)`). Then Tab reaches Cancelar and the
+confirm button. `AeatSubmitFlow`'s controls were already native buttons / `CheckboxField`
+(`role="checkbox"` buttons), so they needed no change.
+
 **No native selects.** The `ConfigDrawer` pickers (Prorrata on the 303 tab; Periodicidad and
 "Preferencia VIES" on the 349 tab) use the app's `Select` through a local `CfgSelect` helper. Its
 `SelectContent` is lifted to `z-[110]`, above `.fm-modal-overlay`. They stay uncontrolled
@@ -4021,11 +4062,14 @@ index items use the 303 section-nav metrics (8px 12px, 14/20, radius 8); it is 2
 every block name stays on one line.
 
 **Cell width (GEN-02 / OBS-12).** `.fm-390-boxes__content` is a size container and the 390 cells
-take `clamp(150px, (100cqw − 296px) / 2, 220px)` — the room the row really has, for the two
+take `clamp(150px, (100cqw − 296px) / 2, 260px)` — the room the row really has, for the two
 columns a 390 block has at most, keeping ~270 px for the concept — instead of the shared compact
 150 px under 1440 px. Inside a 390 cell the box number column is 40 px (56 px in the 303) and the
-pencil / Restore buttons are slimmer, so a 220 px cell shows "1.234.567,89 €" whole even on a
-modified box with both icons. At 1280×720 (sidebar open) and at 1440 px the cells are 220 px. The block content has the 303 24px gutter;
+pencil / Restore buttons are slimmer, so a 260 px cell shows a 12-integer-digit amount
+("123.456.789.012,34 €") whole even on a modified box with both icons (the earlier 220 px cap cut a
+9-digit "123.456.789,12 €": 142 px of text in 134 px — QA retest of OBS-12). At 1280×720, sidebar
+open or collapsed, and at 1440 px the cells are 260 px and the page does not scroll horizontally.
+The value span also carries the amount as its `title`, as a fallback for any narrower case. The block content has the 303 24px gutter;
 the in-block tables (IAE activities, representatives, the year's 303s) are `.fm-dtable--plain`
 like the 303 Facturas / Incidencias tables (header not sticky), and the block warnings have the 303
 warning-banner metrics.
@@ -5158,7 +5202,7 @@ This in-modal guard is now **defense in depth**: `FmListPage`'s "+ Nueva declara
 - **"+ Nueva declaración" toolbar button is not rendered at all** (not just disabled) when `activeCount === 0` — there is nothing productive to create until a model is enabled.
 - **Table region shows a dedicated empty state** — `EmptyState` with only `title = fm.list.empty_no_active_models` ("No hay modelos activos. Configúralos desde el Catálogo de modelos."). It no longer renders a `cta` button: the always-visible "Catálogo de modelos (N)" toolbar button (see above) already covers that action, so a second, redundant "open catalog" entry point inside the empty state was removed. The `fm.list.empty_no_active_models_cta` locale key still exists in `en_US.json`/`es_ES.json` — it is simply unused in source now. This message takes priority over the generic `fm.list.empty` state even when `filtered` still holds stale rows from before all models were deactivated — the check is `activeCount === 0`, evaluated before `filtered.length === 0`.
 
-The full precedence in the table region is: `!catalogLoaded` (the "Cargando…" loading state — see Persistence above) → `activeCount === 0` (this empty state) → `filtered.length === 0` (generic `fm.list.empty`) → the real table.
+The full precedence in the table region is: `!catalogLoaded || !declsLoaded` (the "Cargando…" loading state — see Persistence above; `declsLoaded` flips in the declarations `GET`'s `.finally()`, failure included, and only the first load gates it — OBS-4, ETP-5716: the list used to show "No se encontraron declaraciones" while the declarations were still loading) → `activeCount === 0` (this empty state) → `filtered.length === 0` (generic `fm.list.empty`) → the real table.
 
 ### Active catalog gates the declarations list, not just the create flow
 

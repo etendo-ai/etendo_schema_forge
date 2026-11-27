@@ -88,12 +88,12 @@ beforeEach(() => {
 });
 
 describe('FmModel303Page — figures-only submission snapshot (ETP-5438)', () => {
-  it('shows the "not kept" note in Facturas with the snapshot count as badge, never computing', async () => {
+  it('shows the "not kept" note in Facturas with no counter (OBS-11), never computing', async () => {
     const { computeBoxes303 } = await import('../../../fiscalModelsUtils.js');
     const { container } = render(<FmModel303Page decl={makeDecl({ submittedSnapshot: strippedSnapshot })} {...props} />);
 
     await waitFor(() => expect(kpis(container)).toContain('500'));
-    expect(screen.getByTestId('tab-sources').textContent).toBe('sources:3');
+    expect(screen.getByTestId('tab-sources').textContent).toBe('sources:');
     fireEvent.click(screen.getByTestId('tab-sources'));
 
     expect(screen.getByTestId('fm-snapshot-no-invoice-detail').textContent)
@@ -152,8 +152,9 @@ describe('FmModel303Page snapshot helpers (ETP-5438)', () => {
     expect(invoiceCountFor(false, { sourceCount: 7 }, [1, 2])).toBe(2);
   });
 
-  it('sourcesTabBadge shows the count when snapshot-served, else the rows length or null', () => {
-    expect(sourcesTabBadge(true, 7, undefined)).toBe(7);
+  it('sourcesTabBadge shows no count when snapshot-served (OBS-11), else the rows length or null', () => {
+    expect(sourcesTabBadge(true, 7, undefined)).toBeNull();
+    expect(sourcesTabBadge(true, 7, [1, 2])).toBeNull();
     expect(sourcesTabBadge(false, 7, [1, 2, 3])).toBe(3);
     expect(sourcesTabBadge(false, 7, undefined)).toBeNull();
   });

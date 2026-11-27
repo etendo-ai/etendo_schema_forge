@@ -70,13 +70,13 @@ beforeEach(() => {
 });
 
 describe('FmModel349Page — figures-only submission snapshot (ETP-5438)', () => {
-  it('renders the operators, uses the counts as badges and shows the note in both per-invoice tabs', async () => {
+  it('renders the operators, shows no counter and the note in both per-invoice tabs (OBS-11)', async () => {
     const { compute349Operators } = await import('../../../fiscalModelsUtils.js');
     render(<FmModel349Page decl={decl} onBack={vi.fn()} onStatusChange={vi.fn()} token="tok" apiBaseUrl="/api" />);
 
     await waitFor(() => expect(document.body.textContent).toContain('Snapshot SARL'));
-    expect(screen.getByTestId('tab-invoices').textContent).toBe('invoices:42');
-    expect(screen.getByTestId('tab-rectif').textContent).toBe('rectif:2');
+    expect(screen.getByTestId('tab-invoices').textContent).toBe('invoices:');
+    expect(screen.getByTestId('tab-rectif').textContent).toBe('rectif:');
 
     fireEvent.click(screen.getByTestId('tab-invoices'));
     expect(screen.getByTestId('fm-snapshot-no-invoice-detail')).toBeTruthy();
@@ -122,9 +122,9 @@ describe('FmModel349Page snapshot helpers (ETP-5438)', () => {
     expect(rectificationCountFor(false, null, 3)).toBe(0);
   });
 
-  it('invoicesTabBadge reads the snapshot count, else the live rows length or null', () => {
-    expect(invoicesTabBadge(true, { invoiceCount: 9 }, [1])).toBe(9);
-    expect(invoicesTabBadge(true, {}, [1])).toBe(0);
+  it('invoicesTabBadge shows no count when snapshot-served (OBS-11), else the live rows length or null', () => {
+    expect(invoicesTabBadge(true, { invoiceCount: 9 }, [1])).toBeNull();
+    expect(invoicesTabBadge(true, {}, [1])).toBeNull();
     expect(invoicesTabBadge(false, { invoiceCount: 9 }, [1, 2])).toBe(2);
     expect(invoicesTabBadge(false, null, null)).toBeNull();
   });

@@ -263,6 +263,39 @@ describe('FmListPage — rendering', () => {
 
 // ── Catalog fetch (no token/apiBaseUrl) ─────────────────────────────────────
 
+// OBS-4 (ETP-5716) — while the declarations are still being fetched the list showed
+// "fm.list.empty" ("No se encontraron declaraciones"), which read as lost declarations.
+describe('FmListPage — loading state until the declarations fetch settles', () => {
+  it('shows the loading state, not the empty state, while the declarations are in flight', async () => {
+    let resolveDecls;
+    globalThis.fetch = vi.fn((url) => {
+      if (String(url).includes('fiscal-models-catalog')) {
+        return Promise.resolve({ ok: true, json: async () => ({ '303': true }) });
+      }
+      return new Promise((resolve) => { resolveDecls = resolve; });
+    });
+    const { container } = render(<FmListPage onSelect={vi.fn()} token={TOKEN} apiBaseUrl={API_BASE_URL} />);
+    // The catalog settles; the declarations do not yet.
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledWith(expect.stringContaining('fiscal303/declarations'), expect.anything()));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(container.querySelector('.fm-empty-state').textContent).toBe('loading');
+
+    resolveDecls({ ok: true, json: async () => [] });
+    await waitFor(() => expect(container.querySelector('.fm-empty-state').textContent).toBe('empty'));
+  });
+
+  it('ends the loading state when the declarations fetch fails', async () => {
+    globalThis.fetch = vi.fn((url) => {
+      if (String(url).includes('fiscal-models-catalog')) {
+        return Promise.resolve({ ok: true, json: async () => ({ '303': true }) });
+      }
+      return Promise.resolve({ ok: false, status: 500, json: async () => ({}) });
+    });
+    const { container } = render(<FmListPage onSelect={vi.fn()} token={TOKEN} apiBaseUrl={API_BASE_URL} />);
+    await waitFor(() => expect(container.querySelector('.fm-empty-state').textContent).toBe('empty'));
+  });
+});
+
 describe('FmListPage — catalog fetch skipped without token/apiBaseUrl', () => {
   it('starts with activeModels={} synchronously and never shows "loading" when token/apiBaseUrl are absent', () => {
     const { container } = render(<FmListPage declarations={[]} {...defaultProps} />);
