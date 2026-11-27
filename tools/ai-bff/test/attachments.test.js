@@ -97,6 +97,29 @@ test('rejects a highly compressible workbook before parsing it (decompression bo
   assert.match(textOf(out), /^\[Archivo adjunto "bomb\.xlsx" demasiado grande: el contenido descomprimido supera 8 MB\]$/);
 });
 
+// Rewrites every uncompressed-size field of a zip (local headers and central directory) to a few
+// bytes: the archive still inflates to the same content, but its headers now lie about it.
+function withLyingSizes(zip) {
+  const out = Buffer.from(zip);
+  for (let i = 0; i + 4 <= out.length; i++) {
+    const signature = out.readUInt32LE(i);
+    if (signature === 0x04034b50) out.writeUInt32LE(100, i + 22);
+    if (signature === 0x02014b50) out.writeUInt32LE(100, i + 24);
+  }
+  return out;
+}
+
+test('rejects a decompression bomb whose zip headers declare a tiny size', async () => {
+  const bomb = withLyingSizes(zipSync({ 'xl/worksheets/sheet1.xml': new Uint8Array(20 * 1024 * 1024) }, { level: 9 }));
+  assert.ok(bomb.length < limits.maxBytes);
+  const out = await tabularAttachmentsToText(userFile({
+    mediaType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    filename: 'lying.xlsx',
+    url: `data:application/octet-stream;base64,${bomb.toString('base64')}`,
+  }), limits);
+  assert.match(textOf(out), /^\[Archivo adjunto "lying\.xlsx" demasiado grande: el contenido descomprimido supera 8 MB\]$/);
+});
+
 test('maxChars is one budget for the whole workbook, not per sheet', async () => {
   const bytes = readFileSync(new URL('./fixtures/mixed.xlsx', import.meta.url));
   const out = await tabularAttachmentsToText(userFile({ mediaType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', filename: 'mixed.xlsx', url: `data:application/octet-stream;base64,${bytes.toString('base64')}` }), { ...limits, maxChars: 5 });

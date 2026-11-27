@@ -1,5 +1,5 @@
 import readExcelFile from 'read-excel-file/node';
-import { unzipSync } from 'fflate';
+import { Unzip, UnzipInflate } from 'fflate';
 
 const XLSX_MEDIA_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const TEXT_MEDIA_TYPES = new Set(['text/csv', 'text/tab-separated-values', 'text/plain']);
@@ -68,16 +68,30 @@ const MAX_XLSX_UNCOMPRESSED_BYTES = 8 * 1024 * 1024;
 
 class WorkbookTooLargeError extends Error {}
 
-// Reads the declared sizes from the zip central directory, inflating nothing.
+// Compressed input fed to the inflater per step: deflate expands at most ~1032:1, so one step
+// produces about 1 MB at worst and the cap is checked before memory grows further.
+const INFLATE_STEP_BYTES = 1024;
+
+// Inflates every entry and counts the bytes it REALLY produces, stopping as soon as the total
+// passes the cap. The sizes a zip declares in its headers are not trusted: a crafted file can
+// declare a few bytes and inflate to hundreds of MB. read-excel-file inflates the same entries
+// again afterwards, so this bound holds for it too.
 function assertWorkbookSize(bytes) {
   let total = 0;
-  unzipSync(new Uint8Array(bytes), {
-    filter: entry => {
-      total += entry.originalSize;
+  const unzip = new Unzip(entry => {
+    entry.ondata = (error, chunk) => {
+      if (error) throw error;
+      total += chunk.length;
       if (total > MAX_XLSX_UNCOMPRESSED_BYTES) throw new WorkbookTooLargeError();
-      return false;
-    },
+    };
+    entry.start();
   });
+  unzip.register(UnzipInflate);
+  const input = new Uint8Array(bytes);
+  for (let offset = 0; offset < input.length; offset += INFLATE_STEP_BYTES) {
+    const end = Math.min(offset + INFLATE_STEP_BYTES, input.length);
+    unzip.push(input.subarray(offset, end), end === input.length);
+  }
 }
 
 function classify(part) {
