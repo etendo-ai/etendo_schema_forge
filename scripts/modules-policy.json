@@ -21,7 +21,7 @@
     { "name": "org.openbravo.module.bptaxidkey", "kind": "epic", "location": "modules", "remote": "koodu_software/org.openbravo.module.bptaxidkey" },
     { "name": "com.smf.currency.apiconfig", "kind": "epic", "location": "modules", "remote": "koodu_software/com.smf.currency.apiconfig" },
     { "name": "com.smf.currency.conversionrate", "kind": "epic", "location": "modules", "remote": "koodu_software/com.smf.currency.conversionrate" },
-    { "name": "com.etendoerp.psd2.bank.integration", "kind": "epic", "location": "modules", "remote": "koodu_software/com.etendoerp.psd2.bank.integration" },
+    { "name": "com.etendoerp.psd2.bank.integration", "kind": "epic", "location": "modules", "remote": "etendo-ai/com.etendoerp.psd2.bank.integration" },
     { "name": "com.etendoerp.copilot", "kind": "epic", "location": "modules", "remote": "etendosoftware/com.etendoerp.copilot" },
     { "name": "com.etendoerp.db.extended", "kind": "epic", "location": "modules", "remote": "etendosoftware/com.etendoerp.db.extended" },
     { "name": "com.etendoerp.go.template", "kind": "epic", "location": "modules", "remote": "etendo-ai/com.etendoerp.go.template" },
