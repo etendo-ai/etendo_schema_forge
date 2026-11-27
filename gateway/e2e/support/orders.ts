@@ -1,9 +1,10 @@
 // @covers gateway/src/public-api/public-api.controller.ts
 // The master-child document flow shared by sales-order and purchase-order.
-import { after, describe, it } from 'node:test';
+import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { api, cleanupCreated, createRecord, expectErrorDocument, expectStatus, resource } from './client.ts';
-import { createAddress, createContact, createProduct, firstWarehouseId } from './fixtures.ts';
+import { api, createRecord, expectErrorDocument, expectStatus, resource } from './client.ts';
+import { cleanupCreated, keepAsLeftover, scoped } from './cleanup.ts';
+import { createAddress, createContact, createProduct, firstPaymentMethodId, firstWarehouseId } from './fixtures.ts';
 import {
   expectDeleted, expectListed, expectMissingIfMatchRefused, expectPatchWithEtag, expectStaleEtagRefused,
   itemPath, patch, readWithEtag, type LifecycleSpec,
@@ -254,6 +255,7 @@ export function describeOrderFlow(kind: 'sales-order' | 'purchase-order'): void 
 
       it('completes the order: 200, and it reads back with document_status CO', async () => {
         const res = await api('POST', `${kind}/${completable.id}/actions/complete`);
+        markCompleted(res, itemPath(completable));
         expectStatus(res, 200);
         assert.equal(res.json.data.id, completable.id, 'the answer is the order re-read after the action');
         assert.equal(res.json.data.attributes.document_status, 'CO', 'the answer shows the new status');
@@ -302,7 +304,7 @@ const EMPTY_LOOKUP = 'the payment-method lookup answered no value: the test tena
 /** Status the API answers to a write on a completed order (Etendo's own document rule). */
 const COMPLETED_WRITE_STATUS = 422;
 
-async function createDraftOrder(
+export async function createDraftOrder(
   kind: string,
   { contactId, addressId, warehouseId }: { contactId: string; addressId: string; warehouseId: string },
   extra: Record<string, unknown> = {},
@@ -315,11 +317,47 @@ async function createDraftOrder(
   );
 }
 
-const round2 = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+export const round2 = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
 
-interface ForeignCurrencySetup { currencyId: string; rate: number; catalogPrice: number; productId: string }
+interface ForeignCurrencySetup { currencyId: string; rate: number; catalogPrice: number; productId: string; orgCurrency: string }
 
 const MAX_PRODUCT_CANDIDATES = 10;
+
+const MAX_RATE_PAGES = 10;
+
+type Rate = { attributes: Record<string, any> };
+
+/**
+ * The conversion rates that start at `orgCurrency`, all pages (a real tenant has far more than the 100 of
+ * one page). The server-side `filter[currency]` narrows them; if the gateway refuses it, every rate is read.
+ * `complete` is false when MAX_RATE_PAGES pages were not enough: the caller must not decide from a part.
+ */
+async function fetchConversionRates(orgCurrency: string): Promise<{ rates: Rate[]; complete: boolean }> {
+  let res = await api('GET', `conversion-rates?filter[currency]=${encodeURIComponent(orgCurrency)}&page[size]=100`);
+  if (res.status === 400) res = await api('GET', 'conversion-rates?page[size]=100');
+  expectStatus(res, 200);
+  const rates: Rate[] = [...res.json.data];
+  let next: string | null | undefined = res.json.links?.next;
+  for (let page = 1; next && page < MAX_RATE_PAGES; page += 1) {
+    const more = await api('GET', next);
+    expectStatus(more, 200);
+    rates.push(...more.json.data);
+    next = more.json.links?.next;
+  }
+  return { rates, complete: !next };
+}
+
+/**
+ * Products to probe for a catalog price. Products created through the API cannot be priced (the API
+ * publishes no price list entry and `sale_price` is read-only), so the tenant's own priced products are
+ * used: those with a positive `sale_price` first (server-side filter), else the first ones listed.
+ */
+async function pricedProductCandidates(): Promise<Array<{ id: string }>> {
+  let res = await api('GET', `product?filter[sale_price][gt]=0&page[size]=${MAX_PRODUCT_CANDIDATES}`);
+  if (res.status === 400 || !res.json?.data?.length) res = await api('GET', `product?page[size]=${MAX_PRODUCT_CANDIDATES}`);
+  expectStatus(res, 200);
+  return res.json.data;
+}
 
 /**
  * The organization currency is read from a draft order created without `currency` (Etendo defaults
@@ -329,7 +367,7 @@ const MAX_PRODUCT_CANDIDATES = 10;
  * expectation does not depend on how the tenant maintains product prices. Returns the reason to
  * skip when the tenant lacks the setup.
  */
-async function findForeignCurrency(
+export async function findForeignCurrency(
   kind: string,
   ids: { contactId: string; addressId: string; warehouseId: string },
   orderDate: string,
@@ -338,31 +376,285 @@ async function findForeignCurrency(
   const orgCurrency = probe.data.attributes.currency;
   if (typeof orgCurrency !== 'string' || !orgCurrency) return `the ${kind} created without currency carries no currency: cannot tell the organization currency`;
 
-  const rates = await api('GET', 'conversion-rates?page[size]=100');
-  expectStatus(rates, 200);
+  const { rates, complete } = await fetchConversionRates(orgCurrency);
+  if (!complete) return `the tenant has more than ${MAX_RATE_PAGES * 100} conversion rates from ${orgCurrency}: not all could be read, so the applicable one cannot be told`;
   // Validity is a date-time since ETP-6365; compare calendar days, as the order date has no time.
   const day = (value: string) => value.slice(0, 10);
-  const match = (rates.json.data as Array<{ attributes: Record<string, any> }>).find(({ attributes: a }) =>
-    a.currency === orgCurrency && a.to_currency && a.to_currency !== orgCurrency && Number(a.multiple_rate_by) > 0
+  const valid = rates.filter(({ attributes: a }) =>
+    a.currency === orgCurrency && a.to_currency && a.to_currency !== orgCurrency && a.multiple_rate_by != null && Number(a.multiple_rate_by) > 0
     && (!a.valid_from_date || day(a.valid_from_date) <= orderDate)
     && (!a.valid_to_date || day(a.valid_to_date) >= orderDate));
-  if (!match) {
+  if (!valid.length) {
     return `the tenant has no conversion rate from the organization currency (${orgCurrency}) valid on ${orderDate}: `
       + 'add one (Currency > Conversion Rates) to run the foreign-currency order checks';
   }
+  // A target currency with several rates valid on the same day (overlapping ranges) is ambiguous: which
+  // one Etendo applies is not decidable from the list. Pick a currency that has exactly one; skip only
+  // when none does.
+  const perCurrency = new Map<string, typeof valid>();
+  for (const rate of valid) perCurrency.set(rate.attributes.to_currency, [...(perCurrency.get(rate.attributes.to_currency) ?? []), rate]);
+  const unambiguous = [...perCurrency.values()].find((group) => group.length === 1);
+  if (!unambiguous) return `every target currency from ${orgCurrency} has several conversion rates valid on ${orderDate}: the applied one is ambiguous, foreign-currency checks skipped`;
+  const match = unambiguous[0];
 
-  const products = await api('GET', `product?page[size]=${MAX_PRODUCT_CANDIDATES}`);
-  expectStatus(products, 200);
-  for (const product of products.json.data as Array<{ id: string }>) {
+  for (const product of await pricedProductCandidates()) {
     const res = await api('POST', `${kind}/${probe.id}/lines`, {
       body: resource(`${kind}-lines`, { ordered_quantity: 1, discount: 0 }, { product: ['product', product.id] }),
     });
     if (res.status !== 201) continue;
     const price = Number(res.json.data.attributes.list_price);
     if (Number.isFinite(price) && price > 0) {
-      return { currencyId: match.attributes.to_currency, rate: Number(match.attributes.multiple_rate_by), catalogPrice: price, productId: product.id };
+      return { currencyId: match.attributes.to_currency, rate: Number(match.attributes.multiple_rate_by), catalogPrice: price, productId: product.id, orgCurrency };
     }
   }
   return `no product among the first ${MAX_PRODUCT_CANDIDATES} has a positive catalog price on the ${kind} price list: `
     + 'the tenant needs a priced product to check the conversion';
+}
+
+// --- document rules shared by both orders -----------------------------------------------------------
+// Each test creates what it needs inside scoped(), so it removes it even when it fails. The
+// completed order of the last block cannot be removed: it is reported as left behind.
+
+const CENT = 0.01;
+
+/**
+ * Declares a completed order (and its lines) as left behind right after the complete answer, before any
+ * assertion can throw. A refusal (4xx) leaves a draft, which the cleanup deletes; a success or an
+ * unknown outcome (5xx: the action may have been applied) is kept.
+ */
+function markCompleted(res: { status: number }, orderPath: string, linePaths: string[] = []): void {
+  if (res.status >= 400 && res.status < 500) return;
+  keepAsLeftover(orderPath, 'completed order: Etendo cannot delete it and the API publishes no void action');
+  for (const path of linePaths) keepAsLeftover(path, 'line of a completed order');
+}
+const SNAKE_CASE = /^[a-z][a-z0-9]*(_[a-z0-9]+)*$/;
+const num = (value: unknown) => Number(value);
+const sum = (values: number[]) => values.reduce((total, value) => total + value, 0);
+const taxIdOf = (line: any): string | undefined => line.relationships?.tax?.data?.id ?? (typeof line.attributes?.tax === 'string' ? line.attributes.tax : undefined);
+
+interface Ctx { contactId: string; addressId: string; productId: string; warehouseId: string; paymentMethodId: string }
+
+export function describeOrderDocumentRules(kind: 'sales-order' | 'purchase-order'): void {
+  describe(`${kind} document rules`, () => {
+    after(cleanupCreated);
+    const ctx = {} as Ctx;
+    const orderDate = new Date().toISOString().slice(0, 10);
+    const draft = (extra: Record<string, unknown> = {}) => createDraftOrder(kind, ctx, { payment_method: ctx.paymentMethodId, ...extra });
+    const addLine = (orderId: string, attributes: Record<string, unknown>, productId = ctx.productId) =>
+      createRecord(`${kind}/${orderId}/lines`, resource(`${kind}-lines`, attributes, { product: ['product', productId] }));
+
+    before(async () => {
+      const contact = await createContact('rules-partner', kind === 'sales-order' ? { is_customer: true } : { is_vendor: true });
+      ctx.contactId = contact.id;
+      ctx.addressId = (await createAddress(contact.id)).id;
+      ctx.productId = (await createProduct('rules-item')).id;
+      ctx.warehouseId = await firstWarehouseId(kind);
+      ctx.paymentMethodId = await firstPaymentMethodId(kind);
+    });
+
+    it('completing an order with no lines is refused with 422 and the order stays a draft', async () => {
+      await scoped(async () => {
+        const header = await draft();
+        assert.equal(header.data.attributes.payment_method, ctx.paymentMethodId, 'the only missing piece is the lines, not the payment method');
+        const error = expectErrorDocument(await api('POST', `${kind}/${header.id}/actions/complete`), 422);
+        assert.match(error.code, SNAKE_CASE, 'the refusal carries a snake_case code');
+        const { res } = await readWithEtag(`${kind}/${header.id}`);
+        assert.equal(res.json.data.attributes.document_status, 'DR');
+      });
+    });
+
+    it('PATCHing the product of a line re-prices it: list_price, uom, tax and line_gross_amount follow the new product', async (t) => {
+      await scoped(async () => {
+        const header = await draft();
+        // Products created through the API have no price: two products with different catalog prices
+        // are looked for among the tenant's own (the price a line takes when it is created without list_price).
+        const priced = new Map<string, { id: string; price: number }>();
+        for (const product of await pricedProductCandidates()) {
+          if (priced.size >= 2) break;
+          const probe = await api('POST', `${kind}/${header.id}/lines`, {
+            body: resource(`${kind}-lines`, { ordered_quantity: 1, discount: 0 }, { product: ['product', product.id] }),
+          });
+          const price = num(probe.json?.data?.attributes?.list_price);
+          if (probe.status === 201 && price > 0 && !priced.has(String(price))) priced.set(String(price), { id: product.id, price });
+        }
+        if (priced.size < 2) return t.skip('the tenant needs two products with different positive catalog prices on the price list');
+        const [first, second] = [...priced.values()];
+
+        const line = await addLine(header.id, { ordered_quantity: 2, discount: 0 }, first.id);
+        const before = line.data;
+        assert.equal(num(before.attributes.list_price), first.price);
+        const { etag } = await readWithEtag(line.path);
+        const res = await api('PATCH', line.path, {
+          body: resource(`${kind}-lines`, {}, { product: ['product', second.id] }, line.id),
+          headers: { 'If-Match': etag },
+        });
+        expectStatus(res, 200);
+        const { res: reread } = await readWithEtag(line.path);
+        const after = reread.json.data;
+        assert.equal(after.relationships.product.data.id, second.id, 'the line points at the new product');
+        assert.equal(num(after.attributes.list_price), second.price, 'list_price is the new product catalog price, not the old one');
+        assert.notEqual(num(after.attributes.line_gross_amount), num(before.attributes.line_gross_amount), 'line_gross_amount was recalculated');
+        assert.ok(num(after.attributes.line_gross_amount) > 0);
+        assert.equal(typeof after.attributes.uom, 'string', 'uom is set from the new product');
+        assert.ok(taxIdOf(after), 'a tax is set for the new product');
+        const total = await api('GET', `${kind}/${header.id}`);
+        assert.ok(num(total.json.data.attributes.grand_total_amount) >= num(after.attributes.line_gross_amount) - CENT, 'the header total follows the line');
+      });
+    });
+
+    describe('currency_rate recalculation (docs/public-api.md 4.12)', () => {
+      let setup: Awaited<ReturnType<typeof findForeignCurrency>>;
+
+      before(async () => {
+        setup = await scoped(() => findForeignCurrency(kind, ctx, orderDate));
+      });
+
+      const rateOn = (rates: Rate[], from: ForeignCurrencySetup, day: string): number | undefined => {
+        const matches = rates.filter(({ attributes: a }) =>
+          a.currency === from.orgCurrency && a.to_currency === from.currencyId && a.multiple_rate_by != null && Number(a.multiple_rate_by) > 0
+          && (!a.valid_from_date || a.valid_from_date.slice(0, 10) <= day) && (!a.valid_to_date || a.valid_to_date.slice(0, 10) >= day));
+        return matches.length === 1 ? Number(matches[0].attributes.multiple_rate_by) : undefined; // several candidates: ambiguous, the day is not used
+      };
+
+      it('changing currency without sending currency_rate recalculates it, and back to the organization currency sets 1', async (t) => {
+        if (typeof setup === 'string') return t.skip(setup);
+        const found = setup;
+        await scoped(async () => {
+          const header = await draft({ order_date: orderDate, currency: found.orgCurrency });
+          const spec: LifecycleSpec = { collection: kind, type: kind, id: header.id, firstPatch: {}, secondPatch: {} };
+          const initial = header.data.attributes.currency_rate;
+          assert.ok(initial === null || initial === undefined || num(initial) === 1, `an order in the organization currency has no rate or 1, got ${initial}`);
+
+          let { etag } = await readWithEtag(itemPath(spec));
+          let res = await patch(spec, { currency: found.currencyId }, etag);
+          expectStatus(res, 200);
+          assert.equal(num(res.json.data.attributes.currency_rate), found.rate, 'the published rate valid on order_date is set');
+
+          ({ etag } = await readWithEtag(itemPath(spec)));
+          res = await patch(spec, { currency: found.orgCurrency }, etag);
+          expectStatus(res, 200);
+          assert.equal(num(res.json.data.attributes.currency_rate), 1, 'back to the organization currency sets the rate to 1');
+        });
+      });
+
+      it('changing order_date without sending currency_rate replaces a rate set by hand with the one valid on the new date', async (t) => {
+        if (typeof setup === 'string') return t.skip(setup);
+        const found = setup;
+        const { rates, complete } = await fetchConversionRates(found.orgCurrency);
+        if (!complete) return t.skip('not all conversion rates could be read');
+        let newDate = '';
+        let expected: number | undefined;
+        for (let back = 1; back <= 60 && expected === undefined; back += 1) {
+          const day = new Date(Date.now() - back * 86_400_000).toISOString().slice(0, 10);
+          expected = rateOn(rates, found, day);
+          if (expected !== undefined) newDate = day;
+        }
+        if (expected === undefined) return t.skip('no conversion rate is valid on a day before today: the date change cannot be observed');
+        await scoped(async () => {
+          const byHand = round2(found.rate * 2 + 0.5);
+          const header = await draft({ order_date: orderDate, currency: found.currencyId, currency_rate: byHand });
+          assert.equal(num(header.data.attributes.currency_rate), byHand, 'the rate sent on create is kept');
+          const spec: LifecycleSpec = { collection: kind, type: kind, id: header.id, firstPatch: {}, secondPatch: {} };
+          const { etag } = await readWithEtag(itemPath(spec));
+          const res = await patch(spec, { order_date: newDate }, etag);
+          expectStatus(res, 200);
+          assert.equal(num(res.json.data.attributes.currency_rate), expected, `the rate valid on ${newDate} replaces the hand-set ${byHand}`);
+        });
+      });
+    });
+
+    // The order of this block cannot be removed once completed: it is reported as left behind.
+    describe('totals, taxes and the lock after completing (several lines, one with a discount)', () => {
+      let orderId = '';
+      let lines: Array<{ id: string; path: string; quantity: number }> = [];
+      let draftTotal = 0;
+      let draftLineAmounts: number[] = [];
+
+      const readLines = async () => {
+        const res = await api('GET', `${kind}/${orderId}/lines?page[size]=100&sort=id`);
+        expectStatus(res, 200);
+        return res.json.data as any[];
+      };
+
+      before(async () => {
+        const header = await draft();
+        orderId = header.id;
+        const specs: Array<Record<string, unknown>> = [
+          { ordered_quantity: 10, list_price: 100, discount: 0 },
+          { ordered_quantity: 10, list_price: 100, discount: 10 },
+          { ordered_quantity: 3, list_price: 5.5, discount: 0 },
+        ];
+        for (const spec of specs) {
+          const line = await addLine(orderId, spec);
+          lines.push({ id: line.id, path: line.path, quantity: Number(spec.ordered_quantity) });
+        }
+      });
+
+      it('as a draft, the header total is the sum of the line gross amounts, and the discount lowers a line', async () => {
+        const read = await readLines();
+        assert.equal(read.length, lines.length);
+        draftLineAmounts = lines.map((line) => num(read.find((r) => r.id === line.id).attributes.line_gross_amount));
+        for (const amount of draftLineAmounts) assert.ok(Number.isFinite(amount) && amount > 0, 'every line carries a positive line_gross_amount');
+        const header = await api('GET', `${kind}/${orderId}`);
+        expectStatus(header, 200);
+        draftTotal = num(header.json.data.attributes.grand_total_amount);
+        assert.ok(Math.abs(draftTotal - sum(draftLineAmounts)) <= CENT * lines.length, `grand_total_amount ${draftTotal} is the sum of the lines ${sum(draftLineAmounts)}`);
+
+        const [full, discounted] = draftLineAmounts;
+        assert.ok(discounted < full, 'a line with discount 10 is worth less than the same line with discount 0');
+        // discount is a percentage (Etendo standard, not spelled out in docs/public-api.md); tax is proportional.
+        assert.ok(Math.abs(discounted / full - 0.9) < 0.01, `the 10% discount line is ${discounted}, expected 90% of ${full}`);
+      });
+
+      it('every line carries a tax that exists in the tax resource', async () => {
+        for (const line of await readLines()) {
+          const taxId = taxIdOf(line);
+          assert.ok(taxId, `line ${line.id} has no tax`);
+          expectStatus(await api('GET', `tax/${taxId}`), 200, `the tax ${taxId} of line ${line.id} is readable`);
+        }
+      });
+
+      it('completes the order: 200 and CO', async () => {
+        const res = await api('POST', `${kind}/${orderId}/actions/complete`);
+        markCompleted(res, `${kind}/${orderId}`, lines.map((line) => line.path));
+        expectStatus(res, 200);
+        assert.equal(res.json.data.attributes.document_status, 'CO');
+      });
+
+      it('the total and every line amount are unchanged between DR and CO, and the total is still the sum of the lines', async () => {
+        const read = await readLines();
+        const amounts = lines.map((line) => num(read.find((r) => r.id === line.id).attributes.line_gross_amount));
+        assert.deepEqual(amounts, draftLineAmounts, 'line amounts did not change on completion');
+        const header = await api('GET', `${kind}/${orderId}`);
+        assert.equal(num(header.json.data.attributes.grand_total_amount), draftTotal, 'grand_total_amount did not change on completion');
+        assert.ok(Math.abs(num(header.json.data.attributes.grand_total_amount) - sum(amounts)) <= CENT * lines.length);
+        for (const line of read) assert.ok(taxIdOf(line), `line ${line.id} still has its tax after completing`);
+        // The header publishes no net or tax amount: tax is checked per line (tax) and through the gross total.
+      });
+
+      it('a line POST, PATCH and DELETE on the completed order are refused with 422 and change nothing', async () => {
+        const before = await readLines();
+        const post = await api('POST', `${kind}/${orderId}/lines`, {
+          body: resource(`${kind}-lines`, { ordered_quantity: 1, list_price: 1, discount: 0 }, { product: ['product', ctx.productId] }),
+        });
+        expectErrorDocument(post, COMPLETED_WRITE_STATUS);
+
+        const [target] = lines;
+        const { etag } = await readWithEtag(target.path);
+        const patched = await api('PATCH', target.path, {
+          body: resource(`${kind}-lines`, { ordered_quantity: target.quantity + 1 }, undefined, target.id),
+          headers: { 'If-Match': etag },
+        });
+        expectErrorDocument(patched, COMPLETED_WRITE_STATUS);
+        expectErrorDocument(await api('DELETE', target.path), COMPLETED_WRITE_STATUS);
+
+        const after = await readLines();
+        assert.equal(after.length, before.length, 'no line was added or removed');
+        assert.equal(num(after.find((r) => r.id === target.id).attributes.ordered_quantity), target.quantity, 'the refused PATCH did not land');
+        const header = await api('GET', `${kind}/${orderId}`);
+        assert.equal(header.json.data.attributes.document_status, 'CO');
+        assert.equal(num(header.json.data.attributes.grand_total_amount), draftTotal);
+      });
+    });
+  });
 }

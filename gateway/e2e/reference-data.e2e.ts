@@ -6,7 +6,8 @@
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { RUN_PREFIX } from './support/env.ts';
-import { api, cleanupCreated, expectErrorDocument, expectStatus, resource } from './support/client.ts';
+import { api, expectErrorDocument, expectStatus, resource } from './support/client.ts';
+import { cleanupCreated } from './support/cleanup.ts';
 import { itemPath, patch, readWithEtag } from './support/lifecycle.ts';
 
 after(cleanupCreated);

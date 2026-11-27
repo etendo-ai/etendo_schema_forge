@@ -546,7 +546,7 @@ export class PublicApiController {
 
   /**
    * A page of a collection with `meta.page` and `links`. NEO's `totalRows` comes
-   * from a count query (we never send `_noCount`), so it is exact; it is still
+   * from a count query (we send `_noCount=false`), so it is exact; it is still
    * checked for plausibility and left out when it is not. When the page asked
    * for lies past the end, the datasource rewinds and answers the FIRST page
    * (its `startRow` is then not the one requested): that is an empty page here.

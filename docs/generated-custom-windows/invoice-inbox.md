@@ -34,7 +34,7 @@ Two independent axes, both required, checked by the menu AND by the page:
 | Axis | Source | Menu (`menu.json`) | Page (`windows/custom/invoice-inbox/index.jsx`) |
 |---|---|---|---|
 | Rollout (per account) | `capabilities.invoiceInbox` from `SFWindowAccessMap`, the backend evaluation of the `invoice-inbox` flag | `"capability": "invoiceInbox"` | `isCapabilityVisible(useCapabilitiesSafe(), INVOICE_INBOX_CAPABILITY)` |
-| Role | `windowAccess['81AC659E93504927B459E0CAE80CE923']` from the same access map | `"accessWindowId"` (admins exempt) | `useWindowAccess(INVOICE_INBOX_WINDOW_ID) !== 'none'` |
+| Role | `windowAccess['81AC659E93504927B459E0CAE80CE923']` from the same access map | `"windowId"`: membership in the role menu (`SFListMenu`), which already lets admins and client admins through | `useWindowAccess(INVOICE_INBOX_WINDOW_ID) !== 'none'` |
 
 - While the access maps are still loading (`accessLoaded === false`, reload or deep link) the page
   shows a progress bar (`invoice-inbox-access-loading`), not the denied screen; once loaded it fails
@@ -51,15 +51,22 @@ Two independent axes, both required, checked by the menu AND by the page:
   (`TemplateRoleWindowAccess`); admins through the admin bypass of `SFWindowAccessMap`; automatic roles
   through `NeoAccessStartup` (standard for every Etendo GO window). Ventas and Almacén have no grant.
 - Known gap (pre-existing, also Smart Scan): `CommandPalette` filters items by `capability` but not by
-  `accessWindowId`, so a role without the window but with the capability sees the entry in the
+  window access, so a role without the window but with the capability sees the entry in the
   palette and then lands on the access-denied screen.
 
 ## Menu entry, breadcrumb & i18n
 
 - Last item of the existing Purchases ("Compras") group, after "Relación albarán-factura"
   (`menu-item-invoice-inbox`). Like its siblings it has no icon of its own.
-- The item uses `accessWindowId`, never `windowId`: the window has no `AD_Menu`, and `windowId` is
-  checked against the `AD_Menu` tree, which would hide it from everyone, admins included (ETP-5240).
+- The item uses `windowId` (and no `accessWindowId`). The window has an active `AD_Menu` node
+  (`Invoice Inbox`, Procurement Management > Transactions, right after Purchase Invoice), shipped by
+  com.etendoerp.go in `AD_MENU.xml` / `AD_TREENODE.xml` (ETP-6051). `windowId` is checked against the
+  role's `SFListMenu` tree, so the entry shows for admins, client admins and the roles holding the
+  window grant (Compras, Financiero), and the Roles screen (`useRolesOverviewData.js` resolves rows
+  through `windowId`) places the window under Compras instead of "Otros". `accessWindowId` would be a
+  redundant second check on the same grant. **Both halves ship together**: if the `AD_Menu` node is
+  inactive or missing, `windowId` hides the entry from every role (ETP-5240), and the Roles screen
+  falls back to "Otros". The node is also visible in the Classic menu, under Procurement Management > Transactions, for the roles that hold the window grant (`AD_Window_Access`), gated by the same grant as in GO. Do not deactivate or remove it.
 - Title `tMenu('Invoice Inbox')` → "Bandeja de facturas"; breadcrumb "Compras / Bandeja de facturas"
   (`tMenu('Purchases') / title`, as the other Purchases windows). The TopBar count next to the
   title is Pendientes + Con error (what still needs work); hidden until the counters load.
