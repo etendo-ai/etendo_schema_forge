@@ -87,6 +87,8 @@ function SidebarPeriodSelector({ period, onChangePeriod, ui, disabled = false })
         <div role="listbox" aria-label={ui(current.key)} className="absolute top-11 left-0 z-50 min-w-full bg-card border border-border-control rounded-lg shadow-md overflow-hidden">
           {SIDEBAR_PERIOD_OPTIONS.map(opt => {
             const active = period === opt.value;
+            const activeClass = `font-medium ${ACTIVE_PERIOD_OPTION_CLASS}`;
+            const optionClass = active ? activeClass : 'font-normal text-foreground hover:bg-muted';
             return (
               <button
                 key={opt.value}
@@ -94,7 +96,7 @@ function SidebarPeriodSelector({ period, onChangePeriod, ui, disabled = false })
                 role="option"
                 aria-selected={active}
                 onClick={() => { onChangePeriod(opt.value); setOpen(false); }}
-                className={`flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left text-sm whitespace-nowrap ${active ? `font-medium ${ACTIVE_PERIOD_OPTION_CLASS}` : 'font-normal text-foreground hover:bg-muted'}`}
+                className={`flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left text-sm whitespace-nowrap ${optionClass}`}
                 data-testid="SidebarPeriodOption"
               >
                 {ui(opt.key)}

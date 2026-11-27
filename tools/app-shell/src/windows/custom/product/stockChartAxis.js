@@ -1,5 +1,5 @@
 import { formatCalendarDate } from '@/lib/dateOnly';
-import { formatStockQuantity, formatStockQuantityWithUnit } from './stockQuantityFormat';
+import { formatStockQuantityWithUnit } from './stockQuantityFormat';
 import { dateFromDay, dayNumber, dayFraction, valueAtDay } from './stockSeries';
 
 // Pure helpers for the product side-panel / modal stock chart (ETP-5908 RF-10..RF-12).
