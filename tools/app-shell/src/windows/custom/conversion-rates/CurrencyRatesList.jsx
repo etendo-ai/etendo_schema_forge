@@ -11,8 +11,8 @@ import { ROW_LIFT_SHADOW, ROW_LIFT_HOVER_BORDERS } from '@/components/contract-u
 import { OriginBadge, RateStatusBadge, CurrencySymbolChip } from './ConversionRateBadges.jsx';
 import { formatRate } from './conversionRatesFormat.js';
 import {
-  NO_ZONE, currentRateRow, displayValidFrom, displayValidTo, formatStartInSentence, formatWallClockDate,
-  isEditableRate, nowWallClock, wallClockDate, wallClockTime, withZone,
+  NO_ZONE, displayValidTo, formatInZone, formatWallClock, formatWallClockDate, isEditableRate, nowWallClock,
+  wallClockDate, wallClockTime, withZone,
 } from './conversionRatesModel.js';
 
 /** Expand toggle + the five data columns + actions. */
@@ -37,8 +37,7 @@ function currencyRowClassName(expanded) {
 
 /**
  * Second line of a currency header: last download (automatic) or start of the rate in force
- * (manual), in the viewer's zone (`zone`, named after the time) — a range of calendar days as its
- * day alone; "today" is the viewer's day.
+ * (manual), in the viewer's zone (`zone`, named after the time); "today" is the viewer's day.
  */
 export function currencySubtitle(entry, ui, today = wallClockDate(nowWallClock()), zone = NO_ZONE) {
   if (entry.automatic) {
@@ -49,8 +48,7 @@ export function currencySubtitle(entry, ui, today = wallClockDate(nowWallClock()
       ? ui('convRateDownloadedToday', { time })
       : ui('convRateDownloadedOn', { date: formatWallClockDate(shown), time });
   }
-  // A range of calendar days (downloaded, or date-only) reads as its day, unconverted (QA CP-3).
-  return entry.validFrom ? ui('convRateSince', { date: formatStartInSentence(currentRateRow(entry), zone, ui) }) : '';
+  return entry.validFrom ? ui('convRateSince', { date: formatInZone(entry.validFrom, zone, ui) }) : '';
 }
 
 function CurrencyRow({ entry, orgIso, expanded, onToggle, onNewRate, zone, ui }) {
@@ -145,7 +143,7 @@ function RateRow({ row, symbol, orgSymbol, onEdit, onDelete, deleting, zone, ui 
   return (
     <TableRow className={RATE_ROW} data-testid={`convrate-row-${row.id}`}>
       <TableCell className="w-10" data-testid="TableCell__convrate-indent" />
-      <TableCell data-testid="TableCell__convrate-from">{displayValidFrom(row, zone)}</TableCell>
+      <TableCell data-testid="TableCell__convrate-from">{formatWallClock(zone.show(row.validFromDate))}</TableCell>
       <TableCell className={validTo ? undefined : 'text-muted-foreground'} data-testid="TableCell__convrate-to">{validTo ?? '—'}</TableCell>
       <TableCell className="text-right tabular-nums" data-testid="TableCell__convrate-rate">
         {formatRate(row.multipleRateBy)}

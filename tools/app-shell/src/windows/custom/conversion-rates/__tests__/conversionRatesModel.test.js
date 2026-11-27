@@ -3,9 +3,8 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 // @covers tools/app-shell/src/windows/custom/conversion-rates/conversionRatesModel.js
 import {
-  isOpenEnded, displayValidTo, displayValidFrom, formatWallClock, convertWallClock, createZoneView,
-  isCalendarDayRow, formatCalendarDay, formatStartInSentence, currentRateRow, zoneName, overlapMessage,
-  capitalizeZoneName,
+  isOpenEnded, displayValidTo, formatWallClock, formatInZone, convertWallClock, createZoneView,
+  zoneName, overlapMessage, capitalizeZoneName,
 } from '../conversionRatesModel.js';
 
 describe('isOpenEnded', () => {
@@ -27,14 +26,14 @@ describe('displayValidTo', () => {
   for (const [label, row, expected] of [
     ['open range (9999) shows no end', { validFromDate: '2026-11-01T00:00:00', validToDate: '9999-12-31T00:00:00' }, null],
     ['open range (2999) shows no end', { validFromDate: '2026-11-01T00:00:00', validToDate: '2999-12-31T00:00:00', sMFCRSynced: true }, null],
-    ['synced daily range closing at 00:00 shows that day (a range of days)',
-      { validFromDate: '2026-11-17T00:00:00', validToDate: '2026-11-17T00:00:00', sMFCRSynced: true }, '17/11/2026'],
-    ['synced range closing at another minute shows its day',
-      { validFromDate: '2026-11-17T00:00:00', validToDate: '2026-11-17T10:15:00', sMFCRSynced: true }, '17/11/2026'],
-    ['date-only manual range (00:00 → 00:00) shows its day',
-      { validFromDate: '2026-11-17T00:00:00', validToDate: '2026-11-18T00:00:00', sMFCRSynced: false }, '18/11/2026'],
-    ['manual range entered here keeps its minute',
-      { validFromDate: '2026-11-17T09:30:00', validToDate: '2026-11-18T14:29:00', sMFCRSynced: false }, '18/11/2026 14:29'],
+    ['synced daily range closing at 00:00 shows 23:59 of that day',
+      { validFromDate: '2026-11-17T00:00:00', validToDate: '2026-11-17T00:00:00', sMFCRSynced: true }, '17/11/2026 23:59'],
+    ['synced range closing at another minute shows it as stored',
+      { validFromDate: '2026-11-17T00:00:00', validToDate: '2026-11-17T10:15:00', sMFCRSynced: true }, '17/11/2026 10:15'],
+    ['manual range closing at 00:00 keeps 00:00',
+      { validFromDate: '2026-11-17T00:00:00', validToDate: '2026-11-18T00:00:00', sMFCRSynced: false }, '18/11/2026 00:00'],
+    ['synced end at 00:00 before its start is not stretched',
+      { validFromDate: '2026-11-18T09:00:00', validToDate: '2026-11-17T00:00:00', sMFCRSynced: true }, '17/11/2026 00:00'],
   ]) {
     it(label, () => {
       assert.equal(displayValidTo(row), expected);
@@ -90,42 +89,16 @@ describe('createZoneView', () => {
     assert.equal(off.label, null);
   });
 
-  it('a downloaded range is a calendar day for every viewer: never moved to the day before (QA CP-3)', () => {
-    const row = { validFromDate: '2026-11-26T00:00:00', validToDate: '2026-11-26T00:00:00', sMFCRSynced: true };
-    assert.equal(displayValidFrom(row, view), '26/11/2026');
-    assert.equal(displayValidTo(row, view), '26/11/2026');
-    assert.equal(formatStartInSentence(row, view, (k, p) => `${k}${JSON.stringify(p)}`), '26/11/2026');
+  it('displayValidTo stretches a synced 00:00 end to 23:59 of the server day, then converts it', () => {
+    const row = { validFromDate: '2026-11-17T00:00:00', validToDate: '2026-11-17T00:00:00', sMFCRSynced: true };
+    assert.equal(displayValidTo(row, view), '17/11/2026 20:59');
   });
 
-  it('a manual range is converted and named', () => {
-    const row = { validFromDate: '2026-11-26T12:00:00', validToDate: '2999-12-31T00:00:00', sMFCRSynced: false };
-    assert.equal(displayValidFrom(row, view), '26/11/2026 09:00');
-    assert.equal(formatStartInSentence(row, view, (k, p) => `${p.text} (${p.zone})`), `26/11/2026 09:00 (${view.label})`);
-  });
-});
-
-describe('isCalendarDayRow', () => {
-  for (const [label, row, expected] of [
-    ['downloaded', { validFromDate: '2026-11-26T00:00:00', validToDate: '2026-11-26T00:00:00', sMFCRSynced: true }, true],
-    ['date-only manual, open', { validFromDate: '2026-11-26T00:00:00', validToDate: '2999-12-31T00:00:00' }, true],
-    ['entered here at 09:00', { validFromDate: '2026-11-26T09:00:00', validToDate: '2999-12-31T00:00:00' }, false],
-    ['entered here at 00:00, closed at 08:59', { validFromDate: '2026-11-26T00:00:00', validToDate: '2026-11-27T08:59:00' }, false],
-    ['no row', null, false],
-  ]) {
-    it(`${label} → ${expected}`, () => assert.equal(isCalendarDayRow(row), expected));
-  }
-
-  it('formatCalendarDay reads the day literally', () => {
-    assert.equal(formatCalendarDay('2026-11-26T00:00:00'), '26/11/2026');
-    assert.equal(formatCalendarDay('2026-11-26'), '26/11/2026');
-    assert.equal(formatCalendarDay(null), '');
-  });
-
-  it('currentRateRow takes the listed row, else the origin of currentRates', () => {
-    const listed = { validFromDate: '2026-11-26T00:00:00', validToDate: '2026-11-26T00:00:00', sMFCRSynced: true };
-    assert.equal(currentRateRow({ validFrom: listed.validFromDate, rows: [listed] }), listed);
-    assert.equal(currentRateRow({ validFrom: '2026-11-26T10:00:00', automatic: true, rows: [] }).sMFCRSynced, true);
-    assert.equal(currentRateRow({ validFrom: null }), null);
+  it('a downloaded rate at 00:00 server time is converted like any other (same instant)', () => {
+    const madrid = createZoneView('Europe/Madrid', 'America/Argentina/Cordoba', new Date('2026-11-26T15:00:00Z'), 'es_ES');
+    assert.equal(formatWallClock(madrid.show('2026-11-26T00:00:00')), '25/11/2026 20:00');
+    assert.equal(formatInZone('2026-11-26T00:00:00', madrid, (k, p) => `${p.text} (${p.zone})`),
+      `25/11/2026 20:00 (${madrid.label})`);
   });
 });
 

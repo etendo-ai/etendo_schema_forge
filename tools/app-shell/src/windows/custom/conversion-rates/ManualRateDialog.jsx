@@ -19,7 +19,7 @@ import {
 import {
   NO_ZONE, nowWallClock,
   isOpenEnded, validToWallClock, addMillisToWallClock, isAfterWallClock,
-  formatWallClock, formatStartInSentence, currentRateRow, isCalendarDayRow,
+  formatWallClock, formatInZone,
   OVERLAP_KEY, overlapMessage,
 } from './conversionRatesModel.js';
 
@@ -655,7 +655,7 @@ function ValidFromField({ value, onChange, onBlur, max, inError, error, zone, ui
 
 /**
  * The viewer's zone under a dialog date field, in the field helper style (*Hora estándar de
- * Argentina*); nothing when the view names no zone (inactive, or a range of calendar days).
+ * Argentina*); nothing when the view names no zone (inactive: the server zone is unknown).
  */
 function ZoneHint({ text, testId }) {
   if (!text) return null;
@@ -669,29 +669,27 @@ function ZoneHint({ text, testId }) {
 function EditRangeFields({ rateField, row, zone, ui }) {
   const fromLabel = ui('convRateValidFromDateTime');
   const toLabel = ui('convRateValidToDateTime');
-  // A range of calendar days (date-only source, QA CP-3) is shown unconverted and with no zone.
-  const view = isCalendarDayRow(row) ? NO_ZONE : zone;
   return (
     <>
       <div className="max-w-[240px]">{rateField}</div>
       <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3">
         <Field label={fromLabel} className="min-w-0" data-testid="Field__convrate-from">
           <DateTimeField
-            value={row?.validFromDate ? view.show(row.validFromDate) : row?.validFromDate}
+            value={row?.validFromDate ? zone.show(row.validFromDate) : row?.validFromDate}
             readOnly
             aria-label={fromLabel}
             data-testid="convrate-dialog-valid-from" />
-          <ZoneHint text={view.fieldHint} testId="convrate-dialog-valid-from-zone" data-testid="ZoneHint__convrate-edit-from" />
+          <ZoneHint text={zone.fieldHint} testId="convrate-dialog-valid-from-zone" data-testid="ZoneHint__convrate-edit-from" />
         </Field>
         <Field label={toLabel} className="min-w-0" data-testid="Field__convrate-to">
           <DateTimeField
-            value={isOpenEnded(row?.validToDate) ? null : view.show(row.validToDate)}
+            value={isOpenEnded(row?.validToDate) ? null : zone.show(row.validToDate)}
             readOnly
             placeholder={ui('convRateOpenEnd')}
             aria-label={toLabel}
             data-testid="convrate-dialog-valid-to" />
           <ZoneHint
-            text={isOpenEnded(row?.validToDate) ? null : view.fieldHint}
+            text={isOpenEnded(row?.validToDate) ? null : zone.fieldHint}
             testId="convrate-dialog-valid-to-zone"
             data-testid="ZoneHint__convrate-edit-to" />
         </Field>
@@ -755,7 +753,7 @@ function ModeHint({ mode, noneAvailable, currency, orgIso, destIso, zone, ui }) 
         org: orgIso,
         rate: formatRate(currency.rate),
         currency: destIso,
-        from: formatStartInSentence(currentRateRow(currency), zone, ui),
+        from: formatInZone(currency.validFrom, zone, ui),
       })}
     </div>
   );

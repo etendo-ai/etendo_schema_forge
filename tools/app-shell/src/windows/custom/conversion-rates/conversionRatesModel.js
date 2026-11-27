@@ -13,16 +13,10 @@
  *
  * What the user SEES and TYPES is the browser's wall clock: {@link createZoneView} converts a
  * server value for display and a typed value back before it is sent, from the server zone id
- * `serverClock` answers (see "Time zones" below).
- *
- * ## Downloaded rates are CALENDAR DAYS
- *
- * The downloader (and the Classic window before ETP-6365, whose ValidFrom/ValidTo were date-only)
- * writes a range as whole days: `26/11 00:00 → 26/11 00:00`. Converting that midnight to the
- * viewer's zone moves it to the previous day (`25/11 21:00` in GMT-3, QA CP-3), so such a range is
- * shown as dates, never converted and never labelled with a zone — see {@link isCalendarDayRow}.
+ * `serverClock` answers (see "Time zones" below). Every rate is converted, downloaded ones
+ * included: a downloader range stored at 00:00 of the server's day is the same instant as the
+ * viewer's previous evening west of the server, and is shown so (QA decision, ETP-6365).
  */
-import { parseCalendarDate } from '../../../lib/dateOnly.js';
 
 /** A validity end at or after this year means "no end date" (the open range, `9999-12-31`). */
 export const OPEN_END_YEAR = 2999;
@@ -94,37 +88,6 @@ export function formatWallClock(raw) {
   return p ? `${formatWallClockDate(raw)} ${pad2(p.hour)}:${pad2(p.minute)}` : '';
 }
 
-/** Whether a wall-clock value is exactly midnight (`00:00:00`): how a date-only source stores a day. */
-export function isMidnight(raw) {
-  const m = raw ? String(raw).trim().match(WALL_CLOCK_RE) : null;
-  return Boolean(m) && Number(m[4] ?? 0) === 0 && Number(m[5] ?? 0) === 0 && Number(m[6] ?? 0) === 0;
-}
-
-/**
- * Whether a rate row is a range of CALENDAR DAYS rather than of instants (QA CP-3): a downloaded
- * row (`sMFCRSynced`), or a row whose start is midnight and whose end is open or midnight too —
- * what a date-only source writes (the downloader; the Classic window, whose dates had no time
- * before ETP-6365). A range entered in this window starts at the minute typed and is closed at
- * `start − 1 minute`, so it is never both. Such a row is shown as dates: no zone conversion, no
- * zone label, the same day for every viewer.
- *
- * @param {{validFromDate?: string, validToDate?: string, sMFCRSynced?: boolean}} row
- */
-export function isCalendarDayRow(row) {
-  if (!row) return false;
-  if (row.sMFCRSynced === true) return true;
-  return isMidnight(row.validFromDate) && (isOpenEnded(row.validToDate) || isMidnight(row.validToDate));
-}
-
-/**
- * `dd/MM/yyyy` of the calendar day of a wall-clock (or date-only) value, through the canonical
- * date-only parser (`parseCalendarDate`): the day is never shifted by any zone. '' when unparseable.
- */
-export function formatCalendarDay(raw) {
-  const d = raw ? parseCalendarDate(wallClockDate(raw) || raw) : null;
-  return d ? `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()}` : '';
-}
-
 /**
  * The browser's current minute as a wall-clock string (seconds dropped), the default of
  * "Válido desde". Built from LOCAL getters, never `toISOString()` (UTC).
@@ -191,8 +154,7 @@ export function validToWallClock(row) {
 
 /**
  * The "Válido hasta" text of a history row (`dd/MM/yyyy HH:mm`, see {@link validToWallClock}),
- * in the viewer's zone when `zone` (a {@link createZoneView}) is given; the calendar day alone for a
- * range of days ({@link isCalendarDayRow}); `null` for an open range.
+ * in the viewer's zone when `zone` (a {@link createZoneView}) is given; `null` for an open range.
  *
  * @param {{validFromDate?: string, validToDate?: string, sMFCRSynced?: boolean}} row
  * @param {{show: (raw: string) => string}} [zone]
@@ -201,31 +163,8 @@ export function validToWallClock(row) {
 export function displayValidTo(row, zone) {
   const end = validToWallClock(row);
   if (end == null) return null;
-  if (isCalendarDayRow(row)) return formatCalendarDay(end);
   return formatWallClock(zone ? zone.show(end) : end);
 }
-
-/**
- * The "Válido desde" text of a history row: `dd/MM/yyyy HH:mm` in the viewer's zone, or the
- * calendar day alone (`dd/MM/yyyy`, unconverted) for a range of days ({@link isCalendarDayRow}).
- *
- * @param {{validFromDate?: string, validToDate?: string, sMFCRSynced?: boolean}} row
- * @param {{show: (raw: string) => string}} [zone]
- */
-export function displayValidFrom(row, zone) {
-  if (!row?.validFromDate) return '';
-  if (isCalendarDayRow(row)) return formatCalendarDay(row.validFromDate);
-  return formatWallClock(zone ? zone.show(row.validFromDate) : row.validFromDate);
-}
-
-// ── Time zones ───────────────────────────────────────────────────────────────
-//
-// Storage and the server keep the wall clock of the SERVER's zone (`serverClock.timeZone`, e.g.
-// `UTC` in production). The window shows and takes every datetime in the BROWSER's zone: a
-// value is converted server → browser to be shown and browser → server before it is sent. The
-// conversion goes through `Intl` with both zone ids, so it is DST-correct (never a fixed offset).
-// With an unknown or invalid server zone nothing is converted and no zone is labelled (the
-// behaviour before the zone was known).
 
 const PARTS_FORMATS = new Map();
 
@@ -436,28 +375,6 @@ export function withZone(text, zoneLabel, ui) {
 export function formatInZone(raw, zone, ui) {
   const shown = zone.show(raw);
   return withZone(formatWallClock(shown), zone.labelAt(shown), ui);
-}
-
-/**
- * The start of a rate inside a sentence (*Desde …*, the delete question, *Tasa vigente … desde …*):
- * {@link formatInZone}, or the calendar day alone for a range of days ({@link isCalendarDayRow}).
- *
- * @param {{validFromDate?: string, validToDate?: string, sMFCRSynced?: boolean}} row
- */
-export function formatStartInSentence(row, zone, ui) {
-  if (!row?.validFromDate) return '';
-  return isCalendarDayRow(row) ? formatCalendarDay(row.validFromDate) : formatInZone(row.validFromDate, zone, ui);
-}
-
-/**
- * The rate in force of a currency entry ({@link buildCurrencyList}) as a row: the listed row it
- * starts with, when the period holds it, else what `currentRates` says — `origin: AUTO` is a
- * downloaded range, `MANUAL` a manual one, with no end known.
- */
-export function currentRateRow(entry) {
-  if (!entry?.validFrom) return null;
-  const listed = (entry.rows ?? []).find((r) => r.validFromDate === entry.validFrom);
-  return listed ?? { validFromDate: entry.validFrom, validToDate: null, sMFCRSynced: entry.automatic === true };
 }
 
 /** `ETGO_ConvRateOverlap`, the server's refusal of an overlapping range. */

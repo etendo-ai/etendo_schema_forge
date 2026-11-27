@@ -77,8 +77,7 @@ describe('CurrencyRatesList — rate rows', () => {
 
   it.each([
     ['open-ended manual range', MANUAL_ROW.id, '18/11/2026 14:30', '—', '1,1000'],
-    // QA CP-3: a downloaded range is a calendar day, shown without time or zone conversion.
-    ['downloaded daily range closing at 00:00', SYNCED_ROW.id, /^17\/11\/2026$/, /^17\/11\/2026$/, '1.234,5000'],
+    ['downloaded daily range closing at 00:00', SYNCED_ROW.id, '17/11/2026 00:00', '17/11/2026 23:59', '1.234,5000'],
   ])('%s: dates and a 4-decimal rate as displayed', (_label, id, from, to, rate) => {
     renderList();
     const row = screen.getByTestId(`convrate-row-${id}`);
@@ -93,12 +92,7 @@ describe('currencySubtitle — Desde of the rate in force', () => {
   const zone = createZoneView('UTC', 'America/Argentina/Buenos_Aires', new Date('2026-11-26T15:00:00Z'), 'es_ES');
   const ui = (key, p) => `${key}:${p?.date ?? ''}`;
 
-  it('a range of calendar days keeps its day (QA CP-3)', () => {
-    const entry = { automatic: false, validFrom: '2026-11-26T00:00:00', rows: [] };
-    expect(currencySubtitle(entry, ui, '2026-11-26', zone)).toBe('convRateSince:26/11/2026');
-  });
-
-  it('a range entered with a time is converted to the viewer zone', () => {
+  it('the start of the rate in force is converted to the viewer zone and named', () => {
     const entry = { automatic: false, validFrom: '2026-11-26T12:00:00', rows: [] };
     expect(currencySubtitle(entry, (key, p) => (key === 'convRateWithZone' ? `${p.text} (${p.zone})` : `${key}:${p.date}`), '2026-11-26', zone))
       .toBe(`convRateSince:26/11/2026 09:00 (${zone.label})`);
