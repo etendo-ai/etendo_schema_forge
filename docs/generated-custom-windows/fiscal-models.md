@@ -127,6 +127,10 @@ FmListPage → useDeclarationsAutoCompute
   buckets above so a presented declaration gets its one bootstrap compute and is then **frozen**:
   see "Freeze once presented — recalculation/re-presentation guard (ETP-5438)" below for the full
   rationale (`neverModifiedFn`, `getCachedFiscalCompute`, and the backend defense-in-depth).
+  Like the draft and other buckets, it is enabled by `apiBaseUrl` alone: a cookie session has no
+  `token` (the request helper authenticates by itself), and the former `token && apiBaseUrl` gate
+  left every legacy submitted declaration on the "…" computing indicator forever (ETP-5716
+  OBS-5/OBS-18, ETP-6037 problem 1).
 - `computeFn` = `computeBoxes303Real(decl, { token, apiBaseUrl })` (`models/303/listBehavior303.js`)
   → `GET /fiscal303/boxes?year=&period=` (303) or `compute349Operators(decl, { token, apiBaseUrl })`
   (`models/349/listBehavior349.js`) → `GET /fiscal349/operators?year=&period=` (349).

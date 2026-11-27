@@ -670,7 +670,10 @@ function useDeclarationsAutoCompute(decls, { token, apiBaseUrl, onComputeUpdate 
       checkModifiedFn: neverModifiedFn,
       token,
       apiBaseUrl,
-      enabled:         Boolean(token && apiBaseUrl),
+      // ETP-5716 OBS-5/OBS-18 (ETP-6037): gated like the draft/other buckets. A cookie session has
+      // no `token` (the request helper authenticates on its own); requiring one left every legacy
+      // submitted declaration on the "…" computing indicator forever.
+      enabled:         Boolean(apiBaseUrl),
     }).computedMap);
   }
 
