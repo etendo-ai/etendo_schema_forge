@@ -2017,6 +2017,6 @@ in com.etendoerp.go), so an exported file re-imports unchanged.
 
 The form, the inline grid and the import validate Contacts through the shared core validator (`docs/shared-field-validation.md`).
 
-- **Phone limit is 15 everywhere.** `etgoPhone` declares `maxLength: 15` in `decisions.json`; the form input, the inline grid cell and the import review queue all enforce it, and the native `maxLength` reaches the rendered input.
+- **Phone limit is 15 everywhere.** `etgoPhone` declares `maxLength: 15` in `decisions.json`; the form input, the inline grid cell and the import review queue all enforce it, and the native `maxLength` reaches the rendered input. Import measures the normalised phone (spaces stripped) while the form and grid measure the raw input.
 - **Length comes from the contract.** Every flow reads the contract's declared `maxLength`, not a field-name heuristic.
 - **Text-length table scope.** The Contacts text-length table only covers fields whose contract declares no length. The unsafe-character check and the tax-ID checks are unchanged.

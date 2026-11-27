@@ -707,7 +707,7 @@ function getReadOnlyBgClass(isReadOnly) {
  * `committedValue` is the same `data?.[f.key] ?? ''` the default path reads, so the
  * value semantics are identical — only the commit TIMING differs.
  */
-function DeferredInput({ f, committedValue, onCommit, onFieldBlur, onValidateBlur, placeholder, className, required, disabled, maxLength, nativeProps }) {
+function DeferredInput({ f, committedValue, onCommit, onFieldBlur, onValidateBlur, placeholder, className, required, disabled, nativeProps }) {
   const [buffer, setBuffer] = useState(committedValue);
   const focusedRef = useRef(false);
   // The last value the USER actually committed (or that arrived externally while the field
@@ -802,7 +802,6 @@ function DeferredInput({ f, committedValue, onCommit, onFieldBlur, onValidateBlu
       className={className}
       required={required}
       disabled={disabled}
-      maxLength={maxLength}
       {...nativeProps}
     />
   );
