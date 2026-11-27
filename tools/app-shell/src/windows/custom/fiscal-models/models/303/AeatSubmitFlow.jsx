@@ -130,11 +130,15 @@ export function classifySubmitOutcome(data) {
 export function resolveErrorCodeKey(errorCode) {
   if (errorCode === 'MISSING_PRESENTER') return 'fm.aeat.error.missingPresenter';
   if (errorCode === 'NO_CERTIFICATE') return 'fm.aeat.error.noCertificate';
-  // ETP-5716: the validation that precedes a real presentation got no answer and the server
-  // is set to stop (FiscalAeatSubmissionSupport.PRESENT_WHEN_VALIDATOR_UNANSWERED = false).
+  // ETP-5716: the validation that precedes a real presentation got no answer AND the server is
+  // set to stop on that. Today it is not: FiscalAeatSubmissionSupport.PRESENT_WHEN_VALIDATOR_
+  // UNANSWERED is true, so in production an unanswered validator — the EV0 "model not loaded"
+  // answer included — goes ahead to the presentation and this code is never sent. Kept for the
+  // day the policy flips.
   if (errorCode === 'VALIDATION_UNAVAILABLE') return 'fm.aeat.error.validationUnavailable';
-  // ETP-5716: "Validar sin presentar" answered by a validator that has not loaded this model /
-  // exercise yet (AEAT EV0 "No existe información del modelo"): no verdict about the file.
+  // ETP-5716: "Validar sin presentar" (test mode) answered by a validator that has not loaded
+  // this model / exercise yet (AEAT EV0 "No existe información del modelo"): no verdict about
+  // the file. Test mode only — in production the same answer proceeds to the presentation.
   if (errorCode === 'NOT_VALIDATED') return 'fm.aeat.error.notValidated';
   if (errorCode === 'ALREADY_SUBMITTED') return 'fm.aeat.error.alreadySubmitted';
   // Modelo 390 only (ETP-5716): the backend refuses a filing with blocking incidents.
