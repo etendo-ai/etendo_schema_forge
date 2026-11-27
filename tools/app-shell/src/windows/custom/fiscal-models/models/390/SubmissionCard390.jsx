@@ -5,21 +5,40 @@
 import React from 'react';
 import { BankIcon } from '@phosphor-icons/react';
 import { formatCalendarDate } from '@/lib/dateOnly.js';
+import { formatDateTime } from '@/lib/formatDateTime.js';
 
 const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+function instantOf(raw) {
+  const at = raw ? new Date(raw) : null;
+  return at && !Number.isNaN(at.getTime()) ? at : null;
+}
+
+/** `yyyy-MM-dd` of an instant in the viewer's local calendar. */
+function localDayKey(at) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}`;
+}
+
 /**
- * The presentation date as shown: a date-only value (manual registration) through the calendar
- * formatter, the AEAT's own timestamp text verbatim, otherwise the recorded `submittedAt`.
+ * The presentation date as shown:
+ *   - a date-only value (manual registration): with the time of `submittedAt` when the record was
+ *     made that same local day (ETP-5716 OBS-16: the registration's own instant), else the date
+ *     alone through the calendar formatter (a presentation registered on a later day has no
+ *     known time);
+ *   - the AEAT's own timestamp text, verbatim;
+ *   - otherwise the recorded `submittedAt` instant (date and time).
  */
 export function presentationDateLabel(submission, bcpLocale = 'es-ES') {
   const raw = String(submission?.presentationDate ?? '').trim();
-  if (DATE_ONLY_RE.test(raw)) return formatCalendarDate(raw, bcpLocale);
+  const at = instantOf(submission?.submittedAt);
+  if (DATE_ONLY_RE.test(raw)) {
+    return at && localDayKey(at) === raw
+      ? formatDateTime(at, bcpLocale)
+      : formatCalendarDate(raw, bcpLocale);
+  }
   if (raw) return raw;
-  const at = submission?.submittedAt ? new Date(submission.submittedAt) : null;
-  return at && !Number.isNaN(at.getTime())
-    ? at.toLocaleString(bcpLocale, { dateStyle: 'short', timeStyle: 'short' })
-    : '—';
+  return at ? formatDateTime(at, bcpLocale) : '—';
 }
 
 function Row({ label, value, testId }) {

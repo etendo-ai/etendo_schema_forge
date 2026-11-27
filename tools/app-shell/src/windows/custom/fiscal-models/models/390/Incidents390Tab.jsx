@@ -7,7 +7,7 @@ import React from 'react';
 import { CaretRightIcon } from '@phosphor-icons/react';
 import { IncidentsTab } from '../../FmTabContent.jsx';
 import {
-  incidentActions390, incidentOrigin390, incidentText390, normalizeIncidents390,
+  incidentActions390, incidentOrigin390, incidentSeverityLabel390, incidentText390, normalizeIncidents390,
 } from './incidents390.js';
 
 function availableActions(item, handlers) {
@@ -74,6 +74,7 @@ export default function Incidents390Tab({ incidents, gatingBlocking, onGoToBox, 
         getMessage={(item) => incidentText390(item, t)}
         getOrigin={(item) => incidentOrigin390(item, t)}
         renderAction={renderAction}
+        getSeverityLabel={(item) => incidentSeverityLabel390(item, t)}
         data-testid="IncidentsTab__383a9b" />
     </div>
   );

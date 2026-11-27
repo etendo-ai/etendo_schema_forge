@@ -17,7 +17,7 @@ import { apiFetch } from '@etendo-ai/app-shell-core/auth/api';
 import {
   groupIncidents390, incidentText390, incidentActions390, organizationPath,
   nameWarningsFromIncidents390, ORGANIZATION_SECTION_ANCHOR, INCIDENT_KEY_PREFIX_390,
-  incidentOrigin390, normalizeIncidents390,
+  incidentOrigin390, normalizeIncidents390, incidentSeverityLabel390,
 } from '../incidents390.js';
 import { validate390, generate390File, fetchBoxes390 } from '../fm390Api.js';
 import {
@@ -369,6 +369,22 @@ describe('incompleteYear390 — the exercise has no periods in the fiscal calend
 
   it('has its texts in every locale', () => {
     ['fm.m390.incomplete_year.months', 'fm.m390.incomplete_year.all', 'fm.m390.incomplete_year.go_to_calendar', 'fm.aeat.error.incompleteFiscalYear']
+      .forEach((k) => [esES, enUS, esAR].forEach(d => expect(d.genericLabels?.[k] ?? d[k], k).toBeTruthy()));
+  });
+});
+
+// ETP-5716 OBS-14 — a stored AEAT error does not block the 390, so it is not labelled "Bloqueante".
+describe('incidentSeverityLabel390', () => {
+  const t = (k) => k;
+  it('labels a blocking AEAT incident "Error AEAT" and leaves every other row generic', () => {
+    expect(incidentSeverityLabel390({ origin: 'AEAT-EMALREG', severity: 'block' }, t))
+      .toBe('fm.incidents.severity.aeatError');
+    expect(incidentSeverityLabel390({ origin: 'AEAT-A001', severity: 'warn' }, t)).toBeNull();
+    expect(incidentSeverityLabel390({ origin: 'BLOCK9_MISMATCH', severity: 'block' }, t)).toBeNull();
+  });
+
+  it('has its text in every locale', () => {
+    ['fm.incidents.severity.aeatError', 'fm.aeat.error.notValidated', 'fm.aeat.result.test_error.title']
       .forEach((k) => [esES, enUS, esAR].forEach(d => expect(d.genericLabels?.[k] ?? d[k], k).toBeTruthy()));
   });
 });

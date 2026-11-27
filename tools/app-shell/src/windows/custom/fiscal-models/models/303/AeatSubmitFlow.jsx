@@ -133,12 +133,32 @@ export function resolveErrorCodeKey(errorCode) {
   // ETP-5716: the validation that precedes a real presentation got no answer and the server
   // is set to stop (FiscalAeatSubmissionSupport.PRESENT_WHEN_VALIDATOR_UNANSWERED = false).
   if (errorCode === 'VALIDATION_UNAVAILABLE') return 'fm.aeat.error.validationUnavailable';
+  // ETP-5716: "Validar sin presentar" answered by a validator that has not loaded this model /
+  // exercise yet (AEAT EV0 "No existe información del modelo"): no verdict about the file.
+  if (errorCode === 'NOT_VALIDATED') return 'fm.aeat.error.notValidated';
   if (errorCode === 'ALREADY_SUBMITTED') return 'fm.aeat.error.alreadySubmitted';
   // Modelo 390 only (ETP-5716): the backend refuses a filing with blocking incidents.
   if (errorCode === 'BLOCKING_INCIDENTS') return 'fm.aeat.error.blockingIncidents';
   // Modelo 390 only (ETP-5716): the exercise has no periods in the fiscal calendar.
   if (errorCode === 'INCOMPLETE_FISCAL_YEAR') return 'fm.aeat.error.incompleteFiscalYear';
   return null;
+}
+
+/**
+ * Title of the error result: a presentation stopped by the validator's errors (`stage:
+ * validation`), a "Validar sin presentar" that could not be completed (`testMode`: it was a
+ * validation, never a presentation — ETP-5716 OBS-15), or a presentation that failed.
+ */
+export function submitErrorTitle(response, specificKey, t) {
+  if (response?.stage === 'validation' && !specificKey) {
+    // ETP-5716: the server validates before a real presentation; the validator's errors stopped
+    // it — nothing was presented.
+    return t('fm.aeat.result.validation_rejected.title') ?? 'Declaration not submitted: the AEAT found errors when validating it';
+  }
+  if (response?.testMode === true) {
+    return t('fm.aeat.result.test_error.title') ?? 'The validation could not be completed';
+  }
+  return t('fm.aeat.result.error.title') ?? 'The submission could not be completed';
 }
 
 // ── UI ──────────────────────────────────────────────────────────────────────
@@ -636,16 +656,15 @@ export default function AeatSubmitFlow({ decl, orgIdent, identChecks, liveBoxes,
             } else {
               errorBody = <div style={{ marginTop: 4 }}>{t('fm.aeat.error.generic') ?? 'Unknown error. Please try again.'}</div>;
             }
+            const notValidated = response?.errorCode === 'NOT_VALIDATED';
             return (
               <>
                 <Banner
-                  tone="danger"
-                  icon={<WarningOctagonIcon size={18} data-testid="OctagonAlert__aeatError" />}
-                  title={response?.stage === 'validation' && !specificKey
-                    // ETP-5716: the server validates before a real presentation; the validator's
-                    // errors stopped it — nothing was presented.
-                    ? (t('fm.aeat.result.validation_rejected.title') ?? 'Declaration not submitted: the AEAT found errors when validating it')
-                    : (t('fm.aeat.result.error.title') ?? 'The submission could not be completed')}
+                  tone={notValidated ? 'warning' : 'danger'}
+                  icon={notValidated
+                    ? <WarningIcon size={18} data-testid="TriangleAlert__aeatNotValidated" />
+                    : <WarningOctagonIcon size={18} data-testid="OctagonAlert__aeatError" />}
+                  title={submitErrorTitle(response, specificKey, t)}
                   data-testid="Banner__aeatError">
                   {errorBody}
                 </Banner>

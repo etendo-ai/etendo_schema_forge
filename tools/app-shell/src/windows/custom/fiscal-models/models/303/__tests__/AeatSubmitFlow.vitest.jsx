@@ -27,6 +27,7 @@ import AeatSubmitFlow, {
   buildLocalDeclarationData,
   classifySubmitOutcome,
   resolveErrorCodeKey,
+  submitErrorTitle,
 } from '../AeatSubmitFlow.jsx';
 import { AeatResultBanner } from '../AeatResultBanner.jsx';
 
@@ -131,6 +132,21 @@ describe('resolveErrorCodeKey', () => {
     expect(resolveErrorCodeKey('SUBMISSION_FAILED')).toBeNull();
     expect(resolveErrorCodeKey(undefined)).toBeNull();
     expect(resolveErrorCodeKey('SOMETHING_ELSE')).toBeNull();
+  });
+
+  // ETP-5716: the validator has not loaded the model / exercise (AEAT EV0) — not a rejection.
+  it('maps NOT_VALIDATED to its own message', () => {
+    expect(resolveErrorCodeKey('NOT_VALIDATED')).toBe('fm.aeat.error.notValidated');
+  });
+});
+
+describe('submitErrorTitle (ETP-5716 OBS-15)', () => {
+  const t = (k) => k;
+  it('titles a failed test-mode run as a validation, a production one as a presentation', () => {
+    expect(submitErrorTitle({ testMode: true }, null, t)).toBe('fm.aeat.result.test_error.title');
+    expect(submitErrorTitle({ testMode: false }, null, t)).toBe('fm.aeat.result.error.title');
+    expect(submitErrorTitle({ testMode: false, stage: 'validation' }, null, t))
+      .toBe('fm.aeat.result.validation_rejected.title');
   });
 });
 

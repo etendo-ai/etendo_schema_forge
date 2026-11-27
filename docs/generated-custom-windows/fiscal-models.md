@@ -4071,6 +4071,14 @@ Out of scope and not shown (the backend may still return them): criterio de caja
 equivalencia, régimen simplificado, REAGYP, bienes usados, agencias de viajes, grupo de entidades,
 prorrata. A layout for another design year plugs in through `getLayout390(layoutYear)`.
 
+**Boxes with no source (ETP-5716 OBS-9 audit).** [31]/[32] (modificación de bases y cuotas por
+concurso de acreedores), [232] (bases imponibles del IVA soportado no deducible) and [113]
+(entregas interiores devengadas por ISP en operaciones triangulares) have no tax-report parameter in
+the classic `AEAT390_2025_Y` report and no input: classic writes them as zero in the file (a null
+bean value is formatted as zeros), so GO receives no box and the cell renders blank, with no pencil.
+Making them editable needs new classic tax-report input parameters (a classic dataset change) —
+pending a product decision; until then the file always carries 0 for them.
+
 - **Cells:** calculated = grey, read-only; totals in bold with the formula. **Manual cells behave
   exactly as the 303's editable boxes** (ETP-5716, `InputCell` mirrors `FmBoxes303`
   `renderBoxCell` / `renderCellInput`): the value is shown formatted with a pencil button
@@ -4319,6 +4327,15 @@ certificate) and downloads it in every case. The validation is a warning, never 
 | errors (`rejected`) | the file; result step with the red banner of the direct presentation listing each error with its AEAT code, a line saying the file was downloaded anyway and the errors are in Incidencias, any AEAT warning below, "Ver incidencias" and "Cerrar". The errors are stored as blocking-severity AEAT incidents (`AEAT-<code>`), like after a direct presentation, and the page re-reads them |
 | no answer (`connection_failure` / `not_validated`) | the file; result step with an amber banner saying it could not be validated and was downloaded without validation; the stored incidents are left as they were |
 
+The AEAT validator answering `EV0 … No existe información del modelo: 390, <year>` (it has not
+loaded that exercise yet) is shown as **not validated** too, never as "La AEAT ha detectado errores":
+no incident is stored. In the direct presentation popup, a "Validar sin presentar" with that answer
+(`errorCode: NOT_VALIDATED`, 303 and 390) shows an amber banner with `fm.aeat.error.notValidated`;
+any result of a test-mode submit is titled `fm.aeat.result.test_error.title` ("No se pudo completar la
+validación") instead of "…la presentación" (`submitErrorTitle` in `AeatSubmitFlow.jsx`). The presenter
+name/NIF stay optional in test mode: the ServValiDos body carries no presenter (only `MODELO`,
+`EJERCICIO`, `PERIODO`, `FIC`/`F01`, `IDI`). Contract: `com.etendoerp.go/docs/aeat-390-endpoints.md`.
+
 An accepted validation (with or without warnings) also attaches the validator's draft PDF to the
 declaration as `VALIDACION-390-<año>-0A.pdf`: it shows in the Justificante tab (the
 page refreshes its list and counter) as proof that the file was validated, and each accepted
@@ -4336,6 +4353,10 @@ every blocking row) > 0 keeps "Resuélvelas antes de generar el fichero"; when t
 nothing (390 passes `ruleBlockingCount`, so AEAT errors alone) it reads "Revísalas antes de presentar
 la declaración." (`fm.incidents.review_sub`). 303 and 349 do not pass the prop and are unchanged. The
 Incidencias card chip and tab badge use the same severity counts.
+The "Severidad" column of a stored AEAT error (`AEAT-<code>`, blocking severity) reads **"Error AEAT"**
+(`fm.incidents.severity.aeatError`) in the 390, not "Bloqueante": it never gates Generar / Presentar
+(ETP-5716 OBS-14). Wiring: `IncidentsTab` takes an optional `getSeverityLabel(inc)` (null keeps the
+generic label); the 390 passes `incidentSeverityLabel390`. The colour stays red.
 
 While the file is generated and validated, `FileGenModal390` stays open on the loading state of
 the fiscal certificate upload (`fiscal-config/CircularProgress.jsx`, shared with `CertModal`) with
@@ -4418,6 +4439,9 @@ and no compute runs on mount. Above the cards, the **Presentación en la AEAT** 
 (`SubmissionCard390`) shows date and time, justificante number, CSV and user from
 `manualData.submission` (`method: 'aeat_telematic' | 'manual'`; a date-only value is formatted with `formatCalendarDate`, the AEAT's own
 timestamp text is shown verbatim; a declaration presented before this data existed shows "—").
+A date-only value (manual registration) also shows the time of `submittedAt` when the registration
+was recorded that same local day (`formatDateTime`, `dd/MM/yyyy HH:mm`); recorded on a later day the
+time is not the presentation's, so only the date is shown (ETP-5716 OBS-16).
 
 **Crear declaración sustitutiva** (`createSubstitute390`): `POST /declarations` with
 `type: 'com'` (allowed next to the ordinary — the single-ordinary rule only counts ordinaries),
