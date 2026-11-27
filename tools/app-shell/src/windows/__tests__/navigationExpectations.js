@@ -18,7 +18,7 @@ const groups = {
   // ETP-6389 — Tesorería: Cobro, Pago, Cuentas, an Informes link holding only the aging reports,
   // and Condiciones de pago (moved from Settings). ETP-6247 — Remesas moved here too, after Pago.
   Treasury: 'payment-in payment-out remittance financial-account report-viewer-treasury payment-term',
-  Finance: 'chart-of-accounts cost-center service-project general-ledger-configuration calendar assets asset-group amortization not-posted-documents manual-journals report-viewer-finance',
+  Finance: 'chart-of-accounts cost-center service-project general-ledger-configuration calendar assets asset-group amortization not-posted-documents manual-journals conversion-rates-legacy report-viewer-finance',
   // ETP-6380 — Impuestos: the fiscal windows out of Finance, an Informes link holding only the Tax
   // Report, and Configuración fiscal (moved from Settings).
   Taxes: 'tax tax-category fiscal-monitor fiscal-config fiscal-models report-viewer-taxes',
@@ -59,6 +59,11 @@ const exceptions = {
   // OBUIAPP permission documented in app-shell-functional-flows.md. The AD
   // cache omits this namespace; its "Not Posted Documents" row has null IDs.
   'not-posted-documents': { obuiappProcessId: 'D6AB95CE52D34E1599590526115E26C6' },
+  // ETP-6365 — window 116 has two alternate entries on one route, `currency-conversion-v2`
+  // deciding: the redesign (Settings) needs the capability, the legacy one (Finance, its
+  // pre-ETP-6365 place and label) is hidden by it. Exactly one is ever visible.
+  'conversion-rates': { windowId: '116', capability: 'currencyConversionV2' },
+  'conversion-rates-legacy': { windowId: '116', hideWhenCapability: 'currencyConversionV2', path: 'conversion-rates' },
   // Independent content gates: ReportViewerPage.jsx and SmartScanPage.jsx.
   'report-viewer-finance': { accessWindowId: 'D647D118F5014D00AF47A636B2CD0DD3', path: 'report-viewer?category=finance' },
   'report-viewer-inventory': { accessWindowId: '6346B88619F948F9A42224BDB0B239FA', path: 'report-viewer?category=inventory' },
@@ -123,9 +128,19 @@ export const navigationProfiles = [
   { label: 'all optional entries enabled', apps: ['quick-order', 'spike-hello-app'], marketplace: true, proof: true },
 ];
 
+/**
+ * ETP-6365 — drops every `hideWhenCapability` entry whose capability another expected entry
+ * declares: when the capability-gated member of an alternate pair is expected, its capability is
+ * granted in that scenario, so the alternate is hidden. Idempotent.
+ */
+export function withoutHiddenAlternates(entries) {
+  const granted = new Set(entries.map(entry => entry.capability).filter(Boolean));
+  return entries.filter(entry => !entry.hideWhenCapability || !granted.has(entry.hideWhenCapability));
+}
+
 export function expectedNavigation({ apps = [], marketplace = false, proof = false } = {}) {
-  return [...defaultNavigation, ...optionalNavigation.filter(entry =>
-    (!entry.proof || proof) && (!entry.marketplace || marketplace) && (!entry.app || apps.includes(entry.app)))];
+  return withoutHiddenAlternates([...defaultNavigation, ...optionalNavigation.filter(entry =>
+    (!entry.proof || proof) && (!entry.marketplace || marketplace) && (!entry.app || apps.includes(entry.app)))]);
 }
 
 // Build typed identities FIRST, then use the same flattening boundary as the
@@ -156,5 +171,5 @@ export const catalogFeatureFlags = [...defaultNavigation, ...optionalNavigation]
 export function expectNavigation(groups, expected) {
   const actual = groups.flatMap(group => group.items.map(item => ({ name: item.name, group: group.group, path: item.path || item.name })));
   const byName = (a, b) => a.name.localeCompare(b.name);
-  expect(actual.sort(byName)).toEqual(expected.map(({ name, group, path }) => ({ name, group, path })).sort(byName));
+  expect(actual.sort(byName)).toEqual(withoutHiddenAlternates(expected).map(({ name, group, path }) => ({ name, group, path })).sort(byName));
 }

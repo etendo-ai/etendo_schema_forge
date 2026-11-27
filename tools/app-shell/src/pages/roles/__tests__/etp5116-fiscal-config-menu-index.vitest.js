@@ -48,4 +48,14 @@ describe('ETP-5116 — fiscal-config menu.json windowId (roles matrix override)'
     expect(entry.group).toBe('Taxes');
     expect(entry.label).toBe('Fiscal Configuration');
   });
+
+  // ETP-6365 — window 116 has two alternate entries (Settings «Currency Conversion», capability
+  // currencyConversionV2; Finance «Conversion Rates», hideWhenCapability). The matrix keeps one row:
+  // the current one, never the legacy alternate listed earlier.
+  it('indexes window 116 under the current Settings entry, not its legacy alternate', () => {
+    const entry = buildMenuWindowIndex().get('116');
+    expect(entry.group).toBe('Settings');
+    expect(entry.label).toBe('Currency Conversion');
+    expect(entry.alternate).toBeUndefined();
+  });
 });

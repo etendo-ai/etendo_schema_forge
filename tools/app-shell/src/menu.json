@@ -448,6 +448,14 @@
           "routeOnly": true
         },
         {
+          "name": "conversion-rates-legacy",
+          "label": "Conversion Rates",
+          "favname": "Conversion Rates",
+          "path": "conversion-rates",
+          "windowId": "116",
+          "hideWhenCapability": "currencyConversionV2"
+        },
+        {
           "name": "report-viewer-finance",
           "label": "Reports",
           "favname": "Finance Reports",
@@ -637,7 +645,8 @@
           "name": "conversion-rates",
           "label": "Currency Conversion",
           "favname": "Currency Conversion",
-          "windowId": "116"
+          "windowId": "116",
+          "capability": "currencyConversionV2"
         }
       ]
     },

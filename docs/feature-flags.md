@@ -256,7 +256,7 @@ its behaviour is documented in its topic doc and in `com.etendoerp.go`
 | `bank-bounce-suggestions` | `bank-bounce-suggestions` | ETP-5581 (TTL placeholder 2026-12-31). Backend-only, per account: gates the automatic bounce-pair suggestions of the bank reconciliation for PSD2-synced accounts (the "Rechazos bancarios" section of the auto-match modal, the pair review in the reconciliation panel, accepting a pair). The SPA only renders what the auto-match answer carries. Honouring already-discarded lines is gated too: with the flag off they are plain pending lines, as before ETP-5581; only the stored account counter *Por conciliar* keeps leaving them out (known limitation in the registry entry). Registered on day one, before any code; backend: `com.etendoerp.go` `docs/feature-flags-and-tenant-upgrade.md` |
 | `billing-reconciliation-schedule` | `billing-reconciliation-schedule` | Go-live (flag plus production Process Request): "2.10 Billing reconciliation go-live" in `com.etendoerp.go` `docs/open-and-notable-topics.md`; behaviour: "`billing-reconciliation-schedule` (ETP-5048)" in `com.etendoerp.go` `docs/feature-flags-and-tenant-upgrade.md` |
 | `bp-portal-link` | `bp-self-service-portal` | [BP self-service portal](plans/2026-09-10-bp-self-service-portal.md), extended to every sales document email with 48 h links and renewal by [ETP-6209](plans/2026-11-11-customer-portal-sales-documents.md) — with the flag on, the portal link replaces the email's download button; backend: `com.etendoerp.go` `docs/feature-flags-and-tenant-upgrade.md` |
-| `currency-conversion-v2` | `currency-conversion-v2` | ETP-6365 (TTL placeholder 2027-03-31). Backend-only, per account (lowercase `email` rules): `CurrencyConversionV2Flag` gates the manual conversion rate writes of `conversion-rates` (`createManualCurrency`, `createManualRate`, `updateManualRate`, `previewManualRate`, DELETE: `403 feature_disabled` when off, every channel; the MCP only sees the read actions). The browser reads `capabilities.currencyConversionV2` off `SFWindowAccessMap` (`CURRENCY_CONVERSION_V2_CAPABILITY`, `CurrencyConversionRoute`): on, the redesigned Currency Conversion page; off, the generated window read-only under its old name. No web key. The menu entry is not gated (open item in the registry); window guide: [`conversion-rates.md`](generated-custom-windows/conversion-rates.md); backend: `com.etendoerp.go` `docs/feature-flags-and-tenant-upgrade.md` |
+| `currency-conversion-v2` | `currency-conversion-v2` | ETP-6365 (TTL placeholder 2027-03-31). Backend-only, per account (lowercase `email` rules): `CurrencyConversionV2Flag` gates the manual conversion rate writes of `conversion-rates` (`createManualCurrency`, `createManualRate`, `updateManualRate`, `previewManualRate`, DELETE: `403 feature_disabled` when off, every channel; the MCP only sees the read actions). The browser reads `capabilities.currencyConversionV2` off `SFWindowAccessMap` (`CURRENCY_CONVERSION_V2_CAPABILITY`, `CurrencyConversionRoute`): on, the redesigned Currency Conversion page; off, the generated window read-only under its old name. No web key. The menu has two alternate entries on the `conversion-rates` route: on, *Currency Conversion* in System › Settings (`capability: "currencyConversionV2"`); off or capabilities not loaded yet, the pre-ETP-6365 *Conversion Rates* / *Rangos de conversión* in Finance (`conversion-rates-legacy`, `hideWhenCapability: "currencyConversionV2"`, see *Menu entries gated by a capability* below); window guide: [`conversion-rates.md`](generated-custom-windows/conversion-rates.md); backend: `com.etendoerp.go` `docs/feature-flags-and-tenant-upgrade.md` |
 | `demo-data-transfer` | `demo-data-transfer` | Retired in `com.etendoerp.go` by ETP-5480 (`docs/feature-flags-and-tenant-upgrade.md`, "`demo-data-transfer` — retired"); the registry entry still awaits its retirement |
 | `environment-access-enforcement-off` | `environment-access-enforcement-kill-switch` | [Paid tenant infrastructure](paid-tenant-infrastructure.md) §3.7; local testing: [`stripe-local-testing.md`](stripe-local-testing.md) "The 402 body and the kill switch"; operating it: "Operating environment-access enforcement" in `com.etendoerp.go` `docs/feature-flags-and-tenant-upgrade.md` |
 | `fiscal-model-390` | `fiscal-model-390` | ETP-5716 (TTL 2027-01-01): hides the whole Modelo 390 — the catalog answer drops it and marks it `_unavailable`, and every surface (catalog drawer, declarations list, Organization's Modelo 390 section) reacts to that answer; [fiscal models guide](generated-custom-windows/fiscal-models.md) "Modelo 390 behind the backend-only flag `fiscal-model-390`"; backend: `com.etendoerp.go` `docs/feature-flags-and-tenant-upgrade.md` |
@@ -298,6 +298,28 @@ then widen. Details: `com.etendoerp.go` `docs/feature-flags-and-tenant-upgrade.m
 fallback), **default `false`**, in each environment (production, experimental, staging, development),
 then add per-account targeting rules on the lowercase `email` attribute for the accounts to enable. Until
 the key exists it resolves to `false` and nobody is targeted.
+
+### Menu entries gated by a capability
+
+A backend-only flag reaches the sidebar through `SFWindowAccessMap`'s `capabilities`, read by two
+`menu.json` item keys. Both go through one function, `isHiddenByCapability`
+(`tools/app-shell/src/lib/capabilityVisibility.js`), used by `filterMenuGroupsByAccess`
+(`windows/registry.js`), the command palette and SideMenu's favorite labels:
+
+| Key | Item shown when | While the map is null / loading |
+|---|---|---|
+| `"capability": "<key>"` | `capabilities[key] === true` | hidden (fails closed) |
+| `"hideWhenCapability": "<key>"` (ETP-6365) | `capabilities[key] !== true` | shown (the default) |
+
+A pair — one entry with `capability: K`, its alternate with `hideWhenCapability: K` — is exactly one
+visible at a time, the alternate by default, so nobody sees both. When both open the same route,
+the alternate gets its own `name` and declares the shared route as a plain `path` (no query
+string): name-keyed lookups (React keys, test ids, `windowMap`, the command palette) never collide,
+links and the Copilot's window index (`windowRoutes.js`) go to `path`, the favorite label of the
+route follows the member visible now, and the roles matrix (`buildMenuWindowIndex`) prefers the
+non-alternate entry for the shared window id. The only pair today is `conversion-rates` /
+`conversion-rates-legacy` (`currency-conversion-v2`). Like every flag gate it hides an entry point,
+it is not an access boundary: the route and the backend decide on their own.
 
 ## Personal business-grid views
 

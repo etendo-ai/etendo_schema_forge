@@ -23,10 +23,15 @@ entry `custom/conversion-rates/index.jsx` → `CurrencyConversionRoute.jsx` choo
   `previewManualRate`, DELETE) with 403 `feature_disabled` on every channel, and the MCP only sees
   the read actions.
 - **While the access map loads:** a progress bar, so a reload never flashes the other page.
-- **Not gated:** the menu entry. It keeps the post-ETP-6365 label *Currency Conversion* /
-  *Conversión de divisas* in System › Settings for both states, because `menu.json` can only show an
-  item when a flag or capability is true (no negated axis, no per-state label). Open item
-  `menu-entry-not-gated` in the registry lists the options.
+- **Menu:** two alternate entries open the same `/conversion-rates` route, decided by the same
+  capability: on, *Currency Conversion* / *Conversión de divisas* in System › Settings
+  (`conversion-rates`, `capability: "currencyConversionV2"`); off — and while the capability map is
+  still loading —, the pre-ETP-6365 entry *Conversion Rates* / *Rangos de conversión* in Finance at
+  its original place, after *Asientos manuales* (`conversion-rates-legacy`, `path: "conversion-rates"`,
+  `hideWhenCapability: "currencyConversionV2"`). Exactly one is visible, in the sidebar and the
+  command palette; a favorite of the route takes the label of the visible one; the Roles matrix
+  lists window 116 once, under Settings. See `docs/feature-flags.md` → *Menu entries gated by a
+  capability*.
 
 ## What this window should allow
 - list the conversion rates of each currency pair with their validity range (date and time)
@@ -49,7 +54,7 @@ separate decision.
 
 ## Interaction model
 - **Route:** `/conversion-rates` and `/conversion-rates/:recordId` (unchanged). Both render the same page; there is no drill-in detail since the redesign.
-- **Menu:** **Settings** group (section **System**, *Sistema → Configuración*) in `tools/app-shell/src/menu.json`, last item (`windowId: "116"`, label `Currency Conversion`, translated through the `menus` / `windows` entries of the locale files). Breadcrumb *Configuración / Conversión de divisas*. It was in the **Finance** group until the ETP-6365 QA. The Roles window (*Configuración → Roles*, access matrix) groups its rows by the same `menu.json` entry (matched by `windowId`), so it lists the window under Configuración too; there is no second source to keep in sync.
+- **Menu:** (flag on; off, see *Feature flag* above) **Settings** group (section **System**, *Sistema → Configuración*) in `tools/app-shell/src/menu.json`, last item (`windowId: "116"`, `capability: "currencyConversionV2"`, label `Currency Conversion`, translated through the `menus` / `windows` entries of the locale files). Breadcrumb *Configuración / Conversión de divisas*. It was in the **Finance** group until the ETP-6365 QA. The Roles window (*Configuración → Roles*, access matrix) groups its rows by the same `menu.json` entry (matched by `windowId`), so it lists the window under Configuración too; there is no second source to keep in sync.
 - **Implementation type:** custom window — `layoutType: "custom"` in `artifacts/conversion-rates/decisions.json`; code in `tools/app-shell/src/windows/custom/conversion-rates/`, registered in `customLoaders` (`windows/registry.js`), which wins over the generated loader. The pipeline never overwrites these files (a regeneration writes `index.jsx.new` next to them at most).
 - **Toolbar (design v3):** on the left the quick filters, always shown — there is no Filtros button to show / hide them, by design request of the reporter: **Divisa** (Todas las divisas + every currency with rates), **Periodo** (Últimos 30 días — default —, Este mes, Este año, Personalizado… with two date fields) and **Estado** (Todos los estados / Vigente / Histórico); on the right Copiar enlace (the filters live in the URL: `currency`, `period`, `from`, `to`, `status`), Ordenar (orders the rates inside each currency by valid from, valid to or rate), Actualizar, **Imprimir** and the primary **Nueva divisa**. There is no Origen filter.
 - **Divisas y tasas — one accordion list** (shared `Table` primitives and `RowExpandToggle`, inside the shared `Card`). One row per currency that has rates: every currency with a rate in force (`currentRates`, in its order) plus any other currency with rates in the period, narrowed by Divisa. A row shows chevron, symbol chip, ISO, name, origin badge (Automática / Manual) and, on the right, the forward rate in force `1 EUR = X <symbol>` in bold with a second line: *Descargada hoy HH:mm* (automatic, from `lastDownloadAt`; *Descargada el dd/MM/yyyy HH:mm* when not today) or *Desde dd/MM/yyyy HH:mm* (manual, start of the range in force; *Desde dd/MM/yyyy* for a range of calendar days, see *Downloaded rates are calendar days*). Manual currencies show **+ Nueva tasa**. Currencies start collapsed; filtering by one currency opens it. Names and symbols are always the server's (the translated `C_Currency_Trl` name the GO currency selectors show): from `currentRates` for a currency with a rate in force, else from one `manualCurrencyOptions {withoutRates: false}` read on page load (every active manual currency, by id); `Intl` only when the server gives neither (e.g. a downloaded currency with no rate in force).

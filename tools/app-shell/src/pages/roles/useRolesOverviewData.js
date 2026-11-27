@@ -245,13 +245,19 @@ export function buildMenuWindowIndex() {
       const rawId = item?.windowId ?? item?.obuiappProcessId ?? item?.processId ?? item?.reportId;
       if (rawId == null) return;
       const windowId = String(rawId);
-      const candidate = { group: group.group, label: item.label, groupOrder, itemOrder, hidden: !!item.hidden };
+      const candidate = {
+        group: group.group, label: item.label, groupOrder, itemOrder, hidden: !!item.hidden,
+        ...(item.hideWhenCapability ? { alternate: true } : {}),
+      };
       const existing = index.get(windowId);
       // Prefer this candidate when there's no existing entry yet, or when the
       // first-seen entry for this id was hidden but this one isn't. Any other
       // combination (existing already visible, or both hidden) keeps the
-      // first-encountered entry.
-      if (!existing || (existing.hidden && !candidate.hidden)) {
+      // first-encountered entry. ETP-6365: a `hideWhenCapability` alternate (the legacy
+      // "Conversion Rates" entry of window 116) yields to the visible entry it alternates with,
+      // so the matrix keeps one row for the window, under its current group and label.
+      const replacesAlternate = existing?.alternate && !candidate.alternate && !candidate.hidden;
+      if (!existing || (existing.hidden && !candidate.hidden) || replacesAlternate) {
         index.set(windowId, candidate);
       }
     });

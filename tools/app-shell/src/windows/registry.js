@@ -1,4 +1,5 @@
 import menuConfig from '../menu.json' with { type: 'json' };
+import { isHiddenByCapability } from '../lib/capabilityVisibility.js';
 import { APP_CATALOG } from '../apps-registry.js';
 
 /**
@@ -112,7 +113,10 @@ export function hasAccessibleReportInGroup(groupName, reportAccess) {
  * from the `SFWindowAccessMap` webhook. This check fails CLOSED: an item with a
  * `capability` key is hidden unless `capabilities[item.capability] === true`
  * (a missing/not-yet-loaded `capabilities` map hides it, same convention as
- * `isCapabilityVisible` in `@/lib/capabilityVisibility.js`).
+ * `isCapabilityVisible` in `@/lib/capabilityVisibility.js`). Its negation,
+ * `"hideWhenCapability": "<key>"` (ETP-6365), hides an item when the capability IS on — see
+ * `isHiddenByCapability`. Note the all-null call (`buildMenuGroups`' own) returns the groups
+ * unfiltered, so both members of such a pair are present until the access maps are applied.
  *
  * A third, independent axis (ETP-5240) lets a menu.json item declare
  * `"accessWindowId": "<AD_Window_ID>"` for entries whose target window has no
@@ -210,7 +214,7 @@ export function filterMenuGroupsByAccess(groups, allowedIds, capabilities = null
       return {
         ...group,
         items: group.items.filter(item => {
-          if (item.capability && capabilities?.[item.capability] !== true) return false;
+          if (isHiddenByCapability(item, capabilities)) return false;
           if (item.hideWhenFirstStepsDismissed && firstStepsDismissed !== false) return false;
           if (item.requiresGroupReport && !capabilities?.isAdminOrClientAdmin && !groupHasAccessibleReport) {
             return false;
