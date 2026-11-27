@@ -23,8 +23,8 @@ Schema Forge is now **two sibling repos + one runtime module**:
 
 | Where | Location / remote | Holds | Role |
 |-------|-------------------|-------|------|
-| **etendo_schema_forge** (functional) | this repo · `etendosoftware/etendo_schema_forge` | `tools/app-shell/**`, `artifacts/**`, `docs/generated-custom-windows/**`, `e2e/**`, per-window `decisions.json` | **USE** the tooling |
-| **schema_forge_core** (platform/tooling) | sibling `../schema_forge_core` · `etendosoftware/schema_forge_core` | `packages/**`, pipeline CLI (`cli/src/generate-*`, `extract-*`, `pipeline.js`, `push-to-neo.js`, `resolve-curated.js`, migrations), `templates/`, `schemas/` | **CHANGE** the tooling |
+| **etendo_schema_forge** (functional) | this repo · `etendo-ai/etendo_schema_forge` | `tools/app-shell/**`, `artifacts/**`, `docs/generated-custom-windows/**`, `e2e/**`, per-window `decisions.json` | **USE** the tooling |
+| **schema_forge_core** (platform/tooling) | sibling `../schema_forge_core` · `etendo-ai/schema_forge_core` | `packages/**`, pipeline CLI (`cli/src/generate-*`, `extract-*`, `pipeline.js`, `push-to-neo.js`, `resolve-curated.js`, migrations), `templates/`, `schemas/` | **CHANGE** the tooling |
 | **com.etendoerp.go** (runtime) | `{etendo_root}/modules/com.etendoerp.go` | NEO Headless engine (Java), ETGO_SF_* tables | runtime API |
 | shared bucket | duplicated in **both** SF repos | `cli/src/data-fixes/**`, `cli/src/db.js`, `cli/src/lib/**` | DB access from either side |
 

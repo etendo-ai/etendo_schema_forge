@@ -273,28 +273,39 @@ describe('registry', () => {
       expect(reports.items.map(i => i.name)).toContain('report-viewer-finance');
     });
 
-    describe('item gated by BOTH accessWindowId and a capability (invoice-inbox)', () => {
-      const inbox = () => [{ group: 'Purchases', items: [{ name: 'invoice-inbox', accessWindowId: 'AW1', capability: 'invoiceInbox' }] }];
-      const names = result => result.flatMap(g => g.items.map(i => i.name));
+    // Real menu.json entry: Invoice Inbox now has a real AD_Menu node (Procurement Management >
+    // Transactions), so it is identified by `windowId` (role-menu membership) and gated by the
+    // `invoiceInbox` capability. It must NOT declare `accessWindowId` (anchor without a node).
+    describe('invoice-inbox menu entry (windowId + invoiceInbox capability)', () => {
+      const INBOX_WINDOW = '81AC659E93504927B459E0CAE80CE923';
+      const visible = (allowedIds, capabilities, windowAccess = {}) => filterMenuGroupsByAccess(
+        buildMenuGroups(), allowedIds, capabilities, windowAccess,
+      ).flatMap(g => g.items.map(i => i.name)).includes('invoice-inbox');
 
-      it('is visible only when the capability is true and the window access is granted', () => {
-        expect(names(filterMenuGroupsByAccess(inbox(), null, { invoiceInbox: true }, { AW1: 'full' }))).toEqual(['invoice-inbox']);
+      it('declares windowId and capability, and no accessWindowId (anchor-without-node trap)', () => {
+        const purchases = menuConfig.menu.find(g => g.items.some(i => i.name === 'invoice-inbox'));
+        const item = purchases.items.find(i => i.name === 'invoice-inbox');
+        expect(purchases.group).toBe('Purchases');
+        expect(item).toMatchObject({ windowId: INBOX_WINDOW, capability: 'invoiceInbox' });
+        expect(item.accessWindowId).toBeUndefined();
       });
 
-      it('is hidden when the capability is true but the window access is not granted', () => {
-        expect(names(filterMenuGroupsByAccess(inbox(), null, { invoiceInbox: true }, {}))).toEqual([]);
+      it('is visible when its windowId is allowed and the capability is true', () => {
+        expect(visible(new Set([INBOX_WINDOW]), { invoiceInbox: true })).toBe(true);
       });
 
-      it('is hidden when the window access is granted but the capability is false', () => {
-        expect(names(filterMenuGroupsByAccess(inbox(), null, { invoiceInbox: false }, { AW1: 'full' }))).toEqual([]);
+      it('is hidden when its windowId is missing from allowedIds', () => {
+        expect(visible(new Set(), { invoiceInbox: true })).toBe(false);
       });
 
-      it('stays hidden for an admin without the capability (the admin bypass only waives window access)', () => {
-        expect(names(filterMenuGroupsByAccess(inbox(), null, { isAdminOrClientAdmin: true }, {}))).toEqual([]);
+      it('is hidden when the windowId is allowed but the capability is false or absent', () => {
+        expect(visible(new Set([INBOX_WINDOW]), { invoiceInbox: false })).toBe(false);
+        expect(visible(new Set([INBOX_WINDOW]), {})).toBe(false);
       });
 
-      it('is visible for an admin who has the capability, without a window grant', () => {
-        expect(names(filterMenuGroupsByAccess(inbox(), null, { isAdminOrClientAdmin: true, invoiceInbox: true }, {}))).toEqual(['invoice-inbox']);
+      it('stays hidden for an admin without the capability', () => {
+        expect(visible(new Set(), { isAdminOrClientAdmin: true })).toBe(false);
+        expect(visible(new Set([INBOX_WINDOW]), { isAdminOrClientAdmin: true })).toBe(false);
       });
     });
 

@@ -1188,6 +1188,10 @@ flag-retire-check: ## Gate a flag retirement on its open debt, both registries (
 	@test -n "$(FLAG)" || { echo "usage: make flag-retire-check FLAG=<key> [VERIFY=1] [JSON=1] [GO_MODULE=<path>]"; exit 2; }
 	@node scripts/flag-retire-check.js --flag $(FLAG) $(if $(VERIFY),--verify) $(if $(JSON),--json) $(if $(GO_MODULE),--go-module $(GO_MODULE))
 
+.PHONY: flags
+flags: ## Read/edit the feature-flags panel (ARGS="list --mine", ARGS="show <key>", ARGS=help)
+	@node cli/src/flags-panel.js $(ARGS)
+
 # --- XML Regeneration Check ---
 
 ORIGINAL_DB_DIR ?=

@@ -20,8 +20,8 @@ Schema Forge is now **two sibling repos + one runtime module**. Always know whic
 
 | Where | Location / remote | Holds | You touch it to… |
 |-------|-------------------|-------|------------------|
-| **etendo_schema_forge** (functional) | this repo · `etendosoftware/etendo_schema_forge` | `tools/app-shell/**` (windows + custom + generic React components), `artifacts/**`, `docs/generated-custom-windows/**`, `e2e/**`, per-window `decisions.json` | **USE** the tooling: process windows, edit decisions, regenerate UI |
-| **schema_forge_core** (platform/tooling) | sibling `../schema_forge_core` · `etendosoftware/schema_forge_core` | `packages/**`, the pipeline CLI (`cli/src/generate-*`, `extract-*`, `pipeline.js`, `push-to-neo.js`, `resolve-curated.js`, migrations), `templates/`, `schemas/` | **CHANGE** the tooling: generators, extractors, pipeline |
+| **etendo_schema_forge** (functional) | this repo · `etendo-ai/etendo_schema_forge` | `tools/app-shell/**` (windows + custom + generic React components), `artifacts/**`, `docs/generated-custom-windows/**`, `e2e/**`, per-window `decisions.json` | **USE** the tooling: process windows, edit decisions, regenerate UI |
+| **schema_forge_core** (platform/tooling) | sibling `../schema_forge_core` · `etendo-ai/schema_forge_core` | `packages/**`, the pipeline CLI (`cli/src/generate-*`, `extract-*`, `pipeline.js`, `push-to-neo.js`, `resolve-curated.js`, migrations), `templates/`, `schemas/` | **CHANGE** the tooling: generators, extractors, pipeline |
 | **com.etendoerp.go** (runtime) | `{etendo_root}/modules/com.etendoerp.go` | NEO Headless engine (Java), NeoHandler beans, ETGO_SF_* tables | extend runtime API behavior |
 | shared bucket | duplicated in **both** SF repos | `cli/src/data-fixes/**`, `cli/src/db.js`, `cli/src/lib/**` | tenant data-fixes / DB access from either side |
 
