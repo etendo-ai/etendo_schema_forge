@@ -1,3 +1,4 @@
+// @covers tools/app-shell/src/components/contract-ui/DocumentPrintDrawer.jsx
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
@@ -331,5 +332,19 @@ describe('printDocuments (ETP-4728)', () => {
     await printDocuments('order', ['d1'], 'tok');
     expect(openSpy).toHaveBeenCalledWith('blob:generated', '_blank');
     expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  // ETP-4561 (sink inventory row 13): window.open only ever receives the app-created blob URL.
+  it('opens only the app blob URL even when the document id is hostile', async () => {
+    URL.createObjectURL = vi.fn(() => 'blob:generated');
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+    mockFetchByUrl(() => Promise.resolve({
+      ok: true,
+      headers: { get: (h) => (h === 'content-type' ? 'application/pdf' : null) },
+      blob: () => Promise.resolve(new Blob(['%PDF'])),
+    }));
+    await printDocuments('order', ['javascript:alert(1)'], 'tok');
+    expect(openSpy).toHaveBeenCalledTimes(1);
+    expect(openSpy).toHaveBeenCalledWith('blob:generated', '_blank');
   });
 });

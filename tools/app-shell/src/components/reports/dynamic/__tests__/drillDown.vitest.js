@@ -77,6 +77,22 @@ describe('reportDocumentUrl', () => {
       .toBe('https://go.example/app/financial-account/FA1?txn=a%20b');
     expect(reportDocumentUrl({ docWindow: 'x', recordId: '1', docQueryKey: '', docQueryValue: 'v' }, location)).toBe('https://go.example/app/x/1');
   });
+
+  // ETP-4561 (sink inventory row 12): hostile ids from report SQL stay on the app origin.
+  it.each(['javascript:alert(1)', '//evil.example', '../../evil', 'JaVaScRiPt:alert(1)'])('a hostile id %s cannot leave the app origin', (hostile) => {
+    for (const url of [
+      reportDocumentUrl({ docWindow: 'sales-invoice', recordId: hostile }, location),
+      reportDocumentUrl({ docWindow: hostile, recordId: 'INV1' }, location),
+    ]) {
+      expect(url.startsWith('https://go.example/')).toBe(true);
+      expect(new URL(url).origin).toBe('https://go.example');
+    }
+  });
+
+  it('encodes a hostile query key and value', () => {
+    const url = reportDocumentUrl({ docWindow: 'w', recordId: '1', docQueryKey: 'a=b&c', docQueryValue: 'javascript:x#' }, location);
+    expect(url).toBe('https://go.example/app/w/1?a%3Db%26c=javascript%3Ax%23');
+  });
 });
 
 // ETP-6084 D7: a Trial Balance row opens its ledger.

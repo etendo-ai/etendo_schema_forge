@@ -83,4 +83,17 @@ describe('QuotationConfirmModal — handleGoToDoc basePath (ETP-5378)', () => {
     fireEvent.click(screen.getByText(/sqViewOrder/));
     expect(window.location.href).toBe('/sales-order/order-1');
   });
+
+  // ETP-4561 (sink inventory row 15): the navigation target is the app basePath plus a route the
+  // code builds from the fixed `/sales-order/` prefix; a hostile id/documentNo cannot change the
+  // scheme or host, and a hostile document number never reaches the URL at all.
+  it('keeps navigation on the app path for a hostile order id and document number', async () => {
+    const hostile = { id: 'x?a=1#"><script>', documentNo: 'javascript:alert(1)', documentStatus: 'DR', grandTotalAmount: 1 };
+    await confirmAndReachSuccess({ pathname: '/sales-quotation/q-1', orderRows: [hostile] });
+    fireEvent.click(screen.getByText(/sqViewOrder/));
+    expect(window.location.href).toBe('/sales-order/x?a=1#"><script>');
+    expect(window.location.href.startsWith('/sales-order/')).toBe(true);
+    expect(window.location.href).not.toContain('javascript:alert(1)');
+    expect(window.location.href).not.toMatch(/^[a-z]+:/i);
+  });
 });
