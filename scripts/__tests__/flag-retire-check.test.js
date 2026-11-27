@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import {
   acceptanceProblems,
   checkDeferredItems,
+  checkProduction,
   checkRetirementRecord,
   checkSpecs,
   checkVerify,
@@ -54,7 +55,7 @@ function cleanRetirement(overrides = {}) {
       datadog: 'https://app.datadoghq.eu/feature-flags/x — everyone in production since 2026-10-01',
       userDocs: 'https://help.etendo.ai/acct-process-monitor',
     },
-    ticketItems: [{ id: 'qa-manual-run', note: 'QA ran it in two companies', evidence: 'https://etendoproject.atlassian.net/browse/ETP-6425?c=2' }],
+    ticketItems: [{ id: 'qa-manual-run', note: 'QA ran it in two companies', evidence: 'https://etendoproject.atlassian.net/browse/ETP-6425?c=2', env: 'production' }],
     signOff: HUMAN,
     ...overrides,
   };
@@ -247,9 +248,9 @@ describe('checkRetirementRecord — the out-of-registry evidence', () => {
 
 describe('verify — nothing may still declare or evaluate the flag', () => {
   it('derives the flag-only identifiers from the key', () => {
-    assert.equal(upperSnake('acct-process-monitor'), 'ACCT_PROCESS_MONITOR');
-    assert.deepEqual(flagIdentifiers('acct-process-monitor'),
-      ['acct-process-monitor', 'ACCT_PROCESS_MONITOR', 'etendo.go.flags.acct-process-monitor']);
+    assert.equal(upperSnake('demo-batch-monitor'), 'DEMO_BATCH_MONITOR');
+    assert.deepEqual(flagIdentifiers('demo-batch-monitor'),
+      ['demo-batch-monitor', 'DEMO_BATCH_MONITOR', 'etendo.go.flags.demo-batch-monitor']);
   });
 
   it('ship: constants, properties, framework files and flag API lines block; feature names only warn', () => {
@@ -290,6 +291,29 @@ describe('verify — nothing may still declare or evaluate the flag', () => {
     execFileSync('git', ['add', '.'], { cwd: sfRoot, env });
     assert.deepEqual(gitGrep(sfRoot, ['MY_FLAG']), [{ file: 'src/a.js', line: 1, text: 'useFeatureFlag(MY_FLAG);' }]);
     assert.deepEqual(gitGrep(sfRoot, ['NOT_THERE']), []);
+  });
+});
+
+describe('production — not in Production is not evidence', () => {
+  it('a ticket item with evidence from QA or with no env blocks', () => {
+    for (const env of ['qa', undefined]) {
+      const retirement = cleanRetirement({ ticketItems: [{ id: 'run', evidence: 'https://jira/x', ...(env ? { env } : {}) }] });
+      assert.deepEqual(codes(checkRetirementRecord({ retirement })), ['ticket-item-not-production']);
+    }
+  });
+
+  it('removal commits must be in main, with the deploy run and a live check linked', () => {
+    const inMain = (dir, sha) => sha === 'inmain';
+    const dirs = { schema_forge: sfRoot, 'com.etendoerp.go': goRoot };
+    const missing = { retirement: { production: {} } };
+    assert.deepEqual(codes(checkProduction(missing, { dirs, inMain })),
+      ['prod-commits-missing', 'prod-deploy-missing', 'prod-live-check-missing']);
+    const merged = { retirement: { production: {
+      removalCommits: [{ repo: 'schema_forge', sha: 'inmain' }, { repo: 'com.etendoerp.go', sha: 'develop-only' }],
+      deployRun: 'https://github.com/x/actions/runs/1', liveCheck: 'https://jira/c=3' } } };
+    assert.deepEqual(codes(checkProduction(merged, { dirs, inMain })), ['prod-not-deployed']);
+    merged.retirement.production.removalCommits[1].sha = 'inmain';
+    assert.deepEqual(codes(checkProduction(merged, { dirs, inMain })), []);
   });
 });
 
