@@ -38,11 +38,12 @@
      pill/badge in this window (list rows, "Modal Modelos" filter dropdown, catalog cards,
      upcoming sidebar). Fixed brand hex values, not theme-derived — see fm-model-badge--*,
      fm-catalog-card__badge--*, fm-upcoming__badge--* below, all of which reference these.
-     303 and 390 share the green family because both are VAT (IVA) models: the 303 is the
-     design-system tag palette's `green`, the 390 its own emerald, so they still differ. */
-  --fm-model-303-bg:     #DFF8EA;
-  --fm-model-303-fg:     #17663A;
-  --fm-model-303-border: #A8E6C1;
+     303 and 390 share the green family because both are VAT (IVA) models, each with its own
+     colours outside the design-system tag palette: lime for the 303, emerald for the 390, so
+     they read as one group yet stay distinct. The 349 is the palette's `purple`. */
+  --fm-model-303-bg:     #F7FEE7;
+  --fm-model-303-fg:     #3F6212;
+  --fm-model-303-border: #D9F99D;
   --fm-model-349-bg:     #F4F1FD;
   --fm-model-349-fg:     #4316CA;
   --fm-model-349-border: #C6B6F7;
