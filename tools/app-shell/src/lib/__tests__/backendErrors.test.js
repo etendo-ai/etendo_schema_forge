@@ -3887,9 +3887,9 @@ describe('translateBackendError — invoice post/unpost refusals by identity (ET
     ['ETGO_InvoiceFieldsLockedSiiSent', 'backendError.invoiceSiiSentReferenceLocked',
       "This purchase invoice has already been sent to the SII, so orderReference (the supplier's invoice number) can no longer be changed."],
     ['PostedDocument', 'backendError.documentAlreadyPosted', 'Document already Posted.'],
-    // ETP-5714: costing is stalled, so retrying will not help (the retryable 409 is NotCalculatedCost).
+    // ETP-5714 / ETP-6406: cost pending for over 10 minutes (409 flagged stalled, not retried automatically).
     ['ETGO_CostCalculationStalled', 'backendError.costCalculationStalled',
-      'Cost calculation looks stalled: transactions have been waiting for their cost for a long time, so repeating the post will not help. An administrator must check the Costing Background process and the pending transactions.'],
+      'Cost has been pending for more than 10 minutes, usually because a product has no cost set. Fix the missing costs and post the document again.'],
     ['NotCalculatedCost', 'backendError.costNotCalculated',
       'Cost has not yet been calculated for all products in the document.'],
     // ETP-5591: a disabled document, generic or with its certain reason.
@@ -3935,9 +3935,12 @@ describe('translateBackendError — invoice post/unpost refusals by identity (ET
   });
 
   it('tells the user a stalled costing is not worth retrying, and who to ask', () => {
-    assert.match(es('backendError.costCalculationStalled'), /administrador/);
-    assert.match(en('backendError.costCalculationStalled'), /administrator/);
+    assert.match(es('backendError.costCalculationStalled'), /Regularice los costos/);
+    assert.match(en('backendError.costCalculationStalled'), /Fix the missing costs/);
     assert.doesNotMatch(es('backendError.costCalculationStalled'), /unos minutos/);
+    // ETP-6406: the wait is long but the post is not hopeless — never say it "will not help".
+    assert.doesNotMatch(es('backendError.costCalculationStalled'), /no servirá/);
+    assert.doesNotMatch(en('backendError.costCalculationStalled'), /will not help/);
   });
 
   it('keeps the backend prose when the locale has no entry (never the raw key)', () => {
