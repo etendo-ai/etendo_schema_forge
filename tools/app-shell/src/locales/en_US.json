@@ -22717,7 +22717,7 @@
     "invitePageAcceptFailed": "We could not accept the invitation. Please try again.",
     "invitePageAccountMismatch": "This invitation was sent to a different account than the one you are signed in with. Sign out and continue with the invited account.",
     "invitePageUserInvalidTitle": "This invitation is no longer valid",
-    "invitePageUserInvalidDescription": "The user this invitation was created for in {companyName} is no longer active. Ask an administrator of {companyName} for a new invitation.",
+    "invitePageUserInvalidDescription": "The user this invitation was created for in {companyName} is no longer active. Ask an administrator of that company for a new invitation.",
     "invitePageSupportAccountTitle": "The support account cannot join companies",
     "invitePageSupportAccountDescription": "You are signed in with Etendo's technical support account, which never joins a company. Sign out and open the link with the invited account.",
     "invitePageExistingTitle": "Accept company invitation",

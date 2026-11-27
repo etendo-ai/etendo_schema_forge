@@ -22953,7 +22953,7 @@
     "invitePageAcceptFailed": "No hemos podido aceptar la invitación. Inténtalo de nuevo.",
     "invitePageAccountMismatch": "Esta invitación se envió a una cuenta distinta de la que tienes abierta. Cierra la sesión y continúa con la cuenta invitada.",
     "invitePageUserInvalidTitle": "Esta invitación ya no es válida",
-    "invitePageUserInvalidDescription": "El usuario para el que se creó esta invitación en {companyName} ya no está activo. Pide una nueva invitación a un administrador de {companyName}.",
+    "invitePageUserInvalidDescription": "El usuario para el que se creó esta invitación en {companyName} ya no está activo. Pide una nueva invitación a un administrador de esa empresa.",
     "invitePageSupportAccountTitle": "La cuenta de soporte no puede unirse a empresas",
     "invitePageSupportAccountDescription": "Has iniciado sesión con la cuenta de soporte técnico de Etendo, que nunca se une a una empresa. Cierra la sesión y abre el enlace con la cuenta invitada.",
     "invitePageExistingTitle": "Aceptar invitación a la empresa",
