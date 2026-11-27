@@ -444,6 +444,7 @@ export default function FmModel303Page({ decl, onBack, onStatusChange, onSubmitt
   const {
     ref: hasPendingManualDataEditRef, userEdited: hasUserManualDataEdits,
     mark: markManualDataEdit, clear: clearManualDataEdits,
+    version: manualDataEditVersion, clearIfUnchanged: clearManualDataEditsIfUnchanged,
   } = usePendingEdits();
   // ETP-5431 pt.4 — box 111's formula (`computeBox111` via `recomputeDerivedBoxes`) reads
   // `identChecks.rectificativa` directly, so ANY ident-checks edit (not just a box edit) can
@@ -1075,6 +1076,8 @@ export default function FmModel303Page({ decl, onBack, onStatusChange, onSubmitt
     // blocks a save is having nothing pending or no base URL to send it to.
     if (!hasPendingManualDataEditRef.current || !apiBaseUrl) return { ok: true };
     const manualOverridesToPersist = manualOverridesOverride ?? manualOverrides;
+    // QA BUG-2 (ETP-5716): an edit typed while this save is in flight is not in its payload.
+    const savedVersion = manualDataEditVersion();
     setIsSavingManualData(true);
     let ok = true;
     try {
@@ -1107,7 +1110,9 @@ export default function FmModel303Page({ decl, onBack, onStatusChange, onSubmitt
       // Only clear the pending-edit flag on success — a failed save must still look "pending" so
       // a retry click actually attempts the write again instead of silently no-op'ing.
       if (ok) {
-        clearManualDataEdits();
+        // Only an edit-free save clears the pending state (QA BUG-2): a later edit stays dirty
+        // for the next save and keeps the leave prompt armed.
+        clearManualDataEditsIfUnchanged(savedVersion);
         // ETP-5338 Bug A fix — pushes the just-saved manualData into `FmListPage`'s own cached
         // `decls` entry for this declaration, the same way `onStatusChange` already does for
         // status changes. Without this, reopening the declaration from the list (without a full

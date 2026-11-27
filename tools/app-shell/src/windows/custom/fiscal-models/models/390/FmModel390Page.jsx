@@ -444,7 +444,10 @@ export default function FmModel390Page({
   const [sourcesCount, setSourcesCount] = useState(null);
   // Edits since the last successful save — a ref so a handler can read it synchronously — plus
   // whether the USER made one (the leave guard's question, OBS-17; the 303 preload is automatic).
-  const { ref: dirtyRef, userEdited, mark: markEdit, clear: clearEdits } = usePendingEdits();
+  const {
+    ref: dirtyRef, userEdited, mark: markEdit, clear: clearEdits,
+    version: editVersion, clearIfUnchanged: clearEditsIfUnchanged,
+  } = usePendingEdits();
   const lastSavedManualData = useRef(decl.manualData ?? {});
   const busy = computing || saving || generating || presenting || creatingSubstitute;
   const layout = useMemo(() => getLayout390(payload?.taxReport?.layoutYear), [payload?.taxReport?.layoutYear]);
@@ -623,11 +626,13 @@ export default function FmModel390Page({
     if (!force && !dirtyRef.current) return { ok: true };
     if (!apiBaseUrl) return { ok: true };
     const manualData = currentManualData();
+    const savedVersion = editVersion();
     setSaving(true);
     try {
       const result = await persistManualData(decl.id, manualData, { token, apiBaseUrl });
       if (result.ok) {
-        clearEdits();
+        // QA BUG-2: an edit typed during the PUT is not in `manualData` — it stays pending.
+        clearEditsIfUnchanged(savedVersion);
         lastSavedManualData.current = manualData;
         invalidateFiscalComputeCache(decl.id);
         onManualDataSaved?.(decl.id, manualData);

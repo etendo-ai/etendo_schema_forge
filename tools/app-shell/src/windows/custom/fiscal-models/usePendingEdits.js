@@ -9,24 +9,40 @@
 //   - `userEdited` — "the USER changed something": what the leave guard asks about. An automatic
 //     change is saved with the next save as before, but leaving with only that one pending raises
 //     no prompt — the user did nothing they could lose.
-// `clear()` after a successful save resets both.
+// `clear()` resets both. A save uses `version()` before its PUT and `clearIfUnchanged(v)` after it:
+// an edit typed while the PUT was in flight is not in its payload, so it must stay pending — dirty
+// for the next save and still arming the leave prompt (QA BUG-2, ETP-5716; the 349's own
+// `editVersionRef` is the same rule).
 import { useCallback, useRef, useState } from 'react';
 import { useUnsavedChangesGuard } from '@/hooks/useUnsavedChangesGuard.js';
 import { requestNavigation } from '@/lib/unsavedChanges.js';
 
-/** @returns {{ ref: {current: boolean}, userEdited: boolean, mark: Function, clear: Function }} */
+/**
+ * @returns {{ ref: {current: boolean}, userEdited: boolean, mark: Function, clear: Function,
+ *   version: () => number, clearIfUnchanged: (since: number) => boolean }}
+ */
 export function usePendingEdits() {
   const ref = useRef(false);
+  const versionRef = useRef(0);
   const [userEdited, setUserEdited] = useState(false);
   const mark = useCallback(({ user = true } = {}) => {
     ref.current = true;
+    versionRef.current += 1;
     if (user) setUserEdited(true);
   }, []);
   const clear = useCallback(() => {
     ref.current = false;
     setUserEdited(false);
   }, []);
-  return { ref, userEdited, mark, clear };
+  /** The edit counter now — taken by a save right before its PUT. */
+  const version = useCallback(() => versionRef.current, []);
+  /** `clear()` only when no edit happened since `since`; true when it cleared. */
+  const clearIfUnchanged = useCallback((since) => {
+    if (versionRef.current !== since) return false;
+    clear();
+    return true;
+  }, [clear]);
+  return { ref, userEdited, mark, clear, version, clearIfUnchanged };
 }
 
 /**

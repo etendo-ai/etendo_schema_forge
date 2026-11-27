@@ -45,6 +45,24 @@ describe('usePendingEdits', () => {
     expect(hasUnsavedChanges()).toBe(false);
   });
 
+  // QA BUG-2 (ETP-5716) — an edit typed while the save's PUT is in flight is not in that save's
+  // payload: the save must not clear it, or it loses both the leave prompt and the next save.
+  it('a save clears only when no edit happened while it was in flight', () => {
+    const { result } = renderHook(() => usePage(vi.fn()));
+    act(() => result.current.mark());
+    const savedAt = result.current.version();
+    act(() => result.current.mark()); // typed during the PUT
+    act(() => { result.current.clearIfUnchanged(savedAt); });
+    expect(result.current.ref.current).toBe(true);
+    expect(result.current.userEdited).toBe(true);
+    expect(hasUnsavedChanges()).toBe(true);
+
+    const again = result.current.version();
+    act(() => { result.current.clearIfUnchanged(again); });
+    expect(result.current.ref.current).toBe(false);
+    expect(hasUnsavedChanges()).toBe(false);
+  });
+
   it('unmounting a dirty page leaves the registry clean', () => {
     const { result, unmount } = renderHook(() => usePage(vi.fn()));
     act(() => result.current.mark());
