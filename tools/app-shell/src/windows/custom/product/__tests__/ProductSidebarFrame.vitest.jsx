@@ -43,7 +43,9 @@ describe('ProductSidebarFrame', () => {
 
   it('expanded padding applies only to the wide layer; the strip keeps just the top padding', () => {
     const { rerender } = render(<ProductSidebarFrame collapsed={false} onToggle={vi.fn()}>x</ProductSidebarFrame>);
-    expect(tokens(screen.getByTestId('ProductSidebarClip').firstElementChild)).toEqual(expect.arrayContaining(['pt-2', 'pr-4', 'pb-5']));
+    expect(tokens(screen.getByTestId('ProductSidebarClip').firstElementChild)).toEqual(expect.arrayContaining(['pt-2', 'pb-5']));
+    // No right padding (PS-72.6): the content blocks bring their own px-4, so both insets are 16px.
+    expect(tokens(screen.getByTestId('ProductSidebarClip').firstElementChild)).not.toContain('pr-4');
     rerender(<ProductSidebarFrame collapsed onToggle={vi.fn()}>x</ProductSidebarFrame>);
     const strip = tokens(screen.getByTestId('ProductSidebarClip').firstElementChild);
     expect(strip).toContain('pt-2');

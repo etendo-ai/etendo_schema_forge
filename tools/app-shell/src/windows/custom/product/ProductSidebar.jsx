@@ -1,12 +1,12 @@
 import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowsOutIcon, CubeIcon, CalendarBlankIcon, CaretDownIcon } from '@phosphor-icons/react';
+import { ArrowsOutIcon, CubeIcon, CalendarBlankIcon, CaretDownIcon, CheckIcon } from '@phosphor-icons/react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useUI, useLocaleSwitch } from '@/i18n';
 import { SIDEBAR_PERIOD_OPTIONS, DEFAULT_SIDEBAR_PERIOD, formatPeriodRange } from './productSidebarPeriod';
 import { niceScale } from '@/lib/dashboardNumberFormat';
-import { formatStockQuantity } from './stockQuantityFormat';
+import { formatStockQuantity, formatStockQuantityWithUnit, stockUnitSymbol } from './stockQuantityFormat';
 import { buildXAxisLabels, buildTooltipModel, yAxisPadding } from './stockChartAxis';
 import { buildChartModel, dayFraction, fractionToDay, valueAtDay } from './stockSeries';
 import { useStockHistory } from './useStockHistory';
@@ -37,6 +37,18 @@ function PeriodRangeLabel({ period, className = '' }) {
   );
 }
 
+// Layout of the period selector (ETP-5908 PS-72.2 / PS-72.3). QA expects the button to hug its content, not to
+// fill the 271 px of the panel; the exact Figma width may still change, so it lives in this one class (`self-start`
+// = content width; swap for e.g. `w-[160px]` to pin it). The gap is the one between the selector and the date range.
+// Title of the panel chart ("Movimiento de stock"): main text colour, weight 500 (the design's .ch-h is 14px/500).
+const PANEL_CHART_TITLE_CLASS = 'text-sm font-medium text-foreground';
+const PERIOD_SELECTOR_WIDTH_CLASS = 'self-start';
+const PERIOD_SELECTOR_RANGE_GAP_CLASS = 'gap-2';
+// Active period option (ETP-5908 PS-03 / RF-04), in the dropdown and in the modal: text is the brand blue
+// (#325CFF, what the `primary` token maps to), background `--info-label-bg` (#EBEFFF, the "N ubicaciones" label;
+// the token also has a dark-theme value) and a check icon on the right.
+const ACTIVE_PERIOD_OPTION_CLASS = 'bg-[var(--info-label-bg)] text-primary';
+
 function SidebarPeriodSelector({ period, onChangePeriod, ui, disabled = false }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -51,10 +63,13 @@ function SidebarPeriodSelector({ period, onChangePeriod, ui, disabled = false })
   const current = SIDEBAR_PERIOD_OPTIONS.find(o => o.value === period) ?? SIDEBAR_PERIOD_OPTIONS[0];
 
   return (
-    <div ref={ref} className="relative flex flex-col gap-1">
+    <div ref={ref} className={`flex flex-col ${PERIOD_SELECTOR_RANGE_GAP_CLASS}`}>
+      <div className={`relative ${PERIOD_SELECTOR_WIDTH_CLASS}`}>
       <button
         type="button"
         disabled={disabled}
+        aria-haspopup="listbox"
+        aria-expanded={open}
         onClick={() => !disabled && setOpen(o => !o)}
         className={`h-10 flex items-center gap-1 px-3 border border-border-control rounded-lg shadow-[0px_1px_2px_hsl(var(--foreground) / 0.05)] text-sm font-medium transition-colors
           ${disabled ? 'bg-muted text-disabled cursor-not-allowed' : 'bg-card text-foreground'}`}
@@ -67,21 +82,32 @@ function SidebarPeriodSelector({ period, onChangePeriod, ui, disabled = false })
           className={`h-5 w-5 shrink-0 ${disabled ? 'text-disabled' : 'text-muted-foreground'}`}
           data-testid="ChevronDown__59b33d" />
       </button>
-      <PeriodRangeLabel period={period} data-testid="PeriodRangeLabel__59b33d" />
       {open && (
-        <div className="absolute top-11 left-0 z-50 min-w-full bg-card border border-border-control rounded-lg shadow-md overflow-hidden">
-          {SIDEBAR_PERIOD_OPTIONS.map(opt => (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => { onChangePeriod(opt.value); setOpen(false); }}
-              className={`w-full px-4 py-2.5 text-left text-sm hover:bg-muted text-foreground whitespace-nowrap ${period === opt.value ? 'font-medium' : 'font-normal'}`}
-            >
-              {ui(opt.key)}
-            </button>
-          ))}
+        // committed-selection-ok: three fixed options, all visible; the committed one is marked with aria-selected and a check.
+        <div role="listbox" aria-label={ui(current.key)} className="absolute top-11 left-0 z-50 min-w-full bg-card border border-border-control rounded-lg shadow-md overflow-hidden">
+          {SIDEBAR_PERIOD_OPTIONS.map(opt => {
+            const active = period === opt.value;
+            const activeClass = `font-medium ${ACTIVE_PERIOD_OPTION_CLASS}`;
+            const optionClass = active ? activeClass : 'font-normal text-foreground hover:bg-muted';
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                role="option"
+                aria-selected={active}
+                onClick={() => { onChangePeriod(opt.value); setOpen(false); }}
+                className={`flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left text-sm whitespace-nowrap ${optionClass}`}
+                data-testid="SidebarPeriodOption"
+              >
+                {ui(opt.key)}
+                {active ? <CheckIcon className="h-4 w-4 shrink-0" aria-hidden="true" data-testid="SidebarPeriodOptionCheck" /> : null}
+              </button>
+            );
+          })}
         </div>
       )}
+      </div>
+      <PeriodRangeLabel period={period} data-testid="PeriodRangeLabel__59b33d" />
     </div>
   );
 }
@@ -147,7 +173,7 @@ function smoothPath(xs, ys) {
   return d.join(' ');
 }
 
-function ChartSVG({ range, series, W, H, PAD_X, PAD_Y, fontSize = 10, PAD_R = PAD_X, highlight = null, onClick, className = 'cursor-crosshair', preserveAspectRatio = 'xMidYMid meet' }) {
+function ChartSVG({ unitSymbol = null, range, series, W, H, PAD_X, PAD_Y, fontSize = 10, PAD_R = PAD_X, highlight = null, onClick, className = 'cursor-crosshair', preserveAspectRatio = 'xMidYMid meet' }) {
   const [hoveredDay, setHoveredDay] = useState(null);
   const ui = useUI();
   const { locale } = useLocaleSwitch();
@@ -188,7 +214,7 @@ function ChartSVG({ range, series, W, H, PAD_X, PAD_Y, fontSize = 10, PAD_R = PA
 
   const hx = hoveredDay !== null ? toX(hoveredDay) : null;
   const tooltipModel = hoveredDay !== null
-    ? buildTooltipModel({ series, day: hoveredDay, locale, totalLabel: ui('total'), unitLabel: ui('stockUnitAbbr') })
+    ? buildTooltipModel({ series, day: hoveredDay, locale, totalLabel: ui('total'), unitLabel: unitSymbol })
     : null;
 
   return (
@@ -307,6 +333,8 @@ function StockChart({
   externalOpen, externalWarehouse, onExternalClose,
   // Series visible in the panel (Set of warehouse names) + its toggle handler; owned by ProductSidebar.
   panelVisible, onTogglePanelSeries,
+  // Unit symbol of the product's UOM ("kg"), printed after each quantity; null when the backend sent none.
+  unitSymbol = null,
 }) {
   const [internalOpen, setInternalOpen] = useState(false);
   const [panelChartRef, panelChartWidth] = useMeasuredWidth(PANEL_CHART.FALLBACK_W);
@@ -363,7 +391,7 @@ function StockChart({
       <div className="px-4 pt-2 pb-3 flex flex-col gap-2">
         {/* Title + icon-only expand button */}
         <div className="flex items-center justify-between gap-1.5">
-          <span className="text-sm font-normal text-muted-foreground flex-1">{ui('stockMovement')}</span>
+          <span className={`${PANEL_CHART_TITLE_CLASS} flex-1`} data-testid="StockChartPanelTitle">{ui('stockMovement')}</span>
           <button
             type="button"
             onClick={() => setInternalOpen(true)}
@@ -378,6 +406,7 @@ function StockChart({
         <StockChartLegend items={legendItems} visible={panelShown} highlight={panelHighlight} onToggle={onTogglePanelSeries} onHover={setPanelHover} data-testid="StockChartLegend__59b33d" />
         <div ref={panelChartRef} style={{ height: PANEL_CHART.HEIGHT }} data-testid="StockChartPanelCanvas">
           <ChartSVG
+            unitSymbol={unitSymbol}
             range={chart.range}
             series={filterVisibleSeries(chart.series, panelShown)}
             highlight={panelHighlight}
@@ -409,9 +438,11 @@ function StockChart({
                 </div>
                 <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
                   {SIDEBAR_PERIOD_OPTIONS.map(opt => (
-                    <button key={opt.value} onClick={() => setPeriod(opt.value)}
-                      className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${period === opt.value ? 'bg-card text-status-info-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
+                    <button key={opt.value} type="button" onClick={() => setPeriod(opt.value)} aria-pressed={period === opt.value}
+                      className={`inline-flex items-center gap-1 px-3 py-1 rounded-md text-sm font-medium transition-colors ${period === opt.value ? ACTIVE_PERIOD_OPTION_CLASS : 'text-muted-foreground hover:text-foreground'}`}
+                      data-testid="ModalPeriodOption">
                       {ui(opt.key)}
+                      {period === opt.value ? <CheckIcon className="h-4 w-4 shrink-0" aria-hidden="true" data-testid="ModalPeriodOptionCheck" /> : null}
                     </button>
                   ))}
                 </div>
@@ -423,6 +454,7 @@ function StockChart({
           <div className="flex gap-6 pt-2">
             <div className="flex-1 min-w-0" style={{ height: 300 }}>
               <ChartSVG
+            unitSymbol={unitSymbol}
                 range={large.range}
                 series={filterVisibleSeries(large.series, modalShown)}
                 highlight={modalHighlight}
@@ -434,7 +466,7 @@ function StockChart({
                 data-testid="ChartSVG__59b33d" />
             </div>
             {sortedRows.length > 0 && (
-              <StockWarehouseList rows={sortedRows} colors={sortedRows.map((_, i) => seriesFill(i))} visible={modalShown} onSelect={handleModalSelect} total={currentStock} data-testid="StockWarehouseList__59b33d" />
+              <StockWarehouseList rows={sortedRows} colors={sortedRows.map((_, i) => seriesFill(i))} visible={modalShown} onSelect={handleModalSelect} total={currentStock} unitSymbol={unitSymbol} data-testid="StockWarehouseList__59b33d" />
             )}
           </div>
         </DialogContent>
@@ -446,7 +478,7 @@ function StockChart({
 
 // One card per warehouse: series-coloured dot + name + "Available" left / "N u" right (ETP-5908 RF-08/RF-09).
 // No reserved data: Etendo does not manage reservations.
-function WarehouseCards({ rows, ui, fmt }) {
+function WarehouseCards({ rows, ui, unitSymbol }) {
   if (rows.length === 0) return null;
   return (
     <div className="flex flex-col gap-[10px]" data-testid="WarehouseCards">
@@ -464,7 +496,7 @@ function WarehouseCards({ rows, ui, fmt }) {
           </div>
           <div className="flex items-center justify-between gap-2 pl-1 text-sm" data-testid="WarehouseCardAvailability">
             <span className="text-muted-foreground">{ui('stockAvailableLabel')}</span>
-            <span className="font-semibold text-foreground">{fmt(b.quantityOnHand)} u</span>
+            <span className="font-semibold text-foreground">{formatStockQuantityWithUnit(b.quantityOnHand, unitSymbol)}</span>
           </div>
         </div>
       ))}
@@ -516,7 +548,11 @@ function StockFallback({ stockFailed, historyFailed, historyLoaded, ui, navigate
 export default function ProductSidebar({ recordId, data, token, apiBaseUrl }) {
   const ui = useUI();
   const apiFetch = useApiFetch(apiBaseUrl);
-  const { stockRows, transactions, partial, stockFailed, historyFailed } = useStockHistory(recordId, apiFetch);
+  // DetailView first mounts this panel with an empty record (`data` = {}) and mounts it again, a fraction of a second later,
+  // once the record arrives. Reading on the first mount fired the stock and history requests twice (the first pair
+  // aborted by the remount), so the reads wait for the loaded record and happen once per product.
+  const recordLoaded = data != null && Object.keys(data).length > 0;
+  const { stockRows, transactions, partial, stockFailed, historyFailed } = useStockHistory(recordLoaded ? recordId : null, apiFetch);
   const [activeTab, setActiveTab] = useState('summary');
   // RF-16: collapsed is only different markup; every hook above/below stays mounted, so period, hidden series and history survive.
   const [collapsed, setCollapsed] = useSidebarCollapsed();
@@ -537,7 +573,8 @@ export default function ProductSidebar({ recordId, data, token, apiBaseUrl }) {
   const locatorToWarehouse = buildLocatorToWarehouse(stockRows);
   const locationRows = buildLocationRows(stockRows);
 
-  const fmt = v => (v === null ? null : formatStockQuantity(v));
+  const unitSymbol = stockUnitSymbol(stockRows);
+  const fmt = v => (v === null ? null : formatStockQuantityWithUnit(v, unitSymbol));
 
   const onHandSubtitle = resolveOnHandSubtitle(locationRows, ui);
 
@@ -571,6 +608,7 @@ export default function ProductSidebar({ recordId, data, token, apiBaseUrl }) {
     externalOpen: chartTrigger.open,
     externalWarehouse: chartTrigger.warehouse,
     onExternalClose: () => setChartTrigger({ open: false, warehouse: null }),
+    unitSymbol,
   };
 
   // Service/Expense/Resource products are not stockable — no stock section to
@@ -649,7 +687,7 @@ export default function ProductSidebar({ recordId, data, token, apiBaseUrl }) {
                 disabled={!hasChart}
                 data-testid="SidebarPeriodSelector__59b33d" />
               {stockFailed && <StockUnavailableNote message={ui('stockUnavailableDesc')} data-testid="StockUnavailableNote__59b33d" />}
-              <WarehouseCards rows={sortedRows} ui={ui} fmt={fmt} data-testid="WarehouseCards__59b33d" />
+              <WarehouseCards rows={sortedRows} ui={ui} unitSymbol={unitSymbol} data-testid="WarehouseCards__59b33d" />
             </div>
           )}
         </div>

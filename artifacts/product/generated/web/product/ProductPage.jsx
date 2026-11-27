@@ -514,7 +514,8 @@ export const api = {
       "M_Product_Category_ID": "Category",
       "ProductType": "Type",
       "DateFrom": "Start Date",
-      "DateTo": "Expiry Date"
+      "DateTo": "Expiry Date",
+      "AD_Image_ID": "Product image"
     },
     "es_ES": {
       "M_Product_Category_ID": "Categoría",
@@ -522,12 +523,14 @@ export const api = {
       "Value": "Código",
       "IsStocked": "Almacenable",
       "DateFrom": "Fecha de inicio",
-      "DateTo": "Fecha de expiración"
+      "DateTo": "Fecha de expiración",
+      "AD_Image_ID": "Imagen del producto"
     },
     "es_AR": {
       "IsStocked": "Almacenable",
       "DateFrom": "Fecha de inicio",
-      "DateTo": "Fecha de expiración"
+      "DateTo": "Fecha de expiración",
+      "AD_Image_ID": "Imagen del producto"
     }
   }
 };

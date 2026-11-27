@@ -32,7 +32,7 @@ vi.mock('../AccountLookupPopup.jsx', () => ({
   default: (props) => (props.open ? <div data-testid="account-lookup-popup-open">{props.title}</div> : null),
 }));
 vi.mock('../ImageField.jsx', () => ({
-  ImageField: (props) => <div data-testid={`image-field-${props.fieldKey ?? 'default'}`} />,
+  ImageField: (props) => <div data-testid={`image-field-${props.fieldKey ?? 'default'}`} data-label={props.label ?? undefined} />,
 }));
 vi.mock('../PartnerAddressPicker.jsx', () => ({
   PartnerAddressPicker: () => <div data-testid="partner-address-picker" />,
@@ -1020,6 +1020,19 @@ describe('EntityForm — extended render coverage', () => {
     // Side-panel image layout: flex container with two children
     expect(container.querySelector('.flex.gap-6')).toBeTruthy();
     expect(screen.getByTestId('image-field-photo')).toBeInTheDocument();
+  });
+
+  // ETP-5908 PS-72.7: the side-panel image label follows the label chain (override / translation of the
+  // column first, the raw AD label only as a fallback), like the inline image path.
+  it('titles the side-panel image field with the column label from the label chain, not the raw label', () => {
+    const fields = [
+      { key: 'photo', label: 'Image', type: 'image', column: 'AD_Image_ID' },
+    ];
+    render(
+      <EntityForm fields={fields} data={{ photo: 'img-123' }} onChange={vi.fn()} token="tok" apiBaseUrl="/api" />,
+    );
+    // The mocked useLabel echoes the column, standing for the resolved (overridden) label.
+    expect(screen.getByTestId('image-field-photo')).toHaveAttribute('data-label', 'AD_Image_ID');
   });
 
   // --- colSpan handling ---

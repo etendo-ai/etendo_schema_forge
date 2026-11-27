@@ -1883,7 +1883,8 @@ export function EntityForm({ entity, windowName, fields = [], data, onChange, ca
   }
 
   if (imageField) {
-    const imgLabel = imageField.label ?? t(imageField.column) ?? imageField.key;
+    // Same order as the inline path in renderFieldWithError: the translated/overridden column label first (ETP-5908 PS-72.7), the raw label only as a fallback.
+    const imgLabel = t(imageField.column) ?? imageField.label ?? imageField.key;
     const imgReadOnly = formReadOnly
       || imageField.readOnly
       || displayLogic?.readOnly?.[imageField.key] === true
