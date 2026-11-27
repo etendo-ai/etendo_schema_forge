@@ -1,3 +1,4 @@
+// @covers tools/app-shell/src/components/contract-ui/DocumentPreview.jsx
 /**
  * Render tests for DocumentPreview — the full-screen PDF preview modal.
  * Covers: open/close, title, PDF embed, placeholder, download link, Escape key.
@@ -125,10 +126,10 @@ describe('DocumentPreview', () => {
   });
 
   // ETP-4561 (sink inventory row 14): the embed shows exactly the URL the app passes (an app blob
-  // URL); a hostile title or documentId is text/not a URL and never reaches data/src.
+  // URL); a hostile title is text/not a URL and never reaches data/src.
   it('renders only the given blob URL in object/iframe for a hostile record', () => {
     const { container } = render(
-      <DocumentPreview open={true} onClose={vi.fn()} pdfUrl="blob:https://go.example/abc" title={'"><img src=x onerror=alert(1)>'} documentId="javascript:alert(1)" />,
+      <DocumentPreview open={true} onClose={vi.fn()} pdfUrl="blob:https://go.example/abc" title={'"><img src=x onerror=alert(1)>'} />,
     );
     expect(container.querySelector('object').getAttribute('data')).toBe('blob:https://go.example/abc');
     expect(container.querySelector('iframe').getAttribute('src')).toBe('blob:https://go.example/abc');

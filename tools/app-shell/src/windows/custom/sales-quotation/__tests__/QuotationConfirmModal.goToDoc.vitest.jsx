@@ -93,7 +93,7 @@ describe('QuotationConfirmModal — handleGoToDoc basePath (ETP-5378)', () => {
     fireEvent.click(screen.getByText(/sqViewOrder/));
     expect(window.location.href).toBe('/sales-order/x?a=1#"><script>');
     expect(window.location.href.startsWith('/sales-order/')).toBe(true);
-    expect(window.location.href).not.toContain('documentNo');
+    expect(window.location.href).not.toContain('javascript:alert(1)');
     expect(window.location.href).not.toMatch(/^[a-z]+:/i);
   });
 });

@@ -1,3 +1,4 @@
+// @covers tools/app-shell/src/components/support/helpDocs.js
 import { NetworkError } from '@etendo-ai/app-shell-core/auth';
 import { docUrl, fetchHelpDocs, getHelpPages, groupHelpCollections, searchHelpDocs } from '../helpDocs.js';
 
