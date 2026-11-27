@@ -20,8 +20,8 @@ flow. Codes map to the shared i18n keys `fieldMaxLengthError`, `fieldMinLengthEr
 `websiteInsecureUrl` and `fieldInvalidValue`.
 
 ## Native control attributes
-`getNativeInputProps(field, error)` returns `maxLength`, `min`, `max` (declared `validation` first,
-flat config second), `inputMode` (`email` / `tel` / `url`) and, when an error is set, `aria-invalid`
+`getNativeInputProps(field, error)` returns `maxLength`, `min`, `max` (`min` takes the declared
+`validation` first and falls back to the flat config; `max` comes only from a declared `validation.maximum`, never from the flat config), `inputMode` (`email` / `tel` / `url`) and, when an error is set, `aria-invalid`
 and `aria-describedby` (the message element is `error-<key>-msg`). `type` already comes from the
 contract through `EntityForm.getInputType`.
 

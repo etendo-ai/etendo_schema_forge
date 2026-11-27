@@ -2452,7 +2452,7 @@ export function useEntity(entity, childEntity, {
             // Inline: the error sits under the offending input (aria-invalid / aria-describedby via
             // getNativeInputProps) and is cleared by the next edit of that field. The toast
             // below is the summary.
-            setFieldErrors({ [coreViolation.key]: ui(coreViolation.errorKey, coreViolation.errorParams) });
+            setFieldErrors(prev => ({ ...prev, [coreViolation.key]: ui(coreViolation.errorKey, coreViolation.errorParams) }));
             return reportInvalidFormatField(
                 coreViolation.errorKey,
                 ui,

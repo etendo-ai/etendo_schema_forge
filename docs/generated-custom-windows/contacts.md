@@ -1978,3 +1978,11 @@ is the customer portal link (contacts action `portalLink`, com.etendoerp.go
 first pilots of MCP test `w-portal-link` the agent handed over the record URL instead. The text lives
 in this window's `decisions.json` and in `com.etendoerp.go`'s `ETGO_SF_ENTITY` sourcedata; keep both
 equal.
+
+## ETP-4557 — Contacts validation comes from the contract
+
+The form, the inline grid and the import validate Contacts through the shared core validator (`docs/shared-field-validation.md`).
+
+- **Phone limit is 15 everywhere.** `etgoPhone` declares `maxLength: 15` in `decisions.json`; the form input, the inline grid cell and the import review queue all enforce it, and the native `maxLength` reaches the rendered input.
+- **Length comes from the contract.** Every flow reads the contract's declared `maxLength`, not a field-name heuristic.
+- **Text-length table scope.** The Contacts text-length table only covers fields whose contract declares no length. The unsafe-character check and the tax-ID checks are unchanged.
