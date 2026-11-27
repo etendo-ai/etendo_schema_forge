@@ -178,11 +178,11 @@ export function wasPresentedWithoutValidation(response) {
 // The info note under a real presentation's result when the file was not validated first: the
 // presentation went ahead anyway (PRESENT_WHEN_VALIDATOR_UNANSWERED). `presented` picks the text:
 // accepted by the AEAT, or sent but not presented.
-function PreValidationNote({ response, t, presented }) {
+function PreValidationNote({ response, t, presented, "data-testid": testId }) {
   if (!wasPresentedWithoutValidation(response)) return null;
   const key = presented ? 'fm.aeat.result.pre_validation_skipped.success' : 'fm.aeat.result.pre_validation_skipped.failure';
   return (
-    <div style={{ marginTop: 12 }}>
+    <div style={{ marginTop: 12 }} data-testid={testId}>
       <Banner
         tone="info"
         icon={<InfoIcon size={18} data-testid="Info__aeatPreValidation" />}
@@ -600,7 +600,7 @@ export default function AeatSubmitFlow({ decl, orgIdent, identChecks, liveBoxes,
                 icon={<CheckCircleIcon size={18} data-testid="CircleCheck__aeatSuccess" />}
                 title={t('fm.aeat.result.success.title') ?? 'Declaration submitted successfully'}
                 data-testid="Banner__aeatSuccess" />
-              <PreValidationNote response={response} t={t} presented />
+              <PreValidationNote response={response} t={t} presented data-testid="AeatSubmitFlow__preValidationNoteSuccess" />
               <div style={{ marginTop: 16 }}>
                 <InfoRow
                   label={t('fm.aeat.result.success.csv') ?? 'CSV'}
@@ -704,7 +704,7 @@ export default function AeatSubmitFlow({ decl, orgIdent, identChecks, liveBoxes,
                   data-testid="Banner__aeatError">
                   {errorBody}
                 </Banner>
-                <PreValidationNote response={response} t={t} presented={false} />
+                <PreValidationNote response={response} t={t} presented={false} data-testid="AeatSubmitFlow__preValidationNoteFailure" />
                 {isNoCertificate && (
                   <button
                     type="button"
