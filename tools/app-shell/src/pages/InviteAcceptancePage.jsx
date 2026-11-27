@@ -54,9 +54,24 @@ const SESSION_GUARD = {
 
 const ACTIONABLE_BRANCHES = new Set(['existing_account', 'registration_required']);
 
-// ETP-5385: accept failures after which the link is dead; they replace the whole page instead of
-// showing an inline alert next to the "continue to join" prompt.
-const TERMINAL_ACCEPT_CODES = new Set(['INVALID_TOKEN', 'EXPIRED_TOKEN']);
+// ETP-5385: accept failures that accepting again cannot fix: the link is dead, the invitation's
+// user was deactivated (409), or the signed-in identity is the technical support account, which
+// never joins a company. They replace the whole page instead of showing an inline alert next to
+// the "continue to join" prompt, and offer no retry.
+const TERMINAL_ACCEPT_CODES = new Set([
+  'INVALID_TOKEN',
+  'EXPIRED_TOKEN',
+  'INVITATION_USER_CONFIGURATION_INVALID',
+  'SUPPORT_SESSION_FORBIDDEN',
+]);
+
+// Full-page copy per terminal code; every other error page (dead or missing link, network) keeps
+// the invalid-link copy.
+const ERROR_PAGE_KEYS = {
+  INVITATION_USER_CONFIGURATION_INVALID: ['invitePageUserInvalidTitle', 'invitePageUserInvalidDescription'],
+  SUPPORT_SESSION_FORBIDDEN: ['invitePageSupportAccountTitle', 'invitePageSupportAccountDescription'],
+};
+const DEFAULT_ERROR_PAGE_KEYS = ['invitePageInvalidTitle', 'invitePageInvalidDescription'];
 
 // ETP-5385: non-terminal accept failures are translated by code. The backend text is English, so
 // it is never shown; unknown codes fall back to `invitePageAcceptFailed`.
@@ -495,15 +510,17 @@ export default function InviteAcceptancePage({ apiBase = import.meta.env.VITE_AP
         // straight from storage). When that token is the problem, dropping back to the login
         // step is recoverable; showing the error alone would dead-end a user who skipped the
         // login precisely because they were already signed in.
-        if (res.status === 401 || code === 'AUTHENTICATION_REQUIRED') {
+        // ACCOUNT_REQUIRED: the signed-in session is not the active account of the invited email
+        // (stale or replaced). Signing in again with that email recovers it, like a 401.
+        if (res.status === 401 || code === 'AUTHENTICATION_REQUIRED' || code === 'ACCOUNT_REQUIRED') {
           setExistingAuthenticated(false);
           setActionError(null);
           setSubmitting(false);
           return;
         }
-        // ETP-5385: an invitation the server now calls invalid or expired is a terminal outcome.
-        // Showing it as an inline alert left it next to the "continue to join this company"
-        // prompt, two contradictory messages on one screen; it takes over the page instead.
+        // ETP-5385: a failure that accepting again cannot fix is a terminal outcome. Showing it as
+        // an inline alert left it next to the "continue to join this company" prompt, two
+        // contradictory messages on one screen; it takes over the page instead.
         if (TERMINAL_ACCEPT_CODES.has(code)) {
           setErrorState(code);
           setSubmitting(false);
@@ -675,6 +692,7 @@ export default function InviteAcceptancePage({ apiBase = import.meta.env.VITE_AP
   // "Sign in" rather than "Go to application"; accepted, since /login reaches the app when a
   // session is open.
   const errorButtonSignedIn = existingAuthenticated;
+  const [errorTitleKey, errorDescriptionKey] = ERROR_PAGE_KEYS[errorState] || DEFAULT_ERROR_PAGE_KEYS;
   const guardApplies = !loading && !errorState && !successData
     && ACTIONABLE_BRANCHES.has(invitationData?.branch);
 
@@ -825,10 +843,10 @@ export default function InviteAcceptancePage({ apiBase = import.meta.env.VITE_AP
             <WarningCircleIcon className="h-8 w-8" data-testid="invite-error-icon" />
           </div>
           <h1 className="text-3xl font-semibold tracking-[-0.06em] text-foreground sm:text-[2.7rem] sm:leading-[1.04]">
-            {ui('invitePageInvalidTitle')}
+            {ui(errorTitleKey, { companyName })}
           </h1>
           <p className="mt-3 text-base text-muted-foreground sm:text-xl">
-            {ui('invitePageInvalidDescription')}
+            {ui(errorDescriptionKey, { companyName })}
           </p>
           <ErrorScreenButton
             signedIn={errorButtonSignedIn}
@@ -993,10 +1011,10 @@ export default function InviteAcceptancePage({ apiBase = import.meta.env.VITE_AP
             </div>
             <div>
               <h3 className="text-lg font-semibold text-foreground">
-                {ui('invitePageInvalidTitle')}
+                {ui(errorTitleKey, { companyName })}
               </h3>
               <p className="mt-2 text-sm text-muted-foreground">
-                {ui('invitePageInvalidDescription')}
+                {ui(errorDescriptionKey, { companyName })}
               </p>
             </div>
             <div className="pt-2">
