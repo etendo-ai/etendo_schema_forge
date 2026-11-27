@@ -323,7 +323,8 @@ export function neoLookupParams(query: LookupQuery, context: Record<string, stri
 
 /** The query string NEO receives for a list read (no leading `?`), values percent-encoded. */
 export function neoListParams(query: ListQuery): string[] {
-  const params = [`_startRow=${query.startRow}`, `_endRow=${query.endRow}`];
+  // Core skips COUNT unless explicitly requested; pagination needs the exact total.
+  const params = [`_startRow=${query.startRow}`, `_endRow=${query.endRow}`, '_noCount=false'];
   if (query.sortBy) params.push(`_sortBy=${encodeURIComponent(query.sortBy)}`);
   if (query.criteria) params.push(`criteria=${encodeURIComponent(JSON.stringify(query.criteria))}`);
   return params;

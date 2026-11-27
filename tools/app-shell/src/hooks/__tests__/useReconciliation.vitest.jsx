@@ -26,7 +26,7 @@ import {
 } from '../useReconciliation.js';
 import { useReconciliationPost, RECONCILIATION_BASE_PATH } from '../useReconciliationPost.js';
 import {
-  useDiscardPair, useDismissPair, usePendingLineCounts, useRestorePair,
+  useDiscardPair, useDismissPair, usePendingLineCounts, useRestoreBounceSuggestion, useRestorePair,
 } from '../useBouncePairActions.js';
 import { findFetchCall } from './findFetchCall.js';
 
@@ -280,6 +280,35 @@ describe('useAutoMatch (GET)', () => {
     expect(result.current.kpis).toEqual({
       pendingLines: 0, groupsFound: 0, opsToLink: 0, willCreate: 0,
     });
+  });
+
+  // ETP-6359: the AI layer of the bounce suggestions rides on the same answer.
+  it('keeps bounceAiAssessments from the raw answer', async () => {
+    const ai = { B3: { probabilities: { C1: 10, C2: 85 }, none: 5, recommendedLineId: 'C2' } };
+    globalThis.fetch.mockResolvedValue(getResponse({ groups: [{ id: 'g1' }], bounceAiAssessments: ai }));
+
+    const { result } = renderHook(() => useAutoMatch('acc-1'));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.bounceAiAssessments).toEqual(ai);
+    expect(result.current.groups).toEqual([{ id: 'g1' }]);
+  });
+
+  it('exposes bounceAiAssessments as null when the answer has none, or a malformed one', async () => {
+    globalThis.fetch.mockResolvedValue(getResponse({ groups: [] }));
+    const absent = renderHook(() => useAutoMatch('acc-1'));
+    await waitFor(() => expect(absent.result.current.loading).toBe(false));
+    expect(absent.result.current.bounceAiAssessments).toBeNull();
+
+    globalThis.fetch.mockResolvedValue(getResponse({ groups: [], bounceAiAssessments: 'nope' }));
+    const malformed = renderHook(() => useAutoMatch('acc-2'));
+    await waitFor(() => expect(malformed.result.current.loading).toBe(false));
+    expect(malformed.result.current.bounceAiAssessments).toBeNull();
+  });
+
+  it('exposes bounceAiAssessments as null while idle', async () => {
+    const { result } = renderHook(() => useAutoMatch(null));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(result.current.bounceAiAssessments).toBeNull();
   });
 
   it('reload() re-issues the autoMatch request', async () => {
@@ -796,6 +825,39 @@ describe('useRestorePair (POST restorePair)', () => {
     expect(caught.message).toBe('plain');
     expect(caught.code).toBeNull();
     expect(caught.status).toBe(409);
+  });
+});
+
+describe('useRestoreBounceSuggestion (POST restoreBounceSuggestion, the undo of "No es un rechazo")', () => {
+  it('posts the restoreBounceSuggestion action with the account and the line, and returns the answer', async () => {
+    const answer = { restored: true, statementLineId: 'L-IN' };
+    mockActionResponse(postResponse(answer));
+    const { result } = renderHook(() => useRestoreBounceSuggestion(), { wrapper });
+    const payload = { financialAccountId: 'acc-1', statementLineId: 'L-IN' };
+
+    let returned;
+    await act(async () => { returned = await result.current.restoreBounceSuggestion(payload); });
+
+    const [url, init] = findFetchCall(`/etendo${BASE}?action=restoreBounceSuggestion`);
+    expect(url).toBe(`/etendo${BASE}?action=restoreBounceSuggestion`);
+    expect(init.method).toBe('POST');
+    expect(init.headers.Authorization).toBe('Bearer test-token');
+    expect(JSON.parse(init.body)).toEqual(payload);
+    expect(returned).toEqual(answer);
+  });
+
+  it('rejects a 409 LINE_NOT_PENDING with its code and body', async () => {
+    mockActionResponse(bounceRefusal('LINE_NOT_PENDING', 'ETGO_BounceLineNotPending', 'not pending'));
+    const { result } = renderHook(() => useRestoreBounceSuggestion(), { wrapper });
+    let caught;
+    await act(async () => {
+      caught = await result.current
+        .restoreBounceSuggestion({ financialAccountId: 'acc-1', statementLineId: 'x' }).catch((e) => e);
+    });
+    expect(caught).toBeInstanceOf(Error);
+    expect(caught.code).toBe('LINE_NOT_PENDING');
+    expect(caught.body.code).toBe('LINE_NOT_PENDING');
+    expect(result.current.error).toBe(caught);
   });
 });
 

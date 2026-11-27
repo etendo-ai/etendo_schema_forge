@@ -72,3 +72,51 @@ export async function firstWarehouseId(kind: 'sales-order' | 'purchase-order'): 
   assert.equal(res.json.data[0].type, 'warehouse');
   return id;
 }
+
+export async function createProductCategory(label: string, attributes: Record<string, unknown> = {}) {
+  return createRecord(
+    'product-category',
+    resource('product-category', {
+      search_key: `${RUN_PREFIX}-${label}`, name: `${RUN_PREFIX}-${label}`, default: false, ...attributes,
+    }),
+  );
+}
+
+/** A person of a contact, through its master: `contacts/<contactId>/contact`. */
+export async function createContactPerson(contactId: string, label: string, attributes: Record<string, unknown> = {}) {
+  return createRecord(
+    `contacts/${contactId}/contact`,
+    resource('contacts-contact', {
+      first_name: `${RUN_PREFIX}-${label}`, last_name: 'Person', email: `${RUN_PREFIX}-${label}@example.com`, phone: '600000003',
+      ...attributes,
+    }),
+  );
+}
+
+/** A draft sales quotation for a customer contact. */
+export async function createQuotation(contactId: string, addressId: string, attributes: Record<string, unknown> = {}) {
+  return createRecord(
+    'sales-quotation',
+    resource('sales-quotation', { order_date: '2026-10-14', partner_address: addressId, ...attributes }, {
+      business_partner: ['contacts', contactId],
+    }),
+  );
+}
+
+export async function createQuotationLine(quotationId: string, productId: string, attributes: Record<string, unknown> = {}) {
+  return createRecord(
+    `sales-quotation/${quotationId}/quotation-line`,
+    resource('sales-quotation-quotationLine', { ordered_quantity: 2, list_price: 25, discount: 0, ...attributes }, {
+      product: ['product', productId],
+    }),
+  );
+}
+
+/** First active payment method the order kind offers (its own lookup); an order created with it can be completed. */
+export async function firstPaymentMethodId(kind: 'sales-order' | 'purchase-order'): Promise<string> {
+  const res = await api('GET', `${kind}/lookups/payment_method?page[size]=1`);
+  expectStatus(res, 200);
+  const id = res.json.data?.[0]?.id;
+  assert.ok(id, 'the test tenant needs at least one active payment method (the lookup lists the ones the app offers)');
+  return id;
+}

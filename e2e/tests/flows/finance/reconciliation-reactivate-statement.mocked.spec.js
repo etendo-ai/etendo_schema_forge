@@ -1,6 +1,7 @@
 // @covers tools/app-shell/src/components/contract-ui/DistinctValuesList.jsx
 import { test, expect } from '../../helpers/test.js';
 import { login } from '../../helpers/auth.js';
+import { dismissAutoMatchModalIfOpen } from '../../helpers/financial-account-helpers.js';
 
 /**
  * ETP-5121 — reactivating a bank statement must not hide its already reconciled line.
@@ -518,11 +519,7 @@ async function openTab(page, tab) {
   await page.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => {});
   await expect(page.getByTestId(`detail-tab-${tab}`)).toBeVisible();
 
-  const automatch = page.getByTestId('automatch-suggestion-modal');
-  if (await automatch.isVisible().catch(() => false)) {
-    await page.getByTestId('automatch-modal-cancel').click();
-    await expect(automatch).toHaveCount(0);
-  }
+  await dismissAutoMatchModalIfOpen(page);
 }
 
 /**
