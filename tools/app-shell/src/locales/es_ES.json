@@ -16740,6 +16740,8 @@
     "convRatePreviewOpenRange": "desde {from}, sin fecha de fin",
     "convRatePreviewClosedRange": "desde {from} hasta {to}",
     "convRateWithZone": "{text} ({zone})",
+    "convRateOverlapError": "Ya existe una tasa de conversión para {from} → {to} en las fechas indicadas ({start} – {end}). Elija una fecha de inicio posterior al {suggested}.",
+    "convRateNoEndDate": "sin fecha de fin",
     "convRateCreateCurrency": "Crear divisa",
     "convRateCreateRate": "Crear tasa",
     "convRateSaved": "Tasa guardada",

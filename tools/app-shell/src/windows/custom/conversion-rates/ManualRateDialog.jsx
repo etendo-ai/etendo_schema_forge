@@ -19,7 +19,8 @@ import {
 import {
   NO_ZONE, nowWallClock,
   isOpenEnded, validToWallClock, addMillisToWallClock, isAfterWallClock,
-  formatInZone, formatWallClock,
+  formatWallClock, formatStartInSentence, currentRateRow, isCalendarDayRow,
+  OVERLAP_KEY, overlapMessage,
 } from './conversionRatesModel.js';
 
 /** Debounce of the preview request while the user types. */
@@ -307,20 +308,42 @@ function isRefused(res, data, extra) {
  * The refusal of a write: a non-2xx answer (read through `extractErrorMessage`) or an in-band
  * `data.error`, with the field it belongs to.
  */
-async function refusalOf(res, data, ui) {
+async function refusalOf(res, data, ui, describe) {
   if (!res.ok) {
     const body = await res.clone().json().catch(() => null);
-    return { field: refusedField(body?.error ?? body), message: await extractErrorMessage(res, ui) };
+    const error = body?.error ?? body;
+    return { field: refusedField(error), message: describe(error) ?? await extractErrorMessage(res, ui) };
   }
   const message = typeof data?.error === 'string' ? data.error : ui('convRateSaveFailed');
-  return { field: refusedField(data), message };
+  return { field: refusedField(data), message: describe(data) ?? message };
 }
 
-/** Awaits a write and answers `{data}`, or `{refusal}` when it was refused (see {@link isRefused}). */
-async function settle(request, ui, extra = () => false) {
+/**
+ * Awaits a write and answers `{data}`, or `{refusal}` when it was refused (see {@link isRefused}).
+ * `describe(answer)` may word the refusal itself (the overlap, in the viewer's zone); `null` keeps
+ * the server's text.
+ */
+async function settle(request, ui, extra = () => false, describe = () => null) {
   const { res, data } = await request;
-  if (isRefused(res, data, extra)) return { refusal: await refusalOf(res, data, ui) };
+  if (isRefused(res, data, extra)) return { refusal: await refusalOf(res, data, ui, describe) };
   return { data };
+}
+
+/**
+ * QA CP-13 — the overlap refusal worded in the viewer's zone from its structured instants
+ * (`details` of a write's error body, `errorDetails` of a preview answer), or `null` for any other
+ * refusal (its server text is kept).
+ *
+ * @param {object|null} answer the error body or the preview answer
+ * @param {{fromIso: string, toIso: string}} isos
+ * @param {object} zone the zone view
+ * @param {Function} ui
+ */
+export function describeRefusal(answer, isos, zone, ui) {
+  if (!answer || typeof answer !== 'object') return null;
+  const keys = [answer.errorKey, ...(Array.isArray(answer.messageKeys) ? answer.messageKeys : [])];
+  if (!keys.includes(OVERLAP_KEY)) return null;
+  return overlapMessage(answer.errorDetails ?? answer.details, isos, zone, ui);
 }
 
 /**
@@ -438,7 +461,8 @@ async function proposeChange(ctx) {
 async function createRate(ctx) {
   const create = ctx.isNewCurrency ? createManualCurrency : createManualRate;
   const body = { toCurrency: ctx.dest.currencyId, multipleRateBy: ctx.rate, validFromDate: ctx.zone.send(ctx.validFrom) };
-  const out = await settle(create(ctx.apiFetch, body), ctx.ui);
+  const describe = (answer) => describeRefusal(answer, { fromIso: ctx.orgIso, toIso: ctx.dest.isoCode }, ctx.zone, ctx.ui);
+  const out = await settle(create(ctx.apiFetch, body), ctx.ui, undefined, describe);
   if (out.refusal) return ctx.showRefusal(out.refusal);
   ctx.onSaved();
   return undefined;
@@ -513,10 +537,11 @@ function useRateWrites(params) {
 /**
  * What the errors and the state of the writes mean for the form: the preview's refusal, the field
  * a refusal belongs to (overlap / future start → Válido desde), which fields show in error and
- * whether the primary action is enabled.
+ * whether the primary action is enabled. `describe(preview)` may word the preview's refusal itself
+ * (the overlap in the viewer's zone, see {@link describeRefusal}); `null` keeps the server's text.
  */
-export function formStateOf({ preview, writes, rateError, dateError, inputsValid }) {
-  const previewError = preview?.error ?? null;
+export function formStateOf({ preview, writes, rateError, dateError, inputsValid, describe = () => null }) {
+  const previewError = preview?.error ? (describe(preview) ?? preview.error) : null;
   const previewField = previewError ? refusedField(preview) : null;
   const submitField = writes.submitError ? writes.submitErrorField : null;
   const errorField = previewField || submitField || null;
@@ -603,7 +628,8 @@ function RateField({ value, onChange, onBlur, inError, error, orgIso, destIso, u
 /**
  * Válido desde: in error (red border, aria-invalid) on a field error or on a server refusal of the
  * start (overlap, future); the hint stays under it, as in the error design. Typed in the viewer's
- * zone, named inside the field as a muted suffix (`GMT-3`) so the label fits one line.
+ * zone, named inside the field as a muted suffix — the compact zone name (`hora de Córdoba`, else
+ * the offset `GMT-3`) so the date keeps its room and the label fits one line.
  */
 function ValidFromField({ value, onChange, onBlur, max, inError, error, zone, ui }) {
   const label = ui('convRateValidFromDateTime');
@@ -614,7 +640,7 @@ function ValidFromField({ value, onChange, onBlur, max, inError, error, zone, ui
         onChange={onChange}
         onBlur={onBlur}
         max={max ?? undefined}
-        suffix={zone.label}
+        suffix={zone.compactLabel}
         invalid={inError}
         required
         aria-label={label}
@@ -634,23 +660,25 @@ function ValidFromField({ value, onChange, onBlur, max, inError, error, zone, ui
 function EditRangeFields({ rateField, row, zone, ui }) {
   const fromLabel = ui('convRateValidFromDateTime');
   const toLabel = ui('convRateValidToDateTime');
+  // A range of calendar days (date-only source, QA CP-3) is shown unconverted and with no zone.
+  const view = isCalendarDayRow(row) ? NO_ZONE : zone;
   return (
     <>
       <div className="max-w-[240px]">{rateField}</div>
       <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3">
         <Field label={fromLabel} className="min-w-0" data-testid="Field__convrate-from">
           <DateTimeField
-            value={row?.validFromDate ? zone.show(row.validFromDate) : row?.validFromDate}
+            value={row?.validFromDate ? view.show(row.validFromDate) : row?.validFromDate}
             readOnly
-            suffix={zone.label}
+            suffix={view.compactLabel}
             aria-label={fromLabel}
             data-testid="convrate-dialog-valid-from" />
         </Field>
         <Field label={toLabel} className="min-w-0" data-testid="Field__convrate-to">
           <DateTimeField
-            value={isOpenEnded(row?.validToDate) ? null : zone.show(row.validToDate)}
+            value={isOpenEnded(row?.validToDate) ? null : view.show(row.validToDate)}
             readOnly
-            suffix={isOpenEnded(row?.validToDate) ? null : zone.label}
+            suffix={isOpenEnded(row?.validToDate) ? null : view.compactLabel}
             placeholder={ui('convRateOpenEnd')}
             aria-label={toLabel}
             data-testid="convrate-dialog-valid-to" />
@@ -715,7 +743,7 @@ function ModeHint({ mode, noneAvailable, currency, orgIso, destIso, zone, ui }) 
         org: orgIso,
         rate: formatRate(currency.rate),
         currency: destIso,
-        from: formatInZone(currency.validFrom, zone, ui),
+        from: formatStartInSentence(currentRateRow(currency), zone, ui),
       })}
     </div>
   );
@@ -750,7 +778,8 @@ function useDestination(isNewCurrency, currency, options, destId) {
 /**
  * ETP-6365 — "Nueva divisa" / "Nueva tasa · X" / "Modificar tasa · X". The server owns every
  * rule (inverse rate, closing the previous open range at start − 1 minute, overlap refusal):
- * the dialog shows its preview (`previewManualRate`, debounced) and its refusal messages as is.
+ * the dialog shows its preview (`previewManualRate`, debounced) and its refusal messages as is —
+ * except the overlap, worded from its structured instants in the viewer's zone ({@link describeRefusal}).
  *
  * Tasa and Válido desde are required: the confirm button stays disabled and the field shows its
  * error until both are valid. Enter in a field submits — after the field commits its value
@@ -806,7 +835,7 @@ export function ManualRateDialog({
   const lines = editLinesFor(isEdit, row, rate, proposal);
 
   const writes = useRateWrites({
-    apiFetch, ui, isEdit, isNewCurrency, row, rate, validFrom, dest, onSaved, onClose, setProposal, zone,
+    apiFetch, ui, isEdit, isNewCurrency, row, rate, validFrom, dest, onSaved, onClose, setProposal, zone, orgIso,
   });
 
   // Reset every time the dialog opens (a new target or a new row).
@@ -822,6 +851,7 @@ export function ManualRateDialog({
 
   const { previewError, rateInError, startInError, canSubmit } = formStateOf({
     preview, writes, rateError, dateError, inputsValid,
+    describe: (answer) => describeRefusal(answer, { fromIso: orgIso, toIso: destIso }, zone, ui),
   });
 
   function submit(event) {

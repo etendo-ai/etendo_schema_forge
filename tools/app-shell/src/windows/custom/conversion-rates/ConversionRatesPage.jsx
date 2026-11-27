@@ -23,8 +23,8 @@ import {
 } from './conversionRatesApi.js';
 import {
   DEFAULT_PERIOD, PERIODS, STATUSES, RATE_STATUS, NO_ZONE,
-  buildHistoryCriteria, buildCurrencyList, periodBounds, displayValidTo, formatWallClock,
-  createZoneView, withZone, formatInZone,
+  buildHistoryCriteria, buildCurrencyList, periodBounds, displayValidFrom, displayValidTo,
+  createZoneView, withZone, formatStartInSentence,
 } from './conversionRatesModel.js';
 import { formatRate } from './conversionRatesFormat.js';
 
@@ -75,7 +75,8 @@ function currencyDisplayName(iso, locale) {
 /**
  * Print rows: every forward rate of the listed currencies, in list order, as display strings (the
  * drawer prints what it is given). Datetimes in the viewer's zone (`zone`, see `createZoneView`);
- * the zone is named in the column headers.
+ * the zone is named in the column headers. A range of calendar days (downloaded) prints its days
+ * alone, unconverted, as the list shows them (QA CP-3).
  */
 export function buildPrintRows(entries, ui, zone = NO_ZONE) {
   const out = [];
@@ -84,7 +85,7 @@ export function buildPrintRows(entries, ui, zone = NO_ZONE) {
       out.push({
         currency: entry.isoCode,
         origin: ui(row.sMFCRSynced === true ? 'convRateOriginAuto' : 'convRateOriginManual'),
-        validFrom: formatWallClock(zone.show(row.validFromDate)),
+        validFrom: displayValidFrom(row, zone),
         validTo: displayValidTo(row, zone) ?? '—',
         rate: formatRate(row.multipleRateBy),
         inverse: formatRate(row.divideRateBy),
@@ -190,7 +191,8 @@ export default function ConversionRatesPage({ apiBaseUrl }) {
   const orgSymbol = getCurrencySymbol(orgIso);
   const title = ui('convRateWindowTitle');
   const serverZone = useServerZone(apiFetch);
-  const zone = useMemo(() => createZoneView(serverZone.zone), [serverZone.zone]);
+  // The zone is named in the UI language (QA CP-2/7/11: «hora estándar de Argentina», not «GMT-3»).
+  const zone = useMemo(() => createZoneView(serverZone.zone, undefined, undefined, locale), [serverZone.zone, locale]);
   const serverNames = useServerCurrencyNames(apiFetch);
 
   // ── Filters (URL) ───────────────────────────────────────────────────────────
@@ -517,7 +519,7 @@ export default function ConversionRatesPage({ apiBaseUrl }) {
         title={ui('convRateDeleteTitle')}
         message={pendingDelete ? ui('convRateDeleteMessage', {
           currency: entryById.get(pendingDelete.toCurrency)?.isoCode ?? pendingDelete['toCurrency$_identifier'] ?? '',
-          from: formatInZone(pendingDelete.validFromDate, zone, ui),
+          from: formatStartInSentence(pendingDelete, zone, ui),
         }) : null}
         notice={<p className="text-sm text-muted-foreground" data-testid="convrate-delete-notice">{ui('convRateDeleteNotice')}</p>}
         data-testid="DeleteConfirmDialog__86dbea" />
