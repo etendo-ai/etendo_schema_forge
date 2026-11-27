@@ -1489,7 +1489,6 @@ export function EntityForm({ entity, windowName, fields = [], data, onChange, ca
         className={inputClassName}
         required={f.required}
         disabled={savingField === f.key}
-        maxLength={f.maxLength}
         nativeProps={getNativeInputProps(f, fieldErrors?.[f.key])}
         data-testid="DeferredInput__a8d626" />
       );

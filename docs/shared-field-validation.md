@@ -9,7 +9,7 @@ validity with the same declarative engine, `@etendo-ai/app-shell-core/lib/valida
 | Flow | Entry point |
 |------|-------------|
 | Form save gate | `useEntity.getCoreFieldViolation` → `lib/coreValidation.js#getFirstViolation` |
-| Form blur | `EntityForm.validateNumericOnBlur` → `getFieldError` (inline via `onFieldError`) |
+| Form blur | `EntityForm.applyCoreBlurValidation` → `getFieldError` (inline via `onFieldError`) |
 | Grid add-row / inline edit | `DataTable`, `InlineLinesPanel` → `getFieldError` |
 | Import pre-validation and review-queue re-validation | `validateRow({ emailTargets, fieldConstraints, fieldIdentities })` |
 | Backend structured errors | `useEntity.handleSaveErrorResponse`, `inlineLineUpdateHandlers` → `mapBackendFieldErrors` / `structuredBackendError` |

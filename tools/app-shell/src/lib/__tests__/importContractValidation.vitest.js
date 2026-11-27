@@ -17,7 +17,7 @@ const fields = contract.frontendContract.window.import.fields;
 const options = {
   requiredTargets: [],
   emailTargets: fields.filter((f) => f.isEmail).map((f) => f.target),
-  phoneTargets: [],
+  phoneTargets: fields.filter((f) => f.isPhone).map((f) => f.target),
   fieldConstraints: buildFieldConstraints(fields),
   fieldIdentities: buildFieldIdentities(fields),
 };
@@ -37,14 +37,18 @@ describe('import review queue validation built from the Contacts contract (ETP-4
     }
   });
 
-  it('flags an over-length phone with the same MAX_LENGTH code the form and grid return', () => {
+  it('flags an over-length phone with exactly one error (the phone check owns its length)', () => {
     const { valid, errors } = validateRow({ ...exampleRow, etgoPhone: '1234567890123456' }, options);
     expect(valid).toBe(false);
-    expect(errors.filter((e) => e.target === 'etgoPhone').map((e) => e.code)).toContain('MAX_LENGTH');
+    expect(errors.filter((e) => e.target === 'etgoPhone')).toHaveLength(1);
+  });
+
+  it('accepts a spaced phone longer than 15 raw characters whose normalised value fits', () => {
+    expect(validateRow({ ...exampleRow, etgoPhone: '+34 910 56 54 00' }, options).errors).toEqual([]);
   });
 
   it('reports several simultaneous errors on one row and clears them after correction', () => {
-    const bad = { ...exampleRow, etgoPhone: '1234567890123456', name: 'x'.repeat(61), etgoEmail: 'nope' };
+    const bad = { ...exampleRow, etgoPhone: '12345678901234567', name: 'x'.repeat(61), etgoEmail: 'nope' };
     const first = validateRow(bad, options);
     expect(new Set(first.errors.map((e) => e.target))).toEqual(new Set(['etgoPhone', 'name', 'etgoEmail']));
     expect(validateRow({ ...bad, etgoPhone: '910000001', name: 'ok', etgoEmail: 'a@b.co' }, options).valid).toBe(true);
