@@ -1,4 +1,5 @@
 // @covers tools/app-shell/src/windows/custom/fiscal-models/models/303/FmModel303Page.jsx
+// @covers tools/app-shell/src/windows/custom/fiscal-models/usePendingEdits.js
 // ETP-5338 (PIVOT) — Modelo 303 "Guardar" button (handleSave).
 //
 // "Guardar" (`data-testid="FmModel303Page__save"`) replaced the earlier "Volver"
@@ -95,6 +96,7 @@ vi.mock('@phosphor-icons/react', () => ({
 
 import FmModel303Page from '../FmModel303Page.jsx';
 import { jsonResponse } from '@/test/realApiFetch.js';
+import { hasUnsavedChanges, resetUnsavedChangesForTests } from '@/lib/unsavedChanges.js';
 
 const BASE_DECL = {
   id: '303-2026-T2', model: '303', year: 2026, period: 'T2', type: 'ord',
@@ -376,5 +378,76 @@ describe('FmModel303Page — Guardar button (ETP-5338 pivot)', () => {
     expect(nifOf(putCalls()[0])).toBe('EDIT-DURING-NETWORK-OUTAGE');
     expect(toast.success).toHaveBeenCalledTimes(1);
     expect(onBack).not.toHaveBeenCalled();
+  });
+});
+
+// OBS-17 (ETP-5716) — the leave guard: the user's unsaved edits are registered in the app's
+// unsaved-changes registry (the real one), a save clears them only when it succeeded and nothing
+// was typed while it was in flight, and Cancelar discards them.
+describe('FmModel303Page — unsaved-changes guard', () => {
+  beforeEach(() => resetUnsavedChangesForTests());
+
+  const renderPage = (decl = BASE_DECL, onBack = vi.fn()) => render(
+    <FmModel303Page decl={decl} token={TOKEN} apiBaseUrl={API_BASE_URL} onBack={onBack} onStatusChange={vi.fn()} />,
+  );
+
+  it('a user edit registers them and a successful Guardar clears them', async () => {
+    installImmediateServer();
+    renderPage();
+    expect(hasUnsavedChanges()).toBe(false);
+    editNif('EDITED');
+    expect(hasUnsavedChanges()).toBe(true);
+    await act(async () => { clickSave(); await Promise.resolve(); await Promise.resolve(); });
+    expect(toast.success).toHaveBeenCalledTimes(1);
+    expect(hasUnsavedChanges()).toBe(false);
+  });
+
+  it('a failed Guardar keeps them', async () => {
+    globalThis.fetch = vi.fn((_url, options = {}) => (String(options.method || 'GET').toUpperCase() === 'PUT'
+      ? Promise.reject(new TypeError('Failed to fetch'))
+      : Promise.resolve(jsonResponse({ response: { data: [] } }))));
+    renderPage();
+    editNif('EDITED');
+    await act(async () => { clickSave(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
+    expect(toast.error).toHaveBeenCalledTimes(1);
+    expect(hasUnsavedChanges()).toBe(true);
+  });
+
+  it('an edit typed while Guardar is in flight survives that save', async () => {
+    const { resolveNextPut } = installControllableServer();
+    renderPage();
+    editNif('FIRST');
+    await act(async () => { clickSave(); });
+    expect(putCalls()).toHaveLength(1);
+    editNif('TYPED-DURING-PUT');
+    await act(async () => { resolveNextPut(0); await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
+    expect(toast.success).toHaveBeenCalledTimes(1);
+    expect(hasUnsavedChanges()).toBe(true);
+
+    // The next Guardar sends it and only then clears the guard.
+    await act(async () => { clickSave(); await Promise.resolve(); });
+    expect(putCalls()).toHaveLength(2);
+    expect(nifOf(putCalls()[1])).toBe('TYPED-DURING-PUT');
+    await act(async () => { resolveNextPut(1); await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
+    expect(hasUnsavedChanges()).toBe(false);
+  });
+
+  it('Cancelar discards them and goes back without saving', () => {
+    installImmediateServer();
+    const onBack = vi.fn();
+    renderPage(BASE_DECL, onBack);
+    editNif('DISCARDED');
+    expect(hasUnsavedChanges()).toBe(true);
+    act(() => { fireEvent.click(screen.getByTestId('FmModel303Page__cancel')); });
+    expect(hasUnsavedChanges()).toBe(false);
+    expect(onBack).toHaveBeenCalledTimes(1);
+    expect(putCalls()).toHaveLength(0);
+  });
+
+  it('a submitted declaration never arms it, even on an edit event', () => {
+    installImmediateServer();
+    renderPage({ ...BASE_DECL, status: 'submitted' });
+    editNif('IGNORED');
+    expect(hasUnsavedChanges()).toBe(false);
   });
 });

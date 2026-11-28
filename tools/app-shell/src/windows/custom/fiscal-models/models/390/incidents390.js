@@ -151,6 +151,16 @@ export function incidentOrigin390(item, t) {
 }
 
 /**
+ * The "Severidad" label of an incident when it is not the generic one: an AEAT error stored by a
+ * telematic attempt is listed with the blocking rows but never gates Generar / Presentar (the 390
+ * `gatingBlocking` leaves it out), so it reads "Error AEAT" instead of "Bloqueante" (ETP-5716
+ * OBS-14). `null` keeps the generic label.
+ */
+export function incidentSeverityLabel390(item, t) {
+  return isAeatIncident(item) && isBlocking(item) ? t('fm.incidents.severity.aeatError') : null;
+}
+
+/**
  * The incidents in the shape the shared Incidencias table reads: every item's severity normalised
  * to `block` / `warn` (anything not `warn` is blocking, as `groupIncidents390` counts it).
  */

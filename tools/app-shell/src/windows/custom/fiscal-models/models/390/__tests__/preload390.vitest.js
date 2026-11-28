@@ -52,6 +52,23 @@ describe('applyPreload390', () => {
     expect(r.preloaded).toEqual({});
   });
 
+  // [63] = Σ 303 [43], which may be negative (a regularization in favour of the AEAT).
+  it('applies a negative preloaded [63] (Σ 303 [43] < 0)', () => {
+    const r = applyPreload390({}, null, { '390INVESTMENT_REGULARIZATION': '-25.00' });
+    expect(r.inputs['390INVESTMENT_REGULARIZATION']).toBe('-25.00');
+    expect(r.preloaded).toEqual({ '390INVESTMENT_REGULARIZATION': '-25.00' });
+    expect(r.applied).toEqual(['390INVESTMENT_REGULARIZATION']);
+  });
+
+  it('a preloaded [63] the user cleared stays cleared on a re-preload', () => {
+    for (const cleared of [{}, { '390INVESTMENT_REGULARIZATION': '' }]) {
+      const r = applyPreload390(cleared, { '390INVESTMENT_REGULARIZATION': '-25.00' }, { '390INVESTMENT_REGULARIZATION': '-30.00' });
+      expect(r.inputs['390INVESTMENT_REGULARIZATION'] ?? '').toBe('');
+      expect(r.preloaded).toEqual({ '390INVESTMENT_REGULARIZATION': '-30.00' });
+      expect(r.applied).toEqual([]);
+    }
+  });
+
   it('sanitizes the result (DEVOLVER_xx needs the monthly register)', () => {
     const r = applyPreload390({}, null, { DEVOLVER_12: '30.00' });
     expect(r.inputs.DEVOLVER_12).toBeUndefined();

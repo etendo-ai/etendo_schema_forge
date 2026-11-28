@@ -34,13 +34,16 @@
   --fm-blue-50:    var(--status-info-bg);
   --fm-blue-200:   var(--status-info-border);
   --fm-blue-700f:  var(--status-info-fg);
-  /* Model-tag colors (303/349/390) — single source of truth for every "303"/"349" pill/badge
-     in this window (list rows, "Modal Modelos" filter dropdown, catalog cards, upcoming
-     sidebar). Fixed brand hex values, not theme-derived — see fm-model-badge--*,
-     fm-catalog-card__badge--*, fm-upcoming__badge--* below, all of which reference these. */
-  --fm-model-303-bg:     #F0FAFF;
-  --fm-model-303-fg:     #0075AD;
-  --fm-model-303-border: #ADE4FF;
+  /* Model-tag colors (303/349/390) — single source of truth for every "303"/"349"/"390"
+     pill/badge in this window (list rows, "Modal Modelos" filter dropdown, catalog cards,
+     upcoming sidebar). Fixed brand hex values, not theme-derived — see fm-model-badge--*,
+     fm-catalog-card__badge--*, fm-upcoming__badge--* below, all of which reference these.
+     303 and 390 share the green family because both are VAT (IVA) models, each with its own
+     colours outside the design-system tag palette: lime for the 303, emerald for the 390, so
+     they read as one group yet stay distinct. The 349 is the palette's `purple`. */
+  --fm-model-303-bg:     #F7FEE7;
+  --fm-model-303-fg:     #3F6212;
+  --fm-model-303-border: #D9F99D;
   --fm-model-349-bg:     #F4F1FD;
   --fm-model-349-fg:     #4316CA;
   --fm-model-349-border: #C6B6F7;
@@ -756,6 +759,8 @@
 
 /* ─── Modal ────────────────────────────────────────────────────────── */
 .fm-modal-overlay { position: fixed; inset: 0; background: hsl(var(--foreground) / .35); z-index: 100; display: flex; align-items: center; justify-content: center; }
+/* The overlay is the focusable `role="dialog"` (useModalFocus): no ring on it, its controls show theirs. */
+.fm-modal-overlay:focus { outline: none; }
 
 /* ─── "Nueva declaración" modal (NewDeclModal) ─────────────────────── */
 .fm-newdecl-modal { max-width: 560px; }
@@ -1535,6 +1540,10 @@
   overflow: hidden; text-overflow: ellipsis; justify-content: flex-start;
 }
 .fm-present-acuse-slot { height: calc(var(--fm-acuse-upload-h) + var(--fm-acuse-upload-gap)); }
+/* PresentModal options (GEN-03 retest): the radio is the card's choice part, so the card draws
+   its focus ring — the shared ring colour of the other fiscal-models focus styles. */
+.fm-present-option { outline: none; }
+.fm-present-card:has(.fm-present-option:focus-visible) { outline: 2px solid hsl(var(--ring, var(--primary))); outline-offset: 2px; }
 
 /* Presentación telemática AEAT (AeatSubmitFlow) — full-width stacked fields. */
 .fm-aeat-modal .fm-config-modal__body { min-height: 0; }
@@ -1569,8 +1578,20 @@
 .fm-newdecl-annual-hint .fm-catalog-card__pill { flex-shrink: 0; }
 
 /* Detail page */
+/* GEN-02 — the four KPI cards size on the width they actually get (a container query on the
+   wrapper, not the viewport: the app sidebar takes 256px of a 1280px screen). Each card's label
+   and badge stay on one line (KpiWidget, P15); "Resultado [86]" + "Resultado negativo" needs
+   ~213px of the card's text column. Wide (>= 1240px): unchanged. 1040–1239px: the icon tile is
+   dropped (52px back to the text). Below 1040px: 2 × 2 cards, icon included. */
+.fm-390-kpis-wrap { container-type: inline-size; flex-shrink: 0; background: hsl(var(--card)); }
 .fm-390-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; padding: 12px 20px; background: hsl(var(--card)); flex-shrink: 0; }
-@media (max-width: 1100px) { .fm-390-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@container (max-width: 1239px) {
+  .fm-390-kpis .fm-kpi__icon { display: none !important; }
+}
+@container (max-width: 1039px) {
+  .fm-390-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fm-390-kpis .fm-kpi__icon { display: flex !important; }
+}
 /* The cuadre with the year's 303s (Reconciliation390): the shared rich `.fm-banner` (success /
    warn), full width between the KPI cards and the tabs with the cards' 20px gutter. */
 .fm-390-reconcile-row { padding: 0 20px 4px; background: hsl(var(--card)); flex-shrink: 0; }
@@ -1587,8 +1608,9 @@
 .fm-390-former-input--invalid { border-color: hsl(var(--destructive)); }
 .fm-390-inline-error { font-size: 12px; line-height: 16px; color: hsl(var(--destructive)); }
 
-/* Casillas tab: sticky block index on the left, content on the right. Below 1200px the index
-   folds into a select above the content (1280×720 keeps the index). */
+/* Casillas tab: sticky block index on the left, content on the right. At 1280px and below the
+   index folds into a select above the content (GEN-02: at 1280×720 the 288px index left the
+   cells too narrow for their amounts). */
 .fm-390-boxes { display: flex; align-items: flex-start; gap: 8px; padding: 0; }
 .fm-390-index {
   /* 280px keeps every block name on one line, active (500) included (the 11 items fit under the tabs bar at 1280×720). */
@@ -1605,12 +1627,27 @@
 .fm-390-index__item--active { background: hsl(var(--muted)); font-weight: 500; }
 .fm-390-index__num { width: 18px; flex-shrink: 0; color: hsl(var(--muted-foreground)); font-variant-numeric: tabular-nums; }
 .fm-390-index-select { display: none; }
-@media (max-width: 1200px) {
+@media (max-width: 1280px) {
   .fm-390-boxes { flex-direction: column; }
   .fm-390-index { display: none; }
   .fm-390-index-select { display: block; margin: 8px 24px 0; max-width: 360px; }
+  /* A size container has no intrinsic width: stretch it across the column. */
+  .fm-390-boxes__content { align-self: stretch; }
 }
-.fm-390-boxes__content { flex: 1; min-width: 0; padding: 6px 24px 24px; }
+/* The content is the size container of its cells (GEN-02 / OBS-12): the cell width follows the
+   room the row really has — (content − ~300px kept for the concept and the gaps) / 2, the most
+   columns a 390 block has (fm390Layouts.js) — between 150px (the shared compact width) and
+   260px, instead of a fixed 150px under 1440px. With the box number column at 40px and slimmer
+   icon buttons, a 260px cell shows a 12-integer-digit amount ("123.456.789.012,34 €") whole even
+   with the pencil and the Restore icons of a modified box (the 220px cap cut a 9-digit one, OBS-12
+   retest). At 1280×720 the content is ~940px wide with the app sidebar open, so the cap is what
+   applies there too and the concept column keeps its ~296px. */
+.fm-390-boxes__content { flex: 1; min-width: 0; padding: 6px 24px 24px; container-type: inline-size; }
+.fm-390-boxes .fm-aeat-section--compact { --fm-aeat-cell-w: clamp(150px, calc((100cqw - 296px) / 2), 260px); }
+.fm-390-boxes .fm-aeat-cell__num { width: 40px; }
+.fm-390-boxes .fm-aeat-cell__value { padding: 0 8px 0 10px; }
+.fm-390-boxes .fm-aeat-cell__edit-btn { padding: 0 4px; }
+.fm-390-boxes .fm-aeat-cell__edit-btn:last-child { padding-right: 8px; }
 .fm-390-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 4px 0 12px; }
 .fm-390-search { display: flex; align-items: center; gap: 8px; }
 .fm-390-search__field {
@@ -1696,7 +1733,18 @@
 .fm-390-cell__invoices:hover { color: hsl(var(--foreground)); background: hsl(var(--card)); }
 .fm-390-cell__invoices:focus-visible { outline: 2px solid hsl(var(--ring, var(--primary))); outline-offset: -2px; }
 @media (hover: none) { .fm-390-cell__invoices { opacity: 1; } }
-.fm-390-sources { display: flex; flex-direction: column; flex: 1; min-height: 0; background: hsl(var(--card)); }
+.fm-390-sources { display: flex; flex-direction: column; flex: 1; min-height: 0; background: hsl(var(--card)); container-type: inline-size; }
+/* GEN-02 — the table fits its width without a horizontal scroll (Total always visible). Under
+   1200px of tab width: 8px cell gutters, and with a box filter the "Casillas" column gives way
+   to the box amount column; under 1100px "Fecha contable" is hidden too (the CSV keeps it). */
+@container (max-width: 1199px) {
+  .fm-390-sources__table .fm-dtable th,
+  .fm-390-sources__table .fm-dtable td { padding-left: 8px; padding-right: 8px; }
+  .fm-390-sources__col--boxes-filtered { display: none; }
+}
+@container (max-width: 1099px) {
+  .fm-390-sources__col--secondary { display: none; }
+}
 .fm-390-sources__toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 20px 8px; }
 .fm-390-sources__toolbar .fm-btn { display: inline-flex; align-items: center; gap: 6px; }
 .fm-390-sources__box-tag { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-variant-numeric: tabular-nums; }

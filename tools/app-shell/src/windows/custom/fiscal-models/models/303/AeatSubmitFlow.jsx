@@ -4,12 +4,13 @@ import { useUI } from '@/i18n';
 import { useApiFetch } from '@/auth/useApiFetch.js';
 import { useAuth } from '@/auth/AuthContext.jsx';
 import { neoBase } from '@/components/related-documents/helpers.js';
-import { BankIcon, CheckCircleIcon, CircleNotchIcon, DownloadSimpleIcon, WarningIcon, WarningOctagonIcon } from '@phosphor-icons/react';
+import { BankIcon, CheckCircleIcon, CircleNotchIcon, DownloadSimpleIcon, InfoIcon, WarningIcon, WarningOctagonIcon } from '@phosphor-icons/react';
 import { AeatResultBanner as Banner } from './AeatResultBanner.jsx';
 import { formatAmount, formatPeriod, triggerBase64Download, applyIdentParams, applyBoxParams, isBankIbanRequired, withBox111NonZeroFlag, DECLARATION_TYPE_INGRESO, showIaeActivityReminder } from '../../fiscalModelsUtils.js';
 import { isLastPeriodOfYear } from './fm303Layouts.js';
 import { CheckboxField } from '@/windows/custom/shared/CheckboxField.jsx';
 import { Input } from '@/components/ui/input';
+import { useModalFocus } from '../../useModalFocus.js';
 
 // ── Pure helpers (exported for unit testing — no DOM/React involved) ──────────
 
@@ -129,15 +130,66 @@ export function classifySubmitOutcome(data) {
 export function resolveErrorCodeKey(errorCode) {
   if (errorCode === 'MISSING_PRESENTER') return 'fm.aeat.error.missingPresenter';
   if (errorCode === 'NO_CERTIFICATE') return 'fm.aeat.error.noCertificate';
-  // ETP-5716: the validation that precedes a real presentation got no answer and the server
-  // is set to stop (FiscalAeatSubmissionSupport.PRESENT_WHEN_VALIDATOR_UNANSWERED = false).
+  // ETP-5716: the validation that precedes a real presentation got no answer AND the server is
+  // set to stop on that. Today it is not: FiscalAeatSubmissionSupport.PRESENT_WHEN_VALIDATOR_
+  // UNANSWERED is true, so in production an unanswered validator — the EV0 "model not loaded"
+  // answer included — goes ahead to the presentation and this code is never sent. Kept for the
+  // day the policy flips.
   if (errorCode === 'VALIDATION_UNAVAILABLE') return 'fm.aeat.error.validationUnavailable';
+  // ETP-5716: "Validar sin presentar" (test mode) answered by a validator that has not loaded
+  // this model / exercise yet (AEAT EV0 "No existe información del modelo"): no verdict about
+  // the file. Test mode only — in production the same answer proceeds to the presentation.
+  if (errorCode === 'NOT_VALIDATED') return 'fm.aeat.error.notValidated';
   if (errorCode === 'ALREADY_SUBMITTED') return 'fm.aeat.error.alreadySubmitted';
   // Modelo 390 only (ETP-5716): the backend refuses a filing with blocking incidents.
   if (errorCode === 'BLOCKING_INCIDENTS') return 'fm.aeat.error.blockingIncidents';
   // Modelo 390 only (ETP-5716): the exercise has no periods in the fiscal calendar.
   if (errorCode === 'INCOMPLETE_FISCAL_YEAR') return 'fm.aeat.error.incompleteFiscalYear';
   return null;
+}
+
+/**
+ * Title of the error result: a presentation stopped by the validator's errors (`stage:
+ * validation`), a "Validar sin presentar" that could not be completed (`testMode`: it was a
+ * validation, never a presentation — ETP-5716 OBS-15), or a presentation that failed.
+ */
+export function submitErrorTitle(response, specificKey, t) {
+  if (response?.stage === 'validation' && !specificKey) {
+    // ETP-5716: the server validates before a real presentation; the validator's errors stopped
+    // it — nothing was presented.
+    return t('fm.aeat.result.validation_rejected.title') ?? 'Declaration not submitted: the AEAT found errors when validating it';
+  }
+  if (response?.testMode === true) {
+    return t('fm.aeat.result.test_error.title') ?? 'The validation could not be completed';
+  }
+  // ETP-5716 — a real presentation that failed says so plainly: nothing was presented.
+  return t('fm.aeat.result.error.title') ?? 'The declaration was not submitted';
+}
+
+/**
+ * True when a real presentation went ahead without a verdict from the validation that precedes
+ * it (the server's `preValidation: "NOT_VALIDATED"` — no answer, or EV0 "model not available";
+ * ETP-5716). Never true in test mode: the field is only sent on a real presentation.
+ */
+export function wasPresentedWithoutValidation(response) {
+  return response?.preValidation === 'NOT_VALIDATED';
+}
+
+// The info note under a real presentation's result when the file was not validated first: the
+// presentation went ahead anyway (PRESENT_WHEN_VALIDATOR_UNANSWERED). `presented` picks the text:
+// accepted by the AEAT, or sent but not presented.
+function PreValidationNote({ response, t, presented, "data-testid": testId }) {
+  if (!wasPresentedWithoutValidation(response)) return null;
+  const key = presented ? 'fm.aeat.result.pre_validation_skipped.success' : 'fm.aeat.result.pre_validation_skipped.failure';
+  return (
+    <div style={{ marginTop: 12 }} data-testid={testId}>
+      <Banner
+        tone="info"
+        icon={<InfoIcon size={18} data-testid="Info__aeatPreValidation" />}
+        title={t(key)}
+        data-testid="Banner__aeatPreValidationSkipped" />
+    </div>
+  );
 }
 
 // ── UI ──────────────────────────────────────────────────────────────────────
@@ -302,6 +354,12 @@ export default function AeatSubmitFlow({ decl, orgIdent, identChecks, liveBoxes,
 
   const [step, setStep] = useState('confirm'); // 'confirm' | 'result'
   const [submitting, setSubmitting] = useState(false);
+  // Every way out — Escape, the ✕, the overlay, Cancelar — is refused while the request is in
+  // flight (BUG-1, ETP-5716): closing mid-request let the result and attach callbacks land on an
+  // unmounted flow. Same rule as FileGenModal390's `close`.
+  const close = () => { if (!submitting) onClose?.(); };
+  // GEN-03: focus in, Tab trapped, Escape closes (not mid-request), focus back on close.
+  const dialogRef = useModalFocus(close);
   const [connError, setConnError] = useState(null);
   const [response, setResponse] = useState(null);
 
@@ -388,7 +446,7 @@ export default function AeatSubmitFlow({ decl, orgIdent, identChecks, liveBoxes,
   const submittingKey = testMode ? 'fm.aeat.action.submitting' : 'fm.aeat.action.validating_submitting';
 
   return (
-    <div className="fm-modal-overlay" role="dialog" aria-modal="true" onClick={onClose}>
+    <div className="fm-modal-overlay" role="dialog" aria-modal="true" aria-busy={submitting} onClick={close} ref={dialogRef} tabIndex={-1}>
       <div className="fm-config-modal fm-aeat-modal" onClick={e => e.stopPropagation()} data-testid="AeatSubmitFlow__dialog">
 
         {/* Header */}
@@ -401,7 +459,7 @@ export default function AeatSubmitFlow({ decl, orgIdent, identChecks, liveBoxes,
               </div>
             )}
           </div>
-          <button className="fm-config-modal__close" onClick={onClose} aria-label={t('fm.action.close')}>✕</button>
+          <button className="fm-config-modal__close" onClick={close} disabled={submitting} aria-label={t('fm.action.close')} data-testid="AeatSubmitFlow__closeX">✕</button>
         </div>
 
         {/* Body */}
@@ -542,6 +600,7 @@ export default function AeatSubmitFlow({ decl, orgIdent, identChecks, liveBoxes,
                 icon={<CheckCircleIcon size={18} data-testid="CircleCheck__aeatSuccess" />}
                 title={t('fm.aeat.result.success.title') ?? 'Declaration submitted successfully'}
                 data-testid="Banner__aeatSuccess" />
+              <PreValidationNote response={response} t={t} presented data-testid="AeatSubmitFlow__preValidationNoteSuccess" />
               <div style={{ marginTop: 16 }}>
                 <InfoRow
                   label={t('fm.aeat.result.success.csv') ?? 'CSV'}
@@ -633,19 +692,19 @@ export default function AeatSubmitFlow({ decl, orgIdent, identChecks, liveBoxes,
             } else {
               errorBody = <div style={{ marginTop: 4 }}>{t('fm.aeat.error.generic') ?? 'Unknown error. Please try again.'}</div>;
             }
+            const notValidated = response?.errorCode === 'NOT_VALIDATED';
             return (
               <>
                 <Banner
-                  tone="danger"
-                  icon={<WarningOctagonIcon size={18} data-testid="OctagonAlert__aeatError" />}
-                  title={response?.stage === 'validation' && !specificKey
-                    // ETP-5716: the server validates before a real presentation; the validator's
-                    // errors stopped it — nothing was presented.
-                    ? (t('fm.aeat.result.validation_rejected.title') ?? 'Declaration not submitted: the AEAT found errors when validating it')
-                    : (t('fm.aeat.result.error.title') ?? 'The submission could not be completed')}
+                  tone={notValidated ? 'warning' : 'danger'}
+                  icon={notValidated
+                    ? <WarningIcon size={18} data-testid="TriangleAlert__aeatNotValidated" />
+                    : <WarningOctagonIcon size={18} data-testid="OctagonAlert__aeatError" />}
+                  title={submitErrorTitle(response, specificKey, t)}
                   data-testid="Banner__aeatError">
                   {errorBody}
                 </Banner>
+                <PreValidationNote response={response} t={t} presented={false} data-testid="AeatSubmitFlow__preValidationNoteFailure" />
                 {isNoCertificate && (
                   <button
                     type="button"
@@ -668,7 +727,7 @@ export default function AeatSubmitFlow({ decl, orgIdent, identChecks, liveBoxes,
             <Banner
               tone="danger"
               icon={<WarningOctagonIcon size={18} data-testid="OctagonAlert__aeatUnknown" />}
-              title={t('fm.aeat.result.error.title') ?? 'The submission could not be completed'}
+              title={t('fm.aeat.result.unknown.title') ?? 'The result of the submission could not be confirmed'}
               body={t('fm.aeat.error.generic') ?? 'Unknown error. Please try again.'}
               data-testid="Banner__aeatUnknown" />
           )}
@@ -676,7 +735,7 @@ export default function AeatSubmitFlow({ decl, orgIdent, identChecks, liveBoxes,
 
         {/* Footer */}
         <div className="fm-config-modal__footer">
-          <button className="fm-btn fm-btn--cancel-pill" onClick={onClose}>
+          <button className="fm-btn fm-btn--cancel-pill" onClick={close} disabled={submitting} data-testid="AeatSubmitFlow__cancel">
             {step === 'result' ? (t('fm.action.close') ?? 'Close') : (t('fm.action.cancel') ?? 'Cancel')}
           </button>
           {step === 'confirm' && (

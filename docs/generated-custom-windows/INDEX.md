@@ -103,6 +103,7 @@ Menu group "Impuestos" (ETP-6380), in the Finance section right after Finanzas: 
 | [fiscal-monitor.md](fiscal-monitor.md) | Custom fiscal monitor window — real-time invoice submission status for SII, TBAI, and Verifactu |
 | [fiscal-config.md](fiscal-config.md) | Custom fiscal configuration window — onboarding wizard (SII/TBAI/Verifactu) and ongoing config maintenance; SIF activation through the backend `fiscalSystemCatalog` / `configureFiscalSystem` actions on `sii-config` (ETP-6053) |
 | [fiscal-models.md](fiscal-models.md) | Custom fiscal models window — declaration list and per-model detail pages (303, 349, 390) with auto-compute, file generation (390: validated by the AEAT before download) and direct presentation to the AEAT |
+| [fiscal-models-390.md](fiscal-models-390.md) | Fiscal models — Modelo 390 detail page (`FmModel390Page`, ETP-5716): registry entry, boxes, Facturas tab, preload from the 303s with the cuadre, AEAT-validated file, telematic filing, manual registration, substitute and incidents (split out of `fiscal-models.md`) |
 | [sii-monitor.md](sii-monitor.md) | API-only sub-window — SII invoice submission records consumed by FiscalMonitorPage |
 | [monitor-verifactu.md](monitor-verifactu.md) | API-only sub-window — Verifactu invoice submission records consumed by FiscalMonitorPage |
 | [tbai-facturas-enviadas.md](tbai-facturas-enviadas.md) | API-only sub-window — TBAI invoice submission records consumed by FiscalMonitorPage |

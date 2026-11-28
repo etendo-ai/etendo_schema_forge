@@ -101,6 +101,7 @@ import {
   resultKind390, RESULT_LABEL_KEY_390, sanitizeAeatInputs390, conflictingInput390, isConcurso,
   isMonthlyReturn,
 } from './fm390Layouts.js';
+import { usePendingEdits, useDeclarationLeaveGuard } from '../../usePendingEdits.js';
 import '../../fiscal-models.css';
 
 const MODEL_ID = '390';
@@ -441,8 +442,12 @@ export default function FmModel390Page({
   const [incidents, setIncidents] = useState(decl.incidents?.items ? decl.incidents : EMPTY_INCIDENTS);
   // Facturas tab badge: the unfiltered line count, known once the tab has loaded it (FmSources390).
   const [sourcesCount, setSourcesCount] = useState(null);
-  // Edits since the last successful save — a ref so a handler can read it synchronously.
-  const dirtyRef = useRef(false);
+  // Edits since the last successful save — a ref so a handler can read it synchronously — plus
+  // whether the USER made one (the leave guard's question, OBS-17; the 303 preload is automatic).
+  const {
+    ref: dirtyRef, userEdited, mark: markEdit, clear: clearEdits,
+    version: editVersion, clearIfUnchanged: clearEditsIfUnchanged,
+  } = usePendingEdits();
   const lastSavedManualData = useRef(decl.manualData ?? {});
   const busy = computing || saving || generating || presenting || creatingSubstitute;
   const layout = useMemo(() => getLayout390(payload?.taxReport?.layoutYear), [payload?.taxReport?.layoutYear]);
@@ -533,7 +538,7 @@ export default function FmModel390Page({
   const { resultColors, resultLabel, reconciliation } = resultView390(payload, summary, preload, t);
 
   // ── Edits ─────────────────────────────────────────────────────────────────
-  function markDirty() { dirtyRef.current = true; }
+  function markDirty({ user = true } = {}) { markEdit({ user }); }
 
   function handleInputChange(key, raw, spec) {
     const normalized = normalizeInputValue(raw);
@@ -582,7 +587,7 @@ export default function FmModel390Page({
     aeatInputsRef.current = result.inputs;
     setPreloaded(result.preloaded);
     setAeatInputs(result.inputs);
-    if (result.applied.length > 0 || before !== JSON.stringify(result.preloaded)) markDirty();
+    if (result.applied.length > 0 || before !== JSON.stringify(result.preloaded)) markDirty({ user: false });
     return result;
   }
 
@@ -621,11 +626,13 @@ export default function FmModel390Page({
     if (!force && !dirtyRef.current) return { ok: true };
     if (!apiBaseUrl) return { ok: true };
     const manualData = currentManualData();
+    const savedVersion = editVersion();
     setSaving(true);
     try {
       const result = await persistManualData(decl.id, manualData, { token, apiBaseUrl });
       if (result.ok) {
-        dirtyRef.current = false;
+        // QA BUG-2: an edit typed during the PUT is not in `manualData` — it stays pending.
+        clearEditsIfUnchanged(savedVersion);
         lastSavedManualData.current = manualData;
         invalidateFiscalComputeCache(decl.id);
         onManualDataSaved?.(decl.id, manualData);
@@ -641,7 +648,12 @@ export default function FmModel390Page({
     const { ok } = await persistIfDirty({ force: true });
     if (ok) toast.success(t('recordSaved'));
     else toast.error(t('fm.action.save_error'));
+    return ok;
   }
+
+  // OBS-17 (ETP-5716) — leaving with the user's edits unsaved asks first (side menu, top bar,
+  // reload, the "Modelos Fiscales" crumb); "Guardar y salir" runs Guardar (resolves its `ok`).
+  const guardedBack = useDeclarationLeaveGuard(userEdited && !isSubmitted, handleSave);
 
   // Calcular re-reads the 303s first and applies them to the inputs the user has not changed, so
   // the boxes are computed (and saved) with them.
@@ -787,7 +799,7 @@ export default function FmModel390Page({
         toast.error(t('fm.action.save_error'));
         return;
       }
-      dirtyRef.current = false;
+      clearEdits();
       lastSavedManualData.current = manualData;
       invalidateFiscalComputeCache(decl.id);
       onManualDataSaved?.(decl.id, manualData);
@@ -836,7 +848,7 @@ export default function FmModel390Page({
     // Same shape as the 303/349: the "Modelos Fiscales" level goes back to the list (ETP-6380).
     breadcrumb: [
       t('taxes'),
-      { label: t('fm.breadcrumb.section'), onClick: onBack },
+      { label: t('fm.breadcrumb.section'), onClick: guardedBack(onBack) },
       declTitle,
     ],
     favLabel: t('fm.breadcrumb.section'),
@@ -952,48 +964,50 @@ export default function FmModel390Page({
           t={t}
           data-testid="SubstitutiveBanner__74d2aa" />
 
-        <div className="fm-390-kpis">
-          {/* Incidencias — the 303 card: total + severity badge; a click opens the tab. */}
-          <KpiWidget
-            icon={<IncidentsKpiIcon blocking={blocking} data-testid="IncidentsKpiIcon__74d2aa" />}
-            iconColor={incidentVariants.iconColor}
-            label={t('fm.tab.incidents')}
-            onClick={() => setActiveTab('incidents')}
-            value={<span data-testid="FmModel390Page__incidentsCount">{String(blocking + warning)}</span>}
-            badge={incidentVariants.badge}
-            badgeBg={incidentVariants.badgeBg}
-            badgeColor={incidentVariants.badgeColor}
-            data-testid="KpiWidget__74d2aa" />
-          <KpiWidget
-            icon={<TrendUpIcon size={20} data-testid="TrendingUp__fm390kpi" />}
-            iconColor="hsl(var(--foreground))"
-            label={t('fm.m390.kpi.accrued')}
-            value={formatAmount(summary.accrued)}
-            badge={t('fm.m303.summary.accrued_sub')}
-            badgeBg="hsl(var(--muted))"
-            badgeColor="hsl(var(--muted-foreground))"
-            data-testid="KpiWidget__74d2aa" />
-          <KpiWidget
-            icon={<TrendDownIcon size={20} data-testid="TrendingDown__fm390kpi" />}
-            iconColor="hsl(var(--foreground))"
-            label={t('fm.m390.kpi.deductible')}
-            value={formatAmount(summary.deductible)}
-            badge={t('fm.m303.summary.deductible_sub')}
-            badgeBg="hsl(var(--muted))"
-            badgeColor="hsl(var(--muted-foreground))"
-            data-testid="KpiWidget__74d2aa" />
-          {/* Resultado — [86], or [94] when filing to several administrations. The "cuadre con
-              los 303" banner (Reconciliation390) goes right under the cards. */}
-          <KpiWidget
-            icon={<CalculatorIcon size={20} data-testid="Calculator__fm390kpi" />}
-            iconColor="hsl(var(--foreground))"
-            label={t(display.mode === 'territory' ? 'fm.m390.kpi.result_territory' : 'fm.m390.kpi.result')}
-            value={formatAmount(summary.result)}
-            valueColor={resultColors.valueColor}
-            badge={resultLabel}
-            badgeBg={resultColors.badgeBg}
-            badgeColor={resultColors.badgeColor}
-            data-testid="KpiWidget__74d2aa" />
+        <div className="fm-390-kpis-wrap">
+          <div className="fm-390-kpis">
+            {/* Incidencias — the 303 card: total + severity badge; a click opens the tab. */}
+            <KpiWidget
+              icon={<IncidentsKpiIcon blocking={blocking} data-testid="IncidentsKpiIcon__74d2aa" />}
+              iconColor={incidentVariants.iconColor}
+              label={t('fm.tab.incidents')}
+              onClick={() => setActiveTab('incidents')}
+              value={<span data-testid="FmModel390Page__incidentsCount">{String(blocking + warning)}</span>}
+              badge={incidentVariants.badge}
+              badgeBg={incidentVariants.badgeBg}
+              badgeColor={incidentVariants.badgeColor}
+              data-testid="KpiWidget__74d2aa" />
+            <KpiWidget
+              icon={<TrendUpIcon size={20} data-testid="TrendingUp__fm390kpi" />}
+              iconColor="hsl(var(--foreground))"
+              label={t('fm.m390.kpi.accrued')}
+              value={formatAmount(summary.accrued)}
+              badge={t('fm.m303.summary.accrued_sub')}
+              badgeBg="hsl(var(--muted))"
+              badgeColor="hsl(var(--muted-foreground))"
+              data-testid="KpiWidget__74d2aa" />
+            <KpiWidget
+              icon={<TrendDownIcon size={20} data-testid="TrendingDown__fm390kpi" />}
+              iconColor="hsl(var(--foreground))"
+              label={t('fm.m390.kpi.deductible')}
+              value={formatAmount(summary.deductible)}
+              badge={t('fm.m303.summary.deductible_sub')}
+              badgeBg="hsl(var(--muted))"
+              badgeColor="hsl(var(--muted-foreground))"
+              data-testid="KpiWidget__74d2aa" />
+            {/* Resultado — [86], or [94] when filing to several administrations. The "cuadre con
+                los 303" banner (Reconciliation390) goes right under the cards. */}
+            <KpiWidget
+              icon={<CalculatorIcon size={20} data-testid="Calculator__fm390kpi" />}
+              iconColor="hsl(var(--foreground))"
+              label={t(display.mode === 'territory' ? 'fm.m390.kpi.result_territory' : 'fm.m390.kpi.result')}
+              value={formatAmount(summary.result)}
+              valueColor={resultColors.valueColor}
+              badge={resultLabel}
+              badgeBg={resultColors.badgeBg}
+              badgeColor={resultColors.badgeColor}
+              data-testid="KpiWidget__74d2aa" />
+          </div>
         </div>
         {/* The cuadre with the year's 303s: a full-width banner between the cards and the tabs. */}
         {hasBoxes && (

@@ -240,6 +240,51 @@ describe('PresentModal — two-column layout', () => {
     expect(screen.queryByText('fm.action.confirm_presentation')).toBeTruthy();
   });
 
+  // GEN-03 retest (ETP-5716) — the option cards were plain clickable divs: no role, no Tab stop,
+  // so a keyboard user could not choose a path nor reach a working confirm.
+  it('options are a keyboard-operable radiogroup: one Tab stop, arrows select, Space selects', () => {
+    const onConfirm = vi.fn();
+    render(<PresentModal decl={decl} onConfirm={onConfirm} onClose={vi.fn()} showAeatPath />);
+    const group = screen.getByRole('radiogroup');
+    const radios = screen.getAllByRole('radio');
+    expect(radios.map(r => r.dataset.pathId)).toEqual(['submitted_ack', 'submitted', 'aeat_telematic']);
+    // Nothing checked yet: only the first option is a Tab stop.
+    expect(radios.map(r => r.tabIndex)).toEqual([0, -1, -1]);
+    expect(radios.every(r => r.getAttribute('aria-checked') === 'false')).toBe(true);
+    expect(radios[0]).toHaveAccessibleName('fm.present.path.acuse');
+
+    radios[0].focus();
+    fireEvent.keyDown(radios[0], { key: 'ArrowDown' });
+    expect(screen.getAllByRole('radio')[1]).toHaveAttribute('aria-checked', 'true');
+    expect(document.activeElement).toBe(screen.getAllByRole('radio')[1]);
+    expect(screen.getAllByRole('radio').map(r => r.tabIndex)).toEqual([-1, 0, -1]);
+
+    fireEvent.keyDown(document.activeElement, { key: 'ArrowRight' });
+    expect(screen.getAllByRole('radio')[2]).toHaveAttribute('aria-checked', 'true');
+    // Wraps around.
+    fireEvent.keyDown(document.activeElement, { key: 'ArrowDown' });
+    expect(screen.getAllByRole('radio')[0]).toHaveAttribute('aria-checked', 'true');
+    expect(group).toContainElement(document.activeElement);
+
+    // Space on a focused option checks it; the confirm button is then enabled.
+    fireEvent.keyDown(screen.getAllByRole('radio')[1], { key: ' ' });
+    expect(screen.getAllByRole('radio')[1]).toHaveAttribute('aria-checked', 'true');
+    const confirmBtn = screen.getByText('fm.action.confirm_presentation');
+    expect(confirmBtn.disabled).toBe(false);
+    fireEvent.click(confirmBtn);
+    expect(onConfirm).toHaveBeenCalledWith({ status: 'submitted', acuseFile: null });
+  });
+
+  it('Enter selects an option, and the acuse upload is a Tab stop outside the radio', () => {
+    render(<PresentModal decl={decl} onConfirm={vi.fn()} onClose={vi.fn()} />);
+    const [ack] = screen.getAllByRole('radio');
+    fireEvent.keyDown(ack, { key: 'Enter' });
+    expect(ack).toHaveAttribute('aria-checked', 'true');
+    const upload = screen.getByTestId('PresentModal__acuseUpload').querySelector('button');
+    expect(upload.tabIndex).toBe(0);
+    expect(ack).not.toContainElement(upload);
+  });
+
   it('renders a vertical divider between columns only when the AEAT column is present', () => {
     // Queried by test id, not by `[aria-hidden]`: the reserved acuse slot (ETP-5584) is
     // aria-hidden too, so an aria-hidden query would no longer single out the divider.

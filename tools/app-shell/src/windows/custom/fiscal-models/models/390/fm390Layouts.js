@@ -36,6 +36,7 @@ export const INPUT = Object.freeze({
   VAT_IMPORT: 'LIQANUAL_VAT_IMPORT',                     // [659]
   NO_CURRENT_TYPE_BASE: 'LIQANUAL_NoCurrentTypeBASE',    // [660]
   NO_CURRENT_TYPE_AMOUNT: 'LIQANUAL_NoCurrentTypeAMOUNT', // [661]
+  INVESTMENT_REGULARIZATION: '390INVESTMENT_REGULARIZATION', // [63] (never calculated: prorrata)
   COMMON_TERRITORY: 'COMMON_TERRITORY',                  // [87]
   ALAVA: 'ALAVA',                                        // [88]
   GUIPUZCOA: 'GUIPUZCOA',                                // [89]
@@ -160,7 +161,7 @@ const BLOCKS = Object.freeze([
         r('2', 773, 774), r('4', 587, 588), r('5', 740, 741), r('7.5', 775, 776), r('10', 635, 636), r('21', 637, 638),
       ], { id: 'adq_intra_servicios_ded_total', labelKey: 'fm.m390.row.group_total', cells: [597, 598], total: true }),
       row('rectif_deducciones', 'fm.m390.row.rectif_deducciones', [639, 62]),
-      row('regul_inversion', 'fm.m390.row.regul_inversion', [null, 63]),
+      row('regul_inversion', 'fm.m390.row.regul_inversion', [null, input(INPUT.INVESTMENT_REGULARIZATION, { box: 63 })]),
       row('no_current_type', 'fm.m390.row.no_current_type', [
         input(INPUT.NO_CURRENT_TYPE_BASE, { box: 660 }),
         input(INPUT.NO_CURRENT_TYPE_AMOUNT, { box: 661 }),
@@ -367,8 +368,9 @@ export function territoryPercentSum(inputs) {
 // inputs, so an edit shows its effect on the totals immediately, before "Calcular". The backend
 // stays authoritative: "Calcular" (and the generated file) recompute everything server-side.
 //
-//   echo boxes  [660] [661] [658] [659] [97] [98] [662] [101] [227] [228] [127] [128] [111]
-//   [64] = deductible cuotas + [661]    [65] = [47] − [64]   (the file adds [661] to [64], page 4)
+//   echo boxes  [63] [660] [661] [658] [659] [97] [98] [662] [101] [227] [228] [127] [128] [111]
+//   [64] = deductible cuotas + [63] + [661]    [65] = [47] − [64]   (the file adds [661] to [64],
+//               page 4; [63] is already on classic's bean, so it is part of ResRegGeneral)
 //   liquidation [84] = [65] + [658]   [85] = compensation (≥ 0,01)   [86] = [84] + [659] − compensation
 //   territory   [84] = [65] + [661] + [658]  (classic prints the pre-[661] result here — a quirk of
 //               the file, reproduced so screen = file)
@@ -378,6 +380,7 @@ export function territoryPercentSum(inputs) {
 //   [108] = invoice volume + [127] + [128] + [101] + [227] + [228]
 
 const ECHO_BOXES = Object.freeze({
+  [INPUT.INVESTMENT_REGULARIZATION]: 63,
   [INPUT.NO_CURRENT_TYPE_BASE]: 660,
   [INPUT.NO_CURRENT_TYPE_AMOUNT]: 661,
   [INPUT.REGULARIZATION]: 658,
@@ -430,11 +433,16 @@ export function deriveInputBoxes(computedBoxes, computedInputs, currentInputs) {
 
   for (const [key, box] of Object.entries(ECHO_BOXES)) putIfNonZero(box, inputCents(currentInputs, key));
 
-  // [64]/[65] carry [661]: back out the one they were computed with, apply the one on screen.
+  // [64]/[65] carry [63] and [661]: back out the ones they were computed with, apply the ones on
+  // screen. [63] is inside classic's ResRegGeneral (so it also reaches the territory [84]); [661]
+  // is not.
   const computedNoCurrentType = inputCents(computedInputs, INPUT.NO_CURRENT_TYPE_AMOUNT);
   const noCurrentType = inputCents(currentInputs, INPUT.NO_CURRENT_TYPE_AMOUNT);
-  const resRegGeneral = (cents[65] ?? 0) + computedNoCurrentType; // classic ResRegGeneral
-  put(64, (cents[64] ?? 0) - computedNoCurrentType + noCurrentType);
+  const computedInvestment = inputCents(computedInputs, INPUT.INVESTMENT_REGULARIZATION);
+  const investment = inputCents(currentInputs, INPUT.INVESTMENT_REGULARIZATION);
+  // classic ResRegGeneral
+  const resRegGeneral = (cents[65] ?? 0) + computedNoCurrentType + computedInvestment - investment;
+  put(64, (cents[64] ?? 0) - computedNoCurrentType + noCurrentType - computedInvestment + investment);
   const box65 = resRegGeneral - noCurrentType;
   put(65, box65);
   const regularization = inputCents(currentInputs, INPUT.REGULARIZATION);

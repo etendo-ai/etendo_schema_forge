@@ -670,7 +670,10 @@ function useDeclarationsAutoCompute(decls, { token, apiBaseUrl, onComputeUpdate 
       checkModifiedFn: neverModifiedFn,
       token,
       apiBaseUrl,
-      enabled:         Boolean(token && apiBaseUrl),
+      // ETP-5716 OBS-5/OBS-18 (ETP-6037): gated like the draft/other buckets. A cookie session has
+      // no `token` (the request helper authenticates on its own); requiring one left every legacy
+      // submitted declaration on the "…" computing indicator forever.
+      enabled:         Boolean(apiBaseUrl),
     }).computedMap);
   }
 
@@ -786,6 +789,11 @@ export default function FmListPage({ declarations: propDecls, onSelect, onComput
   const apiFetch = useApiFetch(apiBaseUrl);
 
   const [decls, setDecls] = useState(propDecls ?? []);
+  // OBS-4 (ETP-5716) — until the first declarations fetch settles the list shows the loading
+  // state, never "No se encontraron declaraciones" (which read as lost declarations). Only the
+  // FIRST load gates it: a later refetch (locale change) keeps the rows on screen. A failed fetch
+  // also ends the loading state, so the empty state is still reachable.
+  const [declsLoaded, setDeclsLoaded] = useState(propDecls != null || !apiBaseUrl);
 
   useEffect(() => {
     if (!apiBaseUrl) return;
@@ -793,7 +801,8 @@ export default function FmListPage({ declarations: propDecls, onSelect, onComput
     apiFetch(`${base}/fiscal303/declarations`, { baseUrl: '' })
       .then(r => r.ok ? r.json() : Promise.reject(r.status))
       .then(data => setDecls((Array.isArray(data) ? data : (data?.data ?? [])).map(d => normDecl(d, bcpLocale))))
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setDeclsLoaded(true));
   }, [token, apiBaseUrl, apiFetch, bcpLocale]);
 
   // ETP-5338 CRITICAL FIX — this component "stays mounted at all times" (see the render
@@ -1185,7 +1194,7 @@ export default function FmListPage({ declarations: propDecls, onSelect, onComput
   // If/else-if chain instead of a nested ternary (SonarQube S3358) — same four
   // outcomes in the same order of precedence, same JSX per outcome.
   let tableSection;
-  if (!catalogLoaded) {
+  if (!catalogLoaded || !declsLoaded) {
     tableSection = (
       <EmptyState
         message={t('loading') ?? 'Cargando…'}

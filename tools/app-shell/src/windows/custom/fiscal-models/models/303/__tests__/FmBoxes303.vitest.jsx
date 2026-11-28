@@ -163,6 +163,20 @@ describe('FmBoxes303 — identificacion section', () => {
 // ── Editable cells ────────────────────────────────────────────────────────────
 
 describe('FmBoxes303 — editable cells', () => {
+  // ETP-5716 (QA retest) — the 303 pencil buttons were icon-only with no accessible name (the
+  // 390 ones say which box they edit). Every one now names its box, in grid rows and infoboxes.
+  it('every edit pencil has an accessible name and a per-box test id', () => {
+    const { container } = render(<FmBoxes303 {...BASE_PROPS} boxes={{}} />);
+    const editBtns = [...container.querySelectorAll('.fm-aeat-cell__edit-btn')];
+    expect(editBtns.length).toBeGreaterThan(0);
+    for (const btn of editBtns) {
+      expect(btn).toHaveAttribute('aria-label', 'fm.box.edit_aria');
+      expect(btn).toHaveAttribute('type', 'button');
+      expect(btn.dataset.testid).toMatch(/^FmBoxes303__edit_\d+$/);
+    }
+    expect(screen.getByTestId('FmBoxes303__edit_43')).toBeInTheDocument();
+  });
+
   it('shows edit pencil button on editable cells', () => {
     // resultado_final section typically has editable cells
     const { container } = render(

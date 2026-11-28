@@ -27,6 +27,7 @@ import AeatSubmitFlow, {
   buildLocalDeclarationData,
   classifySubmitOutcome,
   resolveErrorCodeKey,
+  submitErrorTitle,
 } from '../AeatSubmitFlow.jsx';
 import { AeatResultBanner } from '../AeatResultBanner.jsx';
 
@@ -131,6 +132,21 @@ describe('resolveErrorCodeKey', () => {
     expect(resolveErrorCodeKey('SUBMISSION_FAILED')).toBeNull();
     expect(resolveErrorCodeKey(undefined)).toBeNull();
     expect(resolveErrorCodeKey('SOMETHING_ELSE')).toBeNull();
+  });
+
+  // ETP-5716: the validator has not loaded the model / exercise (AEAT EV0) — not a rejection.
+  it('maps NOT_VALIDATED to its own message', () => {
+    expect(resolveErrorCodeKey('NOT_VALIDATED')).toBe('fm.aeat.error.notValidated');
+  });
+});
+
+describe('submitErrorTitle (ETP-5716 OBS-15)', () => {
+  const t = (k) => k;
+  it('titles a failed test-mode run as a validation, a production one as a presentation', () => {
+    expect(submitErrorTitle({ testMode: true }, null, t)).toBe('fm.aeat.result.test_error.title');
+    expect(submitErrorTitle({ testMode: false }, null, t)).toBe('fm.aeat.result.error.title');
+    expect(submitErrorTitle({ testMode: false, stage: 'validation' }, null, t))
+      .toBe('fm.aeat.result.validation_rejected.title');
   });
 });
 
@@ -713,6 +729,93 @@ describe('AeatSubmitFlow — onIncidentsChanged (Incidencias tab refresh, ETP-44
     expect(JSON.parse(stableApiFetch.mock.calls[0][1].body).testMode).toBe(true);
     await waitFor(() => expect(screen.getByText('fm.aeat.result.test.title')).toBeInTheDocument());
     expect(onIncidentsChanged).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ETP-5716 — the server presented without a verdict from the validation that precedes it
+// (`preValidation: "NOT_VALIDATED"`: no answer, or EV0 "model not available"). The result says so.
+describe('AeatSubmitFlow — presented without pre-validation (ETP-5716)', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it('success keeps "Presentado" and adds the info note', async () => {
+    const onSuccess = vi.fn();
+    stableApiFetch.mockReturnValueOnce(jsonResponse({ status: 'SUCCESS', testMode: false, preValidation: 'NOT_VALIDATED' }));
+    renderFlow({ onSuccess });
+    fireEvent.click(screen.getByText('fm.aeat.action.submit'));
+    await waitFor(() => expect(screen.getByText('fm.aeat.result.success.title')).toBeInTheDocument());
+    const note = screen.getByTestId('Banner__aeatPreValidationSkipped');
+    expect(note).toHaveTextContent('fm.aeat.result.pre_validation_skipped.success');
+    expect(note.style.color).toBe('var(--fm-info-fg)');
+    expect(onSuccess).toHaveBeenCalled();
+  });
+
+  it('a validated success shows no note', async () => {
+    stableApiFetch.mockReturnValueOnce(jsonResponse({ status: 'SUCCESS', testMode: false }));
+    renderFlow();
+    fireEvent.click(screen.getByText('fm.aeat.action.submit'));
+    await waitFor(() => expect(screen.getByText('fm.aeat.result.success.title')).toBeInTheDocument());
+    expect(screen.queryByTestId('Banner__aeatPreValidationSkipped')).not.toBeInTheDocument();
+  });
+
+  it('a failed presentation says it was not presented, plus the failure note', async () => {
+    stableApiFetch.mockReturnValueOnce(jsonResponse({
+      status: 'ERROR', testMode: false, preValidation: 'NOT_VALIDATED', errors: ['E0100803 - Razón social'],
+    }));
+    renderFlow();
+    fireEvent.click(screen.getByText('fm.aeat.action.submit'));
+    await waitFor(() => expect(screen.getByText('fm.aeat.result.error.title')).toBeInTheDocument());
+    expect(screen.getByText('E0100803 - Razón social')).toBeInTheDocument();
+    expect(screen.getByTestId('Banner__aeatPreValidationSkipped'))
+      .toHaveTextContent('fm.aeat.result.pre_validation_skipped.failure');
+  });
+
+  it('a failed presentation without the field shows no note', async () => {
+    stableApiFetch.mockReturnValueOnce(jsonResponse({ status: 'ERROR', testMode: false, errors: ['E1 - x'] }));
+    renderFlow();
+    fireEvent.click(screen.getByText('fm.aeat.action.submit'));
+    await waitFor(() => expect(screen.getByText('fm.aeat.result.error.title')).toBeInTheDocument());
+    expect(screen.queryByTestId('Banner__aeatPreValidationSkipped')).not.toBeInTheDocument();
+  });
+
+  it('an unexpected status reads as "could not be confirmed", never as "not presented"', async () => {
+    stableApiFetch.mockReturnValueOnce(jsonResponse({ status: 'WEIRD' }));
+    renderFlow();
+    fireEvent.click(screen.getByText('fm.aeat.action.submit'));
+    await waitFor(() => expect(screen.getByText('fm.aeat.result.unknown.title')).toBeInTheDocument());
+    expect(screen.queryByText('fm.aeat.result.error.title')).not.toBeInTheDocument();
+  });
+});
+
+// BUG-1 (ETP-5716) — the flow closed mid-request through the ✕, the overlay or Cancelar (only
+// Escape was guarded), so the result and attach callbacks landed on an unmounted flow.
+describe('AeatSubmitFlow — no way out while the request is in flight (BUG-1)', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it('the ✕, the overlay, Cancelar and Escape do not close it while submitting', async () => {
+    const onClose = vi.fn();
+    let resolveFetch;
+    stableApiFetch.mockReturnValueOnce(new Promise((resolve) => { resolveFetch = resolve; }));
+    renderFlow({ onClose });
+    fireEvent.click(screen.getByText('fm.aeat.action.submit'));
+    await waitFor(() => expect(screen.getByText('fm.aeat.action.validating_submitting')).toBeInTheDocument());
+
+    const closeX = screen.getByTestId('AeatSubmitFlow__closeX');
+    const cancel = screen.getByTestId('AeatSubmitFlow__cancel');
+    expect(closeX).toBeDisabled();
+    expect(cancel).toBeDisabled();
+    fireEvent.click(closeX);
+    fireEvent.click(cancel);
+    fireEvent.click(screen.getByRole('dialog'));
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(onClose).not.toHaveBeenCalled();
+
+    resolveFetch({ ok: true, json: async () => ({ status: 'SUCCESS' }) });
+    await waitFor(() => expect(screen.getByText('fm.aeat.result.success.title')).toBeInTheDocument());
+    // Once the answer is in, every way out works again.
+    fireEvent.click(screen.getByRole('dialog'));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByTestId('AeatSubmitFlow__cancel'));
+    expect(onClose).toHaveBeenCalledTimes(2);
   });
 });
 

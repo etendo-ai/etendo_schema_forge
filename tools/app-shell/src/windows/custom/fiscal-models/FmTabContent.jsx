@@ -191,7 +191,7 @@ function defaultIncidentAction(inc, onGoToSources, t) {
  * @param {Function} [getOrigin]    (inc) => text of the Origen column (`null` → "—")
  * @param {Function} [renderAction] (inc) => node of the Acción column, or `null`
  */
-export function IncidentsTab({ decl, blocking, warning, gatingBlocking = blocking, t, onGoToSources, getMessage, getOrigin, renderAction }) {
+export function IncidentsTab({ decl, blocking, warning, gatingBlocking = blocking, t, onGoToSources, getMessage, getOrigin, renderAction, getSeverityLabel }) {
   const incidents = decl.incidents?.items ?? [];
   // Per-session dismissal of the warning banner (no localStorage precedent found for
   // this pattern — see CertExpiryBanner.jsx, which also uses a plain local useState).
@@ -225,6 +225,9 @@ export function IncidentsTab({ decl, blocking, warning, gatingBlocking = blockin
   const messageOf = (inc) => (getMessage ? getMessage(inc) : inc.message);
   const originOf = (inc) => (getOrigin ? getOrigin(inc) : inc.origin);
   const actionOf = (inc) => (renderAction ? renderAction(inc) : null);
+  // ETP-5716 OBS-14 — a model can relabel a severity: a stored AEAT error is a blocking-severity
+  // row that does not block (390), so it reads "Error AEAT", not "Bloqueante". Colour unchanged.
+  const severityLabelOf = (inc, fallbackKey) => (getSeverityLabel ? getSeverityLabel(inc) : null) ?? t(fallbackKey);
   const hasAction = renderAction
     ? sorted.some((inc) => actionOf(inc) != null)
     : sorted.some((inc) => inc.origin?.match(CASILLA_ORIGIN_RE));
@@ -281,8 +284,8 @@ export function IncidentsTab({ decl, blocking, warning, gatingBlocking = blockin
                 <tr key={`${inc.origin ?? ''}-${inc.message}-${i}`} data-testid={`IncidentsTab__row_${inc.origin ?? i}`}>
                   <td>
                     {inc.severity === 'block'
-                      ? <span style={{ fontSize: 12, fontWeight: 400, color: 'hsl(var(--destructive))', background: 'var(--status-destructive-bg)', borderRadius: 4, padding: '2px 6px' }}>{t('fm.incidents.severity.block')}</span>
-                      : <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--status-warning-fg)', background: 'var(--status-warning-bg)', borderRadius: 4, padding: '2px 6px' }}>{t('fm.incidents.severity.warn')}</span>
+                      ? <span style={{ fontSize: 12, fontWeight: 400, color: 'hsl(var(--destructive))', background: 'var(--status-destructive-bg)', borderRadius: 4, padding: '2px 6px' }}>{severityLabelOf(inc, 'fm.incidents.severity.block')}</span>
+                      : <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--status-warning-fg)', background: 'var(--status-warning-bg)', borderRadius: 4, padding: '2px 6px' }}>{severityLabelOf(inc, 'fm.incidents.severity.warn')}</span>
                     }
                   </td>
                   <td>{originOf(inc) ?? '—'}</td>

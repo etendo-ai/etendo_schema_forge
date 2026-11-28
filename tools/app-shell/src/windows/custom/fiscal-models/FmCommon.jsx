@@ -22,6 +22,7 @@ export function KpiWidget({ icon, iconColor, label, badge, badgeBg, badgeColor, 
   }
   return (
     <div
+      className="fm-kpi"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onClick={onClick}
@@ -42,7 +43,8 @@ export function KpiWidget({ icon, iconColor, label, badge, badgeBg, badgeColor, 
         borderRadius: 8, flex: 1, minWidth: 0, cursor: clickable ? 'pointer' : 'default',
         transition: 'background .15s, border-color .15s',
       }}>
-      <div style={{
+      {/* `fm-kpi__icon`: a page may drop the tile when its cards get narrow (390, GEN-02). */}
+      <div className="fm-kpi__icon" style={{
         width: 40, height: 40, background: 'hsl(var(--card))',
         border: '1px solid hsl(var(--border-control))',
         boxShadow: '0px 1px 2px hsl(var(--foreground) / 0.05)',

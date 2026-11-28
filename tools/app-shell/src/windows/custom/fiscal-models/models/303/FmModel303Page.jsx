@@ -42,6 +42,7 @@ import { AttachmentsTab, useAttachments } from '@/components/attachments';
 import { notifyAttachmentsChanged } from '@/components/attachments/attachmentsBus';
 import { useApiFetch } from '@/auth/useApiFetch.js';
 import { parseLocaleNumber } from '@/lib/parseLocaleNumber.js';
+import { usePendingEdits, useDeclarationLeaveGuard } from '../../usePendingEdits.js';
 
 // AD table name backing the AEAT justificante attachments store — both the
 // server-side auto-attach on a successful telematic submission and the
@@ -352,10 +353,12 @@ export function invoiceCountFor(snapshotServed, snapshot, sources) {
   return snapshotServed ? (Number(snapshot.sourceCount) || 0) : sources.length;
 }
 
-// The "Facturas" tab badge: the snapshot's invoice count, else the live rows' length (`null`
-// while nothing is loaded).
+// The "Facturas" tab badge: the live rows' length (`null` while nothing is loaded). A declaration
+// served from its submission snapshot shows no counter (OBS-11, ETP-5716): the tab only says the
+// per-invoice detail is not kept, so a number there promised rows the tab cannot show.
+// `invoiceCount` stays in the signature for the callers; the snapshot count is not a tab badge.
 export function sourcesTabBadge(snapshotServed, invoiceCount, sources) {
-  return snapshotServed ? invoiceCount : (sources?.length ?? null);
+  return snapshotServed ? null : (sources?.length ?? null);
 }
 
 // ── Main page ─────────────────────────────────────────────────────
@@ -436,7 +439,13 @@ export default function FmModel303Page({ decl, onBack, onStatusChange, onSubmitt
    * or box edit happens, so `handleSave` can gate on it without waiting for a render, and
    * `handleCancel` can clear it as part of discarding those edits.
    */
-  const hasPendingManualDataEditRef = useRef(false);
+  // OBS-17 (ETP-5716) — `usePendingEdits`: the same ref, plus whether the USER edited (the leave
+  // guard's question; the layout-fixed `autoValueWhen` values below are silent edits).
+  const {
+    ref: hasPendingManualDataEditRef, userEdited: hasUserManualDataEdits,
+    mark: markManualDataEdit, clear: clearManualDataEdits,
+    version: manualDataEditVersion, clearIfUnchanged: clearManualDataEditsIfUnchanged,
+  } = usePendingEdits();
   // ETP-5431 pt.4 — box 111's formula (`computeBox111` via `recomputeDerivedBoxes`) reads
   // `identChecks.rectificativa` directly, so ANY ident-checks edit (not just a box edit) can
   // change what box 111 should be — most visibly, ticking/unticking "Autoliquidación
@@ -446,8 +455,8 @@ export default function FmModel303Page({ decl, onBack, onStatusChange, onSubmitt
   // local first (not read back from `identChecks` state, which `setIdentChecks` won't have
   // applied yet by the time the recompute below runs) and reused for both the state update and
   // the recompute so they agree on the exact same value.
-  const handleIdentChange = (id, value) => {
-    hasPendingManualDataEditRef.current = true;
+  const handleIdentChange = (id, value, { auto = false } = {}) => {
+    markManualDataEdit({ user: !auto });
     const nextIdentChecks = { ...identChecks, [id]: value };
     setIdentChecks(nextIdentChecks);
 
@@ -591,7 +600,7 @@ export default function FmModel303Page({ decl, onBack, onStatusChange, onSubmitt
   });
 
   function handleBoxChange(boxNum, rawValue) {
-    hasPendingManualDataEditRef.current = true;
+    markManualDataEdit();
     let value = parseBoxInput(rawValue);
     // ETP-5393 Bug C: boxes 111 (Rectificación – Importe) and 77 (IVA a la importación
     // liquidado por la Aduana pendiente de ingreso) can never be negative — the classic
@@ -1067,6 +1076,8 @@ export default function FmModel303Page({ decl, onBack, onStatusChange, onSubmitt
     // blocks a save is having nothing pending or no base URL to send it to.
     if (!hasPendingManualDataEditRef.current || !apiBaseUrl) return { ok: true };
     const manualOverridesToPersist = manualOverridesOverride ?? manualOverrides;
+    // QA BUG-2 (ETP-5716): an edit typed while this save is in flight is not in its payload.
+    const savedVersion = manualDataEditVersion();
     setIsSavingManualData(true);
     let ok = true;
     try {
@@ -1099,7 +1110,9 @@ export default function FmModel303Page({ decl, onBack, onStatusChange, onSubmitt
       // Only clear the pending-edit flag on success — a failed save must still look "pending" so
       // a retry click actually attempts the write again instead of silently no-op'ing.
       if (ok) {
-        hasPendingManualDataEditRef.current = false;
+        // Only an edit-free save clears the pending state (QA BUG-2): a later edit stays dirty
+        // for the next save and keeps the leave prompt armed.
+        clearManualDataEditsIfUnchanged(savedVersion);
         // ETP-5338 Bug A fix — pushes the just-saved manualData into `FmListPage`'s own cached
         // `decls` entry for this declaration, the same way `onStatusChange` already does for
         // status changes. Without this, reopening the declaration from the list (without a full
@@ -1128,7 +1141,7 @@ export default function FmModel303Page({ decl, onBack, onStatusChange, onSubmitt
         'fm.validation.out_of_range_save',
         'El resultado de {subject} {verb} el rango admitido por la AEAT. Se debe corregir el dato de origen antes de guardar.',
       );
-      return;
+      return false;
     }
     // ETP-5725 (reopened QA fix) — "Guardar" PERSISTS `manualData.identification`, so it must be
     // gated by the same corrective/ordinaria consistency rule as "Registrar/Presentar" and
@@ -1139,12 +1152,12 @@ export default function FmModel303Page({ decl, onBack, onStatusChange, onSubmitt
     if (correctiveWithoutPresentedOrdinaria) {
       toast.error(t('fm.duplicate_period.requires_ordinaria')
         ?? 'No se puede guardar, generar el fichero ni presentar una declaración rectificativa/sustitutiva para este período hasta que exista una declaración ordinaria ya presentada.');
-      return;
+      return false;
     }
     if (ordinariaAlreadyPresented) {
       toast.error(t('fm.duplicate_period.ordinaria_exists')
         ?? 'Ya existe una declaración ordinaria presentada para este período. Solo puede haber una ordinaria por período — marca esta como rectificativa/sustitutiva antes de guardar, generar el fichero o presentar.');
-      return;
+      return false;
     }
     const { ok } = await persistEditableFields();
     if (ok) {
@@ -1158,7 +1171,12 @@ export default function FmModel303Page({ decl, onBack, onStatusChange, onSubmitt
     } else {
       toast.error(t('fm.action.save_error') ?? 'No se pudo guardar. Inténtalo de nuevo.');
     }
+    return ok;
   }
+
+  // OBS-17 (ETP-5716) — leaving with the user's edits unsaved asks first (side menu, top bar,
+  // reload, the "Modelos Fiscales" crumb); "Guardar y salir" runs Guardar (resolves its `ok`).
+  const guardedBack = useDeclarationLeaveGuard(hasUserManualDataEdits && !isSubmitted, handleSave);
 
   // "Cancelar" (ETP-5338 Bug B fix) — genuinely discards any unsaved edit now, with NO network
   // call: since `identChecks`/`manualOverrides` are pure local state with no background autosave
@@ -1168,7 +1186,7 @@ export default function FmModel303Page({ decl, onBack, onStatusChange, onSubmitt
   // `persistEditableFields`'s own bookkeeping, and so it stays correct if this page is ever made
   // to survive its own `onBack` (e.g. a future "confirm discard" prompt reusing this handler).
   function handleCancel() {
-    hasPendingManualDataEditRef.current = false;
+    clearManualDataEdits();
     onBack?.();
   }
 
@@ -1409,7 +1427,7 @@ export default function FmModel303Page({ decl, onBack, onStatusChange, onSubmitt
   const autoValueKey = autoValueChanges.map(c => `${c.field}=${c.value}`).join('|');
   useEffect(() => {
     if (!autoValueKey) return;
-    for (const { field, value } of autoValueChanges) handleIdentChange(field, value);
+    for (const { field, value } of autoValueChanges) handleIdentChange(field, value, { auto: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run only when the change set changes
   }, [autoValueKey]);
 
@@ -1561,7 +1579,7 @@ export default function FmModel303Page({ decl, onBack, onStatusChange, onSubmitt
     // it takes the same path as "Cancelar".
     breadcrumb: [
       ui('taxes'),
-      { label: ui('fm.breadcrumb.section'), onClick: handleCancel },
+      { label: ui('fm.breadcrumb.section'), onClick: guardedBack(handleCancel) },
       declTitle,
     ],
     favLabel: ui('fm.breadcrumb.section'),

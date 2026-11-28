@@ -59,19 +59,29 @@ describe('fiscal-models.css — 349 key badge colours grouped by operation type'
   });
 });
 
-// The 303 / 349 model tags are the design-system tag palette (app-shell-core
-// components/ui/tag-tokens.js VARIANT_STYLES blue / purple). The 390 keeps its own green.
-describe('fiscal-models.css — 303 / 349 model tag colours come from the design-system tag palette', () => {
+// The 349 model tag is the design-system tag palette (app-shell-core components/ui/tag-tokens.js
+// VARIANT_STYLES purple). The 303 and 390 are both VAT (IVA) models: they share the green family
+// with their own colours outside the palette — lime for the 303, emerald for the 390 — and must
+// stay distinguishable from each other.
+describe('fiscal-models.css — model tag colours', () => {
   const varOf = (name) => (css.match(new RegExp(`--${name}:\\s*([^;]+);`)) ?? [])[1]?.trim().toUpperCase();
-  const PALETTE = {
-    303: { background: '#F0FAFF', color: '#0075AD' }, // VARIANT_STYLES.blue
-    349: { background: '#F4F1FD', color: '#4316CA' }, // VARIANT_STYLES.purple
-  };
-  for (const [model, tokens] of Object.entries(PALETTE)) {
-    it(`the ${model} tag uses its palette pair`, () => {
-      assert.equal(varOf(`fm-model-${model}-bg`), tokens.background);
-      assert.equal(varOf(`fm-model-${model}-fg`), tokens.color);
-    });
-  }
-});
 
+  it('the 349 tag uses its palette pair (VARIANT_STYLES.purple)', () => {
+    assert.equal(varOf('fm-model-349-bg'), '#F4F1FD');
+    assert.equal(varOf('fm-model-349-fg'), '#4316CA');
+  });
+
+  it('the 303 tag uses its own lime', () => {
+    assert.equal(varOf('fm-model-303-bg'), '#F7FEE7');
+    assert.equal(varOf('fm-model-303-fg'), '#3F6212');
+    assert.equal(varOf('fm-model-303-border'), '#D9F99D');
+  });
+
+  it('the 303 and 390 tags differ in every colour', () => {
+    for (const part of ['bg', 'fg', 'border']) {
+      assert.ok(varOf(`fm-model-303-${part}`), `--fm-model-303-${part} is declared`);
+      assert.ok(varOf(`fm-model-390-${part}`), `--fm-model-390-${part} is declared`);
+      assert.notEqual(varOf(`fm-model-303-${part}`), varOf(`fm-model-390-${part}`));
+    }
+  });
+});

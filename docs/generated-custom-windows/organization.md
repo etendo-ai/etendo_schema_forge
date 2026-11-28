@@ -448,7 +448,7 @@ the link just opens the page at the top, without an error:
 | `org-section-iae` | Actividades del IAE |
 | `org-section-390` | Representante legal / Modelo 390 |
 
-Used by "Editar en Organización" of the Modelo 390 incidents (`fiscal-models.md`, "Incidents"):
+Used by "Editar en Organización" of the Modelo 390 incidents (`fiscal-models-390.md`, "Incidents"):
 the link names the section where the incident is fixed.
 
 ## Field change: SII/TicketBAI/Verifactu config flags exposed as `system` fields (ETP-4784)

@@ -5,6 +5,7 @@
 // @covers tools/app-shell/src/windows/custom/fiscal-models/models/390/Settlements303Table390.jsx
 // @covers tools/app-shell/src/windows/custom/fiscal-models/models/390/Incidents390Tab.jsx
 // @covers tools/app-shell/src/windows/custom/fiscal-models/FmDetailChrome.jsx
+// @covers tools/app-shell/src/windows/custom/fiscal-models/usePendingEdits.js
 //
 // Also: the Facturas tab wiring — "Ver facturas" on an invoice box opens the tab filtered by it.
 //
@@ -108,6 +109,7 @@ import { loadLocaleDictionary, makeRealUI } from '../../../../shared/__tests__/t
 import { fetchBoxes390, generate390File, fetchPreload390, validate390 } from '../fm390Api.js';
 import { persistManualData, fetchDeclarationIncidents, fetchDeclaration } from '../../../fiscalModelsUtils.js';
 import { toast } from 'sonner';
+import { hasUnsavedChanges, resetUnsavedChangesForTests } from '@/lib/unsavedChanges.js';
 
 const PAYLOAD = {
   boxes: {
@@ -1142,5 +1144,75 @@ describe('FmModel390Page — TopBar breadcrumb', () => {
     expect(items.filter(item => item.onClick).map(item => item.label)).toEqual(['Modelos Fiscales']);
     act(() => { items[1].onClick(); });
     expect(p.onBack).toHaveBeenCalledTimes(1);
+  });
+});
+
+// OBS-17 (ETP-5716) — the leave guard: only the USER's unsaved edits register in the app's
+// unsaved-changes registry (the real one, `@/lib/unsavedChanges.js`); the 303 preload is saved
+// with the next save but never asks before leaving.
+describe('FmModel390Page — unsaved-changes guard', () => {
+  beforeEach(() => resetUnsavedChangesForTests());
+
+  function deferredSave() {
+    let resolve;
+    const promise = new Promise((res) => { resolve = res; });
+    return { promise, resolve };
+  }
+
+  it('the 303 preload does not register unsaved changes, though Guardar still saves it', async () => {
+    fetchPreload390.mockResolvedValue(PRELOAD);
+    render(<FmModel390Page decl={makeDecl()} {...props()} />);
+    goToBlock('resultado_liquidaciones');
+    await waitFor(() => expect(screen.getByTestId('FmBoxes390__input_INGRESAR_03').getAttribute('data-origin')).toBe('preloaded'));
+    expect(hasUnsavedChanges()).toBe(false);
+    fireEvent.click(screen.getByTestId('FmModel390Page__save'));
+    await waitFor(() => expect(persistManualData).toHaveBeenCalledTimes(1));
+  });
+
+  it('a user input registers them and a successful Guardar clears them', async () => {
+    render(<FmModel390Page decl={makeDecl()} {...props()} />);
+    goToBlock('resultado_liquidacion');
+    typeInput('LIQANUAL_VAT_IMPORT', '12');
+    expect(hasUnsavedChanges()).toBe(true);
+    fireEvent.click(screen.getByTestId('FmModel390Page__save'));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('recordSaved'));
+    expect(hasUnsavedChanges()).toBe(false);
+  });
+
+  it('a failed Guardar keeps them', async () => {
+    persistManualData.mockResolvedValue({ ok: false, error: 'http_500' });
+    render(<FmModel390Page decl={makeDecl()} {...props()} />);
+    goToBlock('resultado_liquidacion');
+    typeInput('LIQANUAL_VAT_IMPORT', '12');
+    fireEvent.click(screen.getByTestId('FmModel390Page__save'));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('fm.action.save_error'));
+    expect(hasUnsavedChanges()).toBe(true);
+  });
+
+  it('an edit typed while Guardar is in flight survives that save and goes in the next one', async () => {
+    const first = deferredSave();
+    persistManualData.mockReturnValueOnce(first.promise);
+    render(<FmModel390Page decl={makeDecl()} {...props()} />);
+    goToBlock('resultado_liquidacion');
+    typeInput('LIQANUAL_VAT_IMPORT', '12');
+    fireEvent.click(screen.getByTestId('FmModel390Page__save'));
+    await waitFor(() => expect(persistManualData).toHaveBeenCalledTimes(1));
+    typeInput('LIQANUAL_VAT_LAW_REGULARIZATION', '7');
+    await act(async () => { first.resolve({ ok: true }); });
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('recordSaved'));
+    expect(hasUnsavedChanges()).toBe(true);
+
+    fireEvent.click(screen.getByTestId('FmModel390Page__save'));
+    await waitFor(() => expect(persistManualData).toHaveBeenCalledTimes(2));
+    expect(persistManualData.mock.calls[1][1].aeatInputs.LIQANUAL_VAT_LAW_REGULARIZATION).toBe('7.00');
+    await waitFor(() => expect(hasUnsavedChanges()).toBe(false));
+  });
+
+  it('a submitted declaration never arms it', async () => {
+    fetchPreload390.mockResolvedValue(PRELOAD);
+    render(<FmModel390Page decl={makeDecl({ status: 'submitted', submittedSnapshot: PAYLOAD, _precomputed: null })} {...props()} />);
+    await waitFor(() => expect(fetchPreload390).toHaveBeenCalled());
+    await act(async () => {});
+    expect(hasUnsavedChanges()).toBe(false);
   });
 });

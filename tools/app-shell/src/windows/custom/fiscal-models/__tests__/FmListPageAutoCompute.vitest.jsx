@@ -81,7 +81,7 @@ describe('FmListPage — auto-compute wiring', () => {
     }
   });
 
-  it('all 9 hook calls still gate enabled on token+apiBaseUrl, including the "other"/"submitted" ones', () => {
+  it('all 9 hook calls gate enabled on apiBaseUrl alone, including the "other"/"submitted" ones', () => {
     render(<FmListPage token="tok" apiBaseUrl="http://host/neo/fiscal-models" />);
     const calls = useFiscalAutoCompute.mock.calls;
     calls.forEach(call => {
@@ -214,6 +214,26 @@ describe('FmListPage — "Resultado" column reads from the correct map', () => {
     const texts = Array.from(rows).map(r => r.querySelectorAll('td')[5].textContent);
     expect(texts.some(t => t.includes('500'))).toBe(true);
     expect(texts.some(t => t.includes('300'))).toBe(true);
+  });
+
+  // ETP-5716 OBS-5/OBS-18 (ETP-6037) — with a cookie session there is no `token`: the request
+  // helper authenticates on its own. A submitted declaration without a snapshot must still get
+  // its Resultado computed instead of staying on the "…" computing indicator forever.
+  it('computes a submitted declaration without snapshot when the session has no token', async () => {
+    useFiscalAutoCompute.mockImplementation((decls, opts) => {
+      const map = {};
+      if (opts.enabled) decls.forEach(d => { map[d.id] = { summary: { result: -300 }, error: null, boxes: { 27: -300 } }; });
+      return { computedMap: map };
+    });
+    const decl = makeRow({ id: 'sub-cookie', status: 'submitted', submittedSnapshot: null });
+    const { container } = render(
+      <FmListPage declarations={[decl]} token={null} apiBaseUrl={API_BASE_URL} />
+    );
+    await waitForCatalogLoad();
+
+    const resultCell = container.querySelector('tbody tr').querySelectorAll('td')[5];
+    expect(resultCell.textContent).not.toContain('…');
+    expect(resultCell.textContent).toContain('300');
   });
 });
 

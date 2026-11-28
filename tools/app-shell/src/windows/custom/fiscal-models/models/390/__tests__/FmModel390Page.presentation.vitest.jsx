@@ -354,4 +354,15 @@ describe('submission390 / card / register helpers', () => {
     expect(presentationDateLabel({ presentationDate: '15/01/2027 10:20' })).toBe('15/01/2027 10:20');
     expect(presentationDateLabel({})).toBe('—');
   });
+
+  // ETP-5716 OBS-16: a manual registration shows the time of the record made that same day.
+  it('presentationDateLabel adds the time of a same-day submittedAt to a date-only value', () => {
+    const at = new Date(2026, 10, 25, 15, 11, 56);
+    expect(presentationDateLabel({ presentationDate: '2026-11-25', submittedAt: at.toISOString() }, 'es-ES'))
+      .toBe('25/11/2026 15:11');
+    // Registered on a later day: the time of the record is not the presentation's.
+    expect(presentationDateLabel({ presentationDate: '2026-11-20', submittedAt: at.toISOString() }, 'es-ES'))
+      .toBe('20/11/2026');
+    expect(presentationDateLabel({ submittedAt: at.toISOString() }, 'es-ES')).toBe('25/11/2026 15:11');
+  });
 });
